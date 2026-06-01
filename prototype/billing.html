@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>用量计费 · 灵镜</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body data-page="billing" data-crumb="经营管理 > 用量计费">
+<div class="shell" id="shell-mount">
+  <div class="main-col">
+    <main class="page">
+      <div class="ph">
+        <div><h1 class="t-h1">用量与计费</h1><p class="desc">按量计费，每次生成消耗点数。托管模式下点数 = 云端能力成本 + 服务费；私有化模式可切换为内部用量统计。</p></div>
+        <button class="btn btn-white"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>充值点数</button>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat" style="animation-delay:.04s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg>当前点数余额</div><div class="val">1,280</div><div class="bar"><i style="width:42%"></i></div><div class="sub">本月已用 1,720 / 充值 3,000</div></div>
+        <div class="stat" style="animation-delay:.08s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>本月数字人视频</div><div class="val">86 <small>条</small></div><div class="sub">消耗 980 点</div></div>
+        <div class="stat" style="animation-delay:.12s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/></svg>本月声音克隆</div><div class="val">14 <small>次</small></div><div class="sub">消耗 420 点</div></div>
+        <div class="stat" style="animation-delay:.16s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg>高精形象训练</div><div class="val">2 <small>个</small></div><div class="sub">消耗 320 点</div></div>
+      </div>
+
+      <div class="sec-head"><span class="sec-title">套餐</span></div>
+      <div class="plans" style="margin-bottom:30px;">
+        <div class="plan"><div class="pn">基础版</div><div class="pp">¥1,000<small> / 1,000 点</small></div><ul><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>3 创作席位</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>标准排队</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>1080P 输出</li></ul><button class="btn btn-dark" style="width:100%">选择</button></div>
+        <div class="plan featured"><div class="pn">专业版 <span class="bdg bdg-blue">推荐</span></div><div class="pp">¥4,500<small> / 5,000 点</small></div><ul><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>10 创作席位</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>优先排队</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>高精形象训练</li></ul><button class="btn btn-white" style="width:100%">选择</button></div>
+        <div class="plan"><div class="pn">私有化</div><div class="pp">定制<small> / 年费</small></div><ul><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>整套部署到客户</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>客户自有云账号</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>数据本地化</li></ul><button class="btn btn-dark" style="width:100%">联系销售</button></div>
+      </div>
+
+      <div class="sec-head"><span class="sec-title">消费记录</span></div>
+      <table class="tbl">
+        <thead><tr><th>时间</th><th>类型</th><th>作品 / 对象</th><th>操作人</th><th style="text-align:right">点数</th></tr></thead>
+        <tbody>
+          <tr><td class="num">06-01 15:16</td><td><span class="bdg bdg-dim">数字人视频</span></td><td class="strong">融媒体新闻·晚间播报</td><td>李编导</td><td class="num neg" style="text-align:right">-12</td></tr>
+          <tr><td class="num">06-01 14:02</td><td><span class="bdg bdg-dim">声音克隆</span></td><td class="strong">台长配音</td><td>李编导</td><td class="num neg" style="text-align:right">-30</td></tr>
+          <tr><td class="num">06-01 11:30</td><td><span class="bdg bdg-blue">高精训练</span></td><td class="strong">台标主播·专属</td><td>王主管</td><td class="num neg" style="text-align:right">-160</td></tr>
+          <tr><td class="num">05-31 18:44</td><td><span class="bdg bdg-dim">数字人视频</span></td><td class="strong">文化节启动报道</td><td>张记者</td><td class="num neg" style="text-align:right">-10</td></tr>
+          <tr><td class="num">05-31 09:10</td><td><span class="bdg bdg-ok">充值</span></td><td class="strong">专业版套餐</td><td>王主管</td><td class="num" style="text-align:right;color:var(--green)">+5,000</td></tr>
+        </tbody>
+      </table>
+    </main>
+  </div>
+</div>
+<script src="shell.js"></script>
+</body>
+</html>

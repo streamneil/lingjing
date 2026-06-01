@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>创建影片 · 灵镜</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body data-page="studio" data-crumb="创作 > 创作台 > 数字人视频">
+<div class="shell" id="shell-mount">
+ <div class="main-col">
+  <div class="studio">
+  <!-- 左:配置 -->
+  <div class="cfg">
+    <div class="cfg-h"><span class="dot"></span>AI 头像影片</div>
+
+    <div class="selr" onclick="openSheet('appearance')">
+      <div class="selr-th" style="background-image:url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=140&q=85&fit=crop&crop=faces')"></div>
+      <div class="selr-b"><h5>头像</h5><p>晓琳 · 主形象</p></div>
+      <div class="selr-ar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></div>
+    </div>
+
+    <div class="selr" onclick="openSheet('voices')">
+      <div class="selr-th"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg></div>
+      <div class="selr-b"><h5>声音</h5><p>选择一个声音，或 <u onclick="event.stopPropagation();openSheet('voices')">克隆一个声音</u></p></div>
+      <div class="selr-ar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></div>
+    </div>
+
+    <div class="script">
+      <textarea id="script" placeholder="输入需要 AI 配音的文字，或上传 / 录制音频…"></textarea>
+      <div class="f"><span class="h"><u>上传或录制音频</u></span><span class="c"><b id="cnt">0</b> / 4000</span></div>
+    </div>
+
+    <div class="cfg-sp"></div>
+
+    <div class="cfg-row">
+      <div class="msel">品质 V1.0 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+      <div class="msel">1080P <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+      <div class="msel">16:9 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+    </div>
+
+    <div class="cbtn-wrap">
+      <span class="cbtn-badge">限时</span>
+      <button class="cbtn" id="createBtn" onclick="alert('演示原型：进入生成队列，右侧对话流可查看进度')">
+        创建 <span class="gem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg> 10</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 右:对话流 -->
+  <div class="feed">
+    <div class="feed-tabs">
+      <button class="ftab active">全部</button>
+      <button class="ftab">影片</button>
+      <button class="ftab">图片</button>
+      <button class="ftab">音乐</button>
+      <button class="ftab">演讲</button>
+    </div>
+    <div class="feed-list">
+
+      <!-- Demo / 案例画廊 -->
+      <div class="fitem" style="animation-delay:.02s">
+        <div class="fmeta">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m12 3 2.4 5.6L20 9l-4.3 3.8L17 18l-5-2.7L7 18l1.3-5.2L4 9l5.6-.4Z"/></svg>
+          <b>案例灵感</b><span class="ts">点击试用同款模板</span>
+          <span class="sp"></span>
+          <a href="#" class="link-btn" style="font-size:12.5px">查看全部 →</a>
+        </div>
+        <div class="demo-strip">
+          <div class="dchip" onclick="alert('演示：套用此案例模板')"><div class="di" style="background-image:url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&q=85&fit=crop&crop=faces')"></div><div class="dv"></div><span class="dt">新闻播报</span><div class="dp"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+          <div class="dchip" onclick="alert('演示：套用此案例模板')"><div class="di" style="background-image:url('https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=300&q=85&fit=crop&crop=faces')"></div><div class="dv"></div><span class="dt">政策解读</span><div class="dp"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+          <div class="dchip" onclick="alert('演示：套用此案例模板')"><div class="di" style="background-image:url('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&q=85&fit=crop&crop=faces')"></div><div class="dv"></div><span class="dt">财经早报</span><div class="dp"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+          <div class="dchip" onclick="alert('演示：套用此案例模板')"><div class="di" style="background-image:url('https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=300&q=85&fit=crop&crop=faces')"></div><div class="dv"></div><span class="dt">出镜报道</span><div class="dp"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+        </div>
+      </div>
+
+      <!-- 生成中 -->
+      <div class="fitem" style="animation-delay:.05s">
+        <div class="fmeta">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c0-3 2.5-4.5 5.5-4.5"/><path d="M16 6v6M19 9h-6"/></svg>
+          <b>AI 虚拟人</b><span class="ts">06-01 15:18</span>
+          <span class="sp"></span>
+          <span class="st" style="color:var(--amber)"><span class="led led-run"></span>生成中</span>
+        </div>
+        <div class="fbubble">
+          <div class="mav" style="background-image:url('https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=90&q=85&fit=crop&crop=faces')"></div>
+          <div class="tx">本期我们关注城市新区建设最新进展，与惠民政策的深度解读。</div>
+        </div>
+        <div class="fvideo proc">
+          <div class="proc-in">
+            <div class="spinner"></div>
+            <div class="lbl">队列第 1 位 · 预计 40s</div>
+            <div class="proc-bar"><i></i></div>
+          </div>
+          <span class="tc">9:16</span>
+        </div>
+      </div>
+
+      <!-- 成品 -->
+      <div class="fitem" style="animation-delay:.1s">
+        <div class="fmeta">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c0-3 2.5-4.5 5.5-4.5"/><path d="M16 6v6M19 9h-6"/></svg>
+          <b>AI 虚拟人</b><span class="ts">06-01 15:16</span>
+          <span class="sp"></span>
+          <span class="st" style="color:var(--green)"><span class="led led-ok"></span>已完成</span>
+        </div>
+        <div class="fbubble">
+          <div class="mav" style="background-image:url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=90&q=85&fit=crop&crop=faces')"></div>
+          <div class="tx">各位观众晚上好，欢迎收看今天的新闻播报。首先为您介绍主要内容。</div>
+        </div>
+        <div class="fvideo">
+          <div class="por" style="background-image:url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&q=85&fit=crop&crop=faces')"></div>
+          <div class="play-ov"><div class="pb"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+          <span class="tc">00:08 · 16:9</span>
+        </div>
+        <div class="factions">
+          <button class="btn btn-dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>重新编辑</button>
+          <button class="btn btn-dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 4v4h-4"/></svg>重新生成</button>
+          <div class="sp"></div>
+          <button class="btn btn-dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>下载</button>
+          <button class="btn btn-dark" style="padding:11px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
+        </div>
+      </div>
+
+      <!-- 失败 -->
+      <div class="fitem" style="animation-delay:.15s">
+        <div class="fmeta">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c0-3 2.5-4.5 5.5-4.5"/><path d="M16 6v6M19 9h-6"/></svg>
+          <b>AI 虚拟人</b><span class="ts">06-01 12:00</span>
+          <span class="sp"></span>
+          <span class="st" style="color:var(--red)"><span class="led led-err"></span>生成失败</span>
+        </div>
+        <div class="fbubble">
+          <div class="mav" style="background-image:url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=90&q=85&fit=crop&crop=faces')"></div>
+          <div class="tx">欢迎收看本期财经观察，今天聚焦区域经济发展态势……</div>
+        </div>
+        <div class="fvideo err">
+          <div class="err-in">
+            <div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 9v4M12 17h.01"/><path d="M10.3 4 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 4a2 2 0 0 0-3.4 0Z"/></svg></div>
+            <div class="lbl">渲染超时，请重试</div>
+          </div>
+          <span class="tc">16:9</span>
+        </div>
+        <div class="factions">
+          <button class="btn btn-dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 4v4h-4"/></svg>重新生成</button>
+          <div class="sp"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+ </div>
+</div>
+
+<!-- ===== 全屏:选择外观 ===== -->
+<div class="sheet-full" id="sheet-appearance">
+  <div class="sf-head">
+    <div class="sf-sub"><b>晓琳</b><span>1 外观</span></div>
+    <h3>选择外观</h3>
+    <div class="sf-close" onclick="closeSheet('appearance')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
+  </div>
+  <div class="sf-body">
+    <div class="grid-av" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));max-width:780px;">
+      <div class="av new" style="animation-delay:.05s" onclick="openModalFromSheet('createRole')">
+        <div class="av-new-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c0-3.3 2.6-5 5.5-5"/><path d="M18 7.5v6M15 10.5h6"/></svg><span>新增外观</span></div>
+      </div>
+      <div class="av pinned" style="animation-delay:.1s" onclick="closeSheet('appearance')">
+        <div class="av-img" style="background-image:url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=600&q=85&fit=crop&crop=faces')"></div>
+        <div class="av-veil"></div><div class="av-name">晓琳</div>
+        <div class="av-cta">选择此外观</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 侧滑:所有声音 ===== -->
+<div class="ov" id="ov-voicesBg" onclick="closeSheet('voices')"></div>
+<div class="sheet-side" id="sheet-voices">
+  <div class="ss-head">
+    <h3>所有声音</h3>
+    <div class="sp"></div>
+    <div class="ss-seg"><button class="active">音色库</button><button>我的声音</button></div>
+    <button class="btn btn-dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" style="width:15px;height:15px"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>克隆或设计</button>
+  </div>
+  <div class="ss-filters">
+    <div class="msel" style="min-width:170px">语言：全部 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+    <div class="msel" style="min-width:170px">性别：全部 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+  </div>
+  <div class="ss-body">
+    <div class="vcard" onclick="pickVoice(this,'新闻播报 · 雅琴')"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>新闻播报 · 雅琴 <span class="hot">热门</span></div><div class="vc-d">女性 · 播音员 · 适合新闻、纪录片</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+    <div class="vcard" onclick="pickVoice(this,'沉稳男声 · 子墨')"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>沉稳男声 · 子墨 <span class="hot">热门</span></div><div class="vc-d">男性 · 沉稳 · 适合纪录片、教育</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+    <div class="vcard" onclick="pickVoice(this,'磁性男声 · 浩然')"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>磁性男声 · 浩然 <span class="hot">热门</span></div><div class="vc-d">成人 · 男性 · 磁性 · 适合广告、品牌</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+    <div class="vcard" onclick="pickVoice(this,'亲切女声 · 思雨')"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>亲切女声 · 思雨 <span class="hot">热门</span></div><div class="vc-d">成人 · 女性 · 亲切 · 适合 Vlog、播客</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+    <div class="vcard" onclick="pickVoice(this,'活泼女声 · 晓琳')"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>活泼女声 · 晓琳</div><div class="vc-d">女性 · 活泼 · 适合 Vlog、短视频</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+    <div class="vcard" onclick="pickVoice(this,'Expressive Narrator')"><div class="vc-b"><div class="vc-n"><span class="flag">🇺🇸</span>Expressive Narrator <span class="hot">热门</span></div><div class="vc-d">成人 · 男性 · 有声书 · 适合讲故事</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+    <div class="vcard" onclick="pickVoice(this,'Compelling Lady')"><div class="vc-b"><div class="vc-n"><span class="flag">🇺🇸</span>Compelling Lady <span class="hot">热门</span></div><div class="vc-d">成人 · 女性 · 播报 · 适合新闻、纪录片</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+    <div class="vcard" onclick="pickVoice(this,'港式女声')"><div class="vc-b"><div class="vc-n"><span class="flag">🇭🇰</span>港式女声 <span class="hot">热门</span></div><div class="vc-d">女性 · 礼貌 · 适合 AI 助手、教育</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+    <div class="vcard" onclick="pickVoice(this,'我的声音 1')"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>我的声音 1</div><div class="vc-d">克隆音色 · 12s 样本</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+    <div class="vcard" onclick="pickVoice(this,'台长配音')"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>台长配音</div><div class="vc-d">克隆音色 · 26s 样本</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+  </div>
+</div>
+
+<!-- ===== 居中:创建角色 ===== -->
+<div class="ov" id="ov-createRole">
+  <div class="modal">
+    <div class="mh"><h3>创建数字人</h3><div class="mc" onclick="closeModal('createRole')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></div></div>
+    <div class="mb">
+      <div class="iline"><label>名称</label><input placeholder="输入数字人名称"></div>
+      <div class="uzone"><div class="ubox"><div class="u"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 15 5-5 4 4 3-3 6 6"/></svg>上传照片</div></div></div>
+      <div class="rtitle">照片要求</div>
+      <div class="rsub">格式 jpg / jpeg / png / webp，文件 &lt; 30MB</div>
+      <div class="samples">
+        <div class="sample" style="background-image:url('https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=220&q=75&fit=crop&crop=faces')"><span class="mk">✅</span></div>
+        <div class="sample" style="background-image:url('https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=220&q=75&fit=crop&crop=faces')"><span class="mk">❌</span></div>
+        <div class="sample" style="background-image:url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=220&q=75&fit=crop&crop=faces')"><span class="mk">❌</span></div>
+        <div class="sample" style="background-image:url('https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=220&q=75&fit=crop&crop=faces')"><span class="mk">❌</span></div>
+      </div>
+      <ul class="rlist"><li>闭嘴，中性表情</li><li>正脸看着镜头</li><li>无墨镜、刘海等面部遮挡</li></ul>
+      <div class="consent"><div class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></div><div>创建即确认我已年满 18 岁，所用照片属于本人或已获授权，并接受 <u style="color:var(--t2)">服务条款</u> 与 <u style="color:var(--t2)">隐私政策</u>。</div></div>
+      <button class="btn btn-white" style="width:100%;padding:15px;font-size:15px;">创建数字人</button>
+    </div>
+  </div>
+</div>
+
+<script src="shell.js"></script>
+<script src="app.js"></script>
+<script>
+  const ta=document.getElementById('script'), cnt=document.getElementById('cnt'), btn=document.getElementById('createBtn');
+  ta.addEventListener('input',()=>{cnt.textContent=ta.value.length;btn.classList.toggle('ready',ta.value.trim().length>0);});
+  document.querySelectorAll('.ftab,.ss-seg button').forEach(t=>t.addEventListener('click',function(){this.parentNode.querySelectorAll('.ftab,button').forEach(x=>x.classList.remove('active'));this.classList.add('active');}));
+  function pickVoice(el,name){
+    const row=document.querySelectorAll('.selr')[1];
+    row.querySelector('.selr-b h5').textContent='声音';
+    row.querySelector('.selr-b p').innerHTML=name;
+    closeSheet('voices');
+  }
+</script>
+</body>
+</html>

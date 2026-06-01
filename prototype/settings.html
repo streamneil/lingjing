@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>系统设置 · 灵镜</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body data-page="settings" data-crumb="经营管理 > 系统设置">
+<div class="shell" id="shell-mount">
+  <div class="main-col">
+    <main class="page">
+      <div class="ph"><div><h1 class="t-h1">系统设置</h1><p class="desc">机构信息、合规标识与默认创作参数。底层模型与算力由平台统一调度，您无需关心。</p></div></div>
+
+      <div class="set-card" style="animation-delay:.04s">
+        <h3>机构信息</h3><div class="h-desc">您的账号所属一个机构（工作空间）。机构内的形象、音色、作品相互隔离。</div>
+        <div class="set-row"><div class="info"><div class="k">机构名称</div><div class="v">未自定义时默认使用 “{用户名}'s Organization”</div></div><div class="ctl"><div style="display:flex;gap:8px;align-items:center"><input class="iline" style="padding:9px 13px;width:220px" value="融媒体中心"><button class="btn btn-dark">保存</button></div></div></div>
+        <div class="set-row"><div class="info"><div class="k">机构 ID</div><div class="v">用于对接与计费,不可修改</div></div><div class="ctl"><span class="bdg bdg-dim">ORG-2049</span></div></div>
+      </div>
+
+      <div class="set-card" style="animation-delay:.12s">
+        <h3>内容合规与 AI 标识</h3><div class="h-desc">融媒体 / 政企硬性要求：生成内容按监管添加 AI 生成标识，并留存审计。</div>
+        <div class="set-row"><div class="info"><div class="k">AI 生成标识(水印)</div><div class="v">在生成视频右下角添加“AI 合成”标识与元数据</div></div><div class="ctl"><div class="switch on" onclick="this.classList.toggle('on')"><i></i></div></div></div>
+        <div class="set-row"><div class="info"><div class="k">内容送审</div><div class="v">文案 / 形象 / 音频生成前自动审核拦截违规</div></div><div class="ctl"><div class="switch on" onclick="this.classList.toggle('on')"><i></i></div></div></div>
+        <div class="set-row"><div class="info"><div class="k">操作审计日志</div><div class="v">记录谁、何时、生成了什么(政企合规留存)</div></div><div class="ctl"><div class="switch on" onclick="this.classList.toggle('on')"><i></i></div></div></div>
+      </div>
+
+      <div class="set-card" style="animation-delay:.16s">
+        <h3>默认创作参数</h3><div class="h-desc">机构级默认值，创作时可单独覆盖。</div>
+        <div class="set-row"><div class="info"><div class="k">默认分辨率</div></div><div class="ctl"><div class="choice-seg"><button>720P</button><button class="active">1080P</button><button>4K</button></div></div></div>
+        <div class="set-row"><div class="info"><div class="k">默认视频比例</div></div><div class="ctl"><div class="choice-seg"><button class="active">16:9</button><button>9:16</button><button>1:1</button></div></div></div>
+      </div>
+    </main>
+  </div>
+</div>
+<script src="shell.js"></script>
+<script>document.querySelectorAll('.choice-seg button').forEach(b=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('button').forEach(x=>x.classList.remove('active'));this.classList.add('active');}));</script>
+</body>
+</html>

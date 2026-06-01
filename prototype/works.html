@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>作品库 · 灵镜</title>
+<link rel="stylesheet" href="app.css">
+<style>
+  .work-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; }
+  .work { border-radius:var(--r-lg); overflow:hidden; background:var(--card); border:1px solid var(--line-soft); box-shadow:var(--sh-card); cursor:pointer; transition:.2s var(--ease-out); animation:rise .6s var(--ease-out) both; }
+  .work:hover { transform:translateY(-4px); border-color:var(--line-hi); }
+  .work-thumb { aspect-ratio:16/9; position:relative; background:#000; display:grid; place-items:center; overflow:hidden; }
+  .work-thumb .por { width:26%; aspect-ratio:3/4; border-radius:7px; background-size:cover; background-position:center; }
+  .work-thumb .ov { position:absolute; inset:0; background:rgba(0,0,0,.2); opacity:0; display:grid; place-items:center; transition:.2s; }
+  .work:hover .ov { opacity:1; }
+  .work-thumb .ov .pb { width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.92);display:grid;place-items:center; }
+  .work-thumb .ov .pb svg { width:18px;height:18px;color:#0A0A0B;margin-left:2px; }
+  .work-thumb .tc { position:absolute; bottom:9px; right:10px; font-family:var(--f-mono); font-size:10px; color:#fff; background:rgba(0,0,0,.4); padding:2px 6px; border-radius:4px; }
+  .work-thumb .st { position:absolute; top:9px; left:10px; }
+  .work-b { padding:14px 15px; }
+  .work-b h4 { font-size:14px; font-weight:600; color:var(--t1); }
+  .work-b .m { font-family:var(--f-mono); font-size:10.5px; color:var(--t4); margin-top:6px; }
+</style>
+</head>
+<body data-page="works" data-crumb="创作 > 作品库">
+<div class="shell" id="shell-mount">
+  <div class="main-col">
+    <main class="page">
+      <div class="ph">
+        <div><h1 class="t-h1">作品库</h1><p class="desc">管理各阶段草稿与成品（视频 / 音频），支持播放、下载、删除、搜索、批量操作。</p></div>
+        <a href="create.html" class="btn btn-white"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>新建作品</a>
+      </div>
+      <div class="bar">
+        <button class="chip active">全部 · 19</button><button class="chip">生成中 · 2</button><button class="chip">已完成 · 14</button><button class="chip">草稿 · 3</button>
+        <div class="sp"></div>
+        <div class="search-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input placeholder="搜索作品…"></div>
+        <button class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>批量</button>
+      </div>
+      <div class="work-grid">
+        <div class="work" style="animation-delay:.04s">
+          <div class="work-thumb"><div class="por" style="background:linear-gradient(160deg,#33333A,#1A1A1E)"></div><div class="st"><span class="bdg bdg-run">● 渲染中 队列#1</span></div><span class="tc">9:16</span></div>
+          <div class="work-b"><h4>融媒体新闻·晚间播报</h4><div class="m">晓琳 · 我的声音1 · 约 40s 后完成</div></div>
+        </div>
+        <div class="work" style="animation-delay:.08s">
+          <div class="work-thumb"><div class="por" style="background:linear-gradient(160deg,#33333A,#1A1A1E)"></div><div class="st"><span class="bdg bdg-dim">排队中 #2</span></div><span class="tc">16:9</span></div>
+          <div class="work-b"><h4>城市新区建设进展</h4><div class="m">浩然 · 财经主播 · 312 字</div></div>
+        </div>
+        <div class="work" style="animation-delay:.12s">
+          <div class="work-thumb"><div class="por" style="background-image:url('https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=300&q=85&fit=crop&crop=faces');background-size:cover;background-position:center"></div><div class="ov"><div class="pb"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div><div class="st"><span class="bdg bdg-ok">已完成</span></div><span class="tc">00:48</span></div>
+          <div class="work-b"><h4>文化节启动·出镜报道</h4><div class="m">思雨 · 9:16 · 05-31</div></div>
+        </div>
+        <div class="work" style="animation-delay:.16s">
+          <div class="work-thumb"><div class="por" style="background-image:url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&q=85&fit=crop&crop=faces');background-size:cover;background-position:center"></div><div class="ov"><div class="pb"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div><div class="st"><span class="bdg bdg-ok">已完成</span></div><span class="tc">01:24</span></div>
+          <div class="work-b"><h4>惠民政策解读·第三期</h4><div class="m">雅琴 · 16:9 · 05-30</div></div>
+        </div>
+        <div class="work" style="animation-delay:.20s">
+          <div class="work-thumb" style="background:linear-gradient(160deg,#2A2238,#150E1F)"><svg viewBox="0 0 24 24" fill="none" stroke="#FFB23E" stroke-width="1.4" style="width:38px;height:38px"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><div class="st"><span class="bdg bdg-ok">已完成</span></div><span class="tc">音频</span></div>
+          <div class="work-b"><h4>宣传片旁白·克隆配音</h4><div class="m">老陈 · 02:10 · 声音克隆</div></div>
+        </div>
+        <div class="work" style="animation-delay:.24s">
+          <div class="work-thumb"><div class="por" style="background-image:url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&q=85&fit=crop&crop=faces');background-size:cover;background-position:center;opacity:.4"></div><div class="st"><span class="bdg" style="background:rgba(255,82,71,.14);color:var(--red)">● 失败</span></div><span class="tc">16:9</span></div>
+          <div class="work-b"><h4>财经观察·区域经济</h4><div class="m">渲染超时 · 可重试</div></div>
+        </div>
+        <div class="work" style="animation-delay:.28s">
+          <div class="work-thumb" style="background:var(--bg-soft)"><svg viewBox="0 0 24 24" fill="none" stroke="var(--t4)" stroke-width="1.4" style="width:34px;height:34px"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><div class="st"><span class="bdg bdg-dim">草稿</span></div></div>
+          <div class="work-b"><h4>未命名草稿·政务播报</h4><div class="m">编辑于 1 小时前</div></div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+<script src="shell.js"></script>
+<script>document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));this.classList.add('active');}));</script>
+</body>
+</html>

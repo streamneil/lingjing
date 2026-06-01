@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>音色库 · 灵镜</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body data-page="voices" data-crumb="创作 > 音色库">
+<div class="shell" id="shell-mount">
+  <div class="main-col">
+    <main class="page">
+      <div class="ph">
+        <div><h1 class="t-h1">音色库</h1><p class="desc">40 个预置人声（400 小时语音包），以及上传 5–30s 样本克隆的专属音色。配音可调语速 0.5–2 倍与音量。</p></div>
+        <button class="btn btn-white"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>克隆新音色</button>
+      </div>
+      <div class="bar">
+        <button class="chip active">我的克隆 · 4</button><button class="chip">预置人声 · 40</button>
+        <div class="sp"></div>
+        <div class="msel" style="min-width:140px">语言：全部 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+        <div class="msel" style="min-width:140px">性别：全部 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+      </div>
+      <div class="ss-body" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr));padding:0;display:grid;gap:12px;">
+        <div class="vcard"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>我的声音 1</div><div class="vc-d">克隆音色 · 12s 样本 · 06-01 创建</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+        <div class="vcard"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>台长配音</div><div class="vc-d">克隆音色 · 26s 样本 · 复刻中 80%</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+        <div class="vcard"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>主持人·老陈</div><div class="vc-d">克隆音色 · 18s 样本</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+        <div class="vcard"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>解说·沉稳男声</div><div class="vc-d">克隆音色 · 22s 样本</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+        <div class="vcard"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>新闻播报·雅琴 <span class="hot">预置</span></div><div class="vc-d">女性 · 播音员 · 适合新闻、纪录片</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+        <div class="vcard"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>磁性男声·浩然 <span class="hot">预置</span></div><div class="vc-d">成人 · 男性 · 磁性 · 适合广告、品牌</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+      </div>
+    </main>
+  </div>
+</div>
+<script src="shell.js"></script>
+<script>document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));this.classList.add('active');}));</script>
+</body>
+</html>

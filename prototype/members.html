@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>成员与权限 · 灵镜</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body data-page="members" data-crumb="经营管理 > 成员与权限">
+<div class="shell" id="shell-mount">
+  <div class="main-col">
+    <main class="page">
+      <div class="ph">
+        <div><h1 class="t-h1">成员与权限</h1><p class="desc">您的账号登录后即归属一个机构。机构 → 成员 → 角色三级管理；创作席位决定可同时创作的成员数。未自定义机构名时，默认使用 “{用户名}'s Organization”。</p></div>
+        <button class="btn btn-white"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>邀请成员</button>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat" style="animation-delay:.04s"><div class="lbl">机构</div><div class="val" style="font-size:22px">融媒体中心</div><div class="sub">ORG-2049</div></div>
+        <div class="stat" style="animation-delay:.08s"><div class="lbl">创作席位</div><div class="val">7 <small>/ 10</small></div><div class="bar"><i style="width:70%"></i></div><div class="sub">已用 7，余 3</div></div>
+        <div class="stat" style="animation-delay:.12s"><div class="lbl">成员总数</div><div class="val">12</div><div class="sub">管理员 2 · 创作者 7 · 查看者 3</div></div>
+        <div class="stat" style="animation-delay:.16s"><div class="lbl">套餐</div><div class="val" style="font-size:22px">专业版</div><div class="sub">按量计费 · 余 1,280 点</div></div>
+      </div>
+
+      <div class="bar">
+        <div class="search-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input placeholder="搜索成员…"></div>
+        <div class="sp"></div>
+        <button class="chip active">全部</button><button class="chip">管理员</button><button class="chip">创作者</button><button class="chip">查看者</button>
+      </div>
+
+      <table class="tbl">
+        <thead><tr><th>成员</th><th>角色</th><th>占用席位</th><th>最近活跃</th><th>状态</th><th></th></tr></thead>
+        <tbody>
+          <tr><td><div style="display:flex;align-items:center;gap:12px"><div class="mini-face" style="background-image:url('https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=80&q=80&fit=crop&crop=faces')"></div><div><div class="strong">王主管</div><div style="font-size:11.5px;color:var(--t4)">wang@rmt.cn</div></div></div></td><td><span class="bdg bdg-role">管理员</span></td><td class="num">—</td><td class="num">2 分钟前</td><td><span class="bdg bdg-ok">活跃</span></td><td style="text-align:right"><button class="btn btn-dark" style="padding:7px 11px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:15px;height:15px"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button></td></tr>
+          <tr><td><div style="display:flex;align-items:center;gap:12px"><div class="mini-face" style="background-image:url('https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=80&q=80&fit=crop&crop=faces')"></div><div><div class="strong">李编导</div><div style="font-size:11.5px;color:var(--t4)">li@rmt.cn</div></div></div></td><td><span class="bdg bdg-role">创作者</span></td><td class="num">席位 #1</td><td class="num">5 分钟前</td><td><span class="bdg bdg-ok">活跃</span></td><td style="text-align:right"><button class="btn btn-dark" style="padding:7px 11px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:15px;height:15px"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button></td></tr>
+          <tr><td><div style="display:flex;align-items:center;gap:12px"><div class="mini-face" style="background-image:url('https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=80&q=80&fit=crop&crop=faces')"></div><div><div class="strong">张记者</div><div style="font-size:11.5px;color:var(--t4)">zhang@rmt.cn</div></div></div></td><td><span class="bdg bdg-role">创作者</span></td><td class="num">席位 #2</td><td class="num">1 小时前</td><td><span class="bdg bdg-ok">活跃</span></td><td style="text-align:right"><button class="btn btn-dark" style="padding:7px 11px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:15px;height:15px"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button></td></tr>
+          <tr><td><div style="display:flex;align-items:center;gap:12px"><div class="mini-face" style="background:linear-gradient(150deg,#2C2C32,#161618);display:grid;place-items:center;font-weight:700;font-size:13px;color:var(--t2)">陈</div><div><div class="strong">陈审核</div><div style="font-size:11.5px;color:var(--t4)">chen@rmt.cn</div></div></div></td><td><span class="bdg bdg-role">查看者</span></td><td class="num">—</td><td class="num">昨天</td><td><span class="bdg bdg-dim">空闲</span></td><td style="text-align:right"><button class="btn btn-dark" style="padding:7px 11px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:15px;height:15px"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button></td></tr>
+        </tbody>
+      </table>
+
+      <div class="set-card" style="margin-top:24px">
+        <h3>角色权限</h3>
+        <div class="h-desc">三种内置角色的能力边界。私有化版可自定义角色(二期)。</div>
+        <table class="tbl" style="box-shadow:none;border:none">
+          <thead><tr><th>权限</th><th style="text-align:center">管理员</th><th style="text-align:center">创作者</th><th style="text-align:center">查看者</th></tr></thead>
+          <tbody>
+            <tr><td>创作数字人视频 / 配音</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center" class="num">—</td></tr>
+            <tr><td>管理形象 / 音色 / 素材</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center" class="num">—</td></tr>
+            <tr><td>查看 / 下载作品</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td></tr>
+            <tr><td>成员管理 / 用量查看</td><td style="text-align:center">✓</td><td style="text-align:center" class="num">—</td><td style="text-align:center" class="num">—</td></tr>
+            <tr><td>系统设置 / 能力网关</td><td style="text-align:center">✓</td><td style="text-align:center" class="num">—</td><td style="text-align:center" class="num">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+</div>
+<script src="shell.js"></script>
+<script>document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));this.classList.add('active');}));</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+
+# 依赖 / 构建产物（将来工程化时用）
+node_modules/
+dist/
+.next/
+build/

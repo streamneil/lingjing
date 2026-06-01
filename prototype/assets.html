@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>素材库 · 灵镜</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body data-page="assets" data-crumb="创作 > 素材库">
+<div class="shell" id="shell-mount">
+  <div class="main-col">
+    <main class="page">
+      <div class="ph">
+        <div><h1 class="t-h1">素材库</h1><p class="desc">统一管理图片、视频、音频、背景素材，可直接用于创作。智能分析（自动打标签 / 以图搜图）二期上线。</p></div>
+        <button class="btn btn-white"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 8l5-5 5 5M5 21h14"/></svg>上传素材</button>
+      </div>
+      <div class="bar">
+        <button class="chip active">全部</button><button class="chip">图片</button><button class="chip">视频</button><button class="chip">音频</button><button class="chip">背景</button>
+        <div class="sp"></div>
+        <div class="search-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input placeholder="搜索素材…"></div>
+        <span class="bdg bdg-blue" title="二期">智能分析 · 二期</span>
+      </div>
+      <div class="grid-av tight" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">
+        <div class="av new" style="aspect-ratio:1/1;animation-delay:.04s"><div class="av-new-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 8l5-5 5 5M5 21h14"/></svg><span>上传素材</span></div></div>
+        <div class="av" style="aspect-ratio:1/1;animation-delay:.08s"><div class="av-img" style="background-image:url('https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=400&q=80&fit=crop')"></div><div class="av-veil"></div><span class="av-tag">背景</span><div class="av-name" style="font-size:13px">演播室·蓝</div></div>
+        <div class="av" style="aspect-ratio:1/1;animation-delay:.12s"><div class="av-img" style="background-image:url('https://images.unsplash.com/photo-1431540015161-0bf868a2d407?w=400&q=80&fit=crop')"></div><div class="av-veil"></div><span class="av-tag">背景</span><div class="av-name" style="font-size:13px">城市夜景</div></div>
+        <div class="av" style="aspect-ratio:1/1;animation-delay:.16s"><div class="av-img" style="background-image:url('https://images.unsplash.com/photo-1497032628192-86f99bcd76bc?w=400&q=80&fit=crop')"></div><div class="av-veil"></div><span class="av-tag">背景</span><div class="av-name" style="font-size:13px">会议厅</div></div>
+        <div class="av" style="aspect-ratio:1/1;animation-delay:.20s"><div class="av-img" style="background:linear-gradient(160deg,#2A2238,#150E1F);display:grid;place-items:center"><svg viewBox="0 0 24 24" fill="none" stroke="#FFB23E" stroke-width="1.5" style="width:40px;height:40px"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg></div><div class="av-veil"></div><span class="av-tag">音频</span><div class="av-name" style="font-size:13px">片头音乐.mp3</div></div>
+        <div class="av" style="aspect-ratio:1/1;animation-delay:.24s"><div class="av-img" style="background-image:url('https://images.unsplash.com/photo-1492619375914-88005aa9e8fb?w=400&q=80&fit=crop')"></div><div class="av-veil"></div><span class="av-tag">视频</span><div class="av-name" style="font-size:13px">采访素材.mp4</div></div>
+      </div>
+    </main>
+  </div>
+</div>
+<script src="shell.js"></script>
+<script>document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));this.classList.add('active');}));</script>
+</body>
+</html>
