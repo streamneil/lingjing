@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>登录 · 灵镜</title>
+<link rel="stylesheet" href="app.css">
+<style>
+  /* 登录页:复用 app.css 设计 token,纯黑哑光底 + 白底 pill 主按钮 */
+  .lg-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg); }
+  .lg-card {
+    width: 380px; max-width: 92vw; background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--r-lg); padding: 36px 32px; box-shadow: var(--sh-card);
+  }
+  .lg-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 28px; }
+  .lg-logo {
+    width: 34px; height: 34px; border-radius: 9px; background: var(--t1); color: #0A0A0B;
+    display: grid; place-items: center; font-weight: 800; font-family: var(--f-en);
+  }
+  .lg-brand h1 { font-size: 17px; font-weight: 700; color: var(--t1); margin: 0; }
+  .lg-brand p { font-size: 12px; color: var(--t3); margin: 2px 0 0; }
+  .lg-field { margin-bottom: 14px; }
+  .lg-field label { display: block; font-size: 12.5px; color: var(--t3); margin-bottom: 7px; }
+  .lg-field input {
+    width: 100%; box-sizing: border-box; background: var(--field); border: 1px solid var(--line);
+    border-radius: var(--r-sm); padding: 12px 14px; color: var(--t1); font-size: 14px;
+    font-family: var(--f); outline: none;
+  }
+  .lg-field input:focus { border-color: var(--line-hi); }
+  .lg-field input::placeholder { color: var(--t4); }
+  .lg-btn {
+    width: 100%; background: var(--t1); color: #0A0A0B; border: none; border-radius: var(--r-pill);
+    padding: 13px; font-size: 14.5px; font-weight: 700; cursor: pointer; margin-top: 10px;
+    font-family: var(--f); box-shadow: var(--sh-white-btn);
+  }
+  .lg-btn:hover { background: #fff; }
+  .lg-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .lg-err { color: var(--red); font-size: 12.5px; margin-top: 12px; min-height: 16px; }
+  .lg-hint { color: var(--t4); font-size: 11.5px; margin-top: 18px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="lg-wrap">
+  <div class="lg-card">
+    <div class="lg-brand">
+      <div class="lg-logo">灵</div>
+      <div><h1>灵镜</h1><p>融媒体数字人内容生产平台</p></div>
+    </div>
+
+    <form id="lgForm">
+      <div class="lg-field">
+        <label>机构 ID</label>
+        <input id="tenantId" placeholder="你的机构标识" autocomplete="off" required>
+      </div>
+      <div class="lg-field">
+        <label>用户名</label>
+        <input id="username" placeholder="登录用户名" autocomplete="username" required>
+      </div>
+      <div class="lg-field">
+        <label>密码</label>
+        <input id="password" type="password" placeholder="密码" autocomplete="current-password" required>
+      </div>
+      <button class="lg-btn" id="lgBtn" type="submit">登 录</button>
+      <div class="lg-err" id="lgErr"></div>
+    </form>
+
+    <div class="lg-hint">
+      Slice 1 演示:机构与账号由管理后台开通(暂无自助注册)。<br>
+      忘记机构 ID 或密码,请联系机构管理员。
+    </div>
+  </div>
+</div>
+
+<script src="api.js"></script>
+<script>
+  const form = document.getElementById('lgForm');
+  const btn = document.getElementById('lgBtn');
+  const err = document.getElementById('lgErr');
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    err.textContent = '';
+    btn.disabled = true;
+    btn.textContent = '登录中…';
+    try {
+      await LJ.login(
+        document.getElementById('tenantId').value.trim(),
+        document.getElementById('username').value.trim(),
+        document.getElementById('password').value,
+      );
+      location.href = 'index.html'; // 登录成功进系统首页(形象库)
+    } catch (ex) {
+      err.textContent = ex.message || '登录失败';
+      btn.disabled = false;
+      btn.textContent = '登 录';
+    }
+  });
+</script>
+</body>
+</html>

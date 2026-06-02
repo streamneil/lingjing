@@ -1,0 +1,36 @@
+{
+  "name": "lingjing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "灵镜 — 融媒体数字人内容生产 SaaS（Slice 1）",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "node --import tsx src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "probe:connect": "node scripts/probe-connectivity.mjs",
+    "probe:baichuan": "node scripts/probe-baichuan.mjs"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^11.8.1",
+    "express": "^4.21.2",
+    "minio": "^8.0.4",
+    "multer": "^1.4.5-lts.1"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/express": "^4.17.21",
+    "@types/multer": "^2.1.0",
+    "@types/node": "^22.13.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.2.6"
+  }
+}

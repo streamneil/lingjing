@@ -1,0 +1,45 @@
+# 灵镜 Slice 1 — 两服务:app + MinIO。
+# 决策来源:/plan-eng-review D3(MinIO 同构)+ D11(去 Redis,DB 队列)。
+# 私有化交付就是把这份 compose 丢进客户内网。
+
+services:
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000" # S3 API
+      - "9001:9001" # 控制台
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    depends_on:
+      - minio
+    environment:
+      PORT: 3000
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY}
+      BAICHUAN_AVATAR_MODEL: ${BAICHUAN_AVATAR_MODEL:-}
+      BAICHUAN_PRESET_AVATAR: ${BAICHUAN_PRESET_AVATAR:-}
+      BAICHUAN_PRESET_VOICE: ${BAICHUAN_PRESET_VOICE:-cosyvoice-v1}
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      DB_FILE: /data/lingjing.db
+    ports:
+      - "3000:3000"
+    volumes:
+      - app-data:/data
+
+volumes:
+  minio-data:
+  app-data:

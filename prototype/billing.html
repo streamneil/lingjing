@@ -11,11 +11,11 @@
     <main class="page">
       <div class="ph">
         <div><h1 class="t-h1">用量与计费</h1><p class="desc">按量计费，每次生成消耗点数。托管模式下点数 = 云端能力成本 + 服务费；私有化模式可切换为内部用量统计。</p></div>
-        <button class="btn btn-white"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>充值点数</button>
+        <button class="btn btn-white" id="grantBtn" onclick="doGrant()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>发放点数</button>
       </div>
 
       <div class="stat-row">
-        <div class="stat" style="animation-delay:.04s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg>当前点数余额</div><div class="val">1,280</div><div class="bar"><i style="width:42%"></i></div><div class="sub">本月已用 1,720 / 充值 3,000</div></div>
+        <div class="stat" style="animation-delay:.04s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg>当前点数余额</div><div class="val" id="balVal">—</div><div class="bar"><i style="width:42%"></i></div><div class="sub" id="balSub">实时余额</div></div>
         <div class="stat" style="animation-delay:.08s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>本月数字人视频</div><div class="val">86 <small>条</small></div><div class="sub">消耗 980 点</div></div>
         <div class="stat" style="animation-delay:.12s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/></svg>本月声音克隆</div><div class="val">14 <small>次</small></div><div class="sub">消耗 420 点</div></div>
         <div class="stat" style="animation-delay:.16s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg>高精形象训练</div><div class="val">2 <small>个</small></div><div class="sub">消耗 320 点</div></div>
@@ -28,10 +28,10 @@
         <div class="plan"><div class="pn">私有化</div><div class="pp">定制<small> / 年费</small></div><ul><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>整套部署到客户</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>客户自有云账号</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>数据本地化</li></ul><button class="btn btn-dark" style="width:100%">联系销售</button></div>
       </div>
 
-      <div class="sec-head"><span class="sec-title">消费记录</span></div>
+      <div class="sec-head"><span class="sec-title">消费记录</span><a href="/api/credits/ledger.csv" class="btn btn-dark" style="padding:7px 13px;font-size:12.5px;text-decoration:none">导出 CSV</a></div>
       <table class="tbl">
-        <thead><tr><th>时间</th><th>类型</th><th>作品 / 对象</th><th>操作人</th><th style="text-align:right">点数</th></tr></thead>
-        <tbody>
+        <thead><tr><th>时间</th><th>类型</th><th>作品 / 对象</th><th>说明</th><th style="text-align:right">点数</th></tr></thead>
+        <tbody id="ledgerBody">
           <tr><td class="num">06-01 15:16</td><td><span class="bdg bdg-dim">数字人视频</span></td><td class="strong">融媒体新闻·晚间播报</td><td>李编导</td><td class="num neg" style="text-align:right">-12</td></tr>
           <tr><td class="num">06-01 14:02</td><td><span class="bdg bdg-dim">声音克隆</span></td><td class="strong">台长配音</td><td>李编导</td><td class="num neg" style="text-align:right">-30</td></tr>
           <tr><td class="num">06-01 11:30</td><td><span class="bdg bdg-blue">高精训练</span></td><td class="strong">台标主播·专属</td><td>王主管</td><td class="num neg" style="text-align:right">-160</td></tr>
@@ -43,5 +43,58 @@
   </div>
 </div>
 <script src="shell.js"></script>
+<script src="api.js"></script>
+<script>
+  const KIND_CN = {grant:'发放',reserve:'预扣',settle:'结算',release:'释放'};
+  const KIND_BDG = {
+    grant:'<span class="bdg bdg-ok">发放</span>',
+    reserve:'<span class="bdg bdg-dim">预扣</span>',
+    settle:'<span class="bdg bdg-dim">数字人视频</span>',
+    release:'<span class="bdg" style="background:rgba(255,178,62,.14);color:var(--amber)">释放</span>',
+  };
+  function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+  function fmtTime(ts){const d=new Date(ts);const p=n=>String(n).padStart(2,'0');return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;}
+
+  async function doGrant(){
+    const me = await LJ.me().catch(()=>null);
+    if(!me||me.role!=='admin'){ alert('仅管理员可发放点数'); return; }
+    const amount = parseInt(prompt('发放点数数量:','1000')||'',10);
+    if(!amount||amount<=0){ return; }
+    try{ await LJ.post('/credits/grant',{amount,note:'后台发放'}); await load(); }
+    catch(e){ alert(e.message); }
+  }
+
+  async function load(){
+    try{
+      const me = await LJ.me();
+      if(me.role!=='admin'){ const b=document.getElementById('grantBtn'); if(b) b.style.display='none'; }
+
+      const bal = await LJ.get('/credits/balance');
+      document.getElementById('balVal').textContent = (bal.balance??0).toLocaleString('en-US');
+      // 用量预警(H5):余额低于阈值时高亮提示
+      const warn = await LJ.get('/credits/warning').catch(()=>null);
+      if(warn && warn.low){
+        const sub=document.getElementById('balSub');
+        if(sub){ sub.textContent='⚠ 余额不足('+warn.balance+' < '+warn.threshold+'),请及时充值'; sub.style.color='var(--amber)'; }
+      }
+
+      const led = await LJ.get('/credits/ledger');
+      const body = document.getElementById('ledgerBody');
+      if(!led.length){ body.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--t4);padding:40px">暂无消费记录</td></tr>'; return; }
+      body.innerHTML = led.map(l=>{
+        const amtColor = l.amount>=0 ? 'color:var(--green)' : '';
+        const amtTxt = (l.amount>=0?'+':'')+l.amount;
+        return `<tr>
+          <td class="num">${fmtTime(l.created_at)}</td>
+          <td>${KIND_BDG[l.kind]||esc(l.kind)}</td>
+          <td class="strong">${l.job_id?('任务 '+esc(l.job_id).slice(0,8)):'—'}</td>
+          <td>${esc(l.note||'')}</td>
+          <td class="num ${l.amount<0?'neg':''}" style="text-align:right;${amtColor}">${amtTxt}</td>
+        </tr>`;
+      }).join('');
+    }catch(e){ /* 401 已跳转 */ }
+  }
+  load();
+</script>
 </body>
 </html>

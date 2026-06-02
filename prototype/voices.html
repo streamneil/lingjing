@@ -11,7 +11,9 @@
     <main class="page">
       <div class="ph">
         <div><h1 class="t-h1">音色库</h1><p class="desc">40 个预置人声（400 小时语音包），以及上传 5–30s 样本克隆的专属音色。配音可调语速 0.5–2 倍与音量。</p></div>
-        <button class="btn btn-white"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>克隆新音色</button>
+        <button class="btn btn-white" id="cloneBtn" onclick="cloneVoiceFlow()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>克隆新音色</button>
+        <input type="file" id="voiceSample" accept="audio/*" style="display:none">
+        <input type="file" id="voiceProof" accept="image/*,application/pdf" style="display:none">
       </div>
       <div class="bar">
         <button class="chip active">我的克隆 · 4</button><button class="chip">预置人声 · 40</button>
@@ -19,18 +21,64 @@
         <div class="msel" style="min-width:140px">语言：全部 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
         <div class="msel" style="min-width:140px">性别：全部 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
       </div>
-      <div class="ss-body" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr));padding:0;display:grid;gap:12px;">
-        <div class="vcard"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>我的声音 1</div><div class="vc-d">克隆音色 · 12s 样本 · 06-01 创建</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-        <div class="vcard"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>台长配音</div><div class="vc-d">克隆音色 · 26s 样本 · 复刻中 80%</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-        <div class="vcard"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>主持人·老陈</div><div class="vc-d">克隆音色 · 18s 样本</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-        <div class="vcard"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>解说·沉稳男声</div><div class="vc-d">克隆音色 · 22s 样本</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-        <div class="vcard"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>新闻播报·雅琴 <span class="hot">预置</span></div><div class="vc-d">女性 · 播音员 · 适合新闻、纪录片</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-        <div class="vcard"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>磁性男声·浩然 <span class="hot">预置</span></div><div class="vc-d">成人 · 男性 · 磁性 · 适合广告、品牌</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-      </div>
+      <div class="ss-body" id="voiceGrid" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr));padding:0;display:grid;gap:12px;"></div>
     </main>
   </div>
 </div>
 <script src="shell.js"></script>
-<script>document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));this.classList.add('active');}));</script>
+<script src="api.js"></script>
+<script>
+  const grid=document.getElementById('voiceGrid');
+  let data={presets:[],clones:[]};
+  function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+  document.querySelectorAll('.chip').forEach((b,i)=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));this.classList.add('active');render(i===0?'clone':'preset');}));
+
+  function card(v,isClone){
+    const status = v.status==='processing'?' · 复刻中':(v.status==='failed'?' · 失败':'');
+    const tag = isClone?'':' <span class="hot">预置</span>';
+    const del = isClone?`<button class="btn btn-dark" style="padding:6px 10px;font-size:12px" onclick="delVoice('${v.id}','${esc(v.name)}')">删除</button>`:'';
+    const desc = isClone?('克隆音色'+status):(`${v.gender||''} · ${v.desc||''}`);
+    return `<div class="vcard"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>${esc(v.name)}${tag}</div><div class="vc-d">${esc(desc)}</div></div><div class="vc-p">${del||'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>'}</div></div>`;
+  }
+  function render(which){
+    const list = which==='preset'?data.presets:data.clones;
+    grid.innerHTML = list.length?list.map(v=>card(v,which!=='preset')).join('')
+      :`<div style="color:var(--t4);padding:40px">${which==='preset'?'暂无预置':'还没有克隆音色,点右上角克隆一个'}</div>`;
+  }
+  async function delVoice(id,name){ if(!confirm(`删除 ${name}?`))return; try{await LJ.del('/voices/'+id);await load();}catch(e){alert(e.message);} }
+
+  async function cloneVoiceFlow(){
+    const me=await LJ.me().catch(()=>null);
+    if(!me||me.role==='viewer'){ alert('查看者不能克隆音色'); return; }
+    document.getElementById('voiceSample').click();
+  }
+  document.getElementById('voiceSample').addEventListener('change',async function(){
+    const sample=this.files[0]; if(!sample)return;
+    const name=prompt('音色名称:','我的克隆音色'); if(!name)return;
+    if(!confirm('确认已获被克隆人本人授权?(合规要求,未授权不可克隆)')){ this.value=''; return; }
+    const fd=new FormData(); fd.append('name',name); fd.append('consent','true'); fd.append('sample',sample);
+    try{
+      const res=await fetch('/api/voices',{method:'POST',body:fd,credentials:'same-origin'});
+      if(res.status===401){location.href='login.html';return;}
+      const d=await res.json().catch(()=>({}));
+      if(!res.ok) throw new Error(d.error||'克隆失败');
+      await load();
+    }catch(e){ alert(e.message); }
+    this.value='';
+  });
+
+  async function load(){
+    try{
+      data=await LJ.get('/voices');
+      const chips=document.querySelectorAll('.chip');
+      if(chips[0])chips[0].textContent='我的克隆 · '+data.clones.length;
+      if(chips[1])chips[1].textContent='预置人声 · '+data.presets.length;
+      const active=document.querySelector('.chip.active');
+      render(active===chips[1]?'preset':'clone');
+    }catch(e){}
+  }
+  load();
+</script>
 </body>
 </html>

@@ -17,8 +17,8 @@
         <button class="btn btn-white" onclick="openModal('createRole')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>创建数字人</button>
       </div>
 
-      <div class="sec-head"><span class="sec-title">我的数字人</span><span class="sec-count">3</span></div>
-      <div class="grid-av">
+      <div class="sec-head"><span class="sec-title">我的数字人</span><span class="sec-count" id="myCount">—</span></div>
+      <div class="grid-av" id="myGrid">
         <div class="av new" style="animation-delay:.05s" onclick="openModal('createRole')">
           <div class="av-new-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c0-3.3 2.6-5 5.5-5"/><path d="M18 7.5v6M15 10.5h6"/></svg><span>创建数字人</span></div>
         </div>
@@ -43,7 +43,7 @@
         <button class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4 2v-8L3 5Z"/></svg>筛选</button>
         <div class="seg"><button class="active">竖式</button><button>横式</button></div>
       </div>
-      <div class="grid-av tight">
+      <div class="grid-av tight" id="presetGrid">
         <div class="av" style="animation-delay:.18s"><div class="av-img" style="background-image:url('https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=600&q=85&fit=crop&crop=faces')"></div><div class="av-veil"></div><span class="av-tag">主播</span><div class="av-name">Chloé</div><div class="av-cta" onclick="location.href='create.html'">创建影片</div></div>
         <div class="av" style="animation-delay:.22s"><div class="av-img" style="background-image:url('https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=600&q=85&fit=crop&crop=faces')"></div><div class="av-veil"></div><span class="av-tag">主持人</span><div class="av-name">Lily</div><div class="av-cta" onclick="location.href='create.html'">创建影片</div></div>
         <div class="av" style="animation-delay:.26s"><div class="av-img" style="background-image:url('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&q=85&fit=crop&crop=faces')"></div><div class="av-veil"></div><span class="av-tag">解说</span><div class="av-name">Miles</div><div class="av-cta" onclick="location.href='create.html'">创建影片</div></div>
@@ -60,9 +60,11 @@
   <div class="modal">
     <div class="mh"><h3>创建数字人</h3><div class="mc" onclick="closeModal('createRole')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></div></div>
     <div class="mb">
-      <div class="iline"><label>名称</label><input placeholder="输入数字人名称"></div>
-      <div style="display:flex;gap:8px;margin-bottom:16px;"><div class="choice-seg" style="flex:1;display:flex;"><button class="active" style="flex:1">照片快速生成</button><button style="flex:1">高清视频·高精定制</button></div></div>
-      <div class="uzone"><div class="ubox"><div class="u"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 15 5-5 4 4 3-3 6 6"/><path d="M16.5 7.5 19 5l3 3"/></svg>上传照片</div></div></div>
+      <div class="iline"><label>名称</label><input id="avName" placeholder="输入数字人名称"></div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;"><div class="choice-seg" style="flex:1;display:flex;"><button class="active" style="flex:1">照片快速生成</button><button style="flex:1" onclick="alert('高精定制训练为二期能力(C4),将在私有化签约后开放')">高清视频·高精定制</button></div></div>
+      <input type="file" id="avPhoto" accept="image/jpeg,image/png,image/webp" style="display:none">
+      <input type="file" id="avProof" accept="image/*,application/pdf" style="display:none">
+      <div class="uzone" onclick="document.getElementById('avPhoto').click()"><div class="ubox"><div class="u" id="avPhotoLabel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 15 5-5 4 4 3-3 6 6"/><path d="M16.5 7.5 19 5l3 3"/></svg>上传照片</div></div></div>
       <div class="rtitle">照片要求</div><div class="rsub">格式 jpg / jpeg / png / webp，文件 &lt; 30MB</div>
       <div class="samples">
         <div class="sample" style="background-image:url('https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=220&q=75&fit=crop&crop=faces')"><span class="mk">✅</span></div>
@@ -71,14 +73,94 @@
         <div class="sample" style="background-image:url('https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=220&q=75&fit=crop&crop=faces')"><span class="mk">❌</span></div>
       </div>
       <ul class="rlist"><li>闭嘴，中性表情</li><li>正脸看着镜头</li><li>无墨镜、刘海等面部遮挡</li></ul>
-      <div class="consent"><div class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></div><div>创建即确认我已年满 18 岁，所用照片属于本人或已获授权，并接受 <u style="color:var(--t2)">服务条款</u> 与 <u style="color:var(--t2)">隐私政策</u>。</div></div>
-      <button class="btn btn-white" style="width:100%;padding:15px;font-size:15px;">创建数字人</button>
+      <div class="consent" id="avConsent" onclick="toggleConsent()" style="cursor:pointer"><div class="ck" id="avConsentBox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></div><div>我确认已获被克隆人<b style="color:var(--t1)">本人授权</b>(年满 18 岁,照片属本人或已书面授权),并接受 <u style="color:var(--t2)">服务条款</u> 与 <u style="color:var(--t2)">隐私政策</u>。<a onclick="event.stopPropagation();document.getElementById('avProof').click()" style="color:var(--blue);cursor:pointer">上传授权凭证(可选)</a> <span id="avProofName" style="color:var(--t4);font-size:11px"></span></div></div>
+      <button class="btn btn-white" id="avCreateBtn" style="width:100%;padding:15px;font-size:15px;" onclick="submitAvatar()">创建数字人</button>
     </div>
   </div>
 </div>
 
 <script src="shell.js"></script>
 <script src="app.js"></script>
-<script>document.querySelectorAll('.chip,.seg button,.choice-seg button').forEach(b=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('button,.chip').forEach(x=>x.classList.remove('active'));this.classList.add('active');}));</script>
+<script src="api.js"></script>
+<script>
+  document.querySelectorAll('.chip,.seg button,.choice-seg button').forEach(b=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('button,.chip').forEach(x=>x.classList.remove('active'));this.classList.add('active');}));
+
+  function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+  // 上传选择反馈
+  document.getElementById('avPhoto').addEventListener('change',function(){
+    const f=this.files[0]; if(f) document.getElementById('avPhotoLabel').innerHTML='已选:'+esc(f.name);
+  });
+  document.getElementById('avProof').addEventListener('change',function(){
+    const f=this.files[0]; if(f) document.getElementById('avProofName').textContent='✓ '+f.name;
+  });
+
+  // 授权勾选(必须勾才能创建)
+  let consented=false;
+  function toggleConsent(){
+    consented=!consented;
+    document.getElementById('avConsentBox').style.opacity=consented?'1':'.25';
+  }
+  document.getElementById('avConsentBox').style.opacity='.25';
+
+  async function submitAvatar(){
+    const name=(document.getElementById('avName').value||'').trim();
+    const photo=document.getElementById('avPhoto').files[0];
+    const proof=document.getElementById('avProof').files[0];
+    if(!name){ alert('请输入名称'); return; }
+    if(!photo){ alert('请上传照片'); return; }
+    if(!consented){ alert('必须勾选"已获本人授权"才能创建(合规要求)'); return; }
+    const fd=new FormData();
+    fd.append('name',name);
+    fd.append('consent','true');
+    fd.append('photo',photo);
+    if(proof) fd.append('proof',proof);
+    const btn=document.getElementById('avCreateBtn');
+    btn.disabled=true; btn.textContent='创建中…';
+    try{
+      // 直接 fetch(FormData 不能用 LJ.post 的 JSON 封装)
+      const res=await fetch('/api/avatars',{method:'POST',body:fd,credentials:'same-origin'});
+      if(res.status===401){ location.href='login.html'; return; }
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok) throw new Error(data.error||'创建失败');
+      closeModal('createRole');
+      await load();
+    }catch(e){ alert(e.message); }
+    finally{ btn.disabled=false; btn.textContent='创建数字人'; }
+  }
+
+  // 渲染形象卡片
+  function avCard(a, isCustom){
+    const bg = a.thumb ? `background-image:url('${a.thumb}')` : 'background:linear-gradient(160deg,#33333A,#1A1A1E)';
+    const tag = isCustom ? '自定义' : (a.name.includes('主播')?'主播':'预置');
+    const statusTag = a.status==='processing' ? '<span class="av-tag" style="background:rgba(255,178,62,.22);color:#FFB23E">处理中</span>'
+      : `<span class="av-tag">${tag}</span>`;
+    const del = isCustom ? `<div class="av-more" onclick="event.stopPropagation();delAvatar('${a.id}','${esc(a.name)}')" title="删除"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></div>` : '';
+    const cta = a.status==='ready' ? `<div class="av-cta" onclick="location.href='create.html'">创建影片</div>` : '';
+    return `<div class="av"><div class="av-img" style="${bg}"></div><div class="av-veil"></div>${statusTag}<div class="av-name">${esc(a.name)}</div>${del}${cta}</div>`;
+  }
+
+  async function delAvatar(id,name){
+    if(!confirm(`删除形象 ${name}?`)) return;
+    try{ await LJ.del('/avatars/'+id); await load(); }catch(e){ alert(e.message); }
+  }
+
+  async function load(){
+    try{
+      const data=await LJ.get('/avatars');
+      // 我的数字人:保留"创建"卡 + 自定义形象
+      const myGrid=document.getElementById('myGrid');
+      const newCard=myGrid.querySelector('.av.new');
+      myGrid.innerHTML='';
+      if(newCard) myGrid.appendChild(newCard);
+      (data.custom||[]).forEach(a=>myGrid.insertAdjacentHTML('beforeend',avCard(a,true)));
+      document.getElementById('myCount').textContent=(data.custom||[]).length;
+      // 预置
+      const pg=document.getElementById('presetGrid');
+      pg.innerHTML=(data.presets||[]).map(p=>avCard({...p,thumb:p.thumb},false)).join('');
+    }catch(e){ /* 401 已跳转 */ }
+  }
+  load();
+</script>
 </body>
 </html>

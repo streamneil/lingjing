@@ -41,7 +41,7 @@
 
     <div class="cbtn-wrap">
       <span class="cbtn-badge">限时</span>
-      <button class="cbtn" id="createBtn" onclick="alert('演示原型：进入生成队列，右侧对话流可查看进度')">
+      <button class="cbtn" id="createBtn">
         创建 <span class="gem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg> 10</span>
       </button>
     </div>
@@ -224,16 +224,103 @@
 
 <script src="shell.js"></script>
 <script src="app.js"></script>
+<script src="api.js"></script>
 <script>
   const ta=document.getElementById('script'), cnt=document.getElementById('cnt'), btn=document.getElementById('createBtn');
   ta.addEventListener('input',()=>{cnt.textContent=ta.value.length;btn.classList.toggle('ready',ta.value.trim().length>0);});
   document.querySelectorAll('.ftab,.ss-seg button').forEach(t=>t.addEventListener('click',function(){this.parentNode.querySelectorAll('.ftab,button').forEach(x=>x.classList.remove('active'));this.classList.add('active');}));
+
+  // ── Slice 1 真实接线:选音色 → 提交生成 → 轮询对话流 ──
+  // 选中的音色名(Slice1 映射到预置 voiceRef;真实音色 ID 待 C-research 补)。
+  let selectedVoice = null;
   function pickVoice(el,name){
+    selectedVoice = name;
     const row=document.querySelectorAll('.selr')[1];
     row.querySelector('.selr-b h5').textContent='声音';
     row.querySelector('.selr-b p').innerHTML=name;
     closeSheet('voices');
   }
+
+  // 登录态守卫:进创作台先确认已登录(未登录 api.js 会自动跳 login)
+  LJ.me().catch(()=>{});
+
+  const feedList = document.querySelector('.feed-list');
+
+  // 转义,防文案里的 HTML 注入对话流
+  function esc(s){ return (s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+  // 渲染/更新一个 job 卡片(三态:running/done/failed),复用原型 class。
+  function renderCard(job, scriptText){
+    let card = document.getElementById('job-'+job.id);
+    if(!card){
+      card = document.createElement('div');
+      card.className = 'fitem';
+      card.id = 'job-'+job.id;
+      feedList.insertBefore(card, feedList.firstChild); // 新任务置顶
+    }
+    const bubble = `<div class="fbubble"><div class="mav"></div><div class="tx">${esc(scriptText)}</div></div>`;
+    if(job.status==='queued' || job.status==='running'){
+      card.innerHTML = `
+        <div class="fmeta"><b>AI 虚拟人</b><span class="ts">刚刚</span><span class="sp"></span>
+          <span class="st" style="color:var(--amber)"><span class="led led-run"></span>${job.status==='queued'?'排队中':'生成中'}</span></div>
+        ${bubble}
+        <div class="fvideo proc"><div class="proc-in"><div class="spinner"></div>
+          <div class="lbl">${job.progress?('进度 '+job.progress+'%'):'已进入生成队列'}</div>
+          <div class="proc-bar"><i style="width:${job.progress||8}%"></i></div></div></div>`;
+    } else if(job.status==='done'){
+      const v = job.videoUrl ? `<video src="${job.videoUrl}" controls style="width:100%;border-radius:12px"></video>` :
+        `<div class="proc-in"><div class="lbl">成品已生成</div></div>`;
+      card.innerHTML = `
+        <div class="fmeta"><b>AI 虚拟人</b><span class="ts">刚刚</span><span class="sp"></span>
+          <span class="st" style="color:var(--green)"><span class="led led-ok"></span>已完成${job.aiLabel==='native'?' · 含AI标识':''}</span></div>
+        ${bubble}
+        <div class="fvideo">${v}</div>`;
+    } else { // failed
+      card.innerHTML = `
+        <div class="fmeta"><b>AI 虚拟人</b><span class="ts">刚刚</span><span class="sp"></span>
+          <span class="st" style="color:var(--red)"><span class="led led-err"></span>生成失败</span></div>
+        ${bubble}
+        <div class="fvideo err"><div class="err-in"><div class="ei">!</div>
+          <div class="lbl">${esc(job.error||'生成失败')}</div></div></div>
+        <div class="factions"><button class="btn btn-dark" onclick="retry('${job.id}','${esc(scriptText).replace(/'/g,"\\'")}')">重新生成</button><div class="sp"></div></div>`;
+    }
+  }
+
+  async function retry(id, scriptText){
+    try{ await LJ.retryJob(id); track(id, scriptText); }
+    catch(e){ alert(e.message); }
+  }
+
+  // 提交后持续轮询直到终态,实时刷新卡片
+  async function track(id, scriptText){
+    try{
+      await LJ.pollJob(id, (job)=>renderCard(job, scriptText));
+    }catch(e){ /* 已登录守卫处理 401;其余忽略 */ }
+  }
+
+  btn.addEventListener('click', async ()=>{
+    const script = ta.value.trim();
+    if(!script){ alert('请输入文案'); return; }
+    if(script.length>2000){ alert('文案不能超过 2000 字'); return; }
+    btn.disabled = true;
+    const prev = btn.innerHTML;
+    btn.textContent = '提交中…';
+    try{
+      // Slice1:形象/音色用预置占位(真实 ID 待 C-research 后从形象库/音色库选)
+      const res = await LJ.createJob({
+        avatarRef: 'preset-1',
+        voiceRef: 'cosyvoice-v1',
+        script,
+      });
+      renderCard({ id: res.id, status: 'queued', progress: 0 }, script);
+      track(res.id, script);
+      ta.value=''; cnt.textContent='0';
+    }catch(e){
+      alert('提交失败:'+e.message);
+    }finally{
+      btn.disabled=false; btn.innerHTML=prev;
+    }
+  });
 </script>
 </body>
 </html>

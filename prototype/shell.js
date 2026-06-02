@@ -1,5 +1,11 @@
 // 共享左侧导航 — 各页 <body data-page="..."> 决定高亮
 (function(){
+  // 确保 api.js 已加载(系统页只需引 shell.js 即自带登录态/登出)
+  if (!window.LJ && !document.querySelector('script[src="api.js"]')) {
+    const s = document.createElement('script');
+    s.src = 'api.js';
+    document.head.appendChild(s);
+  }
   const I = {
     studio: '<path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/>',
     avatars: '<circle cx="12" cy="8" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/>',
@@ -55,10 +61,40 @@
       <div class="sp"></div>
       <div class="credits">
         <span class="gem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/><path d="M2 9h20M9 3 6.5 9 12 21M15 3l2.5 6L12 21"/></svg></span>
-        剩余 <b class="num">1,280</b><a href="billing.html" class="topup">充值</a>
+        剩余 <b class="num" id="lj-balance">—</b><a href="billing.html" class="topup">充值</a>
       </div>
-      <div class="avatar-btn">融</div>
+      <div class="avatar-btn" id="lj-account" title="点击登出">融</div>
     </header>`;
   const mc = document.querySelector('.main-col');
   if (mc) mc.insertAdjacentHTML('afterbegin', bar);
+
+  // 登录态:拉当前用户填充机构名/账号;未登录 api.js 会跳 login。
+  // 注意 shell.js 在 api.js 之前注入,这里延迟到 LJ 就绪后执行。
+  function bindAuth(){
+    if (!window.LJ) { setTimeout(bindAuth, 30); return; }
+    LJ.me().then(u => {
+      const acc = document.getElementById('lj-account');
+      if (acc){
+        acc.textContent = (u.username || '用户').slice(0,1).toUpperCase();
+        acc.title = `${u.username}(${({admin:'管理员',creator:'创作者',viewer:'查看者'})[u.role]||u.role}) · 点击登出`;
+        acc.style.cursor = 'pointer';
+        acc.onclick = async () => {
+          if (!confirm('确认登出?')) return;
+          try { await LJ.logout(); } catch {}
+          location.href = 'login.html';
+        };
+      }
+      // viewer 隐藏“创建/发起生成”入口(前端兜底,后端已有 403 硬拦)
+      if (u.role === 'viewer') {
+        document.querySelectorAll('[data-requires-create]').forEach(el => el.style.display='none');
+      }
+    }).catch(()=>{ /* 未登录已被 api.js 跳转 */ });
+
+    // 顶栏真实余额
+    LJ.get('/credits/balance').then(r => {
+      const el = document.getElementById('lj-balance');
+      if (el) el.textContent = (r.balance ?? 0).toLocaleString('en-US');
+    }).catch(()=>{});
+  }
+  bindAuth();
 })();

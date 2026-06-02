@@ -11,7 +11,8 @@
     <main class="page">
       <div class="ph">
         <div><h1 class="t-h1">素材库</h1><p class="desc">统一管理图片、视频、音频、背景素材，可直接用于创作。智能分析（自动打标签 / 以图搜图）二期上线。</p></div>
-        <button class="btn btn-white"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 8l5-5 5 5M5 21h14"/></svg>上传素材</button>
+        <button class="btn btn-white" onclick="document.getElementById('assetFile').click()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 8l5-5 5 5M5 21h14"/></svg>上传素材</button>
+        <input type="file" id="assetFile" accept="image/*,video/*,audio/*" style="display:none">
       </div>
       <div class="bar">
         <button class="chip active">全部</button><button class="chip">图片</button><button class="chip">视频</button><button class="chip">音频</button><button class="chip">背景</button>
@@ -19,18 +20,54 @@
         <div class="search-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input placeholder="搜索素材…"></div>
         <span class="bdg bdg-blue" title="二期">智能分析 · 二期</span>
       </div>
-      <div class="grid-av tight" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">
-        <div class="av new" style="aspect-ratio:1/1;animation-delay:.04s"><div class="av-new-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 8l5-5 5 5M5 21h14"/></svg><span>上传素材</span></div></div>
-        <div class="av" style="aspect-ratio:1/1;animation-delay:.08s"><div class="av-img" style="background-image:url('https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=400&q=80&fit=crop')"></div><div class="av-veil"></div><span class="av-tag">背景</span><div class="av-name" style="font-size:13px">演播室·蓝</div></div>
-        <div class="av" style="aspect-ratio:1/1;animation-delay:.12s"><div class="av-img" style="background-image:url('https://images.unsplash.com/photo-1431540015161-0bf868a2d407?w=400&q=80&fit=crop')"></div><div class="av-veil"></div><span class="av-tag">背景</span><div class="av-name" style="font-size:13px">城市夜景</div></div>
-        <div class="av" style="aspect-ratio:1/1;animation-delay:.16s"><div class="av-img" style="background-image:url('https://images.unsplash.com/photo-1497032628192-86f99bcd76bc?w=400&q=80&fit=crop')"></div><div class="av-veil"></div><span class="av-tag">背景</span><div class="av-name" style="font-size:13px">会议厅</div></div>
-        <div class="av" style="aspect-ratio:1/1;animation-delay:.20s"><div class="av-img" style="background:linear-gradient(160deg,#2A2238,#150E1F);display:grid;place-items:center"><svg viewBox="0 0 24 24" fill="none" stroke="#FFB23E" stroke-width="1.5" style="width:40px;height:40px"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg></div><div class="av-veil"></div><span class="av-tag">音频</span><div class="av-name" style="font-size:13px">片头音乐.mp3</div></div>
-        <div class="av" style="aspect-ratio:1/1;animation-delay:.24s"><div class="av-img" style="background-image:url('https://images.unsplash.com/photo-1492619375914-88005aa9e8fb?w=400&q=80&fit=crop')"></div><div class="av-veil"></div><span class="av-tag">视频</span><div class="av-name" style="font-size:13px">采访素材.mp4</div></div>
+      <div class="grid-av tight" id="assetGrid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">
+        <div class="av new" style="aspect-ratio:1/1" onclick="document.getElementById('assetFile').click()"><div class="av-new-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 8l5-5 5 5M5 21h14"/></svg><span>上传素材</span></div></div>
       </div>
     </main>
   </div>
 </div>
 <script src="shell.js"></script>
-<script>document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));this.classList.add('active');}));</script>
+<script src="api.js"></script>
+<script>
+  const grid=document.getElementById('assetGrid');
+  const newCard=grid.querySelector('.av.new');
+  let assets=[];
+  const TYPE_CN={image:'图片',video:'视频',audio:'音频'};
+  function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+  document.querySelectorAll('.chip').forEach((b,i)=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));this.classList.add('active');render(['all','image','video','audio','image'][i]);}));
+
+  function card(a){
+    const img = a.type==='image' && a.url ? `background-image:url('${a.url}')` : 'background:linear-gradient(160deg,#2A2238,#150E1F)';
+    const icon = a.type==='audio'?'🎵':(a.type==='video'?'🎬':'');
+    return `<div class="av" style="aspect-ratio:1/1"><div class="av-img" style="${img};display:grid;place-items:center;font-size:30px">${a.type==='image'?'':icon}</div><div class="av-veil"></div><span class="av-tag">${TYPE_CN[a.type]||a.type}</span><div class="av-name" style="font-size:13px">${esc(a.name)}</div><div class="av-more" onclick="event.stopPropagation();delAsset('${a.id}','${esc(a.name)}')"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></div></div>`;
+  }
+  function render(filter){
+    let list=assets;
+    if(filter&&filter!=='all') list=assets.filter(a=>a.type===filter);
+    grid.innerHTML='';
+    grid.appendChild(newCard);
+    list.forEach(a=>grid.insertAdjacentHTML('beforeend',card(a)));
+  }
+  async function delAsset(id,name){ if(!confirm(`删除素材 ${name}?`))return; try{await LJ.del('/assets/'+id);await load();}catch(e){alert(e.message);} }
+
+  document.getElementById('assetFile').addEventListener('change',async function(){
+    const f=this.files[0]; if(!f)return;
+    const fd=new FormData(); fd.append('file',f);
+    try{
+      const res=await fetch('/api/assets',{method:'POST',body:fd,credentials:'same-origin'});
+      if(res.status===401){location.href='login.html';return;}
+      const d=await res.json().catch(()=>({}));
+      if(!res.ok) throw new Error(d.error||'上传失败');
+      await load();
+    }catch(e){ alert(e.message); }
+    this.value='';
+  });
+
+  async function load(){
+    try{ assets=await LJ.get('/assets'); render('all'); }catch(e){}
+  }
+  load();
+</script>
 </body>
 </html>

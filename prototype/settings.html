@@ -13,13 +13,13 @@
 
       <div class="set-card" style="animation-delay:.04s">
         <h3>机构信息</h3><div class="h-desc">您的账号所属一个机构（工作空间）。机构内的形象、音色、作品相互隔离。</div>
-        <div class="set-row"><div class="info"><div class="k">机构名称</div><div class="v">未自定义时默认使用 “{用户名}'s Organization”</div></div><div class="ctl"><div style="display:flex;gap:8px;align-items:center"><input class="iline" style="padding:9px 13px;width:220px" value="融媒体中心"><button class="btn btn-dark">保存</button></div></div></div>
-        <div class="set-row"><div class="info"><div class="k">机构 ID</div><div class="v">用于对接与计费,不可修改</div></div><div class="ctl"><span class="bdg bdg-dim">ORG-2049</span></div></div>
+        <div class="set-row"><div class="info"><div class="k">机构名称</div><div class="v">未自定义时默认使用 “{用户名}'s Organization”</div></div><div class="ctl"><div style="display:flex;gap:8px;align-items:center"><input class="iline" id="orgName" style="padding:9px 13px;width:220px" value=""><button class="btn btn-dark" onclick="saveOrgName()">保存</button></div></div></div>
+        <div class="set-row"><div class="info"><div class="k">交付模式</div><div class="v">托管(平台云账号)/ 私有化(客户自有云账号,能力网关切换)</div></div><div class="ctl"><div class="choice-seg" id="deliverySeg"><button data-v="hosted" class="active">托管</button><button data-v="private">私有化</button></div></div></div>
       </div>
 
       <div class="set-card" style="animation-delay:.12s">
         <h3>内容合规与 AI 标识</h3><div class="h-desc">融媒体 / 政企硬性要求：生成内容按监管添加 AI 生成标识，并留存审计。</div>
-        <div class="set-row"><div class="info"><div class="k">AI 生成标识(水印)</div><div class="v">在生成视频右下角添加“AI 合成”标识与元数据</div></div><div class="ctl"><div class="switch on" onclick="this.classList.toggle('on')"><i></i></div></div></div>
+        <div class="set-row"><div class="info"><div class="k">AI 生成标识(水印)</div><div class="v">在生成视频右下角添加“AI 合成”标识与元数据</div></div><div class="ctl"><div class="switch on" id="aiLabelSwitch" onclick="this.classList.toggle('on');saveAiLabel()"><i></i></div></div></div>
         <div class="set-row"><div class="info"><div class="k">内容送审</div><div class="v">文案 / 形象 / 音频生成前自动审核拦截违规</div></div><div class="ctl"><div class="switch on" onclick="this.classList.toggle('on')"><i></i></div></div></div>
         <div class="set-row"><div class="info"><div class="k">操作审计日志</div><div class="v">记录谁、何时、生成了什么(政企合规留存)</div></div><div class="ctl"><div class="switch on" onclick="this.classList.toggle('on')"><i></i></div></div></div>
       </div>
@@ -33,6 +33,36 @@
   </div>
 </div>
 <script src="shell.js"></script>
-<script>document.querySelectorAll('.choice-seg button').forEach(b=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('button').forEach(x=>x.classList.remove('active'));this.classList.add('active');}));</script>
+<script src="api.js"></script>
+<script>
+  document.querySelectorAll('.choice-seg button').forEach(b=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('button').forEach(x=>x.classList.remove('active'));this.classList.add('active');if(this.parentNode.id==='deliverySeg')saveDelivery(this.dataset.v);}));
+
+  let canEdit=false;
+  async function saveOrgName(){ if(!guard())return; try{ await put({orgName:document.getElementById('orgName').value}); alert('已保存'); }catch(e){alert(e.message);} }
+  // 用 PUT(api.js 没封装 put,直接 fetch)
+  async function put(body){
+    const res=await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify(body)});
+    if(res.status===401){location.href='login.html';return;}
+    const d=await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(d.error||'保存失败');
+    return d;
+  }
+  function guard(){ if(!canEdit){ alert('仅管理员可修改设置'); return false; } return true; }
+  async function saveDelivery(v){ if(!guard())return; try{await put({delivery:v});}catch(e){alert(e.message);} }
+  async function saveAiLabel(){ if(!guard()){document.getElementById('aiLabelSwitch').classList.toggle('on');return;} try{await put({aiLabelEnabled:document.getElementById('aiLabelSwitch').classList.contains('on')});}catch(e){alert(e.message);} }
+
+  async function load(){
+    try{
+      const me=await LJ.me(); canEdit=me.role==='admin';
+      const s=await LJ.get('/settings');
+      document.getElementById('orgName').value=s.orgName||'';
+      // 交付模式高亮
+      document.querySelectorAll('#deliverySeg button').forEach(b=>b.classList.toggle('active',b.dataset.v===s.delivery));
+      // AI 标识开关
+      const sw=document.getElementById('aiLabelSwitch'); sw.classList.toggle('on',!!s.aiLabelEnabled);
+    }catch(e){}
+  }
+  load();
+</script>
 </body>
 </html>
