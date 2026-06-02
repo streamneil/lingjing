@@ -69,6 +69,12 @@
   }
   .fld input::placeholder{color:var(--t4)}
   .fld input:focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-bg);background:var(--card-hi)}
+  .pw-wrap{position:relative}
+  .pw-wrap input{padding-right:54px}
+  .pw-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--t3);font-family:var(--f);font-size:12px;cursor:pointer;padding:7px 9px;border-radius:8px;transition:.15s}
+  .pw-eye:hover{color:var(--t1);background:var(--card-hi)}
+  .fld input.shake{animation:shake .4s}
+  @keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-5px)}40%,80%{transform:translateX(5px)}}
   .submit{
     width:100%;margin-top:10px;background:var(--t1);color:#0A0A0B;border:none;border-radius:999px;
     padding:14px;font-size:15px;font-weight:700;font-family:var(--f);cursor:pointer;letter-spacing:2px;
@@ -106,7 +112,10 @@
       </div>
       <div class="fld">
         <label>密码</label>
-        <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" required>
+        <div class="pw-wrap">
+          <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" required>
+          <button type="button" class="pw-eye" id="pwEye" aria-label="显示密码">显示</button>
+        </div>
       </div>
       <button class="submit" id="lgBtn" type="submit">登 录</button>
       <div class="err" id="lgErr"></div>
@@ -125,12 +134,19 @@
 <script src="api.js"></script>
 <script>
   const form=document.getElementById('lgForm'),btn=document.getElementById('lgBtn'),err=document.getElementById('lgErr');
+  const pw=document.getElementById('password'),eye=document.getElementById('pwEye');
+  eye.addEventListener('click',()=>{ const show=pw.type==='password'; pw.type=show?'text':'password'; eye.textContent=show?'隐藏':'显示'; pw.focus(); });
   form.addEventListener('submit',async(e)=>{
     e.preventDefault(); err.textContent=''; btn.disabled=true; btn.textContent='登录中…';
     try{
-      await LJ.login(document.getElementById('username').value.trim(),document.getElementById('password').value);
+      await LJ.login(document.getElementById('username').value.trim(),pw.value);
       location.href='dashboard.html';
-    }catch(ex){ err.innerHTML='✕ '+(ex.message||'登录失败'); btn.disabled=false; btn.textContent='登 录'; }
+    }catch(ex){
+      err.innerHTML='✕ '+(ex.message||'登录失败'); btn.disabled=false; btn.textContent='登 录';
+      // 登录失败:抖动 + 清空密码 + 重新聚焦,免去用户手动定位
+      pw.classList.add('shake'); setTimeout(()=>pw.classList.remove('shake'),420);
+      pw.value=''; pw.focus();
+    }
   });
 </script>
 </body>

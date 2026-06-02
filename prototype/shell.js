@@ -34,7 +34,8 @@
   const cur = document.body.dataset.page;
   const items = NAV.map(n => n.g
     ? `<div class="sb-group">${n.g}</div>`
-    : `<a class="sb-item ${n.p===cur?'active':''}" href="${n.h}">${ic(n.p)}<span>${n.t}</span></a>`
+    // 创作台是"发起生成"入口,viewer 无权 → 标记以便前端兜底隐藏
+    : `<a class="sb-item ${n.p===cur?'active':''}" href="${n.h}"${n.p==='studio'?' data-requires-create':''}>${ic(n.p)}<span>${n.t}</span></a>`
   ).join('');
 
   const sb = `
@@ -93,7 +94,11 @@
     .lj-modal .row button{flex:1;padding:11px;border-radius:999px;font-size:14px;font-weight:600;font-family:var(--f);cursor:pointer;border:1px solid var(--line)}
     .lj-modal .ok{background:var(--t1);color:#0A0A0B;border:none}
     .lj-modal .cancel{background:none;color:var(--t2)}
-    .lj-msg{font-size:12.5px;min-height:16px;margin-bottom:4px}`;
+    .lj-msg{font-size:12.5px;min-height:16px;margin-bottom:4px}
+    #lj-toast-host{position:fixed;top:22px;right:22px;z-index:600;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+    .lj-toast{background:var(--modal,#161618);border:1px solid var(--line,#232327);border-left:3px solid var(--green);border-radius:11px;padding:12px 16px;font-size:13px;color:var(--t1);box-shadow:var(--sh-pop);opacity:0;transform:translateY(-8px);transition:.28s}
+    .lj-toast.on{opacity:1;transform:translateY(0)}
+    .lj-toast.err{border-left-color:var(--red)}`;
   document.head.appendChild(styleEl);
   document.body.insertAdjacentHTML('beforeend', `
     <div class="lj-ov" id="lj-ov-profile"><div class="lj-modal">
@@ -108,6 +113,8 @@
       <label>原密码</label><input id="lj-op" type="password" placeholder="当前密码">
       <label>新密码(≥6 位)</label><input id="lj-np" type="password" placeholder="新密码">
       <label>确认新密码</label><input id="lj-np2" type="password" placeholder="再次输入">
+      <label style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--t3);cursor:pointer;margin-bottom:8px"><input type="checkbox" id="lj-pw-show" style="width:auto;margin:0">显示密码</label>
+      <div style="font-size:11.5px;color:var(--t4);margin-bottom:10px;line-height:1.5">修改后,你在其它设备的登录将被登出,需用新密码重新登录。</div>
       <div class="lj-msg" id="lj-pw-msg"></div>
       <div class="row"><button class="cancel" data-close>取消</button><button class="ok" id="lj-pw-save">确认修改</button></div>
     </div></div>`);
@@ -144,18 +151,29 @@
           document.getElementById('lj-ov-profile').classList.add('on');
         }
         else if (act==='password'){
-          ['lj-op','lj-np','lj-np2'].forEach(id=>document.getElementById(id).value='');
+          ['lj-op','lj-np','lj-np2'].forEach(id=>{const e=document.getElementById(id);e.value='';e.type='password';});
+          document.getElementById('lj-pw-show').checked=false;
           document.getElementById('lj-pw-msg').textContent='';
           document.getElementById('lj-ov-pwd').classList.add('on');
         }
       });
+      // 改密码:显示密码切换 + 即时一致性反馈
+      const pwShow=document.getElementById('lj-pw-show');
+      if(pwShow) pwShow.onchange=()=>['lj-op','lj-np','lj-np2'].forEach(id=>document.getElementById(id).type=pwShow.checked?'text':'password');
+      const np=document.getElementById('lj-np'), np2=document.getElementById('lj-np2'), pwMsg=document.getElementById('lj-pw-msg');
+      function pwLiveCheck(){
+        if(np2.value && np.value!==np2.value){ pwMsg.style.color='var(--amber)'; pwMsg.textContent='两次新密码不一致'; }
+        else if(np.value && np.value.length<6){ pwMsg.style.color='var(--amber)'; pwMsg.textContent='新密码至少 6 位'; }
+        else pwMsg.textContent='';
+      }
+      if(np){ np.addEventListener('input',pwLiveCheck); np2.addEventListener('input',pwLiveCheck); }
       // 弹窗:取消 / 保存
       document.querySelectorAll('.lj-ov [data-close]').forEach(b=>b.onclick=()=>b.closest('.lj-ov').classList.remove('on'));
       document.querySelectorAll('.lj-ov').forEach(ov=>ov.addEventListener('click',e=>{if(e.target===ov)ov.classList.remove('on')}));
       document.getElementById('lj-pf-save').onclick = async ()=>{
         const dn=document.getElementById('lj-dn').value.trim(); const msg=document.getElementById('lj-pf-msg');
         if(!dn){ msg.style.color='var(--red)'; msg.textContent='昵称不能为空'; return; }
-        try{ const r=await LJ.put('/me',{displayName:dn}); document.getElementById('lj-account').textContent=dn.slice(0,1).toUpperCase(); document.getElementById('lj-menu-name').textContent=dn; document.getElementById('lj-ov-profile').classList.remove('on'); }
+        try{ await LJ.put('/me',{displayName:dn}); document.getElementById('lj-account').textContent=dn.slice(0,1).toUpperCase(); document.getElementById('lj-menu-name').textContent=dn; document.getElementById('lj-ov-profile').classList.remove('on'); window.LJToast&&window.LJToast('✓ 个人信息已保存'); }
         catch(e){ msg.style.color='var(--red)'; msg.textContent=e.message; }
       };
       document.getElementById('lj-pw-save').onclick = async ()=>{
@@ -164,12 +182,17 @@
         if(!op||!np){ msg.textContent='请填写原密码和新密码'; return; }
         if(np!==np2){ msg.textContent='两次新密码不一致'; return; }
         if(np.length<6){ msg.textContent='新密码至少 6 位'; return; }
-        try{ await LJ.post('/me/password',{oldPassword:op,newPassword:np}); msg.style.color='var(--green)'; msg.textContent='✓ 已修改'; setTimeout(()=>document.getElementById('lj-ov-pwd').classList.remove('on'),900); }
-        catch(e){ msg.textContent=e.message; }
+        const save=document.getElementById('lj-pw-save'); save.disabled=true; save.textContent='修改中…';
+        try{ await LJ.post('/me/password',{oldPassword:op,newPassword:np}); msg.style.color='var(--green)'; msg.textContent='✓ 密码已修改,其它设备已登出'; setTimeout(()=>{document.getElementById('lj-ov-pwd').classList.remove('on');save.disabled=false;save.textContent='确认修改';window.LJToast&&window.LJToast('✓ 密码已更新');},1400); }
+        catch(e){ msg.style.color='var(--red)'; msg.textContent=e.message; save.disabled=false; save.textContent='确认修改'; }
       };
-      // viewer 隐藏“创建/发起生成”入口(前端兜底,后端已有 403 硬拦)
+      // viewer 隐藏"创建/发起生成"入口(前端兜底,后端已有 403 硬拦)
       if (u.role === 'viewer') {
         document.querySelectorAll('[data-requires-create]').forEach(el => el.style.display='none');
+        // viewer 误入创作台(无权页)→ 引导回概览,而非停在点了报 403 的页
+        if (document.body.dataset.page === 'studio') {
+          alert('查看者无创作权限,已返回概览'); location.href = 'dashboard.html';
+        }
       }
     }).catch(()=>{ /* 未登录已被 api.js 跳转 */ });
 
@@ -179,5 +202,14 @@
       if (el) el.textContent = (r.balance ?? 0).toLocaleString('en-US');
     }).catch(()=>{});
   }
+  // 全局轻提示(右上角 toast),取代静默关闭弹窗带来的"没反应"错觉
+  window.LJToast = function(text, kind){
+    let host = document.getElementById('lj-toast-host');
+    if(!host){ host=document.createElement('div'); host.id='lj-toast-host'; document.body.appendChild(host); }
+    const t = document.createElement('div'); t.className='lj-toast'+(kind==='err'?' err':'');
+    t.textContent = text; host.appendChild(t);
+    requestAnimationFrame(()=>t.classList.add('on'));
+    setTimeout(()=>{ t.classList.remove('on'); setTimeout(()=>t.remove(),300); }, 2600);
+  };
   bindAuth();
 })();
