@@ -18,3 +18,4 @@ dist/
 build/
 .gstack/
 probe-output.mp4
+probe-labeled.mp4

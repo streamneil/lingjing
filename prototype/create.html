@@ -34,9 +34,7 @@
     <div class="cfg-sp"></div>
 
     <div class="cfg-row">
-      <div class="msel">品质 V1.0 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
-      <div class="msel">1080P <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
-      <div class="msel">16:9 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+      <div class="msel" id="resSel" data-res="720P" onclick="cycleRes()">分辨率 720P <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
     </div>
 
     <div class="cbtn-wrap">
@@ -241,6 +239,14 @@
     closeSheet('voices');
   }
 
+  // 分辨率切换(wan2.2-s2v 只支持 480P / 720P)
+  function cycleRes(){
+    const el=document.getElementById('resSel');
+    const next=el.dataset.res==='720P'?'480P':'720P';
+    el.dataset.res=next;
+    el.firstChild.textContent='分辨率 '+next+' ';
+  }
+
   // 登录态守卫:进创作台先确认已登录(未登录 api.js 会自动跳 login)
   LJ.me().catch(()=>{});
 
@@ -311,6 +317,7 @@
         avatarRef: 'preset-1',
         voiceRef: 'cosyvoice-v1',
         script,
+        resolution: document.getElementById('resSel').dataset.res,
       });
       renderCard({ id: res.id, status: 'queued', progress: 0 }, script);
       track(res.id, script);

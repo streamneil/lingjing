@@ -14,7 +14,23 @@ import { storage, getSignedUrl } from '../storage/index.js';
 import { listPresets as listAvatarPresets, getAvatar } from '../avatars/index.js';
 import { isPreset as isPresetVoice, getVoice } from '../voices/index.js';
 import { moderateScript, moderateOutput } from '../pipeline/moderation.js';
+import { applyAiLabel, probeAudioDuration } from '../pipeline/ai-label.js';
 import { settle, release, estimateCost } from '../credits/index.js';
+import { db } from '../db/index.js';
+
+/** 读租户的 AI 标识设置(默认开启 + "AI 合成")。 */
+function getAiLabelConfig(tenantId: string): { enabled: boolean; text: string } {
+  const get = (key: string, def: string) => {
+    const row = db
+      .prepare(`SELECT value FROM tenant_setting WHERE tenant_id=? AND key=?`)
+      .get(tenantId, key) as { value: string } | undefined;
+    return row?.value ?? def;
+  };
+  return {
+    enabled: get('ai_label_enabled', 'true') === 'true',
+    text: get('ai_label_text', 'AI 合成'),
+  };
+}
 import {
   claimNextJob,
   setProviderTaskId,
@@ -59,6 +75,14 @@ async function processJob(job: JobRow): Promise<void> {
   //        (wan2.2-s2v 不做 TTS,需现成音频;这是查证后的真实链路)
   const voice = resolveVoiceName(input.voiceRef, job.tenant_id);
   const audioBuf = await synthesizeSpeech({ text: input.script, voice });
+  // wan2.2-s2v 硬约束:音频 <20s 且 <15M,超了会被百炼直接拒。提前拦截给清晰错误。
+  if (audioBuf.length > 15 * 1024 * 1024) {
+    throw new Error('合成音频超过 15MB(wan2.2-s2v 上限),请缩短文案');
+  }
+  const dur = await probeAudioDuration(audioBuf);
+  if (dur !== null && dur >= 20) {
+    throw new Error(`合成音频时长 ${dur.toFixed(1)}s 超过 20s 上限,请缩短文案(约 ${Math.floor(input.script.length * 18 / dur)} 字以内)`);
+  }
   const audioKey = `tts/${job.tenant_id}/${job.id}.mp3`;
   await storage.putObject(audioKey, audioBuf, 'audio/mpeg');
   const audioUrl = await getSignedUrl(audioKey);
@@ -96,11 +120,21 @@ async function processJob(job: JobRow): Promise<void> {
   const post = await moderateOutput(videoUrl);
   if (!post.allowed) throw new Error(`成品送审拒绝:${post.reason}`);
 
-  // 5. 抓成品落 MinIO(不依赖厂商临时 URL 过期),记成品 key
+  // 5. 抓成品 → (按租户合规开关)ffmpeg 打 AI 标识 → 落 MinIO
+  //    实测确认 wan2.2-s2v 不自带标识,故默认后处理(可在系统设置关闭)。
   const objectKey = `videos/${job.tenant_id}/${job.id}.mp4`;
-  await storage.putObjectFromUrl(objectKey, videoUrl);
-
-  // TODO(C-code 探明后): 若 aiLabel==='none',此处用 ffmpeg 后处理加合规水印/元数据。
+  const labelCfg = getAiLabelConfig(job.tenant_id);
+  if (labelCfg.enabled) {
+    const resp = await fetch(videoUrl);
+    if (!resp.ok) throw new Error(`抓取成品失败 ${resp.status}`);
+    const raw = Buffer.from(await resp.arrayBuffer());
+    const { buffer, applied } = await applyAiLabel(raw, { text: labelCfg.text });
+    await storage.putObject(objectKey, buffer, 'video/mp4');
+    aiLabel = applied ? 'postprocess' : 'none'; // applied=false 说明 ffmpeg 缺失,记 none 以便告警
+  } else {
+    await storage.putObjectFromUrl(objectKey, videoUrl); // 关了标识则原样落库
+    aiLabel = 'disabled';
+  }
 
   markDone(job.id, objectKey, aiLabel);
   // 成功结算:实扣按字数估算(与提交时 reserve 同一算法 → 差额0)

@@ -19,6 +19,21 @@ vi.mock('../src/gateway/cosyvoice.js', () => ({
   }),
 }));
 
+// ── mock AI 标识后处理:测试不跑真实 ffmpeg / 不抓真实视频 URL ──
+vi.mock('../src/pipeline/ai-label.js', () => ({
+  applyAiLabel: vi.fn(async (buf: Buffer) => ({ buffer: buf, applied: true })),
+  probeAudioDuration: vi.fn(async () => 5), // 假装 5s,通过时长校验
+}));
+
+// worker 取回成品时会 fetch(videoUrl);测试里桩掉为假视频字节
+const _realFetch = globalThis.fetch;
+globalThis.fetch = (async (url: any, init?: any) => {
+  if (typeof url === 'string' && url.startsWith('http://fake/')) {
+    return new Response(Buffer.from('fake-video-bytes'), { status: 200 });
+  }
+  return _realFetch(url, init);
+}) as typeof fetch;
+
 // ── mock 网关:正常任务一次轮询即成功 ──
 vi.mock('../src/gateway/baichuan.js', () => ({
   getGateway: () => ({

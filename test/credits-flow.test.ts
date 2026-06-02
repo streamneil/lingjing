@@ -34,6 +34,19 @@ vi.mock('../src/storage/index.js', () => ({
   getSignedUrl: vi.fn(async (k: string) => k),
 }));
 
+vi.mock('../src/pipeline/ai-label.js', () => ({
+  applyAiLabel: vi.fn(async (buf: Buffer) => ({ buffer: buf, applied: true })),
+  probeAudioDuration: vi.fn(async () => 5),
+}));
+
+const _realFetch = globalThis.fetch;
+globalThis.fetch = (async (url: any, init?: any) => {
+  if (typeof url === 'string' && url.startsWith('http://fake/')) {
+    return new Response(Buffer.from('fake-video-bytes'), { status: 200 });
+  }
+  return _realFetch(url, init);
+}) as typeof fetch;
+
 const { db } = await import('../src/db/index.js');
 const { enqueueVideo } = await import('../src/queue/index.js');
 const { tick } = await import('../src/queue/worker.js');
