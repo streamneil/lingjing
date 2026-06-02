@@ -25,7 +25,7 @@ services:
     depends_on:
       - minio
     environment:
-      PORT: 3000
+      PORT: 9372
       DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY}
       BAICHUAN_AVATAR_MODEL: ${BAICHUAN_AVATAR_MODEL:-}
       BAICHUAN_PRESET_AVATAR: ${BAICHUAN_PRESET_AVATAR:-}
@@ -36,7 +36,7 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
       DB_FILE: /data/lingjing.db
     ports:
-      - "3000:3000"
+      - "9372:9372"
     volumes:
       - app-data:/data
 

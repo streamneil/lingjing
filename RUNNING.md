@@ -31,7 +31,7 @@ npm install
 cp .env.example .env          # 填入 DASHSCOPE_API_KEY(已开通付费)
 # MinIO:本地单独起一个,或用 docker 只起 minio:
 docker compose up -d minio
-npm run dev                   # http://localhost:3000/index.html
+npm run dev                   # http://localhost:9372/index.html
 ```
 
 ## docker 一键起(app + MinIO)
@@ -39,7 +39,7 @@ npm run dev                   # http://localhost:3000/index.html
 ```bash
 cp .env.example .env          # 填 key
 docker compose up --build
-# 形象库首页: http://localhost:3000/index.html
+# 形象库首页: http://localhost:9372/index.html
 # MinIO 控制台: http://localhost:9001 (minioadmin/minioadmin)
 ```
 

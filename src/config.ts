@@ -32,7 +32,7 @@ function optional(key: string, fallback: string): string {
 }
 
 export const config = {
-  port: Number(optional('PORT', '3000')),
+  port: Number(optional('PORT', '9372')),
 
   // ── 百炼 / DashScope ──
   baichuan: {

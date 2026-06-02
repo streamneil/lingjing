@@ -12,6 +12,6 @@ RUN npm install --omit=dev || npm install
 
 COPY . .
 
-EXPOSE 3000
+EXPOSE 9372
 # tsx 直接跑 TS,Slice1 不预编译(规模化后改 npm run build + node dist)
 CMD ["npm", "run", "start"]

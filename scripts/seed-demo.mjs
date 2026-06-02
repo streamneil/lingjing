@@ -16,5 +16,5 @@ console.log('机构 ID :', t.id);
 console.log('管理员   : admin / pw123456');
 console.log('创作者   : editor / pw123456');
 console.log('初始积分 : 5000');
-console.log('\n登录: http://localhost:3000/login.html');
+console.log('\n登录: http://localhost:9372/login.html');
 console.log('(机构 ID 复制上面那串,用户名 admin,密码 pw123456)\n');
