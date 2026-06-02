@@ -29,11 +29,12 @@ if (!API_KEY) { console.error('⚠️  缺少 DASHSCOPE_API_KEY'); process.exit(
 const BASE = process.env.DASHSCOPE_BASE_URL || 'https://dashscope.aliyuncs.com/api/v1';
 const MODEL = process.env.BAICHUAN_AVATAR_MODEL || 'wan2.2-s2v';
 
-// 阿里官方文档示例素材(公网可访问)。换成你自己的图/音频也行。
+// 阿里官方文档当前示例素材(公网可访问,2026-06 核实)。换成你自己的图/音频也行。
+// 要求:图 JPG/PNG 400-7000px;音频 WAV/MP3 <15M 且 <20s,含清晰人声无背景音。
 const IMAGE_URL = process.env.PROBE_IMAGE_URL
-  || 'https://dashscope.oss-cn-beijing.aliyuncs.com/images/wan_s2v/pose.png';
+  || 'https://img.alicdn.com/imgextra/i3/O1CN011FObkp1T7Ttowoq4F_!!6000000002335-0-tps-1440-1797.jpg';
 const AUDIO_URL = process.env.PROBE_AUDIO_URL
-  || 'https://dashscope.oss-cn-beijing.aliyuncs.com/samples/audio/cosyvoice/cosyvoice-zeroshot-sample.wav';
+  || 'https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20250825/iaqpio/input_audio.MP3';
 
 const t0 = Date.now();
 const el = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
@@ -72,11 +73,25 @@ async function http(method, path, body, extra = {}) {
     const st = q.json?.output?.task_status;
     console.log(`[${el()}] task_status=${st}`);
     if (st === 'SUCCEEDED') {
-      const url = q.json?.output?.video_url;
+      // 查证(2026-06 官方):成品在 output.results.video_url(URL 24h 过期,要尽快下载)
+      const url = q.json?.output?.results?.video_url ?? q.json?.output?.video_url;
       console.log('\n=== 探针报告 ===');
       console.log(`✅ 端到端耗时: ${el()}`);
       console.log(`📹 视频 URL: ${url}`);
-      console.log('❓ 下载看:口型同步?形象自然?是否自带 AI 标识?(决定是否需 ffmpeg 后处理)');
+      if (q.json?.usage) console.log(`📊 时长 ${q.json.usage.duration}s · 尺寸 ${q.json.usage.size} · ${q.json.usage.fps}fps`);
+      if (url) {
+        // 直接下载到本地,免得 24h 过期还要手动下
+        const out = resolve(process.cwd(), 'probe-output.mp4');
+        const { writeFileSync } = await import('node:fs');
+        const buf = Buffer.from(await (await fetch(url)).arrayBuffer());
+        writeFileSync(out, buf);
+        console.log(`💾 已下载到: ${out}  (${(buf.length / 1024 / 1024).toFixed(1)} MB)`);
+        console.log(`▶️  打开看:  open "${out}"`);
+      } else {
+        console.log('⚠️ 未解析到 video_url,原始 output:');
+        console.dir(q.json?.output, { depth: 5 });
+      }
+      console.log('❓ 看效果:口型同步?形象自然?无恐怖谷?是否自带 AI 标识?');
       process.exit(0);
     }
     if (st === 'FAILED' || st === 'UNKNOWN') { console.error('❌ 失败:', JSON.stringify(q.json?.output)); process.exit(3); }

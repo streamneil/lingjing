@@ -17,3 +17,4 @@ dist/
 .next/
 build/
 .gstack/
+probe-output.mp4

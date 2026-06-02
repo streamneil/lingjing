@@ -106,9 +106,9 @@ export class BaichuanGateway implements CapabilityGateway {
     if (typeof out.progress === 'number') result.progress = out.progress;
 
     if (normalized === 'succeeded') {
-      // TODO(C-research): 成品 URL 字段名以真实返回为准(video_url / results[0].url)。
-      result.videoUrl = out.video_url ?? out.results?.[0]?.url;
-      // C-code 探明:成品是否自带 AI 标识。暂按 none(需我方后处理),探明后改。
+      // 查证(2026-06 官方):成品在 output.results.video_url(results 是对象,非数组)。URL 有效期 24h。
+      result.videoUrl = out.results?.video_url ?? out.video_url;
+      // wan2.2-s2v 成品默认不自带 AI 标识(我方需 ffmpeg 后处理加合规水印,见 worker TODO)。
       result.aiLabel = 'none';
     }
     if (normalized === 'failed') {
