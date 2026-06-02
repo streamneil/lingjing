@@ -17,13 +17,15 @@
     --ease:cubic-bezier(.22,.61,.36,1);
   }
   *{margin:0;padding:0;box-sizing:border-box}
-  html,body{height:100%}
+  html,body{height:100%;width:100%}
   body{
     font-family:var(--f); background:var(--void); color:var(--t1);
-    display:grid; grid-template-columns:1.1fr .9fr; min-height:100%;
-    -webkit-font-smoothing:antialiased;
+    display:grid; grid-template-columns:1.05fr .95fr; grid-template-rows:100vh;
+    min-height:100vh; -webkit-font-smoothing:antialiased; overflow:hidden;
   }
-  @media(max-width:860px){ body{grid-template-columns:1fr} .stage{display:none} }
+  @media(max-width:860px){ body{grid-template-columns:1fr; grid-template-rows:auto; min-height:100vh; overflow:auto} .stage{display:none} }
+  /* 两栏都强制满高 */
+  .stage,.panel{ min-height:0; height:100%; }
 
   /* ───────── 左:品牌舞台 ───────── */
   .stage{
