@@ -8,8 +8,11 @@
 
 import { config } from '../config.js';
 import { getGateway } from '../gateway/baichuan.js';
-import type { VideoGenInput } from '../gateway/types.js';
-import { storage } from '../storage/index.js';
+import { synthesizeSpeech } from '../gateway/cosyvoice.js';
+import type { VideoGenInput, VideoSubmitUrls } from '../gateway/types.js';
+import { storage, getSignedUrl } from '../storage/index.js';
+import { listPresets as listAvatarPresets, getAvatar } from '../avatars/index.js';
+import { isPreset as isPresetVoice, getVoice } from '../voices/index.js';
 import { moderateScript, moderateOutput } from '../pipeline/moderation.js';
 import { settle, release, estimateCost } from '../credits/index.js';
 import {
@@ -23,6 +26,24 @@ import {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** 把 avatarRef 解析为公网可访问的脸图 URL(预置=外链;自定义=MinIO 签名 URL)。 */
+async function resolveImageUrl(avatarRef: string, tenantId: string): Promise<string> {
+  const preset = listAvatarPresets().find((p) => p.id === avatarRef);
+  if (preset) return preset.thumb;
+  const custom = getAvatar(avatarRef, tenantId);
+  if (custom?.source_key) return getSignedUrl(custom.source_key);
+  throw new Error(`形象不可用:${avatarRef}`);
+}
+
+/** 把 voiceRef 解析为 CosyVoice 可用的音色标识。 */
+function resolveVoiceName(voiceRef: string, tenantId: string): string {
+  if (isPresetVoice(voiceRef)) return voiceRef; // 预置音色名直接用
+  const clone = getVoice(voiceRef, tenantId);
+  if (clone) return clone.id; // 克隆音色 id(真实克隆音色由百炼声音复刻产出)
+  // 兜底:用默认预置,避免整个任务因音色解析失败而崩
+  return 'longxiaochun';
+}
+
 /** 处理单个 job 的完整管线。抛错由调用方捕获并标 failed(失败隔离)。 */
 async function processJob(job: JobRow): Promise<void> {
   const input = JSON.parse(job.input_json) as VideoGenInput;
@@ -31,9 +52,22 @@ async function processJob(job: JobRow): Promise<void> {
   const pre = await moderateScript(input.script);
   if (!pre.allowed) throw new Error(`送审拒绝:${pre.reason}`);
 
-  // 2. 网关提交(厂商无关)
+  // 2. 解析素材为 wan2.2-s2v 需要的公网 URL:
+  //    2a. 脸图 URL(预置外链 / 自定义 MinIO 签名)
+  const imageUrl = await resolveImageUrl(input.avatarRef, job.tenant_id);
+  //    2b. 文案 → CosyVoice TTS → 音频 → 落 MinIO → 公网签名 URL
+  //        (wan2.2-s2v 不做 TTS,需现成音频;这是查证后的真实链路)
+  const voice = resolveVoiceName(input.voiceRef, job.tenant_id);
+  const audioBuf = await synthesizeSpeech({ text: input.script, voice });
+  const audioKey = `tts/${job.tenant_id}/${job.id}.mp3`;
+  await storage.putObject(audioKey, audioBuf, 'audio/mpeg');
+  const audioUrl = await getSignedUrl(audioKey);
+
+  // 3. 网关提交(wan2.2-s2v:image_url + audio_url)
+  const submitRes: '480P' | '720P' = input.resolution === '480P' ? '480P' : '720P';
+  const urls: VideoSubmitUrls = { imageUrl, audioUrl, resolution: submitRes };
   const gateway = getGateway(job.tenant_id);
-  const providerTaskId = await gateway.submitVideo(input);
+  const providerTaskId = await gateway.submitVideo(urls);
   setProviderTaskId(job.id, providerTaskId);
 
   // 3. 轮询直到完成 / 失败 / 超时(超时上限防永久 running 的静默失败)

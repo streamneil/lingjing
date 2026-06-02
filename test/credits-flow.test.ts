@@ -6,10 +6,17 @@ import { describe, it, expect, vi } from 'vitest';
 process.env.DB_FILE = ':memory:';
 process.env.BAICHUAN_AVATAR_MODEL = 'test-model';
 
+// TTS mock:BOOM 文案抛错(模拟链路某步失败),其它出假音频
+vi.mock('../src/gateway/cosyvoice.js', () => ({
+  synthesizeSpeech: vi.fn(async (p: { text: string }) => {
+    if (p.text.includes('BOOM')) throw new Error('mock 崩');
+    return Buffer.from('fake-audio');
+  }),
+}));
+
 vi.mock('../src/gateway/baichuan.js', () => ({
   getGateway: () => ({
-    async submitVideo(input: { script: string }) {
-      if (input.script.includes('BOOM')) throw new Error('mock 崩');
+    async submitVideo() {
       return 'ptask-' + Math.random().toString(36).slice(2);
     },
     async fetchJobStatus() {
@@ -20,6 +27,7 @@ vi.mock('../src/gateway/baichuan.js', () => ({
 
 vi.mock('../src/storage/index.js', () => ({
   storage: {
+    putObject: vi.fn(async (k: string) => k),
     putObjectFromUrl: vi.fn(async (k: string) => k),
     getSignedUrl: vi.fn(async (k: string) => k),
   },
@@ -36,7 +44,7 @@ const T = 'flow-tenant';
 function submit(script: string) {
   // 模拟 API 层:入队 + reserve(API 真实路径在 jobs.ts)
   const cost = estimateCost(script.length);
-  const id = enqueueVideo({ avatarRef: 'a', voiceRef: 'v', script }, T);
+  const id = enqueueVideo({ avatarRef: 'preset-1', voiceRef: 'cosyvoice-v1', script }, T);
   reserve(T, id, cost);
   return { id, cost };
 }

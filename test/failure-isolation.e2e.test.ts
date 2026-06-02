@@ -11,27 +11,30 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 process.env.DB_FILE = ':memory:';
 process.env.BAICHUAN_AVATAR_MODEL = 'test-model';
 
-// ── mock 网关:script 含 "BOOM" 的任务在 submit 阶段抛错,其它正常走完 ──
-vi.mock('../src/gateway/baichuan.js', () => {
-  return {
-    getGateway: () => ({
-      async submitVideo(input: { script: string }) {
-        if (input.script.includes('BOOM')) {
-          throw new Error('mock 百炼崩溃');
-        }
-        return `provider-task-${Math.random().toString(36).slice(2)}`;
-      },
-      async fetchJobStatus(_taskId: string) {
-        // 正常任务:一次轮询即成功
-        return { status: 'succeeded', videoUrl: 'http://fake/video.mp4', aiLabel: 'none' as const };
-      },
-    }),
-  };
-});
+// ── mock TTS:script 含 "BOOM" 的任务在 TTS 阶段抛错(模拟百炼链路某步崩),其它出假音频 ──
+vi.mock('../src/gateway/cosyvoice.js', () => ({
+  synthesizeSpeech: vi.fn(async (p: { text: string }) => {
+    if (p.text.includes('BOOM')) throw new Error('mock 百炼崩溃');
+    return Buffer.from('fake-audio');
+  }),
+}));
+
+// ── mock 网关:正常任务一次轮询即成功 ──
+vi.mock('../src/gateway/baichuan.js', () => ({
+  getGateway: () => ({
+    async submitVideo() {
+      return `provider-task-${Math.random().toString(36).slice(2)}`;
+    },
+    async fetchJobStatus() {
+      return { status: 'succeeded', videoUrl: 'http://fake/video.mp4', aiLabel: 'none' as const };
+    },
+  }),
+}));
 
 // ── mock 存储:不连真实 MinIO ──
 vi.mock('../src/storage/index.js', () => ({
   storage: {
+    putObject: vi.fn(async (key: string) => key),
     putObjectFromUrl: vi.fn(async (key: string) => key),
     getSignedUrl: vi.fn(async (key: string) => `signed://${key}`),
   },

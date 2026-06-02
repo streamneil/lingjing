@@ -1,17 +1,18 @@
 // 灵镜 能力网关 — 百炼(DashScope)适配器。
 //
-// 已由 context7 文档 + 连通性探针确认:百炼是 submit→轮询 task_status 的异步范式
-// (X-DashScope-Async: enable 头提交,GET /tasks/:id 轮询,task_status: SUCCEEDED/FAILED)。
-// 因此 fetchJobStatus 走 GET /tasks/:id;poll 模式是默认与私有化兜底。
-//
-// ⚠️ C-research 待补(标 TODO 处):数字人视频生成的真实 model 名、generation 路径、
-//    input 字段 schema —— 需以你百炼控制台"数字人/视频生成"开通后的 API 文档为准。
-//    其余(认证、异步范式、轮询、错误处理)均为真实可用代码。
+// 查证(2026-06 阿里官方文档)的真实 wan2.2-s2v 接口:
+//   端点 POST /services/aigc/image2video/video-synthesis/  (X-DashScope-Async: enable)
+//   input: { image_url, audio_url }  parameters: { resolution: '480P'|'720P' }
+//   返回 output.task_id;GET /tasks/:id 轮询,task_status: SUCCEEDED/FAILED;
+//   成功 output.video_url 即成品。
+//   ⚠️ image_url / audio_url 必须公网可访问(私有化内网需特殊处理,见 TODOS)。
+//   ⚠️ wan2.2-s2v 不做 TTS:文案要先经 CosyVoice 转音频(见 worker 编排)。
+// 参考:https://help.aliyun.com/zh/model-studio/wan-s2v-api
 
 import { config } from '../config.js';
 import type {
   CapabilityGateway,
-  VideoGenInput,
+  VideoSubmitUrls,
   ProviderJobResult,
   ProviderJobStatus,
 } from './types.js';
@@ -63,29 +64,21 @@ function normalizeStatus(s: string | undefined): ProviderJobStatus {
 }
 
 export class BaichuanGateway implements CapabilityGateway {
-  async submitVideo(input: VideoGenInput): Promise<string> {
-    const model = config.baichuan.avatarModel;
-    if (!model) {
-      throw new Error(
-        '未配置 BAICHUAN_AVATAR_MODEL。开通百炼数字人后,把真实 model 名填进 .env(见 C-research)。',
-      );
-    }
+  async submitVideo(urls: VideoSubmitUrls): Promise<string> {
+    const model = config.baichuan.avatarModel || 'wan2.2-s2v';
 
-    // TODO(C-research): generation 路径与 input 字段以真实数字人 API 文档为准。
-    // 下面是百炼异步任务的通用形态(参考 VideoSynthesis / ImageSynthesis 范式)。
+    // wan2.2-s2v 真实入参:image_url + audio_url(均需公网可访问)
     const { status, json } = await httpJson(
       'POST',
-      '/services/aigc/video-generation/generation',
+      '/services/aigc/image2video/video-synthesis/',
       {
         model,
         input: {
-          avatar: input.avatarRef,
-          voice: input.voiceRef,
-          text: input.script,
+          image_url: urls.imageUrl,
+          audio_url: urls.audioUrl,
         },
         parameters: {
-          resolution: input.resolution ?? '1080P',
-          ratio: input.ratio ?? '16:9',
+          resolution: urls.resolution ?? '720P', // s2v 支持 480P | 720P
         },
       },
       { 'X-DashScope-Async': 'enable' }, // 异步任务,返回 task_id

@@ -38,10 +38,10 @@ export const config = {
   baichuan: {
     apiKey: () => required('DASHSCOPE_API_KEY'), // 函数式:仅在真正调用时校验,便于无 key 跑测试
     baseUrl: optional('DASHSCOPE_BASE_URL', 'https://dashscope.aliyuncs.com/api/v1'),
-    // C-research 待补:开通数字人后填真实 model 名 / 预置形象 ID。空着时网关会给出明确报错。
-    avatarModel: optional('BAICHUAN_AVATAR_MODEL', ''),
-    presetAvatar: optional('BAICHUAN_PRESET_AVATAR', ''),
-    presetVoice: optional('BAICHUAN_PRESET_VOICE', 'cosyvoice-v1'),
+    // 数字人视频模型:音频驱动口型(wan2.2-s2v,吃 image_url + audio_url)。
+    avatarModel: optional('BAICHUAN_AVATAR_MODEL', 'wan2.2-s2v'),
+    // TTS 模型:文案→音频(CosyVoice,WebSocket)。wan2.2-s2v 不做 TTS,需此前置步骤。
+    ttsModel: optional('BAICHUAN_TTS_MODEL', 'cosyvoice-v2'),
     // 任务回收模式:'poll'(私有化兜底,默认) | 'webhook'(托管可选)
     jobMode: optional('BAICHUAN_JOB_MODE', 'poll') as 'poll' | 'webhook',
     pollIntervalMs: Number(optional('POLL_INTERVAL_MS', '3000')),
