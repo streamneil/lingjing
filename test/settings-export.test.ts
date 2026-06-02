@@ -24,6 +24,42 @@ async function loginAs(u: string) {
   return c;
 }
 
+describe('个人信息 + 改密码', () => {
+  it('/me 含 displayName(默认=用户名)', async () => {
+    const c = await loginAs('admin');
+    const me = await c.get('/api/me');
+    expect(me.body.username).toBe('admin');
+    expect(me.body.displayName).toBe('admin');
+  });
+  it('改昵称生效', async () => {
+    const c = await loginAs('admin');
+    const r = await c.put('/api/me', { displayName: '台长' });
+    expect(r.status).toBe(200);
+    expect((await c.get('/api/me')).body.displayName).toBe('台长');
+  });
+  it('改密码:原密码错 → 400', async () => {
+    const c = await loginAs('viewer');
+    const r = await c.post('/api/me/password', { oldPassword: '错的', newPassword: 'newpw123' });
+    expect(r.status).toBe(400);
+  });
+  it('改密码:成功后新密码可登录、旧密码失效', async () => {
+    // 单独建一个用户避免影响其它用例
+    createUser(tenantId, 'pwuser', 'oldpw123', 'creator');
+    const c = new Client(app);
+    await c.post('/api/login', { username: 'pwuser', password: 'oldpw123' });
+    const r = await c.post('/api/me/password', { oldPassword: 'oldpw123', newPassword: 'newpw456' });
+    expect(r.status).toBe(200);
+    // 新密码能登录
+    const c2 = new Client(app);
+    const ok = await c2.post('/api/login', { username: 'pwuser', password: 'newpw456' });
+    expect(ok.status).toBe(200);
+    // 旧密码失效
+    const c3 = new Client(app);
+    const bad = await c3.post('/api/login', { username: 'pwuser', password: 'oldpw123' });
+    expect(bad.status).toBe(401);
+  });
+});
+
 describe('系统设置', () => {
   it('读设置返回默认值', async () => {
     const c = await loginAs('admin');

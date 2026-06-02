@@ -40,7 +40,8 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS user (
     id            TEXT PRIMARY KEY,
     tenant_id     TEXT NOT NULL,
-    username      TEXT NOT NULL,                  -- 登录名(租户内唯一)
+    username      TEXT NOT NULL,                  -- 登录名(全局唯一)
+    display_name  TEXT,                            -- 昵称(展示名,可改;空则用 username)
     password_hash TEXT NOT NULL,                  -- bcrypt
     role          TEXT NOT NULL DEFAULT 'creator', -- admin | creator | viewer
     status        TEXT NOT NULL DEFAULT 'active',  -- active | disabled
@@ -188,6 +189,7 @@ function addColumnIfMissing(table: string, column: string, ddl: string): void {
 }
 addColumnIfMissing('avatar', 'orientation', `orientation TEXT DEFAULT 'portrait'`);
 addColumnIfMissing('avatar', 'is_default', `is_default INTEGER NOT NULL DEFAULT 0`);
+addColumnIfMissing('user', 'display_name', `display_name TEXT`);
 
 // 用户名全局唯一(登录免输机构 ID):在 user.username 上建唯一索引。
 // 旧库若已有重名用户会建索引失败 —— 用 try 包裹并告警,交付时人工清理重名。
@@ -230,6 +232,7 @@ export interface UserRow {
   id: string;
   tenant_id: string;
   username: string;
+  display_name: string | null;
   password_hash: string;
   role: Role;
   status: UserStatus;

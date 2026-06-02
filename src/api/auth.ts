@@ -10,6 +10,8 @@ import {
   setUserStatus,
   removeUser,
   listUsers,
+  updateDisplayName,
+  changePassword,
 } from '../auth/index.js';
 import {
   setSessionCookie,
@@ -53,6 +55,32 @@ authRouter.post('/logout', requireAuth, (req: Request, res: Response) => {
 // 当前用户(前端判断登录态/角色)
 authRouter.get('/me', requireAuth, (req: Request, res: Response) => {
   return res.json(req.user);
+});
+
+// 改个人信息(昵称)
+authRouter.put('/me', requireAuth, (req: Request, res: Response) => {
+  const displayName = (req.body?.displayName as string || '').trim();
+  if (!displayName) return res.status(400).json({ error: '昵称不能为空' });
+  if (displayName.length > 30) return res.status(400).json({ error: '昵称过长(≤30 字)' });
+  updateDisplayName(req.user!.id, displayName);
+  audit(req, 'update_profile', displayName);
+  return res.json({ ok: true, displayName });
+});
+
+// 改密码(校验原密码;成功后作废其它会话,当前会话保留)
+authRouter.post('/me/password', requireAuth, (req: Request, res: Response) => {
+  const { oldPassword, newPassword } = req.body ?? {};
+  if (!oldPassword || !newPassword) return res.status(400).json({ error: '缺少原密码 / 新密码' });
+  try {
+    // 当前 session token 从 cookie 取,改密后保留它(不把自己踢下线)
+    const m = (req.headers.cookie ?? '').match(/lj_session=([^;]+)/);
+    const keep = m ? decodeURIComponent(m[1]!) : undefined;
+    changePassword(req.user!.id, oldPassword, newPassword, keep);
+    audit(req, 'change_password');
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(400).json({ error: e instanceof Error ? e.message : '改密码失败' });
+  }
 });
 
 // ── 成员管理(仅 admin)──
