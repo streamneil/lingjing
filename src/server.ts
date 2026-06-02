@@ -36,6 +36,9 @@ export function createApp() {
   app.use('/api', settingsRouter);
   app.use('/api', jobsRouter);
 
+  // 根路径 → 营销落地页(公开入口);旧 index.html 已改名 avatars.html
+  app.get('/', (_req, res) => res.redirect('/landing.html'));
+
   // 静态页:prototype 直接托管(Slice1 复用高保真原型作为 UI)
   app.use('/', express.static(prototypeDir));
 

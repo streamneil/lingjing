@@ -7,6 +7,7 @@
     document.head.appendChild(s);
   }
   const I = {
+    dashboard: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
     studio: '<path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/>',
     avatars: '<circle cx="12" cy="8" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/>',
     voices: '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/>',
@@ -18,6 +19,7 @@
   };
   const ic = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${I[p]}</svg>`;
   const NAV = [
+    {p:'dashboard', t:'概览', h:'dashboard.html'},
     {g:'创作'},
     {p:'studio', t:'创作台', h:'create.html'},
     {p:'avatars', t:'形象库', h:'avatars.html'},
