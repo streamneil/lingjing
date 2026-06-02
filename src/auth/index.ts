@@ -36,10 +36,9 @@ export function createUser(
   password: string,
   role: Role,
 ): UserRow {
-  const exists = db
-    .prepare(`SELECT 1 FROM user WHERE tenant_id=? AND username=?`)
-    .get(tenantId, username);
-  if (exists) throw new Error('该机构下用户名已存在');
+  // 用户名全局唯一:登录只凭账号即可定位租户,无需手输机构 ID。
+  const exists = db.prepare(`SELECT 1 FROM user WHERE username=?`).get(username);
+  if (exists) throw new Error('用户名已被占用(全平台唯一,请换一个)');
 
   const u: UserRow = {
     id: randomUUID(),
@@ -86,11 +85,11 @@ export interface AuthedUser {
   role: Role;
 }
 
-/** 用 (tenant, username, password) 登录,成功返回 session token。 */
-export function login(tenantId: string, username: string, password: string): string {
+/** 用 (username, password) 登录(用户名全局唯一,租户从账号反查),成功返回 session token。 */
+export function login(username: string, password: string): string {
   const u = db
-    .prepare(`SELECT * FROM user WHERE tenant_id=? AND username=?`)
-    .get(tenantId, username) as UserRow | undefined;
+    .prepare(`SELECT * FROM user WHERE username=?`)
+    .get(username) as UserRow | undefined;
   // 统一报错文案,避免泄露"用户是否存在"
   const fail = () => new Error('用户名或密码错误');
   if (!u) {

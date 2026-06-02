@@ -49,12 +49,8 @@
 
     <form id="lgForm">
       <div class="lg-field">
-        <label>机构 ID</label>
-        <input id="tenantId" placeholder="你的机构标识" autocomplete="off" required>
-      </div>
-      <div class="lg-field">
         <label>用户名</label>
-        <input id="username" placeholder="登录用户名" autocomplete="username" required>
+        <input id="username" placeholder="登录用户名" autocomplete="username" required autofocus>
       </div>
       <div class="lg-field">
         <label>密码</label>
@@ -65,8 +61,8 @@
     </form>
 
     <div class="lg-hint">
-      Slice 1 演示:机构与账号由管理后台开通(暂无自助注册)。<br>
-      忘记机构 ID 或密码,请联系机构管理员。
+      账号由机构管理员开通(暂无自助注册)。<br>
+      忘记密码请联系机构管理员。
     </div>
   </div>
 </div>
@@ -84,7 +80,6 @@
     btn.textContent = '登录中…';
     try {
       await LJ.login(
-        document.getElementById('tenantId').value.trim(),
         document.getElementById('username').value.trim(),
         document.getElementById('password').value,
       );

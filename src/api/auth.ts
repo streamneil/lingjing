@@ -23,14 +23,14 @@ import type { Role } from '../db/index.js';
 
 export const authRouter = Router();
 
-// 登录:(tenantId, username, password) → 设 session cookie
+// 登录:(username, password) → 设 session cookie(用户名全局唯一,租户从账号反查)
 authRouter.post('/login', (req: Request, res: Response) => {
-  const { tenantId, username, password } = req.body ?? {};
-  if (!tenantId || !username || !password) {
-    return res.status(400).json({ error: '缺少 tenantId / username / password' });
+  const { username, password } = req.body ?? {};
+  if (!username || !password) {
+    return res.status(400).json({ error: '缺少 username / password' });
   }
   try {
-    const token = login(tenantId, username, password);
+    const token = login(username, password);
     setSessionCookie(res, token);
     // 审计登录(此时 req.user 还没挂,用 resolveSession 拿 user id)
     const u = resolveSession(token);

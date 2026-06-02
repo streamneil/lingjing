@@ -189,6 +189,14 @@ function addColumnIfMissing(table: string, column: string, ddl: string): void {
 addColumnIfMissing('avatar', 'orientation', `orientation TEXT DEFAULT 'portrait'`);
 addColumnIfMissing('avatar', 'is_default', `is_default INTEGER NOT NULL DEFAULT 0`);
 
+// 用户名全局唯一(登录免输机构 ID):在 user.username 上建唯一索引。
+// 旧库若已有重名用户会建索引失败 —— 用 try 包裹并告警,交付时人工清理重名。
+try {
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_user_username_global ON user(username)`);
+} catch {
+  console.warn('[迁移] user.username 存在跨租户重名,未能建全局唯一索引;请清理重名后重启。');
+}
+
 export type JobStatus = 'queued' | 'running' | 'done' | 'failed';
 
 export interface JobRow {

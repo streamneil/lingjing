@@ -41,8 +41,8 @@ window.LJ = (function () {
     del: (p) => call('DELETE', p),
 
     // 便捷方法
-    login: (tenantId, username, password) =>
-      call('POST', '/login', { tenantId, username, password }),
+    login: (username, password) =>
+      call('POST', '/login', { username, password }),
     logout: () => call('POST', '/logout'),
     me: () => call('GET', '/me'),
 

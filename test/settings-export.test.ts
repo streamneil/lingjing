@@ -20,7 +20,7 @@ beforeAll(() => {
 
 async function loginAs(u: string) {
   const c = new Client(app);
-  await c.post('/api/login', { tenantId, username: u, password: 'pw123456' });
+  await c.post('/api/login', { username: u, password: 'pw123456' });
   return c;
 }
 

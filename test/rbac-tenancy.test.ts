@@ -17,19 +17,23 @@ const app = createApp();
 let tenantA: string;
 let tenantB: string;
 
+// 用户名全局唯一:测试里给每个租户的账号加租户前缀,loginAs 自动拼。
+const tag = (tid: string) => (tid === tenantA ? 'A' : tid === tenantB ? 'B' : 'X');
+
 beforeAll(() => {
   tenantA = createTenant('A 台').id;
   tenantB = createTenant('B 台').id;
-  createUser(tenantA, 'admin', 'pw123456', 'admin');
-  createUser(tenantA, 'creator', 'pw123456', 'creator');
-  createUser(tenantA, 'viewer', 'pw123456', 'viewer');
-  createUser(tenantB, 'admin', 'pw123456', 'admin');
+  createUser(tenantA, 'A_admin', 'pw123456', 'admin');
+  createUser(tenantA, 'A_creator', 'pw123456', 'creator');
+  createUser(tenantA, 'A_viewer', 'pw123456', 'viewer');
+  createUser(tenantB, 'B_admin', 'pw123456', 'admin');
   grant(tenantA, 10000); // A 有积分,可发起生成;B 故意不发(测余额隔离/不足)
 });
 
-async function loginAs(tenantId: string, username: string): Promise<InstanceType<typeof Client>> {
+// 保持调用处签名不变:loginAs(tenantId, '角色'),内部拼成全局唯一用户名
+async function loginAs(tenantId: string, role: string): Promise<InstanceType<typeof Client>> {
   const c = new Client(app);
-  const r = await c.post('/api/login', { tenantId, username, password: 'pw123456' });
+  const r = await c.post('/api/login', { username: `${tag(tenantId)}_${role}`, password: 'pw123456' });
   expect(r.status).toBe(200);
   return c;
 }
@@ -37,7 +41,7 @@ async function loginAs(tenantId: string, username: string): Promise<InstanceType
 describe('认证', () => {
   it('密码错误 → 401', async () => {
     const c = new Client(app);
-    const r = await c.post('/api/login', { tenantId: tenantA, username: 'admin', password: '错的' });
+    const r = await c.post('/api/login', { username: 'A_admin', password: '错的' });
     expect(r.status).toBe(401);
   });
 
@@ -139,10 +143,11 @@ describe('积分 + 审计 API', () => {
   });
 
   it('余额不足时发起生成 → 402', async () => {
-    // 新建一个没发过积分的租户
+    // 新建一个没发过积分的租户(用户名全局唯一)
     const poorTenant = createTenant('穷台').id;
-    createUser(poorTenant, 'creator', 'pw123456', 'creator');
-    const c = await loginAs(poorTenant, 'creator');
+    createUser(poorTenant, 'poor_creator', 'pw123456', 'creator');
+    const c = new Client(app);
+    await c.post('/api/login', { username: 'poor_creator', password: 'pw123456' });
     const r = await c.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'cosyvoice-v1', script: '需要扣分的文案' });
     expect(r.status).toBe(402);
   });
@@ -165,9 +170,10 @@ describe('积分 + 审计 API', () => {
 describe('停用即生效', () => {
   it('管理员停用成员后,该成员 session 立即失效', async () => {
     const admin = await loginAs(tenantA, 'admin');
-    // 新建一个成员并登录
+    // 新建一个成员并登录(用户名全局唯一)
     await admin.post('/api/members', { username: 'tobedisabled', password: 'pw123456', role: 'creator' });
-    const victim = await loginAs(tenantA, 'tobedisabled');
+    const victim = new Client(app);
+    await victim.post('/api/login', { username: 'tobedisabled', password: 'pw123456' });
     expect((await victim.get('/api/me')).status).toBe(200);
 
     // 找到该成员 id 并停用
