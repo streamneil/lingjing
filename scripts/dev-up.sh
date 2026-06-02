@@ -9,7 +9,8 @@ docker compose up -d minio >/dev/null 2>&1
 sleep 4
 
 echo "▶ 2/4 种子账号(若 DB 已存在则追加一个新机构)..."
-DB_FILE=lingjing.db MINIO_ENDPOINT=127.0.0.1 node scripts/seed-demo.mjs
+# 必须用 tsx:种子脚本 import 的是 .ts 源码(TS 的 .js→.ts 解析,node 不支持)
+DB_FILE=lingjing.db MINIO_ENDPOINT=127.0.0.1 NODE_NO_WARNINGS=1 npx tsx scripts/seed-demo.mjs
 
 echo "▶ 3/4 启动应用(本地,连本地 MinIO)..."
 echo "   日志写到 /tmp/lingjing-app.log;停止用: kill \$(cat /tmp/lingjing-app.pid)"
