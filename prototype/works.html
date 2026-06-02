@@ -87,14 +87,47 @@
 
   function card(job){
     const thumb = job.status==='done'
-      ? `<div class="work-thumb"><div class="por" style="background:linear-gradient(160deg,#33333A,#1A1A1E)"></div><div class="ov"><div class="pb"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div><div class="st">${BADGE.done}</div></div>`
+      ? `<div class="work-thumb" onclick="play('${job.id}')" style="cursor:pointer"><div class="por" style="background:linear-gradient(160deg,#33333A,#1A1A1E)"></div><div class="ov"><div class="pb"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div><div class="st">${BADGE.done}</div></div>`
       : `<div class="work-thumb"><div class="por" style="background:linear-gradient(160deg,#33333A,#1A1A1E)"></div><div class="st">${BADGE[job.status]||''}</div></div>`;
     const meta = job.status==='failed' ? esc(job.error||'生成失败')+' · 可重试'
       : (job.status==='done' ? '已完成 · '+fmtTime(job.createdAt) : fmtTime(job.createdAt));
-    const retry = job.status==='failed'
-      ? `<button class="btn btn-dark" style="margin-top:8px;padding:6px 12px;font-size:12px" onclick="retry('${job.id}')">重新生成</button>` : '';
-    return `<div class="work">${thumb}<div class="work-b"><h4>数字人视频</h4><div class="m">${meta}</div>${retry}</div></div>`;
+    let actions = '';
+    if (job.status==='done') {
+      actions = `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn btn-dark" style="padding:6px 12px;font-size:12px" onclick="play('${job.id}')">播放</button>
+        <button class="btn btn-dark" style="padding:6px 12px;font-size:12px" onclick="download('${job.id}')">下载</button>
+        <button class="btn btn-dark" style="padding:6px 12px;font-size:12px" onclick="reedit('${job.id}')">重新编辑</button>
+      </div>`;
+    } else if (job.status==='failed') {
+      actions = `<button class="btn btn-dark" style="margin-top:8px;padding:6px 12px;font-size:12px" onclick="retry('${job.id}')">重新生成</button>`;
+    }
+    return `<div class="work">${thumb}<div class="work-b"><h4>数字人视频</h4><div class="m">${meta}</div>${actions}</div></div>`;
   }
+
+  // 拿成品签名 URL(懒取,避免列表一次性签所有)
+  async function signedUrl(id){
+    const j = await LJ.getJob(id);
+    if (!j.videoUrl) throw new Error('成品 URL 暂不可用');
+    return j.videoUrl;
+  }
+  async function play(id){
+    try{
+      const url = await signedUrl(id);
+      // 简易播放浮层
+      const ov = document.createElement('div');
+      ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.85);display:grid;place-items:center;z-index:999';
+      ov.onclick=()=>ov.remove();
+      ov.innerHTML=`<video src="${url}" controls autoplay style="max-width:90vw;max-height:85vh;border-radius:14px"></video>`;
+      document.body.appendChild(ov);
+    }catch(e){ alert(e.message); }
+  }
+  async function download(id){
+    try{
+      const url = await signedUrl(id);
+      const a=document.createElement('a'); a.href=url; a.download='lingjing-'+id+'.mp4'; a.click();
+    }catch(e){ alert(e.message); }
+  }
+  function reedit(id){ location.href='create.html?from='+encodeURIComponent(id); }
 
   function render(filter){
     let list = allJobs;

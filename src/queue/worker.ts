@@ -9,8 +9,9 @@
 import { config } from '../config.js';
 import { getGateway } from '../gateway/baichuan.js';
 import { synthesizeSpeech } from '../gateway/cosyvoice.js';
+import { getMediaPublisher, tenantDelivery } from '../gateway/media-publisher.js';
 import type { VideoGenInput, VideoSubmitUrls } from '../gateway/types.js';
-import { storage, getSignedUrl } from '../storage/index.js';
+import { storage } from '../storage/index.js';
 import { listPresets as listAvatarPresets, getAvatar } from '../avatars/index.js';
 import { isPreset as isPresetVoice, getVoice } from '../voices/index.js';
 import { moderateScript, moderateOutput } from '../pipeline/moderation.js';
@@ -42,12 +43,15 @@ import {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** 把 avatarRef 解析为公网可访问的脸图 URL(预置=外链;自定义=MinIO 签名 URL)。 */
+/** 把 avatarRef 解析为公网可访问的脸图 URL(预置=外链;自定义=经发布策略转公网 URL)。 */
 async function resolveImageUrl(avatarRef: string, tenantId: string): Promise<string> {
   const preset = listAvatarPresets().find((p) => p.id === avatarRef);
-  if (preset) return preset.thumb;
+  if (preset) return preset.thumb; // 预置外链本就公网可达
   const custom = getAvatar(avatarRef, tenantId);
-  if (custom?.source_key) return getSignedUrl(custom.source_key);
+  if (custom?.source_key) {
+    // 自定义素材经发布策略(托管=签名URL;私有化=中转),保证百炼可访问
+    return getMediaPublisher(tenantDelivery(tenantId)).publish(custom.source_key);
+  }
   throw new Error(`形象不可用:${avatarRef}`);
 }
 
@@ -85,7 +89,8 @@ async function processJob(job: JobRow): Promise<void> {
   }
   const audioKey = `tts/${job.tenant_id}/${job.id}.mp3`;
   await storage.putObject(audioKey, audioBuf, 'audio/mpeg');
-  const audioUrl = await getSignedUrl(audioKey);
+  // 经发布策略转公网 URL(托管=签名URL;私有化=中转),保证百炼可访问
+  const audioUrl = await getMediaPublisher(tenantDelivery(job.tenant_id)).publish(audioKey);
 
   // 3. 网关提交(wan2.2-s2v:image_url + audio_url)
   const submitRes: '480P' | '720P' = input.resolution === '480P' ? '480P' : '720P';
