@@ -10,92 +10,58 @@
 <style>
   :root{
     --void:#060607; --bg:#0A0A0B; --card:#161618; --card-hi:#1C1C1F; --field:#101012;
-    --line:#232327; --line-hi:#34343A; --hairline:rgba(255,255,255,.06);
+    --line:#232327; --line-soft:#1A1A1D; --line-hi:#34343A; --hairline:rgba(255,255,255,.06);
     --t1:#F6F6F8; --t2:#ABABB2; --t3:#717179; --t4:#4A4A51;
     --blue:#4D8DFF; --blue-bg:rgba(77,141,255,.13); --red:#FF5247; --green:#34C759; --amber:#FFB23E;
     --f:'Noto Sans SC',sans-serif; --f-en:'Manrope',sans-serif; --f-mono:'Space Mono',monospace;
     --ease:cubic-bezier(.22,.61,.36,1);
   }
   *{margin:0;padding:0;box-sizing:border-box}
-  html,body{height:100%;width:100%}
+  /* 单一居中布局 — 用 flex 居中,不依赖 grid 列对齐/高度链,任何视口都稳 */
   body{
     font-family:var(--f); background:var(--void); color:var(--t1);
-    display:grid; grid-template-columns:1.05fr .95fr; grid-template-rows:100vh;
-    min-height:100vh; -webkit-font-smoothing:antialiased; overflow:hidden;
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    padding:32px; position:relative; overflow:hidden; -webkit-font-smoothing:antialiased;
   }
-  @media(max-width:860px){ body{grid-template-columns:1fr; grid-template-rows:auto; min-height:100vh; overflow:auto} .stage{display:none} }
-  /* 两栏都强制满高 */
-  .stage,.panel{ min-height:0; height:100%; }
-
-  /* ───────── 左:品牌舞台 ───────── */
-  .stage{
-    position:relative; overflow:hidden;
+  /* 氛围背景:渐变光晕 + 网格 + 颗粒,铺满整屏 */
+  body::before{
+    content:""; position:fixed; inset:0; z-index:0;
     background:
-      radial-gradient(110% 70% at 12% -5%, #1a1a1f 0%, transparent 52%),
-      radial-gradient(90% 80% at 105% 105%, rgba(77,141,255,.12) 0%, transparent 48%),
+      radial-gradient(60% 50% at 50% -10%, rgba(77,141,255,.10) 0%, transparent 60%),
+      radial-gradient(50% 50% at 100% 100%, rgba(77,141,255,.06) 0%, transparent 55%),
+      radial-gradient(80% 60% at 0% 30%, #141417 0%, transparent 60%),
       var(--bg);
-    border-right:1px solid var(--line);
-    display:flex; flex-direction:column; justify-content:space-between; padding:48px 56px;
   }
-  .stage::before{
-    content:""; position:absolute; inset:0;
+  body::after{
+    content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
     background-image:linear-gradient(var(--hairline) 1px,transparent 1px),linear-gradient(90deg,var(--hairline) 1px,transparent 1px);
-    background-size:56px 56px; mask-image:radial-gradient(75% 75% at 28% 32%,#000 0%,transparent 78%); opacity:.55;
+    background-size:60px 60px; mask-image:radial-gradient(70% 60% at 50% 40%,#000 0%,transparent 80%); opacity:.5;
   }
-  .stage::after{
-    content:""; position:absolute; inset:0; pointer-events:none; opacity:.035; mix-blend-mode:screen;
-    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  }
-  .brand{position:relative; z-index:2; display:flex; align-items:center; gap:13px}
-  .brand .mk{
-    width:46px;height:46px;border-radius:13px;background:var(--t1);
-    display:grid;place-items:center;box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 12px 32px -12px rgba(255,255,255,.3);
-  }
-  .brand .mk svg{width:27px;height:27px}
-  .brand b{font-size:20px;font-weight:700;letter-spacing:.5px;display:block;line-height:1}
-  .brand .en{font-family:var(--f-en);font-size:11px;color:var(--t3);letter-spacing:3.5px;text-transform:uppercase;margin-top:4px;display:block}
 
-  .hero{position:relative; z-index:2}
-  .hero .eyebrow{font-family:var(--f-en);font-size:12px;color:var(--blue);letter-spacing:2px;text-transform:uppercase;margin-bottom:18px}
-  .hero h1{
-    font-size:clamp(32px,3.6vw,50px); font-weight:800; line-height:1.06; letter-spacing:-1.2px;
-    background:linear-gradient(176deg,#fff 28%,#9a9aa3); -webkit-background-clip:text; background-clip:text; color:transparent;
-  }
-  .hero h1 .accent{color:var(--blue); -webkit-text-fill-color:var(--blue)}
-  .hero p{color:var(--t2); font-size:15px; margin-top:20px; max-width:32ch; line-height:1.75}
-
-  .ticker{position:relative; z-index:2; border:1px solid var(--line); border-radius:16px; background:rgba(16,16,18,.66); backdrop-filter:blur(10px); overflow:hidden}
-  .ticker-head{display:flex;align-items:center;gap:8px;padding:11px 16px;border-bottom:1px solid var(--line-soft,#1A1A1D);font-family:var(--f-mono);font-size:10.5px;color:var(--t4);letter-spacing:1px;text-transform:uppercase}
-  .ticker-head .dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green)}
-  .ticker-row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.04);font-family:var(--f-mono);font-size:12px}
-  .ticker-row:last-child{border-bottom:none}
-  .led{width:7px;height:7px;border-radius:50%;flex-shrink:0}
-  .led.run{background:var(--amber);box-shadow:0 0 8px var(--amber);animation:pulse 1.3s var(--ease) infinite}
-  .led.ok{background:var(--green)} .led.q{background:var(--t4)}
-  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-  .ticker-row .nm{color:var(--t2);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .ticker-row .st{color:var(--t3)}
-  .ticker-row .bar{width:54px;height:4px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden}
-  .ticker-row .bar i{display:block;height:100%;background:var(--amber);transition:width .6s var(--ease)}
-
-  /* ───────── 右:登录卡(有实体边界,修之前"输入框漂浮"的问题)───────── */
-  .panel{display:flex;align-items:center;justify-content:center;padding:40px;background:var(--bg)}
-  .card{
-    width:380px; max-width:92vw; background:var(--card); border:1px solid var(--line);
-    border-radius:22px; padding:40px 38px;
-    box-shadow:0 1px 0 rgba(255,255,255,.04) inset, 0 40px 90px -30px rgba(0,0,0,.9);
-    animation:rise .65s var(--ease) both;
-  }
+  .wrap{ position:relative; z-index:1; width:100%; max-width:430px; animation:rise .6s var(--ease) both; }
   @keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
-  .card .mk-sm{display:none}
-  @media(max-width:860px){ .card .mk-sm{display:flex;align-items:center;gap:10px;margin-bottom:24px}
-    .card .mk-sm .b{width:38px;height:38px;border-radius:11px;background:var(--t1);display:grid;place-items:center}
-    .card .mk-sm .b svg{width:23px;height:23px} .card .mk-sm b{font-size:17px} }
-  .card h2{font-size:24px;font-weight:700;letter-spacing:-.4px}
-  .card .sub{color:var(--t3);font-size:13.5px;margin-top:8px;margin-bottom:30px;line-height:1.6}
-  .fld{margin-bottom:16px}
+
+  /* 品牌(卡片上方,居中) */
+  .brand{ display:flex; flex-direction:column; align-items:center; text-align:center; margin-bottom:26px; }
+  .brand .mk{
+    width:56px;height:56px;border-radius:16px;background:var(--t1);display:grid;place-items:center;
+    box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 16px 40px -14px rgba(255,255,255,.32); margin-bottom:16px;
+  }
+  .brand .mk svg{width:33px;height:33px}
+  .brand .nm{display:flex;align-items:baseline;gap:9px}
+  .brand .nm b{font-size:22px;font-weight:700;letter-spacing:.5px}
+  .brand .nm .en{font-family:var(--f-en);font-size:11px;color:var(--t4);letter-spacing:3px;text-transform:uppercase}
+  .brand .tag{margin-top:9px;font-size:12.5px;color:var(--blue);letter-spacing:.5px}
+
+  /* 登录卡 */
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:22px; padding:34px 34px 30px;
+    box-shadow:0 1px 0 rgba(255,255,255,.04) inset, 0 40px 100px -34px rgba(0,0,0,.9);
+  }
+  .card h2{font-size:21px;font-weight:700;letter-spacing:-.3px;text-align:center}
+  .card .sub{color:var(--t3);font-size:13px;margin-top:7px;margin-bottom:26px;text-align:center}
+  .fld{margin-bottom:15px}
   .fld label{display:block;font-size:11px;color:var(--t3);margin-bottom:8px;font-family:var(--f-en);letter-spacing:.5px;text-transform:uppercase;font-weight:600}
-  .fld .ipt{position:relative}
   .fld input{
     width:100%;background:var(--field);border:1px solid var(--line);border-radius:12px;
     padding:13px 15px;color:var(--t1);font-size:14.5px;font-family:var(--f);outline:none;
@@ -104,72 +70,60 @@
   .fld input::placeholder{color:var(--t4)}
   .fld input:focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-bg);background:var(--card-hi)}
   .submit{
-    width:100%;margin-top:12px;background:var(--t1);color:#0A0A0B;border:none;border-radius:999px;
-    padding:14px;font-size:15px;font-weight:700;font-family:var(--f);cursor:pointer;
+    width:100%;margin-top:10px;background:var(--t1);color:#0A0A0B;border:none;border-radius:999px;
+    padding:14px;font-size:15px;font-weight:700;font-family:var(--f);cursor:pointer;letter-spacing:2px;
     box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 10px 26px -10px rgba(255,255,255,.28);
-    transition:transform .12s var(--ease),box-shadow .18s,opacity .18s; letter-spacing:2px;
+    transition:transform .12s var(--ease),box-shadow .18s,opacity .18s;
   }
   .submit:hover{transform:translateY(-1px);box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 14px 34px -10px rgba(255,255,255,.4)}
   .submit:active{transform:translateY(0)}
   .submit:disabled{opacity:.5;cursor:not-allowed;transform:none}
-  .err{color:var(--red);font-size:12.5px;margin-top:14px;min-height:18px;display:flex;align-items:center;gap:6px}
-  .hint{color:var(--t4);font-size:11.5px;margin-top:24px;line-height:1.7;border-top:1px solid var(--line-soft,#1A1A1D);padding-top:18px}
+  .err{color:var(--red);font-size:12.5px;margin-top:13px;min-height:17px;display:flex;align-items:center;gap:6px}
+  .hint{color:var(--t4);font-size:11.5px;margin-top:22px;line-height:1.7;border-top:1px solid var(--line-soft);padding-top:17px;text-align:center}
   .hint b{color:var(--t3);font-weight:500}
+
+  /* 卡片下方一行"价值锚点"(替代原大舞台,信息保留但不靠脆弱分栏) */
+  .pitch{ margin-top:20px; display:flex; align-items:center; justify-content:center; gap:18px; color:var(--t4); font-size:12px; font-family:var(--f-mono); flex-wrap:wrap; }
+  .pitch .dot{width:5px;height:5px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);display:inline-block;margin-right:5px}
+  .pitch span{white-space:nowrap}
 </style>
 </head>
 <body>
-  <aside class="stage">
+  <div class="wrap">
     <div class="brand">
       <span class="mk"><svg viewBox="0 0 32 32" fill="none"><path d="M16 3.5C9.1 3.5 3.5 9.1 3.5 16S9.1 28.5 16 28.5" stroke="#0A0A0B" stroke-width="3" stroke-linecap="round"/><path d="M16 6.5C21.2 6.5 25.5 10.8 25.5 16S21.2 25.5 16 25.5" stroke="#0A0A0B" stroke-width="3" stroke-linecap="round" opacity="0.45"/><circle cx="16" cy="13" r="2.6" fill="#0A0A0B"/><path d="M11.2 21.5c0-2.9 2.1-4.6 4.8-4.6s4.8 1.7 4.8 4.6" stroke="#0A0A0B" stroke-width="2.4" stroke-linecap="round"/></svg></span>
-      <div><b>灵镜</b><span class="en">Lingjing</span></div>
+      <div class="nm"><b>灵镜</b><span class="en">Lingjing</span></div>
+      <div class="tag">融媒体数字人内容生产平台</div>
     </div>
 
-    <div class="hero">
-      <div class="eyebrow">融媒体数字人内容生产平台</div>
-      <h1>一张照片<br>即刻拥有<span class="accent">数字主播</span></h1>
-      <p>上传照片、克隆声音、输入文案,云端秒级生成口型自然的数字人讲话视频。</p>
-    </div>
-
-    <div class="ticker" aria-hidden="true">
-      <div class="ticker-head"><span class="dot"></span>云端生成 · 实时</div>
-      <div class="ticker-row"><span class="led run"></span><span class="nm">融媒体新闻 · 晚间播报</span><span class="bar"><i id="tbar" style="width:72%"></i></span><span class="st" id="tpct">72%</span></div>
-      <div class="ticker-row"><span class="led ok"></span><span class="nm">惠民政策解读 · 第三期</span><span class="st">已完成</span></div>
-      <div class="ticker-row"><span class="led q"></span><span class="nm">城市新区建设进展</span><span class="st">排队 #2</span></div>
-    </div>
-  </aside>
-
-  <main class="panel">
     <form class="card" id="lgForm">
-      <div class="mk-sm">
-        <span class="b"><svg viewBox="0 0 32 32" fill="none"><path d="M16 3.5C9.1 3.5 3.5 9.1 3.5 16S9.1 28.5 16 28.5" stroke="#0A0A0B" stroke-width="3" stroke-linecap="round"/><path d="M16 6.5C21.2 6.5 25.5 10.8 25.5 16S21.2 25.5 16 25.5" stroke="#0A0A0B" stroke-width="3" stroke-linecap="round" opacity="0.45"/><circle cx="16" cy="13" r="2.6" fill="#0A0A0B"/><path d="M11.2 21.5c0-2.9 2.1-4.6 4.8-4.6s4.8 1.7 4.8 4.6" stroke="#0A0A0B" stroke-width="2.4" stroke-linecap="round"/></svg></span>
-        <b>灵镜</b>
-      </div>
       <h2>欢迎回来</h2>
-      <div class="sub">登录灵镜创作台,继续你的内容生产。</div>
+      <div class="sub">登录创作台,继续你的内容生产</div>
 
       <div class="fld">
         <label>用户名</label>
-        <div class="ipt"><input id="username" placeholder="你的登录账号" autocomplete="username" required autofocus></div>
+        <input id="username" placeholder="你的登录账号" autocomplete="username" required autofocus>
       </div>
       <div class="fld">
         <label>密码</label>
-        <div class="ipt"><input id="password" type="password" placeholder="••••••••" autocomplete="current-password" required></div>
+        <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" required>
       </div>
       <button class="submit" id="lgBtn" type="submit">登 录</button>
       <div class="err" id="lgErr"></div>
 
-      <div class="hint">
-        账号由机构管理员开通,登录无需机构 ID。<br>
-        忘记密码请联系 <b>机构管理员</b>。
-      </div>
+      <div class="hint">账号由机构管理员开通,登录无需机构 ID<br>忘记密码请联系 <b>机构管理员</b></div>
     </form>
-  </main>
+
+    <div class="pitch">
+      <span><span class="dot"></span>云端秒级生成</span>
+      <span>口型自然</span>
+      <span>声音克隆</span>
+      <span>合规 AI 标识</span>
+    </div>
+  </div>
 
 <script src="api.js"></script>
 <script>
-  let w=72;
-  setInterval(()=>{ w=w>=96?72:w+2; const b=document.getElementById('tbar'),p=document.getElementById('tpct'); if(b)b.style.width=w+'%'; if(p)p.textContent=w+'%'; },1400);
-
   const form=document.getElementById('lgForm'),btn=document.getElementById('lgBtn'),err=document.getElementById('lgErr');
   form.addEventListener('submit',async(e)=>{
     e.preventDefault(); err.textContent=''; btn.disabled=true; btn.textContent='登录中…';
