@@ -61,6 +61,27 @@ export async function probeAudioDuration(audioBuf: Buffer): Promise<number | nul
   }
 }
 
+/**
+ * C3:从视频抽取首帧为 JPG(作自定义形象图)。ffmpeg 不可用或抽帧失败返回 null。
+ */
+export async function extractFirstFrame(videoBuf: Buffer): Promise<Buffer | null> {
+  if (!(await ffmpegAvailable())) return null;
+  const dir = await mkdtemp(join(tmpdir(), 'lj-frame-'));
+  const inPath = join(dir, 'in.mp4');
+  const outPath = join(dir, 'frame.jpg');
+  try {
+    await writeFile(inPath, videoBuf);
+    // -frames:v 1 取首帧;-q:v 2 高质量 JPG
+    await runFfmpeg(['-y', '-i', inPath, '-frames:v', '1', '-q:v', '2', outPath]);
+    return await readFile(outPath);
+  } catch {
+    return null; // 抽帧失败(坏视频等)→ null,API 层给 422
+  } finally {
+    await unlink(inPath).catch(() => {});
+    await unlink(outPath).catch(() => {});
+  }
+}
+
 export interface LabelOptions {
   text?: string; // 标识文案,默认"AI 合成"
 }

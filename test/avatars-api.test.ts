@@ -68,4 +68,28 @@ describe('形象上传 API', () => {
     const r = await c.postMultipart('/api/avatars', { name: 'x', consent: 'true' }, { photo: fakePhoto });
     expect(r.status).toBe(403);
   });
+
+  it('C6:重命名 + 设为默认', async () => {
+    const c = await loginAs('creator');
+    const created = await c.postMultipart('/api/avatars', { name: '原名', consent: 'true' }, { photo: fakePhoto });
+    const id = created.body.id;
+    // 重命名
+    const rn = await c.put('/api/avatars/' + id, { name: '台长专属' });
+    expect(rn.status).toBe(200);
+    // 设为默认
+    const def = await c.post('/api/avatars/' + id + '/default');
+    expect(def.status).toBe(200);
+    const list = await c.get('/api/avatars');
+    const mine = list.body.custom.find((a: any) => a.id === id);
+    expect(mine.name).toBe('台长专属');
+    expect(mine.isDefault).toBe(true);
+  });
+
+  it('列表预置含 gender/orientation(C5 筛选用)', async () => {
+    const c = await loginAs('creator');
+    const r = await c.get('/api/avatars');
+    expect(r.body.presets.length).toBeGreaterThanOrEqual(6);
+    expect(r.body.presets[0].gender).toBeTruthy();
+    expect(r.body.presets[0].orientation).toBeTruthy();
+  });
 });

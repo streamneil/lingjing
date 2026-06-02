@@ -14,8 +14,11 @@ import {
   createCustomAvatar,
   deleteAvatar,
   getAvatar,
+  renameAvatar,
+  setDefaultAvatar,
 } from '../avatars/index.js';
 import { putObject, getSignedUrl } from '../storage/index.js';
+import { extractFirstFrame } from '../pipeline/ai-label.js';
 import { audit } from '../audit/index.js';
 
 export const avatarsRouter = Router();
@@ -36,6 +39,8 @@ avatarsRouter.get('/avatars', requireAuth, async (req: Request, res: Response) =
       name: a.name,
       kind: a.kind,
       status: a.status,
+      orientation: a.orientation,
+      isDefault: a.is_default === 1,
       thumb: a.thumb_url ? await getSignedUrl(a.thumb_url).catch(() => null) : null,
       createdAt: a.created_at,
     })),
@@ -43,22 +48,25 @@ avatarsRouter.get('/avatars', requireAuth, async (req: Request, res: Response) =
   res.json({ presets, custom: customOut });
 });
 
-// 创建自定义形象(上传照片 + 授权凭证)
+// 创建自定义形象(C2 照片 / C3 视频提取首帧 + 授权凭证)
 avatarsRouter.post(
   '/avatars',
   requireRole('admin', 'creator'),
   upload.fields([
     { name: 'photo', maxCount: 1 },
+    { name: 'video', maxCount: 1 }, // C3:上传视频提取首帧为形象
     { name: 'proof', maxCount: 1 },
   ]),
   async (req: Request, res: Response) => {
     const files = req.files as Record<string, Express.Multer.File[]> | undefined;
     const photo = files?.photo?.[0];
+    const video = files?.video?.[0];
     const proof = files?.proof?.[0];
     const name = (req.body?.name as string) || '自定义形象';
+    const orientation = (req.body?.orientation as 'portrait' | 'landscape' | 'square') || 'portrait';
     const consent = req.body?.consent === 'true' || req.body?.consent === true;
 
-    if (!photo) return res.status(400).json({ error: '缺少照片文件 photo' });
+    if (!photo && !video) return res.status(400).json({ error: '缺少照片(photo)或视频(video)文件' });
     // 授权存证强制(政企法律门票)
     if (!consent) {
       return res.status(400).json({ error: '必须勾选"已获被克隆人本人授权"' });
@@ -66,10 +74,21 @@ avatarsRouter.post(
 
     const tenantId = req.user!.tenantId;
     try {
-      // 落 MinIO:照片 + 授权凭证(若有)
-      const ext = (photo.originalname.split('.').pop() || 'jpg').toLowerCase();
-      const photoKey = `avatars/${tenantId}/${randomUUID()}.${ext}`;
-      await putObject(photoKey, photo.buffer, photo.mimetype);
+      let sourceKey: string;
+      let kind: 'photo' | 'video';
+      if (video) {
+        // C3:从视频提取首帧 → 落 MinIO 作形象图(ffmpeg)
+        const frame = await extractFirstFrame(video.buffer);
+        if (!frame) return res.status(422).json({ error: '视频抽帧失败(需 ffmpeg);请改用照片上传' });
+        sourceKey = `avatars/${tenantId}/${randomUUID()}.jpg`;
+        await putObject(sourceKey, frame, 'image/jpeg');
+        kind = 'video';
+      } else {
+        const ext = (photo!.originalname.split('.').pop() || 'jpg').toLowerCase();
+        sourceKey = `avatars/${tenantId}/${randomUUID()}.${ext}`;
+        await putObject(sourceKey, photo!.buffer, photo!.mimetype);
+        kind = 'photo';
+      }
 
       let proofKey: string | undefined;
       if (proof) {
@@ -79,16 +98,10 @@ avatarsRouter.post(
       }
 
       const av = createCustomAvatar({
-        tenantId,
-        userId: req.user!.id,
-        name,
-        kind: 'photo',
-        sourceKey: photoKey,
-        consent,
-        proofKey,
+        tenantId, userId: req.user!.id, name, kind, sourceKey, consent, proofKey, orientation,
       });
       audit(req, 'create_avatar', av.id);
-      res.status(201).json({ id: av.id, name: av.name, status: av.status });
+      res.status(201).json({ id: av.id, name: av.name, status: av.status, kind });
     } catch (e) {
       const code = (e as any)?.code;
       const status = code === 'AUTHORIZATION_REQUIRED' ? 400 : 500;
@@ -96,6 +109,20 @@ avatarsRouter.post(
     }
   },
 );
+
+// C6:重命名
+avatarsRouter.put('/avatars/:id', requireRole('admin', 'creator'), (req: Request, res: Response) => {
+  const name = (req.body?.name as string || '').trim();
+  if (!name) return res.status(400).json({ error: '缺少 name' });
+  const ok = renameAvatar(req.params.id!, req.user!.tenantId, name);
+  return ok ? res.json({ ok: true }) : res.status(404).json({ error: '形象不存在' });
+});
+
+// C6:设为默认
+avatarsRouter.post('/avatars/:id/default', requireRole('admin', 'creator'), (req: Request, res: Response) => {
+  const ok = setDefaultAvatar(req.params.id!, req.user!.tenantId);
+  return ok ? res.json({ ok: true }) : res.status(404).json({ error: '形象不存在' });
+});
 
 avatarsRouter.delete('/avatars/:id', requireRole('admin', 'creator'), (req: Request, res: Response) => {
   const av = getAvatar(req.params.id!, req.user!.tenantId);

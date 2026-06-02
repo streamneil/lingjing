@@ -117,6 +117,8 @@ db.exec(`
     source_key    TEXT,                             -- 源素材在 MinIO 的 key(自定义)
     thumb_url     TEXT,                             -- 缩略图(预置用外链,自定义用源图)
     authorization_id TEXT,                          -- 关联授权凭证(自定义必填)
+    orientation   TEXT DEFAULT 'portrait',          -- portrait(竖) | landscape(横) | square
+    is_default    INTEGER NOT NULL DEFAULT 0,       -- 是否设为该租户默认形象(C6)
     created_at    INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_avatar_tenant ON avatar(tenant_id);
@@ -176,6 +178,16 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_job_status ON job(status, created_at);
 `);
+
+// 幂等迁移:给早于"形象库 C5/C6"的旧库补列(CREATE TABLE IF NOT EXISTS 不会改已存在的表)。
+function addColumnIfMissing(table: string, column: string, ddl: string): void {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!cols.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  }
+}
+addColumnIfMissing('avatar', 'orientation', `orientation TEXT DEFAULT 'portrait'`);
+addColumnIfMissing('avatar', 'is_default', `is_default INTEGER NOT NULL DEFAULT 0`);
 
 export type JobStatus = 'queued' | 'running' | 'done' | 'failed';
 
@@ -258,6 +270,8 @@ export interface AvatarRow {
   source_key: string | null;
   thumb_url: string | null;
   authorization_id: string | null;
+  orientation: string | null;
+  is_default: number;
   created_at: number;
 }
 

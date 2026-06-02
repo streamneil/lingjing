@@ -13,6 +13,9 @@ const {
   listCustom,
   deleteAvatar,
   isUsableAvatar,
+  renameAvatar,
+  setDefaultAvatar,
+  getDefaultAvatar,
 } = await import('../src/avatars/index.js');
 
 const T = 'avatar-tenant';
@@ -24,10 +27,34 @@ beforeEach(() => {
 });
 
 describe('预置形象', () => {
-  it('有预置形象,且 isPreset 识别', () => {
-    expect(listPresets().length).toBeGreaterThan(0);
+  it('有预置形象(≥6,PRD 建议),且 isPreset 识别', () => {
+    expect(listPresets().length).toBeGreaterThanOrEqual(6);
     expect(isPreset('preset-1')).toBe(true);
     expect(isPreset('not-a-preset')).toBe(false);
+  });
+  it('预置带 gender/orientation/scene 元数据(供 C5 筛选)', () => {
+    const p = listPresets()[0]!;
+    expect(['male', 'female']).toContain(p.gender);
+    expect(['portrait', 'landscape']).toContain(p.orientation);
+    expect(p.scene).toBeTruthy();
+  });
+});
+
+describe('C6 重命名 + 设为默认', () => {
+  it('重命名', () => {
+    const av = createCustomAvatar({ tenantId: T, userId: U, name: '旧名', kind: 'photo', sourceKey: 'k', consent: true });
+    expect(renameAvatar(av.id, T, '新名')).toBe(true);
+    expect(listCustom(T).find((x) => x.id === av.id)!.name).toBe('新名');
+    expect(renameAvatar(av.id, 'other', 'x')).toBe(false); // 跨租户不可改
+  });
+  it('设为默认互斥(同租户只有一个默认)', () => {
+    const a = createCustomAvatar({ tenantId: T, userId: U, name: 'A', kind: 'photo', sourceKey: 'k1', consent: true });
+    const b = createCustomAvatar({ tenantId: T, userId: U, name: 'B', kind: 'photo', sourceKey: 'k2', consent: true });
+    expect(setDefaultAvatar(a.id, T)).toBe(true);
+    expect(getDefaultAvatar(T)!.id).toBe(a.id);
+    setDefaultAvatar(b.id, T); // 切换默认
+    expect(getDefaultAvatar(T)!.id).toBe(b.id); // 只有 b 是默认
+    expect(listCustom(T).filter((x) => x.is_default === 1).length).toBe(1);
   });
 });
 
