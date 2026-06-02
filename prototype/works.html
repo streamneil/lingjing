@@ -33,7 +33,14 @@
         <button class="chip active">全部 · 19</button><button class="chip">生成中 · 2</button><button class="chip">已完成 · 14</button><button class="chip">草稿 · 3</button>
         <div class="sp"></div>
         <div class="search-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input placeholder="搜索作品…"></div>
-        <button class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>批量</button>
+        <button class="pill" id="batchBtn" onclick="toggleBatch()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>批量</button>
+      </div>
+      <div id="batchBar" style="display:none;align-items:center;gap:12px;margin:-6px 0 14px;padding:11px 16px;background:var(--card);border:1px solid var(--line);border-radius:12px">
+        <span id="batchCount" style="font-size:13px;color:var(--t2)">已选 0 项</span>
+        <div class="sp" style="flex:1"></div>
+        <button class="btn btn-dark" style="padding:7px 13px;font-size:12.5px" onclick="batchDownload()">下载</button>
+        <button class="btn btn-dark" style="padding:7px 13px;font-size:12.5px;color:var(--red)" onclick="batchDelete()">删除</button>
+        <button class="btn btn-dark" style="padding:7px 13px;font-size:12.5px" onclick="toggleBatch()">取消</button>
       </div>
       <div class="work-grid" id="workGrid">
         <div class="work" style="animation-delay:.04s">
@@ -101,7 +108,34 @@
     } else if (job.status==='failed') {
       actions = `<button class="btn btn-dark" style="margin-top:8px;padding:6px 12px;font-size:12px" onclick="retry('${job.id}')">重新生成</button>`;
     }
-    return `<div class="work">${thumb}<div class="work-b"><h4>数字人视频</h4><div class="m">${meta}</div>${actions}</div></div>`;
+    const checkbox = batchMode
+      ? `<div onclick="event.stopPropagation();toggleSel('${job.id}')" style="position:absolute;top:10px;left:10px;width:22px;height:22px;border-radius:6px;border:2px solid #fff;background:${selected.has(job.id)?'var(--blue)':'rgba(0,0,0,.4)'};cursor:pointer;z-index:5;display:grid;place-items:center">${selected.has(job.id)?'<svg viewBox=\"0 0 24 24\" width=\"13\" fill=\"none\" stroke=\"#fff\" stroke-width=\"3\"><path d=\"M20 6 9 17l-5-5\"/></svg>':''}</div>`
+      : '';
+    return `<div class="work" style="position:relative">${checkbox}${thumb}<div class="work-b"><h4>数字人视频</h4><div class="m">${meta}</div>${batchMode?'':actions}</div></div>`;
+  }
+
+  // ── T6:批量选择 ──
+  let batchMode=false; const selected=new Set();
+  function toggleBatch(){
+    batchMode=!batchMode; selected.clear();
+    document.getElementById('batchBtn').classList.toggle('active', batchMode);
+    document.getElementById('batchBar').style.display = batchMode?'flex':'none';
+    render(document.querySelector('.chip.active')?.dataset.filter||'all');
+  }
+  function toggleSel(id){
+    selected.has(id)?selected.delete(id):selected.add(id);
+    document.getElementById('batchCount').textContent='已选 '+selected.size+' 项';
+    render(document.querySelector('.chip.active')?.dataset.filter||'all');
+  }
+  async function batchDelete(){
+    if(!selected.size){ alert('请先选择作品'); return; }
+    if(!confirm(`删除选中的 ${selected.size} 个作品?`)) return;
+    for(const id of selected){ try{ await LJ.del('/jobs/'+id); }catch(e){} }
+    toggleBatch(); await load();
+  }
+  async function batchDownload(){
+    if(!selected.size){ alert('请先选择作品'); return; }
+    for(const id of selected){ try{ await download(id); await new Promise(r=>setTimeout(r,300)); }catch(e){} }
   }
 
   // 拿成品签名 URL(懒取,避免列表一次性签所有)

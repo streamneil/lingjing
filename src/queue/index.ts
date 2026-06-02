@@ -53,6 +53,14 @@ export function getJob(id: string): JobRow | undefined {
   return db.prepare(`SELECT * FROM job WHERE id=?`).get(id) as JobRow | undefined;
 }
 
+// 删除作品(租户隔离)。生成中的任务不让删(防删掉正在跑的)。
+export function deleteJobForTenant(id: string, tenantId: string): boolean {
+  const res = db
+    .prepare(`DELETE FROM job WHERE id=? AND tenant_id=? AND status!='running'`)
+    .run(id, tenantId);
+  return res.changes === 1;
+}
+
 // API 层用:强制带 tenant_id,防跨租户读取他人任务(行级隔离防漏)。
 export function getJobForTenant(id: string, tenantId: string): JobRow | undefined {
   return db.prepare(`SELECT * FROM job WHERE id=? AND tenant_id=?`).get(id, tenantId) as

@@ -15,32 +15,45 @@
     <div class="cfg-h"><span class="dot"></span>AI 头像影片</div>
 
     <div class="selr" onclick="openSheet('appearance')">
-      <div class="selr-th" style="background-image:url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=140&q=85&fit=crop&crop=faces')"></div>
-      <div class="selr-b"><h5>头像</h5><p>晓琳 · 主形象</p></div>
+      <div class="selr-th" id="avThumb"></div>
+      <div class="selr-b"><h5>头像</h5><p id="avPickLabel">从形象库选择</p></div>
       <div class="selr-ar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></div>
     </div>
 
     <div class="selr" onclick="openSheet('voices')">
       <div class="selr-th"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg></div>
-      <div class="selr-b"><h5>声音</h5><p>选择一个声音，或 <u onclick="event.stopPropagation();openSheet('voices')">克隆一个声音</u></p></div>
+      <div class="selr-b"><h5>声音</h5><p id="voicePickLabel">从音色库选择</p></div>
       <div class="selr-ar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></div>
     </div>
 
     <div class="script">
-      <textarea id="script" placeholder="输入需要 AI 配音的文字，或上传 / 录制音频…"></textarea>
-      <div class="f"><span class="h"><u>上传或录制音频</u></span><span class="c"><b id="cnt">0</b> / 4000</span></div>
+      <textarea id="script" maxlength="2000" placeholder="输入需要 AI 配音的文字…（≤2000 字）"></textarea>
+      <div class="f"><span class="h" id="estLabel">预估 — 点</span><span class="c"><b id="cnt">0</b> / 2000</span></div>
     </div>
 
     <div class="cfg-sp"></div>
+
+    <!-- 语速 / 音量(PRD E4)-->
+    <div class="cfg-row" style="flex-direction:column;gap:14px;align-items:stretch">
+      <div style="display:flex;align-items:center;gap:12px">
+        <span style="font-size:12.5px;color:var(--t3);width:42px">语速</span>
+        <input type="range" id="speed" min="0.5" max="2" step="0.1" value="1" style="flex:1">
+        <span id="speedVal" style="font-family:var(--f-mono);font-size:12px;color:var(--t2);width:36px;text-align:right">1.0×</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span style="font-size:12.5px;color:var(--t3);width:42px">音量</span>
+        <input type="range" id="volume" min="0" max="100" step="5" value="50" style="flex:1">
+        <span id="volumeVal" style="font-family:var(--f-mono);font-size:12px;color:var(--t2);width:36px;text-align:right">50</span>
+      </div>
+    </div>
 
     <div class="cfg-row">
       <div class="msel" id="resSel" data-res="720P" onclick="cycleRes()">分辨率 720P <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
     </div>
 
     <div class="cbtn-wrap">
-      <span class="cbtn-badge">限时</span>
       <button class="cbtn" id="createBtn">
-        创建 <span class="gem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg> 10</span>
+        创建 <span class="gem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg> <b id="estGem">—</b></span>
       </button>
     </div>
   </div>
@@ -158,15 +171,8 @@
     <div class="sf-close" onclick="closeSheet('appearance')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
   </div>
   <div class="sf-body">
-    <div class="grid-av" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));max-width:780px;">
-      <div class="av new" style="animation-delay:.05s" onclick="openModalFromSheet('createRole')">
-        <div class="av-new-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c0-3.3 2.6-5 5.5-5"/><path d="M18 7.5v6M15 10.5h6"/></svg><span>新增外观</span></div>
-      </div>
-      <div class="av pinned" style="animation-delay:.1s" onclick="closeSheet('appearance')">
-        <div class="av-img" style="background-image:url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=600&q=85&fit=crop&crop=faces')"></div>
-        <div class="av-veil"></div><div class="av-name">晓琳</div>
-        <div class="av-cta">选择此外观</div>
-      </div>
+    <div class="grid-av" id="avSheetGrid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));max-width:780px;">
+      <div style="color:var(--t4);padding:20px">加载形象中…</div>
     </div>
   </div>
 </div>
@@ -184,8 +190,11 @@
     <div class="msel" style="min-width:170px">语言：全部 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
     <div class="msel" style="min-width:170px">性别：全部 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
   </div>
-  <div class="ss-body">
-    <div class="vcard" onclick="pickVoice(this,'新闻播报 · 雅琴')"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>新闻播报 · 雅琴 <span class="hot">热门</span></div><div class="vc-d">女性 · 播音员 · 适合新闻、纪录片</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+  <div class="ss-body" id="voiceSheetBody">
+    <div style="color:var(--t4);padding:20px">加载音色中…</div>
+  </div>
+</div>
+
     <div class="vcard" onclick="pickVoice(this,'沉稳男声 · 子墨')"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>沉稳男声 · 子墨 <span class="hot">热门</span></div><div class="vc-d">男性 · 沉稳 · 适合纪录片、教育</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
     <div class="vcard" onclick="pickVoice(this,'磁性男声 · 浩然')"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>磁性男声 · 浩然 <span class="hot">热门</span></div><div class="vc-d">成人 · 男性 · 磁性 · 适合广告、品牌</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
     <div class="vcard" onclick="pickVoice(this,'亲切女声 · 思雨')"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>亲切女声 · 思雨 <span class="hot">热门</span></div><div class="vc-d">成人 · 女性 · 亲切 · 适合 Vlog、播客</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
@@ -225,35 +234,104 @@
 <script src="api.js"></script>
 <script>
   const ta=document.getElementById('script'), cnt=document.getElementById('cnt'), btn=document.getElementById('createBtn');
-  ta.addEventListener('input',()=>{cnt.textContent=ta.value.length;btn.classList.toggle('ready',ta.value.trim().length>0);});
   document.querySelectorAll('.ftab,.ss-seg button').forEach(t=>t.addEventListener('click',function(){this.parentNode.querySelectorAll('.ftab,button').forEach(x=>x.classList.remove('active'));this.classList.add('active');}));
 
-  // ── Slice 1 真实接线:选音色 → 提交生成 → 轮询对话流 ──
-  // 选中的音色名(Slice1 映射到预置 voiceRef;真实音色 ID 待 C-research 补)。
-  let selectedVoice = null;
-  function pickVoice(el,name){
-    selectedVoice = name;
-    const row=document.querySelectorAll('.selr')[1];
-    row.querySelector('.selr-b h5').textContent='声音';
-    row.querySelector('.selr-b p').innerHTML=name;
-    closeSheet('voices');
+  function esc(s){ return (s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  const feedList = document.querySelector('.feed-list');
+
+  // ── 选中状态(T1:真实 id)──
+  let selectedAvatar = null; // {id,name,thumb}
+  let selectedVoice = null;  // {id,name}
+
+  // ── T1:从 /avatars /voices 动态拉,渲染到 sheet ──
+  async function loadPickers(){
+    try{
+      const av = await LJ.get('/avatars');
+      const grid = document.getElementById('avSheetGrid');
+      const items = [...(av.presets||[]), ...((av.custom||[]).filter(a=>a.status==='ready'))];
+      grid.innerHTML = items.map(a=>{
+        const bg = a.thumb ? `background-image:url('${a.thumb}')` : 'background:linear-gradient(160deg,#33333A,#1A1A1E)';
+        return `<div class="av" onclick='pickAvatar(${JSON.stringify({id:a.id,name:a.name,thumb:a.thumb||''}).replace(/'/g,"&#39;")})'><div class="av-img" style="${bg}"></div><div class="av-veil"></div><div class="av-name">${esc(a.name)}</div><div class="av-cta">选择此形象</div></div>`;
+      }).join('') || '<div style="color:var(--t4);padding:20px">暂无形象</div>';
+      // 默认选第一个预置
+      if(!selectedAvatar && items[0]) pickAvatar({id:items[0].id,name:items[0].name,thumb:items[0].thumb||''}, true);
+    }catch(e){}
+    try{
+      const vc = await LJ.get('/voices');
+      const body = document.getElementById('voiceSheetBody');
+      const items = [...((vc.clones||[]).filter(v=>v.status==='ready')), ...(vc.presets||[])];
+      body.innerHTML = items.map(v=>{
+        const desc = v.kind==='clone' ? '克隆音色' : `${v.gender||''} · ${v.desc||''}`;
+        return `<div class="vcard" onclick='pickVoice(${JSON.stringify({id:v.id,name:v.name}).replace(/'/g,"&#39;")})'><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>${esc(v.name)}${v.kind==='preset'?' <span class="hot">预置</span>':''}</div><div class="vc-d">${esc(desc)}</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>`;
+      }).join('') || '<div style="color:var(--t4);padding:20px">暂无音色</div>';
+      if(!selectedVoice && items[0]) pickVoice({id:items[0].id,name:items[0].name}, true);
+    }catch(e){}
   }
 
-  // 分辨率切换(wan2.2-s2v 只支持 480P / 720P)
+  function pickAvatar(a, silent){
+    selectedAvatar = a;
+    document.getElementById('avPickLabel').textContent = a.name;
+    const th=document.getElementById('avThumb');
+    if(a.thumb){ th.style.backgroundImage=`url('${a.thumb}')`; th.style.backgroundSize='cover'; th.style.backgroundPosition='center'; }
+    if(!silent) closeSheet('appearance');
+  }
+  function pickVoice(a, silent){
+    selectedVoice = a;
+    document.getElementById('voicePickLabel').textContent = a.name;
+    if(!silent) closeSheet('voices');
+  }
+
   function cycleRes(){
     const el=document.getElementById('resSel');
     const next=el.dataset.res==='720P'?'480P':'720P';
     el.dataset.res=next;
     el.firstChild.textContent='分辨率 '+next+' ';
+    scheduleEstimate();
   }
 
-  // 登录态守卫:进创作台先确认已登录(未登录 api.js 会自动跳 login)
-  LJ.me().catch(()=>{});
+  // ── T3:语速/音量控件 ──
+  const speedEl=document.getElementById('speed'), volEl=document.getElementById('volume');
+  speedEl.addEventListener('input',()=>document.getElementById('speedVal').textContent=parseFloat(speedEl.value).toFixed(1)+'×');
+  volEl.addEventListener('input',()=>document.getElementById('volumeVal').textContent=volEl.value);
 
-  const feedList = document.querySelector('.feed-list');
+  // ── T4:费用预估(防抖)──
+  let estTimer=null;
+  function scheduleEstimate(){
+    clearTimeout(estTimer);
+    estTimer=setTimeout(async()=>{
+      const script=ta.value.trim();
+      if(!script){ document.getElementById('estLabel').textContent='预估 — 点'; document.getElementById('estGem').textContent='—'; return; }
+      try{
+        const r=await LJ.post('/jobs/estimate',{script,resolution:document.getElementById('resSel').dataset.res});
+        document.getElementById('estLabel').textContent='预估 '+r.cost+' 点';
+        document.getElementById('estGem').textContent=r.cost;
+      }catch(e){}
+    },350);
+  }
+  ta.addEventListener('input',()=>{
+    cnt.textContent=ta.value.length;
+    btn.classList.toggle('ready',ta.value.trim().length>0);
+    scheduleEstimate();
+  });
 
-  // 转义,防文案里的 HTML 注入对话流
-  function esc(s){ return (s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  // 登录态守卫 + 加载选择器 + T5 回填
+  LJ.me().then(()=>{ loadPickers().then(prefillFromQuery); }).catch(()=>{});
+
+  // ── T5:?from=jobId 回填 ──
+  async function prefillFromQuery(){
+    const from=new URLSearchParams(location.search).get('from');
+    if(!from) return;
+    try{
+      const job=await LJ.getJob(from);
+      const inp=job.input||{};
+      if(inp.script){ ta.value=inp.script; cnt.textContent=inp.script.length; scheduleEstimate(); }
+      if(inp.resolution){ const el=document.getElementById('resSel'); el.dataset.res=inp.resolution; el.firstChild.textContent='分辨率 '+inp.resolution+' '; }
+      if(inp.speed){ speedEl.value=inp.speed; document.getElementById('speedVal').textContent=parseFloat(inp.speed).toFixed(1)+'×'; }
+      if(inp.volume!==undefined){ volEl.value=inp.volume; document.getElementById('volumeVal').textContent=inp.volume; }
+      if(inp.avatarRef) pickAvatar({id:inp.avatarRef,name:'(原形象)',thumb:''}, true);
+      if(inp.voiceRef) pickVoice({id:inp.voiceRef,name:'(原音色)'}, true);
+    }catch(e){}
+  }
 
   // 渲染/更新一个 job 卡片(三态:running/done/failed),复用原型 class。
   function renderCard(job, scriptText){
@@ -308,20 +386,23 @@
     const script = ta.value.trim();
     if(!script){ alert('请输入文案'); return; }
     if(script.length>2000){ alert('文案不能超过 2000 字'); return; }
+    if(!selectedAvatar){ alert('请选择形象'); return; }
+    if(!selectedVoice){ alert('请选择音色'); return; }
     btn.disabled = true;
     const prev = btn.innerHTML;
     btn.textContent = '提交中…';
     try{
-      // Slice1:形象/音色用预置占位(真实 ID 待 C-research 后从形象库/音色库选)
       const res = await LJ.createJob({
-        avatarRef: 'preset-1',
-        voiceRef: 'cosyvoice-v1',
+        avatarRef: selectedAvatar.id,    // T1:真实形象 id
+        voiceRef: selectedVoice.id,      // T1:真实音色 id
         script,
         resolution: document.getElementById('resSel').dataset.res,
+        speed: parseFloat(speedEl.value),   // T3
+        volume: parseInt(volEl.value, 10),  // T3
       });
       renderCard({ id: res.id, status: 'queued', progress: 0 }, script);
       track(res.id, script);
-      ta.value=''; cnt.textContent='0';
+      ta.value=''; cnt.textContent='0'; scheduleEstimate();
     }catch(e){
       alert('提交失败:'+e.message);
     }finally{

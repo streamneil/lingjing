@@ -9,6 +9,7 @@ import {
   getJobForTenant,
   listJobsForTenant,
   retryJob,
+  deleteJobForTenant,
 } from '../queue/index.js';
 import { getSignedUrl } from '../storage/index.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
@@ -23,7 +24,7 @@ export const jobsRouter = Router();
 // 提交生成 — 仅 admin/creator(viewer 不能发起生成,验收第8条)
 jobsRouter.post('/jobs', requireRole('admin', 'creator'), (req: Request, res: Response) => {
   const body = req.body ?? {};
-  const { avatarRef, voiceRef, script, resolution, ratio } = body as Partial<VideoGenInput>;
+  const { avatarRef, voiceRef, script, resolution, ratio, speed, volume } = body as Partial<VideoGenInput>;
 
   if (!avatarRef || typeof avatarRef !== 'string') {
     return res.status(400).json({ error: '缺少 avatarRef(形象)' });
@@ -46,9 +47,19 @@ jobsRouter.post('/jobs', requireRole('admin', 'creator'), (req: Request, res: Re
     return res.status(400).json({ error: '音色不可用(不存在或非本机构)' });
   }
 
+  // 语速/音量范围校验(PRD E4):超出百炼合法区间直接 400,不透传给百炼(D5)
+  if (speed !== undefined && (typeof speed !== 'number' || speed < 0.5 || speed > 2)) {
+    return res.status(400).json({ error: '语速需在 0.5–2 倍之间' });
+  }
+  if (volume !== undefined && (typeof volume !== 'number' || volume < 0 || volume > 100)) {
+    return res.status(400).json({ error: '音量需在 0–100 之间' });
+  }
+
   const input: VideoGenInput = { avatarRef, voiceRef, script };
   if (resolution) input.resolution = resolution;
   if (ratio) input.ratio = ratio;
+  if (speed !== undefined) input.speed = speed;
+  if (volume !== undefined) input.volume = volume;
 
   // 先入队拿 jobId,再按预估 reserve(reserve 关联 jobId,失败时能精确 release)
   const cost = estimateCost(script.length, resolution);
@@ -99,6 +110,7 @@ jobsRouter.get('/jobs/:id', requireAuth, async (req: Request, res: Response) => 
     aiLabel: job.ai_label,
     error: job.error,
     createdAt: job.created_at,
+    input: JSON.parse(job.input_json), // 供"重新编辑"回填原文案/形象/音色/参数(T5)
   };
 
   if (job.status === 'done' && job.output_url) {
@@ -118,4 +130,11 @@ jobsRouter.post('/jobs/:id/retry', requireRole('admin', 'creator'), (req: Reques
   const ok = retryJob(req.params.id!, req.user!.tenantId);
   if (!ok) return res.status(409).json({ error: '任务不存在、非本机构、或非 failed 状态' });
   return res.json({ id: req.params.id, status: 'queued' });
+});
+
+// 删除作品 — 仅 admin/creator,租户隔离,生成中不可删
+jobsRouter.delete('/jobs/:id', requireRole('admin', 'creator'), (req: Request, res: Response) => {
+  const ok = deleteJobForTenant(req.params.id!, req.user!.tenantId);
+  if (!ok) return res.status(409).json({ error: '任务不存在、非本机构、或生成中不可删' });
+  return res.json({ ok: true });
 });

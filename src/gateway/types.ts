@@ -11,6 +11,8 @@ export interface VideoGenInput {
   script: string; // 文案 ≤2000 字
   resolution?: string; // wan2.2-s2v 支持 480P | 720P
   ratio?: string; // 预留(s2v 由图片比例决定,暂不强制)
+  speed?: number; // 配音语速 0.5-2(PRD E4),默认 1
+  volume?: number; // 配音音量 0-100(PRD E4),默认 50
 }
 
 // 网关侧入参(已解析为公网 URL):wan2.2-s2v 真实需要的是图 + 音频 URL。

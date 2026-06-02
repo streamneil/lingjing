@@ -26,8 +26,17 @@
 
       <div class="set-card" style="animation-delay:.16s">
         <h3>默认创作参数</h3><div class="h-desc">机构级默认值，创作时可单独覆盖。</div>
-        <div class="set-row"><div class="info"><div class="k">默认分辨率</div></div><div class="ctl"><div class="choice-seg"><button>720P</button><button class="active">1080P</button><button>4K</button></div></div></div>
-        <div class="set-row"><div class="info"><div class="k">默认视频比例</div></div><div class="ctl"><div class="choice-seg"><button class="active">16:9</button><button>9:16</button><button>1:1</button></div></div></div>
+        <div class="set-row"><div class="info"><div class="k">默认分辨率</div></div><div class="ctl"><div class="choice-seg"><button class="active">720P</button><button>480P</button></div></div></div>
+        <div class="set-row"><div class="info"><div class="k">默认视频比例</div></div><div class="ctl"><div class="choice-seg"><button class="active">竖屏 9:16</button><button>横屏 16:9</button></div></div></div>
+      </div>
+
+      <!-- T8:审计日志(仅 admin)-->
+      <div class="set-card" id="auditCard" style="animation-delay:.2s;display:none">
+        <h3>操作审计日志</h3><div class="h-desc">记录谁、何时、做了什么(登录、生成、成员变更、设置修改)。政企合规留存,可追溯。</div>
+        <table class="tbl" style="margin-top:8px">
+          <thead><tr><th>时间</th><th>操作</th><th>对象</th><th>来源 IP</th></tr></thead>
+          <tbody id="auditBody"><tr><td colspan="4" style="color:var(--t4);padding:20px">加载中…</td></tr></tbody>
+        </table>
       </div>
     </main>
   </div>
@@ -51,15 +60,34 @@
   async function saveDelivery(v){ if(!guard())return; try{await put({delivery:v});}catch(e){alert(e.message);} }
   async function saveAiLabel(){ if(!guard()){document.getElementById('aiLabelSwitch').classList.toggle('on');return;} try{await put({aiLabelEnabled:document.getElementById('aiLabelSwitch').classList.contains('on')});}catch(e){alert(e.message);} }
 
+  function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+  function fmtT(ts){const d=new Date(ts);const p=n=>String(n).padStart(2,'0');return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;}
+  const ACTION_CN={login:'登录',create_job:'发起生成',grant_credit:'发放点数',member_add:'新增成员',
+    update_profile:'改个人信息',change_password:'改密码',update_settings:'改设置',
+    create_avatar:'创建形象',clone_voice:'克隆音色',upload_asset:'上传素材',delete_avatar:'删除形象',delete_voice:'删除音色',delete_asset:'删除素材'};
+
   async function load(){
     try{
       const me=await LJ.me(); canEdit=me.role==='admin';
       const s=await LJ.get('/settings');
       document.getElementById('orgName').value=s.orgName||'';
-      // 交付模式高亮
       document.querySelectorAll('#deliverySeg button').forEach(b=>b.classList.toggle('active',b.dataset.v===s.delivery));
-      // AI 标识开关
       const sw=document.getElementById('aiLabelSwitch'); sw.classList.toggle('on',!!s.aiLabelEnabled);
+
+      // T8:审计日志(仅 admin 可见+可查)
+      if(me.role==='admin'){
+        document.getElementById('auditCard').style.display='';
+        try{
+          const logs=await LJ.get('/audit');
+          const body=document.getElementById('auditBody');
+          body.innerHTML = logs.length ? logs.slice(0,50).map(a=>`<tr>
+            <td class="num">${fmtT(a.created_at)}</td>
+            <td>${ACTION_CN[a.action]||esc(a.action)}</td>
+            <td class="strong">${esc(a.target||'—')}</td>
+            <td class="num" style="color:var(--t4)">${esc(a.ip||'—')}</td></tr>`).join('')
+            : '<tr><td colspan="4" style="color:var(--t4);padding:20px">暂无审计记录</td></tr>';
+        }catch(e){}
+      }
     }catch(e){}
   }
   load();

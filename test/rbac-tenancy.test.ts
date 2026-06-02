@@ -167,6 +167,42 @@ describe('积分 + 审计 API', () => {
   });
 });
 
+describe('创作参数 + 作品删除(CEO 审计补齐)', () => {
+  it('语速超出 0.5-2 → 400', async () => {
+    const c = await loginAs(tenantA, 'creator');
+    const r = await c.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'cosyvoice-v1', script: '文案', speed: 99 });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toContain('语速');
+  });
+  it('音量超出 0-100 → 400', async () => {
+    const c = await loginAs(tenantA, 'creator');
+    const r = await c.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'cosyvoice-v1', script: '文案', volume: 500 });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toContain('音量');
+  });
+  it('合法语速音量 → 202', async () => {
+    const c = await loginAs(tenantA, 'creator');
+    const r = await c.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'cosyvoice-v1', script: '文案', speed: 1.5, volume: 80 });
+    expect(r.status).toBe(202);
+  });
+  it('GET /jobs/:id 回显 input(供重新编辑回填)', async () => {
+    const c = await loginAs(tenantA, 'creator');
+    const created = await c.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'cosyvoice-v1', script: '回填测试', speed: 1.2 });
+    const job = await c.get('/api/jobs/' + created.body.id);
+    expect(job.body.input.script).toBe('回填测试');
+    expect(job.body.input.speed).toBe(1.2);
+  });
+  it('删除作品:本租户可删,跨租户 409', async () => {
+    const ca = await loginAs(tenantA, 'creator');
+    const created = await ca.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'cosyvoice-v1', script: '待删' });
+    const id = created.body.id;
+    const cb = await loginAs(tenantB, 'admin');
+    expect((await cb.del('/api/jobs/' + id)).status).toBe(409); // 跨租户删不了
+    expect((await ca.del('/api/jobs/' + id)).status).toBe(200); // 本租户可删
+    expect((await ca.get('/api/jobs/' + id)).status).toBe(404); // 已删
+  });
+});
+
 describe('停用即生效', () => {
   it('管理员停用成员后,该成员 session 立即失效', async () => {
     const admin = await loginAs(tenantA, 'admin');

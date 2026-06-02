@@ -18,6 +18,8 @@ export interface TtsParams {
   text: string;
   voice: string; // 预置音色名(如 'longxiaochun' 等)或克隆音色 id
   model?: string; // 默认 cosyvoice-v2
+  rate?: number; // 语速 0.5-2,默认 1(CosyVoice rate 参数)
+  volume?: number; // 音量 0-100,默认 50(CosyVoice volume 参数)
 }
 
 /**
@@ -51,7 +53,10 @@ export function synthesizeSpeech(params: TtsParams): Promise<Buffer> {
             task: 'tts',
             function: 'SpeechSynthesizer',
             model,
-            parameters: { text_type: 'PlainText', voice: params.voice, format: 'mp3', sample_rate: 22050 },
+            parameters: {
+              text_type: 'PlainText', voice: params.voice, format: 'mp3', sample_rate: 22050,
+              rate: params.rate ?? 1, volume: params.volume ?? 50,
+            },
             input: {},
           },
         }),

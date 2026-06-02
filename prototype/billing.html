@@ -16,15 +16,15 @@
 
       <div class="stat-row">
         <div class="stat" style="animation-delay:.04s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg>当前点数余额</div><div class="val" id="balVal">—</div><div class="bar"><i style="width:42%"></i></div><div class="sub" id="balSub">实时余额</div></div>
-        <div class="stat" style="animation-delay:.08s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>本月数字人视频</div><div class="val">86 <small>条</small></div><div class="sub">消耗 980 点</div></div>
-        <div class="stat" style="animation-delay:.12s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/></svg>本月声音克隆</div><div class="val">14 <small>次</small></div><div class="sub">消耗 420 点</div></div>
-        <div class="stat" style="animation-delay:.16s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg>高精形象训练</div><div class="val">2 <small>个</small></div><div class="sub">消耗 320 点</div></div>
+        <div class="stat" style="animation-delay:.08s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>累计生成扣点</div><div class="val" id="statGen">—</div><div class="sub">消耗 <b id="statGenPts">—</b> 点</div></div>
+        <div class="stat" style="animation-delay:.12s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg>累计发放</div><div class="val" id="statGrant">—</div><div class="sub">后台发放点数</div></div>
+        <div class="stat" style="animation-delay:.16s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 4v4h-4"/></svg>失败释放</div><div class="val" id="statRelease">—</div><div class="sub">失败任务退还(不计费)</div></div>
       </div>
 
       <div class="sec-head"><span class="sec-title">套餐</span></div>
       <div class="plans" style="margin-bottom:30px;">
-        <div class="plan"><div class="pn">基础版</div><div class="pp">¥1,000<small> / 1,000 点</small></div><ul><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>3 创作席位</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>标准排队</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>720P 输出</li></ul><button class="btn btn-dark" style="width:100%">选择</button></div>
-        <div class="plan featured"><div class="pn">专业版 <span class="bdg bdg-blue">推荐</span></div><div class="pp">¥4,500<small> / 5,000 点</small></div><ul><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>10 创作席位</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>优先排队</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>高精形象训练</li></ul><button class="btn btn-white" style="width:100%">选择</button></div>
+        <div class="plan"><div class="pn">基础版</div><div class="pp">¥1,000<small> / 1,000 点</small></div><ul><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>3 创作席位</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>标准排队</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>720P 输出</li></ul><button class="btn btn-dark" style="width:100%" onclick="alert('请联系机构销售开通')">联系销售</button></div>
+        <div class="plan featured"><div class="pn">专业版 <span class="bdg bdg-blue">推荐</span></div><div class="pp">¥4,500<small> / 5,000 点</small></div><ul><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>10 创作席位</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>优先排队</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>高精形象训练</li></ul><button class="btn btn-white" style="width:100%" onclick="alert('请联系机构销售开通')">联系销售</button></div>
         <div class="plan"><div class="pn">私有化</div><div class="pp">定制<small> / 年费</small></div><ul><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>整套部署到客户</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>客户自有云账号</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>数据本地化</li></ul><button class="btn btn-dark" style="width:100%">联系销售</button></div>
       </div>
 
@@ -79,6 +79,15 @@
       }
 
       const led = await LJ.get('/credits/ledger');
+      // 从真实流水算统计卡(替代写死的 86条/980点 假数据)
+      const sum = (k)=>led.filter(l=>l.kind===k).reduce((s,l)=>s+l.amount,0);
+      const settleCnt = led.filter(l=>l.kind==='settle').length;
+      const reserveSpent = -sum('reserve') - sum('release'); // 净扣点 ≈ 预扣 - 释放
+      document.getElementById('statGen').innerHTML = settleCnt + ' <small>次</small>';
+      document.getElementById('statGenPts').textContent = Math.max(0, reserveSpent);
+      document.getElementById('statGrant').innerHTML = sum('grant').toLocaleString('en-US');
+      document.getElementById('statRelease').innerHTML = sum('release') + ' <small>点</small>';
+
       const body = document.getElementById('ledgerBody');
       if(!led.length){ body.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--t4);padding:40px">暂无消费记录</td></tr>'; return; }
       body.innerHTML = led.map(l=>{

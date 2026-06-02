@@ -78,7 +78,10 @@ async function processJob(job: JobRow): Promise<void> {
   //    2b. 文案 → CosyVoice TTS → 音频 → 落 MinIO → 公网签名 URL
   //        (wan2.2-s2v 不做 TTS,需现成音频;这是查证后的真实链路)
   const voice = resolveVoiceName(input.voiceRef, job.tenant_id);
-  const audioBuf = await synthesizeSpeech({ text: input.script, voice });
+  const audioBuf = await synthesizeSpeech({
+    text: input.script, voice,
+    rate: input.speed ?? 1, volume: input.volume ?? 50,
+  });
   // wan2.2-s2v 硬约束:音频 <20s 且 <15M,超了会被百炼直接拒。提前拦截给清晰错误。
   if (audioBuf.length > 15 * 1024 * 1024) {
     throw new Error('合成音频超过 15MB(wan2.2-s2v 上限),请缩短文案');

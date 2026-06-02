@@ -32,3 +32,18 @@
 
 ## 已并入本期 PR 的事项(不在此列,见设计文档 Eng Review 增补)
 - 授权存证、合规 moderation 钩子、DB 队列、MinIO 存储 — 均已纳入 Slice 1/3 任务清单。
+
+## CEO 审计补充(2026-06-03,SELECTIVE EXPANSION)
+
+### T-CUSTOM-BG:自定义视频背景上传(PRD E6)
+- **What:** 创作时上传高清背景图,生成视频用该背景。
+- **Why:** PRD E6 列为需求。
+- **Cons:** wan2.2-s2v 是"图+音驱动口型",背景是原图一部分;换背景需额外抠图/合成,百炼接口未必直接支持。
+- **Context:** 来自 /plan-ceo-review D3.5。需先验证百炼 s2v 能否换背景,否则要自建抠图管线。
+- **Priority:** P2  **Depends on:** 百炼能力确认(C-research)
+
+### T-WORKS-POLL:作品库轮询自动刷新
+- **What:** 作品库页对生成中任务轮询,自动转"已完成",无需手动刷页。
+- **Why:** 体验连贯,用户不用手动刷新看进度。
+- **Context:** 来自 /plan-ceo-review D3.6。create.html 对话流已有轮询,复用其模式即可。非断裂(手动刷新可见),优先级低。
+- **Priority:** P3
