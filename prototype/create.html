@@ -119,7 +119,7 @@
     <h3>所有声音</h3>
     <div class="sp"></div>
     <div class="ss-seg"><button class="active">音色库</button><button>我的声音</button></div>
-    <button class="btn btn-dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" style="width:15px;height:15px"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>克隆或设计</button>
+    <button class="btn btn-dark" onclick="location.href='voices.html'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" style="width:15px;height:15px"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>克隆或设计</button>
   </div>
   <div class="ss-filters">
     <input id="voiceSearch" placeholder="搜索音色名称…" oninput="filterVoices(this.value)"
@@ -353,7 +353,9 @@
     if(s.includes('429')||s.includes('rate')||s.includes('limit')) return '生成请求过于频繁,请稍后重试';
     if(s.includes('timeout')||s.includes('timed out')||s.includes('etimedout')) return '渲染超时,请重试';
     if(s.includes('insufficient')||s.includes('余额')||s.includes('credit')) return '点数余额不足,请充值后重试';
-    if(s.includes('inspection')||s.includes('审核')||s.includes('sensitive')) return '内容未通过审核,请调整文案或形象';
+    // 图片/音频 URL 拉取失败:多因自定义素材存在本地 MinIO,云端生成服务访问不到(私有化/本地开发常见)
+    if(s.includes('download')||s.includes('url error')||s.includes('invalidparameter')||s.includes('not accessible')||s.includes('无法访问')||s.includes('downloadfile')) return '生成服务无法访问素材文件(自定义形象/音频需公网可达);本地调试请改用预置形象,或配置公网存储';
+    if(s.includes('inspection')||s.includes('审核')||s.includes('sensitive')) return '形象图未通过内容审核(需清晰正脸、无遮挡);或图片云端不可达,本地调试请改用预置形象';
     if(s.includes('network')||s.includes('econn')||s.includes('fetch')) return '网络连接异常,请重试';
     if(/[一-龥]/.test(raw)) return raw; // 已是中文,直接展示
     return '生成失败,请重试'; // 其余英文/未知错误,统一兜底
