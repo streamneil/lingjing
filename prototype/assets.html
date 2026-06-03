@@ -49,7 +49,7 @@
     grid.appendChild(newCard);
     list.forEach(a=>grid.insertAdjacentHTML('beforeend',card(a)));
   }
-  async function delAsset(id,name){ if(!confirm(`删除素材 ${name}?`))return; try{await LJ.del('/assets/'+id);await load();}catch(e){alert(e.message);} }
+  async function delAsset(id,name){ if(!(await window.LJConfirm({title:'删除素材',body:`确认删除素材「<b style="color:var(--t1)">${esc(name)}</b>」?删除后不可恢复。`,confirmText:'删除',danger:true})))return; try{await LJ.del('/assets/'+id);await load();window.LJToast('已删除素材');}catch(e){window.LJToast(e.message,'err');} }
 
   document.getElementById('assetFile').addEventListener('change',async function(){
     const f=this.files[0]; if(!f)return;
@@ -60,7 +60,7 @@
       const d=await res.json().catch(()=>({}));
       if(!res.ok) throw new Error(d.error||'上传失败');
       await load();
-    }catch(e){ alert(e.message); }
+    }catch(e){ window.LJToast(e.message,'err'); }
     this.value='';
   });
 

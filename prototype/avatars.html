@@ -224,9 +224,9 @@
       closeModal('createRole');
       resetAvForm();
       await load();
-      window.LJToast && window.LJToast('✓ 数字人「'+name+'」已创建');
+      window.LJToast('✓ 数字人「'+name+'」已创建');
     }catch(e){
-      window.LJToast ? window.LJToast(e.message,'err') : alert(e.message);
+      window.LJToast(e.message,'err');
       refreshAvBtn();
     }
   }
@@ -274,8 +274,8 @@
 
   async function avDoDefault(){
     const t=avMenuTarget; closeAvPop(); if(!t) return;
-    try{ await LJ.post('/avatars/'+t.id+'/default'); await load(); window.LJToast&&window.LJToast('✓ 已设为默认形象'); }
-    catch(e){ window.LJToast?window.LJToast(e.message,'err'):alert(e.message); }
+    try{ await LJ.post('/avatars/'+t.id+'/default'); await load(); window.LJToast('✓ 已设为默认形象'); }
+    catch(e){ window.LJToast(e.message,'err'); }
   }
   function avOpenRename(){
     const t=avMenuTarget; closeAvPop(); if(!t) return;
@@ -298,8 +298,8 @@
   }
   async function avDoDelete(){
     const t=avMenuTarget;
-    try{ await LJ.del('/avatars/'+t.id); closeModal('avDelete'); await load(); window.LJToast&&window.LJToast('已删除形象'); }
-    catch(e){ closeModal('avDelete'); window.LJToast?window.LJToast(e.message,'err'):alert(e.message); }
+    try{ await LJ.del('/avatars/'+t.id); closeModal('avDelete'); await load(); window.LJToast('已删除形象'); }
+    catch(e){ closeModal('avDelete'); window.LJToast(e.message,'err'); }
   }
 
   // C5 预置筛选:搜索 + 性别 + 横竖比
