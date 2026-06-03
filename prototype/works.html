@@ -128,13 +128,13 @@
     render(document.querySelector('.chip.active')?.dataset.filter||'all');
   }
   async function batchDelete(){
-    if(!selected.size){ alert('请先选择作品'); return; }
-    if(!confirm(`删除选中的 ${selected.size} 个作品?`)) return;
+    if(!selected.size){ window.LJToast('请先选择作品','err'); return; }
+    if(!(await window.LJConfirm({title:'批量删除',body:`确认删除选中的 <b style="color:var(--t1)">${selected.size}</b> 个作品?删除后不可恢复。`,confirmText:'删除',danger:true}))) return;
     for(const id of selected){ try{ await LJ.del('/jobs/'+id); }catch(e){} }
-    toggleBatch(); await load();
+    toggleBatch(); await load(); window.LJToast('已删除选中作品');
   }
   async function batchDownload(){
-    if(!selected.size){ alert('请先选择作品'); return; }
+    if(!selected.size){ window.LJToast('请先选择作品','err'); return; }
     for(const id of selected){ try{ await download(id); await new Promise(r=>setTimeout(r,300)); }catch(e){} }
   }
 
@@ -153,13 +153,13 @@
       ov.onclick=()=>ov.remove();
       ov.innerHTML=`<video src="${url}" controls autoplay style="max-width:90vw;max-height:85vh;border-radius:14px"></video>`;
       document.body.appendChild(ov);
-    }catch(e){ alert(e.message); }
+    }catch(e){ window.LJToast(e.message,'err'); }
   }
   async function download(id){
     try{
       const url = await signedUrl(id);
       const a=document.createElement('a'); a.href=url; a.download='lingjing-'+id+'.mp4'; a.click();
-    }catch(e){ alert(e.message); }
+    }catch(e){ window.LJToast(e.message,'err'); }
   }
   function reedit(id){ location.href='create.html?from='+encodeURIComponent(id); }
 
@@ -177,7 +177,7 @@
 
   async function retry(id){
     try{ await LJ.retryJob(id); await load(); }
-    catch(e){ alert(e.message); }
+    catch(e){ window.LJToast(e.message,'err'); }
   }
 
   async function load(){

@@ -93,7 +93,9 @@
     .lj-modal .row{display:flex;gap:10px;margin-top:6px}
     .lj-modal .row button{flex:1;padding:11px;border-radius:999px;font-size:14px;font-weight:600;font-family:var(--f);cursor:pointer;border:1px solid var(--line)}
     .lj-modal .ok{background:var(--t1);color:#0A0A0B;border:none}
+    .lj-modal .ok.lj-danger{background:var(--red);color:#fff;border:none}
     .lj-modal .cancel{background:none;color:var(--t2)}
+    .lj-modal .lj-body{font-size:13.5px;color:var(--t2);line-height:1.6;margin-bottom:18px}
     .lj-msg{font-size:12.5px;min-height:16px;margin-bottom:4px}
     #lj-toast-host{position:fixed;top:22px;right:22px;z-index:600;display:flex;flex-direction:column;gap:8px;pointer-events:none}
     .lj-toast{background:var(--modal,#161618);border:1px solid var(--line,#232327);border-left:3px solid var(--green);border-radius:11px;padding:12px 16px;font-size:13px;color:var(--t1);box-shadow:var(--sh-pop);opacity:0;transform:translateY(-8px);transition:.28s}
@@ -143,7 +145,7 @@
       menu.querySelectorAll('.lj-mi').forEach(mi => mi.onclick = async ()=>{
         menu.style.display='none';
         const act = mi.dataset.act;
-        if (act==='logout'){ if(!confirm('确认登出?'))return; try{await LJ.logout();}catch{} location.href='login.html'; }
+        if (act==='logout'){ if(!(await window.LJConfirm({title:'登出',body:'确认要退出当前账号吗?',confirmText:'登出',danger:true})))return; try{await LJ.logout();}catch{} location.href='login.html'; }
         else if (act==='profile'){
           document.getElementById('lj-dn').value = u.displayName || '';
           document.getElementById('lj-un').value = u.username;
@@ -191,7 +193,7 @@
         document.querySelectorAll('[data-requires-create]').forEach(el => el.style.display='none');
         // viewer 误入创作台(无权页)→ 引导回概览,而非停在点了报 403 的页
         if (document.body.dataset.page === 'studio') {
-          alert('查看者无创作权限,已返回概览'); location.href = 'dashboard.html';
+          window.LJToast('查看者无创作权限,已返回概览','err'); location.href = 'dashboard.html';
         }
       }
     }).catch(()=>{ /* 未登录已被 api.js 跳转 */ });
@@ -210,6 +212,61 @@
     t.textContent = text; host.appendChild(t);
     requestAnimationFrame(()=>t.classList.add('on'));
     setTimeout(()=>{ t.classList.remove('on'); setTimeout(()=>t.remove(),300); }, 2600);
+  };
+
+  // 共享弹窗:取代浏览器原生 confirm()/prompt()。返回 Promise,可 await。
+  function ljBuildOverlay(innerHTML){
+    const ov = document.createElement('div');
+    ov.className = 'lj-ov';
+    ov.innerHTML = `<div class="lj-modal">${innerHTML}</div>`;
+    document.body.appendChild(ov);
+    requestAnimationFrame(()=>ov.classList.add('on'));
+    return ov;
+  }
+  function ljTeardown(ov, onKey){
+    ov.classList.remove('on');
+    document.removeEventListener('keydown', onKey);
+    setTimeout(()=>ov.remove(), 300);
+  }
+  // 危险/确认弹窗。body 以 HTML 注入,调用方对用户内容用 esc() 转义。→ Promise<boolean>
+  window.LJConfirm = function(opts){
+    opts = opts || {};
+    const { title='请确认', body='', confirmText='确认', cancelText='取消', danger=false } = opts;
+    return new Promise(resolve=>{
+      const ov = ljBuildOverlay(
+        `<h3>${title}</h3>`+
+        `<div class="lj-body">${body}</div>`+
+        `<div class="row"><button class="cancel" data-act="cancel">${cancelText}</button>`+
+        `<button class="ok${danger?' lj-danger':''}" data-act="ok">${confirmText}</button></div>`);
+      const done = v => { ljTeardown(ov, onKey); resolve(v); };
+      const onKey = e => { if(e.key==='Escape') done(false); };
+      document.addEventListener('keydown', onKey);
+      ov.addEventListener('click', e=>{ if(e.target===ov) done(false); });
+      ov.querySelector('[data-act=cancel]').onclick = ()=>done(false);
+      ov.querySelector('[data-act=ok]').onclick = ()=>done(true);
+    });
+  };
+  // 文本输入弹窗(通用 prompt 替代)。→ Promise<string|null>
+  window.LJPrompt = function(opts){
+    opts = opts || {};
+    const { title='', label='', value='', placeholder='', confirmText='确认', cancelText='取消' } = opts;
+    return new Promise(resolve=>{
+      const ov = ljBuildOverlay(
+        `<h3>${title}</h3>`+
+        (label?`<label>${label}</label>`:'')+
+        `<input class="lj-prompt-in" value="${String(value).replace(/"/g,'&quot;')}" placeholder="${placeholder}">`+
+        `<div class="row"><button class="cancel" data-act="cancel">${cancelText}</button>`+
+        `<button class="ok" data-act="ok">${confirmText}</button></div>`);
+      const input = ov.querySelector('.lj-prompt-in');
+      const done = v => { ljTeardown(ov, onKey); resolve(v); };
+      const submit = ()=>{ const t=input.value.trim(); done(t||null); };
+      const onKey = e => { if(e.key==='Escape') done(null); if(e.key==='Enter'){ e.preventDefault(); submit(); } };
+      document.addEventListener('keydown', onKey);
+      ov.addEventListener('click', e=>{ if(e.target===ov) done(null); });
+      ov.querySelector('[data-act=cancel]').onclick = ()=>done(null);
+      ov.querySelector('[data-act=ok]').onclick = submit;
+      setTimeout(()=>{ input.focus(); input.select(); }, 60);
+    });
   };
   bindAuth();
 })();

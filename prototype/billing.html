@@ -294,7 +294,7 @@
 
   // ── 发放点数弹窗 ──
   function openGrant(){
-    if(!isAdmin){ window.LJToast?window.LJToast('仅管理员可发放点数','err'):alert('仅管理员可发放点数'); return; }
+    if(!isAdmin){ window.LJToast('仅管理员可发放点数','err'); return; }
     document.getElementById('grantMsg').textContent='';
     document.getElementById('grantAmt').value='1000';
     document.getElementById('grantOv').style.display='grid';
@@ -315,9 +315,7 @@
   }
 
   function requestTopup(){
-    window.LJToast
-      ? window.LJToast('已记录扩容意向,平台对接人将与机构管理员联系')
-      : alert('已记录扩容意向,平台对接人将与机构管理员联系');
+    window.LJToast('已记录扩容意向,平台对接人将与机构管理员联系');
   }
 
   // ── 筛选切换 ──

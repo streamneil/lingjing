@@ -134,7 +134,7 @@
   };
   function pickRole(b){ invRole=b.dataset.r; b.parentNode.querySelectorAll('.ir-opt').forEach(x=>x.classList.remove('active')); b.classList.add('active'); document.getElementById('invRoleDesc').textContent=ROLE_DESC[invRole]; }
   function invite(){
-    if(myRole!=='admin'){ alert('仅管理员可邀请成员'); return; }
+    if(myRole!=='admin'){ window.LJToast('仅管理员可邀请成员','err'); return; }
     document.getElementById('invUser').value=''; document.getElementById('invPass').value='';
     document.getElementById('invMsg').textContent=''; invRole='creator';
     document.querySelectorAll('#invRoleSeg .ir-opt').forEach(b=>b.classList.toggle('active',b.dataset.r==='creator'));
@@ -156,9 +156,9 @@
     }catch(e){ msg.textContent=e.message; }
     finally{ btn.disabled=false; btn.textContent='邀请'; }
   }
-  async function disable(id,name){ if(!confirm(`停用 ${name}?其登录将立即失效。`))return; try{await LJ.post('/members/'+id+'/disable');await load();}catch(e){alert(e.message);} }
-  async function enable(id){ try{await LJ.post('/members/'+id+'/enable');await load();}catch(e){alert(e.message);} }
-  async function removeM(id,name){ if(!confirm(`移除 ${name}?不可恢复。`))return; try{await LJ.del('/members/'+id);await load();}catch(e){alert(e.message);} }
+  async function disable(id,name){ if(!(await window.LJConfirm({title:'停用成员',body:`停用「<b style="color:var(--t1)">${esc(name)}</b>」?其登录将立即失效。`,confirmText:'停用',danger:true})))return; try{await LJ.post('/members/'+id+'/disable');await load();window.LJToast('已停用成员');}catch(e){window.LJToast(e.message,'err');} }
+  async function enable(id){ try{await LJ.post('/members/'+id+'/enable');await load();window.LJToast('已启用成员');}catch(e){window.LJToast(e.message,'err');} }
+  async function removeM(id,name){ if(!(await window.LJConfirm({title:'移除成员',body:`移除「<b style="color:var(--t1)">${esc(name)}</b>」?此操作不可恢复。`,confirmText:'移除',danger:true})))return; try{await LJ.del('/members/'+id);await load();window.LJToast('已移除成员');}catch(e){window.LJToast(e.message,'err');} }
 
   async function load(){
     try{

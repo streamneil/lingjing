@@ -396,7 +396,7 @@
 
   async function retry(id, scriptText){
     try{ await LJ.retryJob(id); track(id, scriptText); }
-    catch(e){ alert(e.message); }
+    catch(e){ window.LJToast(e.message,'err'); }
   }
 
   // 提交后持续轮询直到终态,实时刷新卡片
@@ -425,9 +425,9 @@
       renderCard({ id: res.id, status: 'queued', progress: 0 }, script);
       track(res.id, script);
       ta.value=''; cnt.textContent='0'; scheduleEstimate();
-      window.LJToast && window.LJToast('✓ 已提交生成,可在右侧查看进度');
+      window.LJToast('✓ 已提交生成,可在右侧查看进度');
     }catch(e){
-      window.LJToast ? window.LJToast('提交失败:'+e.message,'err') : alert('提交失败:'+e.message);
+      window.LJToast('提交失败:'+e.message,'err');
     }finally{
       btn.innerHTML=prev; refreshCreateBtn();
     }

@@ -363,6 +363,10 @@ img { display: block; }
 .vc-p { width: 40px; height: 40px; border-radius: 50%; background: var(--card-2); display: grid; place-items: center; flex-shrink: 0; color: var(--t1); transition: background .2s, color .2s; }
 .vcard:hover .vc-p { background: var(--t1); color: #0A0A0B; }
 .vc-p svg { width: 15px; height: 15px; margin-left: 2px; }
+/* 克隆卡操作行:试听 + 删除 并排(独立,不挤进圆形播放槽) */
+.vc-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.vc-p.vc-play { border: none; cursor: pointer; font-family: var(--f); }
+.vc-actions .vc-p svg { margin-left: 0; }
 .hot { font-size: 10px; font-weight: 700; color: var(--blue); background: var(--blue-bg); padding: 2px 6px; border-radius: 5px; letter-spacing: .02em; }
 
 /* 居中弹窗:创建角色 */

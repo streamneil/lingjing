@@ -47,7 +47,7 @@
   document.querySelectorAll('.choice-seg button').forEach(b=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('button').forEach(x=>x.classList.remove('active'));this.classList.add('active');if(this.parentNode.id==='deliverySeg')saveDelivery(this.dataset.v);}));
 
   let canEdit=false;
-  async function saveOrgName(){ if(!guard())return; try{ await put({orgName:document.getElementById('orgName').value}); alert('已保存'); }catch(e){alert(e.message);} }
+  async function saveOrgName(){ if(!guard())return; try{ await put({orgName:document.getElementById('orgName').value}); window.LJToast('✓ 已保存'); }catch(e){window.LJToast(e.message,'err');} }
   // 用 PUT(api.js 没封装 put,直接 fetch)
   async function put(body){
     const res=await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify(body)});
@@ -56,9 +56,9 @@
     if(!res.ok) throw new Error(d.error||'保存失败');
     return d;
   }
-  function guard(){ if(!canEdit){ alert('仅管理员可修改设置'); return false; } return true; }
-  async function saveDelivery(v){ if(!guard())return; try{await put({delivery:v});}catch(e){alert(e.message);} }
-  async function saveAiLabel(){ if(!guard()){document.getElementById('aiLabelSwitch').classList.toggle('on');return;} try{await put({aiLabelEnabled:document.getElementById('aiLabelSwitch').classList.contains('on')});}catch(e){alert(e.message);} }
+  function guard(){ if(!canEdit){ window.LJToast('仅管理员可修改设置','err'); return false; } return true; }
+  async function saveDelivery(v){ if(!guard())return; try{await put({delivery:v});}catch(e){window.LJToast(e.message,'err');} }
+  async function saveAiLabel(){ if(!guard()){document.getElementById('aiLabelSwitch').classList.toggle('on');return;} try{await put({aiLabelEnabled:document.getElementById('aiLabelSwitch').classList.contains('on')});}catch(e){window.LJToast(e.message,'err');} }
 
   function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
   function fmtT(ts){const d=new Date(ts);const p=n=>String(n).padStart(2,'0');return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;}

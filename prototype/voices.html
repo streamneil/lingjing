@@ -25,7 +25,28 @@
     </main>
   </div>
 </div>
+
+<!-- 克隆音色 弹窗(替代 prompt+confirm 原生弹框)-->
+<div class="ov" id="ov-cloneVoice"><div class="modal">
+  <div class="mh"><h3>克隆新音色</h3><div class="mc" onclick="closeModal('cloneVoice')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></div></div>
+  <div class="mb">
+    <div class="iline"><label>音色名称</label><input id="cvName" placeholder="例如：我的克隆音色" maxlength="40" oninput="refreshCvBtn()" onkeydown="if(event.key==='Enter')submitClone()"></div>
+    <div class="uzone" id="cvUzone" onclick="document.getElementById('voiceSample').click()">
+      <div class="ubox" id="cvUboxEmpty"><div class="u" id="cvSampleLabel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>上传 5–30s 语音样本</div></div>
+      <div class="upreview" id="cvPreview" style="display:none"><div class="upreview-bar"><span id="cvSampleName"></span><button type="button" class="upreview-x" onclick="event.stopPropagation();clearCvUpload()">重新选择</button></div></div>
+    </div>
+    <div class="rtitle">样本要求</div><div class="rsub">单人清晰语音，5–30 秒，无背景音乐与噪声；格式 mp3 / wav / m4a。</div>
+    <div class="consent" id="cvConsent" role="checkbox" aria-checked="false" tabindex="0" aria-label="确认已获本人授权并接受服务条款与隐私政策" onclick="toggleCvConsent()" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleCvConsent();}" style="cursor:pointer">
+      <div class="ck" id="cvConsentBox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></div>
+      <div>我确认已获被克隆人<b style="color:var(--t1)">本人授权</b>(年满 18 岁,声音属本人或已书面授权),并接受 <a href="terms.html" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--blue)">服务条款</a> 与 <a href="privacy.html" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--blue)">隐私政策</a>。<a onclick="event.stopPropagation();document.getElementById('voiceProof').click()" style="color:var(--blue);cursor:pointer">上传授权凭证(可选)</a> <span id="cvProofName" style="color:var(--t4);font-size:11px"></span></div>
+    </div>
+    <button class="btn btn-white" id="cvSubmitBtn" style="width:100%;padding:15px;font-size:15px" onclick="submitClone()">克隆音色</button>
+  </div>
+</div></div>
+
+<audio id="cvAudio" style="display:none"></audio>
 <script src="shell.js"></script>
+<script src="app.js"></script>
 <script src="api.js"></script>
 <script>
   const grid=document.getElementById('voiceGrid');
@@ -34,39 +55,119 @@
 
   document.querySelectorAll('.chip').forEach((b,i)=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));this.classList.add('active');render(i===0?'clone':'preset');}));
 
+  // 播放图标 / 停止图标
+  const PLAY_SVG='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+  const STOP_SVG='<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
+
   function card(v,isClone){
     const status = v.status==='processing'?' · 复刻中':(v.status==='failed'?' · 失败':'');
     const tag = isClone?'':' <span class="hot">预置</span>';
-    const del = isClone?`<button class="btn btn-dark" style="padding:6px 10px;font-size:12px" onclick="delVoice('${v.id}','${esc(v.name)}')">删除</button>`:'';
     const desc = isClone?('克隆音色'+status):(`${v.gender||''} · ${v.desc||''}`);
-    return `<div class="vcard"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>${esc(v.name)}${tag}</div><div class="vc-d">${esc(desc)}</div></div><div class="vc-p">${del||'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>'}</div></div>`;
+    // 克隆卡:试听 + 删除 独立操作行(不再把删除塞进圆形播放槽 → 不重叠)
+    let actions;
+    if(isClone){
+      const canPlay = v.status==='ready' && v.sample;
+      const play = `<button class="vc-p vc-play" data-src="${v.sample||''}" ${canPlay?'':'disabled style="opacity:.4;cursor:not-allowed"'} onclick="event.stopPropagation();togglePlay(this)" aria-label="试听">${PLAY_SVG}</button>`;
+      const del = `<button class="btn btn-dark" style="padding:8px 12px;font-size:12.5px" onclick="event.stopPropagation();delVoice('${v.id}','${esc(v.name)}')">删除</button>`;
+      actions = `<div class="vc-actions">${play}${del}</div>`;
+    } else {
+      // 预置:圆形播放占位(预置无真实样本 URL,保持装饰)
+      actions = `<div class="vc-p">${PLAY_SVG}</div>`;
+    }
+    return `<div class="vcard"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>${esc(v.name)}${tag}</div><div class="vc-d">${esc(desc)}</div></div>${actions}</div>`;
   }
   function render(which){
+    stopAudio();
     const list = which==='preset'?data.presets:data.clones;
     grid.innerHTML = list.length?list.map(v=>card(v,which!=='preset')).join('')
       :`<div style="color:var(--t4);padding:40px">${which==='preset'?'暂无预置':'还没有克隆音色,点右上角克隆一个'}</div>`;
   }
-  async function delVoice(id,name){ if(!confirm(`删除 ${name}?`))return; try{await LJ.del('/voices/'+id);await load();}catch(e){alert(e.message);} }
 
+  // ── 试听:点播放,再点停;切换其它卡自动停 ──
+  const cvAudio=document.getElementById('cvAudio');
+  let playingBtn=null;
+  function stopAudio(){ try{cvAudio.pause();}catch(_){} if(playingBtn){ playingBtn.innerHTML=PLAY_SVG; playingBtn=null; } }
+  function togglePlay(btn){
+    if(playingBtn===btn){ stopAudio(); return; }
+    stopAudio();
+    const src=btn.dataset.src; if(!src) return;
+    cvAudio.src=src; cvAudio.play().then(()=>{ btn.innerHTML=STOP_SVG; playingBtn=btn; })
+      .catch(()=>window.LJToast('试听失败,样本可能已过期','err'));
+  }
+  cvAudio.addEventListener('ended',stopAudio);
+
+  async function delVoice(id,name){
+    const ok = await window.LJConfirm({title:'删除音色',body:`确认删除「<b style="color:var(--t1)">${esc(name)}</b>」?删除后不可恢复。`,confirmText:'删除',danger:true});
+    if(!ok) return;
+    try{ await LJ.del('/voices/'+id); await load(); window.LJToast('已删除音色'); }
+    catch(e){ window.LJToast(e.message,'err'); }
+  }
+
+  // ── 克隆流程:设计系统弹窗(替代 prompt+confirm)──
   async function cloneVoiceFlow(){
     const me=await LJ.me().catch(()=>null);
-    if(!me||me.role==='viewer'){ alert('查看者不能克隆音色'); return; }
-    document.getElementById('voiceSample').click();
+    if(!me||me.role==='viewer'){ window.LJToast('查看者不能克隆音色','err'); return; }
+    resetCvForm(); openModal('cloneVoice');
+    setTimeout(()=>document.getElementById('cvName').focus(),60);
   }
-  document.getElementById('voiceSample').addEventListener('change',async function(){
-    const sample=this.files[0]; if(!sample)return;
-    const name=prompt('音色名称:','我的克隆音色'); if(!name)return;
-    if(!confirm('确认已获被克隆人本人授权?(合规要求,未授权不可克隆)')){ this.value=''; return; }
+  let cvConsented=false;
+  function setCvConsent(v){
+    cvConsented=v;
+    document.getElementById('cvConsentBox').classList.toggle('on',v);
+    document.getElementById('cvConsent').setAttribute('aria-checked',v?'true':'false');
+    refreshCvBtn();
+  }
+  function toggleCvConsent(){ setCvConsent(!cvConsented); }
+  function refreshCvBtn(){
+    const btn=document.getElementById('cvSubmitBtn');
+    const name=(document.getElementById('cvName').value||'').trim();
+    const hasFile=!!document.getElementById('voiceSample').files[0];
+    let txt='克隆音色', ok=true;
+    if(!name){ txt='请输入音色名称'; ok=false; }
+    else if(!hasFile){ txt='请上传语音样本'; ok=false; }
+    else if(!cvConsented){ txt='请勾选已获授权'; ok=false; }
+    btn.disabled=!ok; btn.textContent=txt;
+  }
+  function clearCvUpload(){
+    document.getElementById('voiceSample').value='';
+    document.getElementById('cvPreview').style.display='none';
+    document.getElementById('cvUboxEmpty').style.display='';
+    refreshCvBtn();
+  }
+  function resetCvForm(){
+    document.getElementById('cvName').value='';
+    document.getElementById('voiceProof').value=''; document.getElementById('cvProofName').textContent='';
+    setCvConsent(false); clearCvUpload();
+  }
+  document.getElementById('voiceSample').addEventListener('change',function(){
+    const f=this.files[0]; if(!f) return;
+    document.getElementById('cvUboxEmpty').style.display='none';
+    document.getElementById('cvPreview').style.display='block';
+    document.getElementById('cvSampleName').textContent=f.name;
+    refreshCvBtn();
+  });
+  document.getElementById('voiceProof').addEventListener('change',function(){
+    const f=this.files[0]; if(f) document.getElementById('cvProofName').textContent='✓ '+f.name;
+  });
+  async function submitClone(){
+    const btn=document.getElementById('cvSubmitBtn'); if(btn.disabled) return;
+    const name=document.getElementById('cvName').value.trim();
+    const sample=document.getElementById('voiceSample').files[0];
+    const proof=document.getElementById('voiceProof').files[0];
     const fd=new FormData(); fd.append('name',name); fd.append('consent','true'); fd.append('sample',sample);
+    if(proof) fd.append('proof',proof);
+    btn.disabled=true; btn.textContent='克隆中…';
     try{
       const res=await fetch('/api/voices',{method:'POST',body:fd,credentials:'same-origin'});
       if(res.status===401){location.href='login.html';return;}
       const d=await res.json().catch(()=>({}));
       if(!res.ok) throw new Error(d.error||'克隆失败');
-      await load();
-    }catch(e){ alert(e.message); }
-    this.value='';
-  });
+      closeModal('cloneVoice'); await load();
+      window.LJToast('✓ 音色「'+name+'」已提交克隆');
+    }catch(e){ window.LJToast(e.message,'err'); refreshCvBtn(); }
+  }
+  // Esc 关闭克隆弹窗
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape' && document.getElementById('ov-cloneVoice').classList.contains('show')) closeModal('cloneVoice'); });
 
   async function load(){
     try{
