@@ -61,7 +61,7 @@ const { enqueueVideo, getJob } = await import('../src/queue/index.js');
 const { tick } = await import('../src/queue/worker.js');
 
 function input(script: string) {
-  return { avatarRef: 'preset-1', voiceRef: 'cosyvoice-v1', script };
+  return { avatarRef: 'preset-1', voiceRef: 'longjing', script };
 }
 
 describe('失败隔离', () => {
