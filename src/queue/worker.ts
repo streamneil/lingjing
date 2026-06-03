@@ -114,12 +114,22 @@ async function processJob(job: JobRow): Promise<void> {
   const deadline = Date.now() + config.baichuan.jobTimeoutMs;
   let videoUrl: string | undefined;
   let aiLabel = 'none';
+  let sawRunning = false;
   for (;;) {
     if (Date.now() > deadline) {
-      throw new Error(`生成超时(>${config.baichuan.jobTimeoutMs}ms),已放弃`);
+      // 区分两种超时:一直 pending(被厂商队列卡住,常见于免费档并发=1)vs 卡在 running。
+      throw new Error(
+        sawRunning
+          ? `生成超时(>${config.baichuan.jobTimeoutMs}ms),已放弃`
+          : `排队超时:生成服务繁忙(免费档同时只跑 1 个任务),请稍后重试或减少并发`,
+      );
     }
     const r = await gateway.fetchJobStatus(providerTaskId);
+    if (r.status === 'running') sawRunning = true;
+    // 进度心跳:厂商返回数字进度就用它;否则给个轻量推进,让前端看出"在排队/在跑"而非卡死。
     if (typeof r.progress === 'number') updateProgress(job.id, r.progress);
+    else if (r.status === 'running') updateProgress(job.id, 50);
+    else updateProgress(job.id, 5); // pending:排队中,显示 5% 心跳
     if (r.status === 'succeeded') {
       videoUrl = r.videoUrl;
       aiLabel = r.aiLabel ?? 'none';
