@@ -82,7 +82,7 @@
         <div class="sample" style="background-image:url('https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=220&q=75&fit=crop&crop=faces')"><span class="mk">❌</span></div>
       </div>
       <ul class="rlist"><li>闭嘴，中性表情</li><li>正脸看着镜头</li><li>无墨镜、刘海等面部遮挡</li></ul>
-      <div class="consent" id="avConsent" onclick="toggleConsent()" style="cursor:pointer"><div class="ck" id="avConsentBox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></div><div>我确认已获被克隆人<b style="color:var(--t1)">本人授权</b>(年满 18 岁,照片属本人或已书面授权),并接受 <u style="color:var(--t2)">服务条款</u> 与 <u style="color:var(--t2)">隐私政策</u>。<a onclick="event.stopPropagation();document.getElementById('avProof').click()" style="color:var(--blue);cursor:pointer">上传授权凭证(可选)</a> <span id="avProofName" style="color:var(--t4);font-size:11px"></span></div></div>
+      <div class="consent" id="avConsent" role="checkbox" aria-checked="false" tabindex="0" aria-label="确认已获本人授权并接受服务条款与隐私政策" onclick="toggleConsent()" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleConsent();}" style="cursor:pointer"><div class="ck" id="avConsentBox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></div><div>我确认已获被克隆人<b style="color:var(--t1)">本人授权</b>(年满 18 岁,照片属本人或已书面授权),并接受 <a href="terms.html" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--blue)">服务条款</a> 与 <a href="privacy.html" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--blue)">隐私政策</a>。<a onclick="event.stopPropagation();document.getElementById('avProof').click()" style="color:var(--blue);cursor:pointer">上传授权凭证(可选)</a> <span id="avProofName" style="color:var(--t4);font-size:11px"></span></div></div>
       <button class="btn btn-white" id="avCreateBtn" style="width:100%;padding:15px;font-size:15px;" onclick="submitAvatar()">创建数字人</button>
     </div>
   </div>
@@ -174,14 +174,17 @@
     const f=this.files[0]; if(f) document.getElementById('avProofName').textContent='✓ '+f.name;
   });
 
-  // 授权勾选(必须勾才能创建)
+  // 授权勾选(必须勾才能创建)— role=checkbox,键盘/屏读可用,勾选态用明确填色而非 opacity
   let consented=false;
-  function toggleConsent(){
-    consented=!consented;
-    document.getElementById('avConsentBox').style.opacity=consented?'1':'.25';
+  function setConsent(v){
+    consented=v;
+    const box=document.getElementById('avConsentBox'), wrap=document.getElementById('avConsent');
+    box.classList.toggle('on',consented);
+    wrap.setAttribute('aria-checked',consented?'true':'false');
     refreshAvBtn();
   }
-  document.getElementById('avConsentBox').style.opacity='.25';
+  function toggleConsent(){ setConsent(!consented); }
+  setConsent(false);
 
   // 创建按钮:按"缺什么"反馈并禁用,替代点了才 alert
   function refreshAvBtn(){
@@ -231,7 +234,7 @@
   function resetAvForm(){
     document.getElementById('avName').value='';
     document.getElementById('avProof').value=''; document.getElementById('avProofName').textContent='';
-    consented=false; document.getElementById('avConsentBox').style.opacity='.25';
+    setConsent(false);
     clearUpload();
   }
 

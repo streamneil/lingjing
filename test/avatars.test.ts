@@ -68,7 +68,7 @@ describe('自定义形象 + 授权存证', () => {
     ).toThrow('授权');
   });
 
-  it('已授权 → 创建成功,且写入 authorization 存证', () => {
+  it('已授权 → 创建成功,且写入 authorization 存证', async () => {
     const av = createCustomAvatar({
       tenantId: T, userId: U, name: '台长', kind: 'photo',
       sourceKey: 'avatars/x.jpg', consent: true, proofKey: 'authorizations/p.pdf',
@@ -80,6 +80,9 @@ describe('自定义形象 + 授权存证', () => {
     expect(auth.consent).toBe(1);
     expect(auth.proof_key).toBe('authorizations/p.pdf');
     expect(auth.created_by).toBe(U);
+    // 条款版本留痕(可举证"用户当时同意的是哪一版"),以后端常量为准
+    const { TERMS_VERSION } = await import('../src/legal/index.js');
+    expect(auth.terms_version).toBe(TERMS_VERSION);
   });
 
   it('列表 + 删除 + 租户隔离', () => {
