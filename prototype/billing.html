@@ -4,104 +4,348 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>用量计费 · 灵镜</title>
 <link rel="stylesheet" href="app.css">
+<style>
+  /* ───────── 用量计费 · 「燃尽决策台」局部样式 ─────────
+     页面只服务一个问题:我们还剩多少,够撑多久,钱花在哪。
+     延续设计系统「静默精密器械」语言:纯黑哑光、白底强调、Space Mono 数字。 */
+
+  /* 决策区:左 余额+燃尽预测,右 30 天消耗趋势脊线 */
+  .bl-deck{
+    display:grid; grid-template-columns:1.15fr 1fr; gap:18px; margin-bottom:18px;
+  }
+  @media (max-width:900px){ .bl-deck{ grid-template-columns:1fr; } }
+
+  .bl-bal{
+    position:relative; overflow:hidden;
+    background:
+      radial-gradient(120% 140% at 0% 0%, rgba(77,141,255,.08), transparent 55%),
+      var(--card);
+    border:1px solid var(--line); border-radius:var(--r-lg); padding:26px 28px;
+    animation:blRise .5s var(--ease-out) both;
+  }
+  .bl-bal::after{ /* 细网格氛围 */
+    content:""; position:absolute; inset:0; pointer-events:none; opacity:.5;
+    background-image:linear-gradient(var(--hairline) 1px,transparent 1px),linear-gradient(90deg,var(--hairline) 1px,transparent 1px);
+    background-size:34px 34px; mask-image:radial-gradient(70% 80% at 90% 10%,#000,transparent 75%);
+  }
+  .bl-bal .cap{ font-size:11px; font-family:var(--f-mono); letter-spacing:1.5px; text-transform:uppercase; color:var(--t3); display:flex; align-items:center; gap:8px; position:relative; }
+  .bl-bal .cap .led{ width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green); }
+  .bl-bal .cap .led.low{ background:var(--amber); box-shadow:0 0 8px var(--amber); }
+  .bl-bal .big{ font-family:var(--f-en); font-size:54px; font-weight:800; letter-spacing:-.03em; line-height:1.05; margin:14px 0 2px; position:relative; }
+  .bl-bal .big .u{ font-size:18px; color:var(--t3); font-weight:600; margin-left:6px; }
+  .bl-bal .runway{ position:relative; display:inline-flex; align-items:center; gap:9px; margin-top:14px; padding:8px 14px; border-radius:var(--r-pill); background:var(--field); border:1px solid var(--line-soft); font-size:13px; color:var(--t2); }
+  .bl-bal .runway b{ color:var(--t1); font-family:var(--f-en); font-weight:700; }
+  .bl-bal .runway.warn{ background:rgba(255,178,62,.1); border-color:rgba(255,178,62,.25); color:var(--amber); }
+  .bl-bal .runway.warn b{ color:var(--amber); }
+  .bl-bal .rate{ position:relative; margin-top:13px; font-size:11.5px; color:var(--t4); font-family:var(--f-mono); }
+
+  /* 30 天趋势脊线卡 */
+  .bl-trend{
+    background:var(--card); border:1px solid var(--line); border-radius:var(--r-lg); padding:22px 24px 16px;
+    display:flex; flex-direction:column; animation:blRise .5s var(--ease-out) .06s both;
+  }
+  .bl-trend .th{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:6px; }
+  .bl-trend .th .t{ font-size:13px; color:var(--t2); font-weight:600; }
+  .bl-trend .th .s{ font-size:11px; font-family:var(--f-mono); color:var(--t4); letter-spacing:.5px; }
+  .bl-trend .spark{ flex:1; min-height:96px; margin-top:auto; position:relative; }
+  .bl-trend svg{ width:100%; height:100%; display:block; overflow:visible; }
+  .bl-trend .axis{ display:flex; justify-content:space-between; font-size:10px; font-family:var(--f-mono); color:var(--t5); margin-top:6px; }
+  .bl-spark-path{ stroke-dasharray:1200; stroke-dashoffset:1200; animation:blDraw 1.1s var(--ease-out) .2s forwards; }
+  @keyframes blDraw{ to{ stroke-dashoffset:0; } }
+  @keyframes blRise{ from{ opacity:0; transform:translateY(12px); } to{ opacity:1; transform:none; } }
+
+  /* 明细工具条:筛选 + 导出 */
+  .bl-tools{ display:flex; align-items:center; gap:10px; margin-left:auto; }
+  .bl-seg{ display:inline-flex; background:var(--field); border:1px solid var(--line); border-radius:var(--r-pill); padding:3px; }
+  .bl-seg button{ border:none; background:none; color:var(--t3); font-family:var(--f); font-size:12px; padding:6px 13px; border-radius:var(--r-pill); cursor:pointer; transition:.15s; white-space:nowrap; }
+  .bl-seg button.on{ background:var(--t1); color:#0A0A0B; font-weight:600; }
+  .bl-seg button:hover:not(.on){ color:var(--t1); }
+
+  .bl-csv{ display:inline-flex; align-items:center; gap:7px; text-decoration:none; }
+  .bl-csv svg{ width:14px; height:14px; }
+
+  /* 续费 / 扩容:克制的对公引导,非自助下单 */
+  .bl-renew{ margin-top:26px; display:flex; align-items:center; gap:18px; background:linear-gradient(100deg, var(--card), var(--bg-soft)); border:1px solid var(--line); border-radius:var(--r-lg); padding:22px 26px; animation:blRise .5s var(--ease-out) .12s both; }
+  .bl-renew .ic{ width:42px; height:42px; flex:none; border-radius:12px; background:var(--field); border:1px solid var(--line); display:grid; place-items:center; }
+  .bl-renew .ic svg{ width:20px; height:20px; color:var(--t2); }
+  .bl-renew .tx{ flex:1; }
+  .bl-renew .tx b{ font-size:14px; color:var(--t1); font-weight:600; }
+  .bl-renew .tx p{ font-size:12.5px; color:var(--t3); margin-top:4px; line-height:1.6; }
+
+  /* 表格里数值与徽标的细节 */
+  .bl-amt{ font-family:var(--f-en); font-weight:700; text-align:right; }
+  .bl-amt.pos{ color:var(--green); }
+  .bl-amt.neg{ color:var(--t1); }
+  .bl-empty{ text-align:center; color:var(--t4); padding:54px 20px; }
+  .bl-empty svg{ width:34px; height:34px; color:var(--t5); margin-bottom:12px; }
+</style>
 </head>
 <body data-page="billing" data-crumb="经营管理 > 用量计费">
 <div class="shell" id="shell-mount">
   <div class="main-col">
     <main class="page">
       <div class="ph">
-        <div><h1 class="t-h1">用量与计费</h1><p class="desc">按量计费，每次生成消耗点数。托管模式下点数 = 云端能力成本 + 服务费；私有化模式可切换为内部用量统计。</p></div>
-        <button class="btn btn-white" id="grantBtn" onclick="doGrant()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>发放点数</button>
+        <div><h1 class="t-h1">用量与计费</h1><p class="desc">按量计费,每次生成消耗点数。底层算力成本由平台统一调度,您只需关注余额、消耗与对账。</p></div>
+        <button class="btn btn-white" id="grantBtn" onclick="openGrant()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>发放点数</button>
       </div>
 
+      <!-- ── 决策区:余额 + 燃尽预测 + 30天趋势 ── -->
+      <div class="bl-deck">
+        <div class="bl-bal">
+          <div class="cap"><span class="led" id="balLed"></span>当前点数余额</div>
+          <div class="big"><span id="balBig">—</span><span class="u">点</span></div>
+          <div class="runway" id="runway"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span id="runwayTxt">按消耗速度估算可用时长…</span></div>
+          <div class="rate" id="rateTxt"></div>
+        </div>
+
+        <div class="bl-trend">
+          <div class="th"><span class="t">近 30 天消耗趋势</span><span class="s" id="trendSum">— 点</span></div>
+          <div class="spark">
+            <svg id="sparkSvg" viewBox="0 0 300 96" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="rgba(77,141,255,.28)"/>
+                  <stop offset="100%" stop-color="rgba(77,141,255,0)"/>
+                </linearGradient>
+              </defs>
+              <path id="sparkArea" fill="url(#sparkFill)" stroke="none"></path>
+              <path id="sparkLine" class="bl-spark-path" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+          </div>
+          <div class="axis"><span id="axL">30 天前</span><span>今天</span></div>
+        </div>
+      </div>
+
+      <!-- ── 四统计卡(真实 ledger 计算)── -->
       <div class="stat-row">
-        <div class="stat" style="animation-delay:.04s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg>当前点数余额</div><div class="val" id="balVal">—</div><div class="bar"><i style="width:42%"></i></div><div class="sub" id="balSub">实时余额</div></div>
-        <div class="stat" style="animation-delay:.08s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>累计生成扣点</div><div class="val" id="statGen">—</div><div class="sub">消耗 <b id="statGenPts">—</b> 点</div></div>
-        <div class="stat" style="animation-delay:.12s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg>累计发放</div><div class="val" id="statGrant">—</div><div class="sub">后台发放点数</div></div>
-        <div class="stat" style="animation-delay:.16s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 4v4h-4"/></svg>失败释放</div><div class="val" id="statRelease">—</div><div class="sub">失败任务退还(不计费)</div></div>
+        <div class="stat" style="animation-delay:.04s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>累计生成</div><div class="val" id="statGen">—</div><div class="sub">消耗 <b id="statGenPts">—</b> 点</div></div>
+        <div class="stat" style="animation-delay:.08s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 14 3-4 3 3 4-6"/></svg>本月消耗</div><div class="val" id="statMonth">—</div><div class="sub">本自然月净扣点</div></div>
+        <div class="stat" style="animation-delay:.12s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg>累计发放</div><div class="val" id="statGrant">—</div><div class="sub">后台 / 充值入账</div></div>
+        <div class="stat" style="animation-delay:.16s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 4v4h-4"/></svg>失败释放</div><div class="val" id="statRelease">—</div><div class="sub">失败任务退还(不计费)</div></div>
       </div>
 
-      <div class="sec-head"><span class="sec-title">套餐</span></div>
-      <div class="plans" style="margin-bottom:30px;">
-        <div class="plan"><div class="pn">基础版</div><div class="pp">¥1,000<small> / 1,000 点</small></div><ul><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>3 创作席位</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>标准排队</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>720P 输出</li></ul><button class="btn btn-dark" style="width:100%" onclick="alert('请联系机构销售开通')">联系销售</button></div>
-        <div class="plan featured"><div class="pn">专业版 <span class="bdg bdg-blue">推荐</span></div><div class="pp">¥4,500<small> / 5,000 点</small></div><ul><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>10 创作席位</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>优先排队</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>高精形象训练</li></ul><button class="btn btn-white" style="width:100%" onclick="alert('请联系机构销售开通')">联系销售</button></div>
-        <div class="plan"><div class="pn">私有化</div><div class="pp">定制<small> / 年费</small></div><ul><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>整套部署到客户</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>客户自有云账号</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>数据本地化</li></ul><button class="btn btn-dark" style="width:100%">联系销售</button></div>
+      <!-- ── 消费明细 ── -->
+      <div class="sec-head" style="margin-top:30px">
+        <span class="sec-title">消费明细</span>
+        <div class="bl-tools">
+          <div class="bl-seg" id="filterSeg">
+            <button data-k="all" class="on">全部</button>
+            <button data-k="spend">消耗</button>
+            <button data-k="grant">入账</button>
+            <button data-k="release">释放</button>
+          </div>
+          <a href="/api/credits/ledger.csv" class="btn btn-dark bl-csv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>导出对账 CSV</a>
+        </div>
       </div>
-
-      <div class="sec-head"><span class="sec-title">消费记录</span><a href="/api/credits/ledger.csv" class="btn btn-dark" style="padding:7px 13px;font-size:12.5px;text-decoration:none">导出 CSV</a></div>
       <table class="tbl">
-        <thead><tr><th>时间</th><th>类型</th><th>作品 / 对象</th><th>说明</th><th style="text-align:right">点数</th></tr></thead>
+        <thead><tr><th>时间</th><th>类型</th><th>关联任务</th><th>说明</th><th style="text-align:right">点数</th></tr></thead>
         <tbody id="ledgerBody">
-          <tr><td class="num">06-01 15:16</td><td><span class="bdg bdg-dim">数字人视频</span></td><td class="strong">融媒体新闻·晚间播报</td><td>李编导</td><td class="num neg" style="text-align:right">-12</td></tr>
-          <tr><td class="num">06-01 14:02</td><td><span class="bdg bdg-dim">声音克隆</span></td><td class="strong">台长配音</td><td>李编导</td><td class="num neg" style="text-align:right">-30</td></tr>
-          <tr><td class="num">06-01 11:30</td><td><span class="bdg bdg-blue">高精训练</span></td><td class="strong">台标主播·专属</td><td>王主管</td><td class="num neg" style="text-align:right">-160</td></tr>
-          <tr><td class="num">05-31 18:44</td><td><span class="bdg bdg-dim">数字人视频</span></td><td class="strong">文化节启动报道</td><td>张记者</td><td class="num neg" style="text-align:right">-10</td></tr>
-          <tr><td class="num">05-31 09:10</td><td><span class="bdg bdg-ok">充值</span></td><td class="strong">专业版套餐</td><td>王主管</td><td class="num" style="text-align:right;color:var(--green)">+5,000</td></tr>
+          <tr><td colspan="5" style="color:var(--t4);padding:32px;text-align:center">加载中…</td></tr>
         </tbody>
       </table>
+
+      <!-- ── 续费 / 扩容:对公引导,非自助下单 ── -->
+      <div class="bl-renew">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-6 0v4"/><rect x="2" y="9" width="20" height="11" rx="2"/><path d="M12 13v3"/></svg></div>
+        <div class="tx">
+          <b>需要扩容或续费?</b>
+          <p id="renewHint">机构点数采用对公采购,由平台对接人开通。点数不足时,联系您的客户成功对接人或机构管理员申请扩容。</p>
+        </div>
+        <button class="btn btn-dark" id="renewBtn" onclick="requestTopup()">申请扩容</button>
+      </div>
     </main>
   </div>
 </div>
+
+<!-- 发放点数弹窗(替代 prompt) -->
+<div class="bl-ov" id="grantOv" style="position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:none;place-items:center;z-index:400">
+  <div style="width:360px;max-width:92vw;background:var(--modal);border:1px solid var(--line);border-radius:18px;padding:26px;box-shadow:var(--sh-pop)">
+    <h3 style="font-size:17px;font-weight:700;margin-bottom:6px">发放点数</h3>
+    <p style="font-size:12.5px;color:var(--t3);margin-bottom:18px;line-height:1.6">为本机构入账点数(对公采购到账后操作)。此动作会记入审计日志。</p>
+    <label style="display:block;font-size:12px;color:var(--t3);margin-bottom:7px">发放数量(点)</label>
+    <input id="grantAmt" type="number" min="1" value="1000" style="width:100%;box-sizing:border-box;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--t1);font-size:14px;font-family:var(--f);outline:none">
+    <div style="display:flex;gap:7px;margin:12px 0 4px">
+      <button class="qa" data-v="1000">+1,000</button><button class="qa" data-v="5000">+5,000</button><button class="qa" data-v="10000">+10,000</button>
+    </div>
+    <div class="lj-msg" id="grantMsg" style="font-size:12.5px;min-height:16px;color:var(--red)"></div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button onclick="document.getElementById('grantOv').style.display='none'" style="flex:1;padding:11px;border-radius:999px;font-size:14px;font-weight:600;font-family:var(--f);cursor:pointer;border:1px solid var(--line);background:none;color:var(--t2)">取消</button>
+      <button id="grantOk" onclick="submitGrant()" style="flex:1;padding:11px;border-radius:999px;font-size:14px;font-weight:600;font-family:var(--f);cursor:pointer;border:none;background:var(--t1);color:#0A0A0B">确认发放</button>
+    </div>
+  </div>
+</div>
+<style>
+  #grantOv .qa{ flex:1;background:var(--field);border:1px solid var(--line);color:var(--t2);font-family:var(--f-mono);font-size:11.5px;padding:8px;border-radius:9px;cursor:pointer;transition:.15s }
+  #grantOv .qa:hover{ background:var(--card-hi);color:var(--t1);border-color:var(--line-hi) }
+</style>
+
 <script src="shell.js"></script>
 <script src="api.js"></script>
 <script>
-  const KIND_CN = {grant:'发放',reserve:'预扣',settle:'结算',release:'释放'};
+  // ── 类型 → 人话 ──
   const KIND_BDG = {
-    grant:'<span class="bdg bdg-ok">发放</span>',
-    reserve:'<span class="bdg bdg-dim">预扣</span>',
-    settle:'<span class="bdg bdg-dim">数字人视频</span>',
-    release:'<span class="bdg" style="background:rgba(255,178,62,.14);color:var(--amber)">释放</span>',
+    grant:'<span class="bdg bdg-ok">入账</span>',
+    reserve:'<span class="bdg bdg-dim">生成扣点</span>',
+    settle:'<span class="bdg bdg-dim">结算</span>',
+    release:'<span class="bdg" style="background:rgba(255,178,62,.14);color:var(--amber)">失败释放</span>',
   };
-  function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-  function fmtTime(ts){const d=new Date(ts);const p=n=>String(n).padStart(2,'0');return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;}
+  // 筛选分组:消耗(reserve)、入账(grant)、释放(release);settle 多为 0 差额,并入"消耗"组
+  const FILTER = { all:()=>true, spend:l=>l.kind==='reserve'||l.kind==='settle', grant:l=>l.kind==='grant', release:l=>l.kind==='release' };
+  let LEDGER = [], curFilter = 'all', isAdmin = false;
 
-  async function doGrant(){
-    const me = await LJ.me().catch(()=>null);
-    if(!me||me.role!=='admin'){ alert('仅管理员可发放点数'); return; }
-    const amount = parseInt(prompt('发放点数数量:','1000')||'',10);
-    if(!amount||amount<=0){ return; }
-    try{ await LJ.post('/credits/grant',{amount,note:'后台发放'}); await load(); }
-    catch(e){ alert(e.message); }
+  const esc = s => (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const fmtTime = ts => { const d=new Date(ts),p=n=>String(n).padStart(2,'0'); return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+  const fmtN = n => Math.round(n).toLocaleString('en-US');
+  const DAY = 86400000;
+
+  // ── 余额 + 燃尽预测 ──
+  function renderDeck(bal, warn){
+    document.getElementById('balBig').textContent = fmtN(bal);
+    const led = document.getElementById('balLed');
+    if(warn && warn.low) led.classList.add('low');
+
+    // 近 30 天净消耗速度 → 可用天数
+    const cut = Date.now() - 30*DAY;
+    const spend30 = LEDGER.filter(l=>l.created_at>=cut && (l.kind==='reserve'||l.kind==='settle'))
+                          .reduce((s,l)=>s + Math.min(0,l.amount), 0); // 负数
+    const burnPerDay = Math.abs(spend30) / 30; // 点/天
+    const rwEl = document.getElementById('runway'), rwTxt = document.getElementById('runwayTxt'), rate = document.getElementById('rateTxt');
+
+    if(burnPerDay < 0.01){
+      rwTxt.textContent = '近 30 天暂无消耗,余额充足';
+      rate.textContent = '';
+    } else {
+      const days = Math.floor(bal / burnPerDay);
+      rate.textContent = `日均消耗 ≈ ${fmtN(burnPerDay)} 点 · 基于近 30 天`;
+      if(days <= 14){
+        rwEl.classList.add('warn');
+        rwTxt.innerHTML = `按当前速度,余额约可用 <b>${days}</b> 天,建议尽快续费`;
+      } else if (days > 999){
+        rwTxt.innerHTML = `按当前速度,余额可用 <b>999+</b> 天`;
+      } else {
+        rwTxt.innerHTML = `按当前速度,余额约可用 <b>${days}</b> 天`;
+      }
+    }
   }
+
+  // ── 30 天趋势脊线(按天聚合净消耗)──
+  function renderSpark(){
+    const days = 30, buckets = new Array(days).fill(0);
+    const today0 = (()=>{ const d=new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
+    LEDGER.forEach(l=>{
+      if(l.kind!=='reserve' && l.kind!=='settle') return;
+      const idx = days-1 - Math.floor((today0 - new Date(l.created_at).setHours(0,0,0,0))/DAY);
+      if(idx>=0 && idx<days) buckets[idx] += Math.abs(Math.min(0,l.amount));
+    });
+    const total = buckets.reduce((a,b)=>a+b,0);
+    document.getElementById('trendSum').textContent = fmtN(total) + ' 点';
+    const max = Math.max(1, ...buckets);
+    const W=300, H=96, pad=4;
+    const pts = buckets.map((v,i)=>{
+      const x = (i/(days-1))*W;
+      const y = H - pad - (v/max)*(H-pad*2);
+      return [x, y];
+    });
+    const line = pts.map((p,i)=>`${i?'L':'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ');
+    document.getElementById('sparkLine').setAttribute('d', line);
+    document.getElementById('sparkArea').setAttribute('d', `${line} L${W} ${H} L0 ${H} Z`);
+  }
+
+  // ── 统计卡 ──
+  function renderStats(){
+    const sum = k => LEDGER.filter(l=>l.kind===k).reduce((s,l)=>s+l.amount,0);
+    const settleCnt = LEDGER.filter(l=>l.kind==='settle').length;
+    const reserveCnt = LEDGER.filter(l=>l.kind==='reserve').length;
+    const genCnt = Math.max(settleCnt, reserveCnt); // 生成任务数
+    const netSpend = Math.abs(sum('reserve')) - sum('release');
+
+    const monStart = (()=>{ const d=new Date(); return new Date(d.getFullYear(),d.getMonth(),1).getTime(); })();
+    const monthSpend = LEDGER.filter(l=>l.created_at>=monStart && (l.kind==='reserve'))
+                             .reduce((s,l)=>s+Math.abs(l.amount),0);
+
+    document.getElementById('statGen').innerHTML = genCnt + ' <small>次</small>';
+    document.getElementById('statGenPts').textContent = fmtN(Math.max(0,netSpend));
+    document.getElementById('statMonth').innerHTML = fmtN(monthSpend) + ' <small>点</small>';
+    document.getElementById('statGrant').textContent = fmtN(sum('grant'));
+    document.getElementById('statRelease').innerHTML = fmtN(sum('release')) + ' <small>点</small>';
+  }
+
+  // ── 明细表(可筛选)──
+  function renderTable(){
+    const body = document.getElementById('ledgerBody');
+    const rows = LEDGER.filter(FILTER[curFilter]);
+    if(!rows.length){
+      body.innerHTML = `<tr><td colspan="5"><div class="bl-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M8 4v16"/></svg>
+        <div>${curFilter==='all'?'暂无消费记录,发起第一次生成后这里会出现明细':'该类型暂无记录'}</div></div></td></tr>`;
+      return;
+    }
+    body.innerHTML = rows.map(l=>{
+      const pos = l.amount>=0;
+      return `<tr>
+        <td class="num">${fmtTime(l.created_at)}</td>
+        <td>${KIND_BDG[l.kind]||esc(l.kind)}</td>
+        <td class="strong">${l.job_id?('任务 '+esc(l.job_id).slice(0,8)):'—'}</td>
+        <td style="color:var(--t3)">${esc(l.note||'')}</td>
+        <td class="bl-amt ${pos?'pos':'neg'}">${pos?'+':''}${fmtN(l.amount)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // ── 发放点数弹窗 ──
+  function openGrant(){
+    if(!isAdmin){ window.LJToast?window.LJToast('仅管理员可发放点数','err'):alert('仅管理员可发放点数'); return; }
+    document.getElementById('grantMsg').textContent='';
+    document.getElementById('grantAmt').value='1000';
+    document.getElementById('grantOv').style.display='grid';
+  }
+  document.querySelectorAll('#grantOv .qa').forEach(b=>b.onclick=()=>{ document.getElementById('grantAmt').value=b.dataset.v; });
+  async function submitGrant(){
+    const amt = parseInt(document.getElementById('grantAmt').value,10);
+    const msg = document.getElementById('grantMsg');
+    if(!amt || amt<=0){ msg.textContent='请输入正整数'; return; }
+    const ok = document.getElementById('grantOk'); ok.disabled=true; ok.textContent='发放中…';
+    try{
+      await LJ.post('/credits/grant',{amount:amt,note:'后台发放'});
+      document.getElementById('grantOv').style.display='none';
+      window.LJToast && window.LJToast(`✓ 已发放 ${fmtN(amt)} 点`);
+      await load();
+    }catch(e){ msg.textContent=e.message; }
+    finally{ ok.disabled=false; ok.textContent='确认发放'; }
+  }
+
+  function requestTopup(){
+    window.LJToast
+      ? window.LJToast('已记录扩容意向,平台对接人将与机构管理员联系')
+      : alert('已记录扩容意向,平台对接人将与机构管理员联系');
+  }
+
+  // ── 筛选切换 ──
+  document.querySelectorAll('#filterSeg button').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#filterSeg button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); curFilter=b.dataset.k; renderTable();
+  });
 
   async function load(){
     try{
       const me = await LJ.me();
-      if(me.role!=='admin'){ const b=document.getElementById('grantBtn'); if(b) b.style.display='none'; }
-
-      const bal = await LJ.get('/credits/balance');
-      document.getElementById('balVal').textContent = (bal.balance??0).toLocaleString('en-US');
-      // 用量预警(H5):余额低于阈值时高亮提示
-      const warn = await LJ.get('/credits/warning').catch(()=>null);
-      if(warn && warn.low){
-        const sub=document.getElementById('balSub');
-        if(sub){ sub.textContent='⚠ 余额不足('+warn.balance+' < '+warn.threshold+'),请及时充值'; sub.style.color='var(--amber)'; }
+      isAdmin = me.role==='admin';
+      if(!isAdmin){
+        const g=document.getElementById('grantBtn'); if(g) g.style.display='none';
+        const r=document.getElementById('renewBtn'); if(r) r.style.display='none';
+        document.getElementById('renewHint').textContent='点数不足时,请联系您的机构管理员申请扩容。';
       }
-
-      const led = await LJ.get('/credits/ledger');
-      // 从真实流水算统计卡(替代写死的 86条/980点 假数据)
-      const sum = (k)=>led.filter(l=>l.kind===k).reduce((s,l)=>s+l.amount,0);
-      const settleCnt = led.filter(l=>l.kind==='settle').length;
-      const reserveSpent = -sum('reserve') - sum('release'); // 净扣点 ≈ 预扣 - 释放
-      document.getElementById('statGen').innerHTML = settleCnt + ' <small>次</small>';
-      document.getElementById('statGenPts').textContent = Math.max(0, reserveSpent);
-      document.getElementById('statGrant').innerHTML = sum('grant').toLocaleString('en-US');
-      document.getElementById('statRelease').innerHTML = sum('release') + ' <small>点</small>';
-
-      const body = document.getElementById('ledgerBody');
-      if(!led.length){ body.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--t4);padding:40px">暂无消费记录</td></tr>'; return; }
-      body.innerHTML = led.map(l=>{
-        const amtColor = l.amount>=0 ? 'color:var(--green)' : '';
-        const amtTxt = (l.amount>=0?'+':'')+l.amount;
-        return `<tr>
-          <td class="num">${fmtTime(l.created_at)}</td>
-          <td>${KIND_BDG[l.kind]||esc(l.kind)}</td>
-          <td class="strong">${l.job_id?('任务 '+esc(l.job_id).slice(0,8)):'—'}</td>
-          <td>${esc(l.note||'')}</td>
-          <td class="num ${l.amount<0?'neg':''}" style="text-align:right;${amtColor}">${amtTxt}</td>
-        </tr>`;
-      }).join('');
-    }catch(e){ /* 401 已跳转 */ }
+      const [bal, warn, led] = await Promise.all([
+        LJ.get('/credits/balance'),
+        LJ.get('/credits/warning').catch(()=>null),
+        LJ.get('/credits/ledger').catch(()=>[]),
+      ]);
+      LEDGER = Array.isArray(led) ? led : [];
+      renderDeck(bal.balance ?? 0, warn);
+      renderSpark();
+      renderStats();
+      renderTable();
+    }catch(e){ /* 401 已由 api.js 跳转 */ }
   }
   load();
 </script>
