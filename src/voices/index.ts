@@ -4,6 +4,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { db, type VoiceRow } from '../db/index.js';
+import { TERMS_VERSION } from '../legal/index.js';
 
 const now = () => Date.now();
 
@@ -40,9 +41,9 @@ export function createCloneVoice(p: CreateVoiceParams): VoiceRow {
   }
   const authId = randomUUID();
   db.prepare(
-    `INSERT INTO authorization (id,tenant_id,subject_type,consent,proof_key,created_by,created_at)
-     VALUES (?,?,?,?,?,?,?)`,
-  ).run(authId, p.tenantId, 'voice', 1, p.proofKey ?? null, p.userId, now());
+    `INSERT INTO authorization (id,tenant_id,subject_type,consent,proof_key,terms_version,created_by,created_at)
+     VALUES (?,?,?,?,?,?,?,?)`,
+  ).run(authId, p.tenantId, 'voice', 1, p.proofKey ?? null, TERMS_VERSION, p.userId, now());
 
   const v: VoiceRow = {
     id: randomUUID(),

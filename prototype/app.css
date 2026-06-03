@@ -407,8 +407,11 @@ img { display: block; }
 .rlist { list-style: none; margin: 36px 0 18px; display: flex; flex-direction: column; gap: 11px; }
 .rlist li { display: flex; align-items: center; gap: 11px; font-size: 14px; color: var(--t2); }
 .rlist li::before { content:''; width: 5px; height: 5px; border-radius: 50%; background: var(--t3); flex-shrink: 0; }
-.consent { display: flex; gap: 12px; font-size: 12.5px; color: var(--t3); line-height: 1.75; margin-bottom: 22px; }
-.consent .ck { width: 22px; height: 22px; border-radius: 50%; background: var(--t1); color: #0A0A0B; display: grid; place-items: center; flex-shrink: 0; }
+.consent { display: flex; gap: 12px; font-size: 12.5px; color: var(--t3); line-height: 1.75; margin-bottom: 22px; border-radius: 10px; padding: 4px; margin-left: -4px; margin-right: -4px; transition: box-shadow .15s; }
+.consent:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--blue); }   /* 键盘聚焦可见 */
+/* 勾选态用明确填色,未勾是空心描边圈(不再靠 opacity 区分) */
+.consent .ck { width: 22px; height: 22px; border-radius: 50%; background: transparent; border: 1.5px solid var(--line-hi); color: transparent; display: grid; place-items: center; flex-shrink: 0; transition: background .15s, border-color .15s, color .15s; }
+.consent .ck.on { background: var(--t1); border-color: var(--t1); color: #0A0A0B; }
 .consent .ck svg { width: 13px; height: 13px; }
 
 @media (max-width: 1080px) {

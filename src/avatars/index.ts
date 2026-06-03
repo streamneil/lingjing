@@ -5,6 +5,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { db, type AvatarRow, type AvatarKind } from '../db/index.js';
+import { TERMS_VERSION } from '../legal/index.js';
 
 const now = () => Date.now();
 
@@ -55,9 +56,9 @@ export function createCustomAvatar(p: CreateAvatarParams): AvatarRow {
 
   const authId = randomUUID();
   db.prepare(
-    `INSERT INTO authorization (id,tenant_id,subject_type,consent,proof_key,created_by,created_at)
-     VALUES (?,?,?,?,?,?,?)`,
-  ).run(authId, p.tenantId, 'avatar', 1, p.proofKey ?? null, p.userId, now());
+    `INSERT INTO authorization (id,tenant_id,subject_type,consent,proof_key,terms_version,created_by,created_at)
+     VALUES (?,?,?,?,?,?,?,?)`,
+  ).run(authId, p.tenantId, 'avatar', 1, p.proofKey ?? null, TERMS_VERSION, p.userId, now());
 
   const av: AvatarRow = {
     id: randomUUID(),

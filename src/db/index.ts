@@ -154,6 +154,7 @@ db.exec(`
     subject_type  TEXT NOT NULL,                    -- avatar | voice(肖像 / 声音)
     consent       INTEGER NOT NULL DEFAULT 0,       -- 是否勾选"已获本人授权"(1=是)
     proof_key     TEXT,                             -- 授权凭证文件在 MinIO 的 key
+    terms_version TEXT,                             -- 同意时的条款版本(可举证"同意的是哪一版")
     note          TEXT,
     created_by    TEXT,                             -- 操作人 user id
     created_at    INTEGER NOT NULL
@@ -190,6 +191,7 @@ function addColumnIfMissing(table: string, column: string, ddl: string): void {
 addColumnIfMissing('avatar', 'orientation', `orientation TEXT DEFAULT 'portrait'`);
 addColumnIfMissing('avatar', 'is_default', `is_default INTEGER NOT NULL DEFAULT 0`);
 addColumnIfMissing('user', 'display_name', `display_name TEXT`);
+addColumnIfMissing('authorization', 'terms_version', `terms_version TEXT`);
 
 // 用户名全局唯一(登录免输机构 ID):在 user.username 上建唯一索引。
 // 旧库若已有重名用户会建索引失败 —— 用 try 包裹并告警,交付时人工清理重名。
@@ -292,6 +294,7 @@ export interface AuthorizationRow {
   subject_type: 'avatar' | 'voice';
   consent: number;
   proof_key: string | null;
+  terms_version: string | null;
   note: string | null;
   created_by: string | null;
   created_at: number;
