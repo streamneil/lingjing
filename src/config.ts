@@ -31,6 +31,17 @@ function optional(key: string, fallback: string): string {
   return process.env[key] ?? fallback;
 }
 
+/** 归一化 OSS region:把误填的完整 endpoint URL 收敛成纯 region 名。
+ *  接受 'oss-cn-hangzhou' / 'https://oss-cn-hangzhou.aliyuncs.com' / 'oss-cn-hangzhou.aliyuncs.com'。 */
+function normalizeOssRegion(raw: string): string {
+  let r = raw.trim();
+  if (!r) return '';
+  r = r.replace(/^https?:\/\//, ''); // 去协议
+  r = r.replace(/\.aliyuncs\.com.*$/, ''); // 去 .aliyuncs.com 及后面
+  r = r.replace(/\/.*$/, ''); // 去残留路径
+  return r;
+}
+
 export const config = {
   port: Number(optional('PORT', '9372')),
 
@@ -65,7 +76,10 @@ export const config = {
   // wan2.2-s2v 需公网可达的素材 URL —— OSS 公网域名满足,本地 MinIO 不满足。
   // accessKey/secret 复用 DashScope 同账号的 AccessKey(RAM 用户授权 OSS 即可)。
   oss: {
-    region: optional('OSS_REGION', ''), // 如 oss-cn-hangzhou
+    // region 容错:ali-oss 只认 region 名(如 oss-cn-hangzhou)。用户常误填完整
+    // endpoint URL(https://oss-cn-hangzhou.aliyuncs.com),这里归一化成纯 region 名,
+    // 否则 ali-oss 启动即抛 "region must be conform" 把整个服务搞崩。
+    region: normalizeOssRegion(optional('OSS_REGION', '')),
     bucket: optional('OSS_BUCKET', ''),
     accessKeyId: optional('OSS_ACCESS_KEY_ID', ''),
     accessKeySecret: optional('OSS_ACCESS_KEY_SECRET', ''),
