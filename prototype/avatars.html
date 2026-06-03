@@ -65,7 +65,13 @@
       <input type="file" id="avPhoto" accept="image/jpeg,image/png,image/webp" style="display:none">
       <input type="file" id="avVideo" accept="video/mp4,video/quicktime" style="display:none">
       <input type="file" id="avProof" accept="image/*,application/pdf" style="display:none">
-      <div class="uzone" id="avUzone" onclick="document.getElementById('avPhoto').click()"><div class="ubox"><div class="u" id="avPhotoLabel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 15 5-5 4 4 3-3 6 6"/><path d="M16.5 7.5 19 5l3 3"/></svg>上传照片</div></div></div>
+      <div class="uzone" id="avUzone" onclick="document.getElementById('avPhoto').click()">
+        <div class="ubox" id="avUboxEmpty"><div class="u" id="avPhotoLabel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 15 5-5 4 4 3-3 6 6"/><path d="M16.5 7.5 19 5l3 3"/></svg>上传照片</div></div>
+        <div class="upreview" id="avPreview" style="display:none">
+          <img id="avPreviewImg" alt="预览">
+          <div class="upreview-bar"><span id="avPreviewName"></span><button type="button" class="upreview-x" onclick="event.stopPropagation();clearUpload()">重新选择</button></div>
+        </div>
+      </div>
       <div id="avHifiNote" style="display:none;background:rgba(255,178,62,.1);border:1px solid rgba(255,178,62,.25);border-radius:12px;padding:14px;margin-bottom:8px;color:var(--t2);font-size:13px;line-height:1.6">⏳ <b style="color:#FFB23E">高精形象定制训练</b>:基于客户高清视频训练专属高保真分身。该能力为<b>二期 / 私有化签约后</b>开放(训练长时、按分身计费、需厂商审核)。当前可先用「照片」或「视频提取」快速生成。</div>
       <div class="iline" id="avOrientRow" style="margin-bottom:12px"><label>比例</label><div class="choice-seg" id="avOrientSeg" style="flex:1;display:flex"><button class="active" data-o="portrait" style="flex:1" onclick="pickOrient(this)">竖屏 9:16</button><button data-o="landscape" style="flex:1" onclick="pickOrient(this)">横屏 16:9</button></div></div>
       <div class="rtitle" id="avReqTitle">照片要求</div><div class="rsub" id="avReqSub">格式 jpg / jpeg / png / webp，文件 &lt; 30MB</div>
@@ -81,6 +87,32 @@
     </div>
   </div>
 </div>
+
+<!-- C6 操作下拉 -->
+<div class="av-pop" id="avPop">
+  <button data-act="rename" onclick="avOpenRename()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>重命名</button>
+  <button data-act="default" onclick="avDoDefault()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 3 2.4 5.6L20 9l-4.3 3.8L17 18l-5-2.7L7 18l1.3-5.2L4 9l5.6-.4Z"/></svg>设为默认</button>
+  <button data-act="delete" class="danger" onclick="avOpenDelete()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>删除</button>
+</div>
+
+<!-- 重命名弹窗 -->
+<div class="ov" id="ov-avRename"><div class="modal" style="width:340px">
+  <div class="mh"><h3>重命名形象</h3><div class="mc" onclick="closeModal('avRename')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></div></div>
+  <div class="mb">
+    <div class="iline"><label>名称</label><input id="avRnInput" placeholder="输入新名称" onkeydown="if(event.key==='Enter')avDoRename()"></div>
+    <div id="avRnMsg" style="font-size:12.5px;color:var(--red);min-height:16px;margin-bottom:6px"></div>
+    <div style="display:flex;gap:10px"><button class="btn btn-dark" style="flex:1" onclick="closeModal('avRename')">取消</button><button class="btn btn-white" style="flex:1" onclick="avDoRename()">保存</button></div>
+  </div>
+</div></div>
+
+<!-- 删除确认弹窗 -->
+<div class="ov" id="ov-avDelete"><div class="modal" style="width:340px">
+  <div class="mh"><h3>删除形象</h3><div class="mc" onclick="closeModal('avDelete')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></div></div>
+  <div class="mb">
+    <p style="font-size:13.5px;color:var(--t2);line-height:1.6;margin-bottom:18px">确认删除形象「<b style="color:var(--t1)" id="avDelName"></b>」?删除后不可恢复,已用该形象生成的作品不受影响。</p>
+    <div style="display:flex;gap:10px"><button class="btn btn-dark" style="flex:1" onclick="closeModal('avDelete')">取消</button><button class="btn btn-white" style="flex:1;background:var(--red);color:#fff;border-color:var(--red)" onclick="avDoDelete()">删除</button></div>
+  </div>
+</div></div>
 
 <script src="shell.js"></script>
 <script src="app.js"></script>
@@ -103,15 +135,40 @@
       if(m==='video'){ uz.setAttribute('onclick',"document.getElementById('avVideo').click()"); reqT.textContent='视频要求'; reqS.textContent='格式 mp4 / mov，<30MB,正脸清晰;系统自动提取首帧为形象'; }
       else{ uz.setAttribute('onclick',"document.getElementById('avPhoto').click()"); reqT.textContent='照片要求'; reqS.textContent='格式 jpg / jpeg / png / webp，文件 < 30MB'; }
     }
+    clearUpload(); // 切模式清掉已选文件,避免照片模式残留视频
+    refreshAvBtn();
   }
   function pickOrient(b){ avOrient=b.dataset.o; b.parentNode.querySelectorAll('button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); }
 
-  // 上传选择反馈
+  // 上传选择反馈 + 预览(所见即所得)
+  function showPreview(src, name){
+    document.getElementById('avUboxEmpty').style.display='none';
+    const pv=document.getElementById('avPreview'); pv.style.display='block';
+    const img=document.getElementById('avPreviewImg');
+    if(src){ img.src=src; img.style.display=''; }
+    else{ img.style.display='none'; } // 视频抽帧失败:只显示文件名条
+    document.getElementById('avPreviewName').textContent=name;
+    refreshAvBtn();
+  }
+  function clearUpload(){
+    document.getElementById('avPhoto').value=''; document.getElementById('avVideo').value='';
+    document.getElementById('avPreview').style.display='none';
+    document.getElementById('avUboxEmpty').style.display='';
+    document.getElementById('avPhotoLabel').innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 15 5-5 4 4 3-3 6 6"/><path d="M16.5 7.5 19 5l3 3"/></svg>'+(avMode==='video'?'上传视频':'上传照片');
+    refreshAvBtn();
+  }
   document.getElementById('avPhoto').addEventListener('change',function(){
-    const f=this.files[0]; if(f) document.getElementById('avPhotoLabel').innerHTML='已选:'+esc(f.name);
+    const f=this.files[0]; if(!f) return;
+    const r=new FileReader(); r.onload=e=>showPreview(e.target.result, f.name); r.readAsDataURL(f);
   });
   document.getElementById('avVideo').addEventListener('change',function(){
-    const f=this.files[0]; if(f) document.getElementById('avPhotoLabel').innerHTML='已选视频:'+esc(f.name);
+    const f=this.files[0]; if(!f) return;
+    // 抽首帧作预览;失败则退回文件名卡
+    const url=URL.createObjectURL(f), v=document.createElement('video');
+    v.preload='metadata'; v.muted=true; v.src=url;
+    v.onloadeddata=()=>{ try{ v.currentTime=0.1; }catch(_){ showPreview('', f.name); } };
+    v.onseeked=()=>{ try{ const c=document.createElement('canvas'); c.width=v.videoWidth||320; c.height=v.videoHeight||180; c.getContext('2d').drawImage(v,0,0,c.width,c.height); showPreview(c.toDataURL('image/jpeg'), f.name); }catch(_){ showPreview('', f.name); } URL.revokeObjectURL(url); };
+    v.onerror=()=>{ showPreview('', f.name); URL.revokeObjectURL(url); };
   });
   document.getElementById('avProof').addEventListener('change',function(){
     const f=this.files[0]; if(f) document.getElementById('avProofName').textContent='✓ '+f.name;
@@ -122,26 +179,38 @@
   function toggleConsent(){
     consented=!consented;
     document.getElementById('avConsentBox').style.opacity=consented?'1':'.25';
+    refreshAvBtn();
   }
   document.getElementById('avConsentBox').style.opacity='.25';
 
+  // 创建按钮:按"缺什么"反馈并禁用,替代点了才 alert
+  function refreshAvBtn(){
+    const btn=document.getElementById('avCreateBtn');
+    const name=(document.getElementById('avName').value||'').trim();
+    const hasFile = avMode==='video' ? !!document.getElementById('avVideo').files[0]
+                  : avMode==='photo' ? !!document.getElementById('avPhoto').files[0] : false;
+    let txt='创建数字人', ok=true;
+    if(avMode==='hifi'){ txt='高精定制(二期开放)'; ok=false; }
+    else if(!name){ txt='请输入名称'; ok=false; }
+    else if(!hasFile){ txt = avMode==='video'?'请上传视频':'请上传照片'; ok=false; }
+    else if(!consented){ txt='请勾选已获授权'; ok=false; }
+    btn.disabled=!ok; btn.textContent=txt;
+  }
+  document.getElementById('avName').addEventListener('input',refreshAvBtn);
+
   async function submitAvatar(){
-    if(avMode==='hifi'){ alert('高精定制为二期/签约后能力,当前请用照片或视频提取'); return; }
+    const btn=document.getElementById('avCreateBtn');
+    if(btn.disabled) return; // 缺项时按钮已禁用并在文案上提示
     const name=(document.getElementById('avName').value||'').trim();
     const photo=document.getElementById('avPhoto').files[0];
     const video=document.getElementById('avVideo').files[0];
     const proof=document.getElementById('avProof').files[0];
-    if(!name){ alert('请输入名称'); return; }
-    if(avMode==='photo' && !photo){ alert('请上传照片'); return; }
-    if(avMode==='video' && !video){ alert('请上传视频'); return; }
-    if(!consented){ alert('必须勾选"已获本人授权"才能创建(合规要求)'); return; }
     const fd=new FormData();
     fd.append('name',name);
     fd.append('consent','true');
     fd.append('orientation',avOrient);
     if(avMode==='video') fd.append('video',video); else fd.append('photo',photo);
     if(proof) fd.append('proof',proof);
-    const btn=document.getElementById('avCreateBtn');
     btn.disabled=true; btn.textContent='创建中…';
     try{
       // 直接 fetch(FormData 不能用 LJ.post 的 JSON 封装)
@@ -150,9 +219,20 @@
       const data=await res.json().catch(()=>({}));
       if(!res.ok) throw new Error(data.error||'创建失败');
       closeModal('createRole');
+      resetAvForm();
       await load();
-    }catch(e){ alert(e.message); }
-    finally{ btn.disabled=false; btn.textContent='创建数字人'; }
+      window.LJToast && window.LJToast('✓ 数字人「'+name+'」已创建');
+    }catch(e){
+      window.LJToast ? window.LJToast(e.message,'err') : alert(e.message);
+      refreshAvBtn();
+    }
+  }
+  // 重置创建表单(关弹窗 / 创建成功后)
+  function resetAvForm(){
+    document.getElementById('avName').value='';
+    document.getElementById('avProof').value=''; document.getElementById('avProofName').textContent='';
+    consented=false; document.getElementById('avConsentBox').style.opacity='.25';
+    clearUpload();
   }
 
   let DATA = { presets: [], custom: [] };
@@ -165,7 +245,7 @@
       : (a.isDefault ? '<span class="av-tag" style="background:var(--blue-bg);color:var(--blue)">默认</span>'
         : `<span class="av-tag">${a.kind==='video'?'视频':'自定义'}</span>`);
     const cta = a.status==='ready' ? `<div class="av-cta" onclick="location.href='create.html'">创建影片</div>` : '';
-    const menu = `<div class="av-more" onclick="event.stopPropagation();avMenu('${a.id}','${esc(a.name)}',${a.isDefault?1:0})"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></div>`;
+    const menu = `<div class="av-more" onclick="event.stopPropagation();avMenu('${a.id}','${esc(a.name)}',${a.isDefault?1:0},event)"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></div>`;
     return `<div class="av"><div class="av-img" style="${bg}"></div><div class="av-veil"></div>${status}<div class="av-name">${esc(a.name)}</div>${menu}${cta}</div>`;
   }
   // 预置卡(只读)
@@ -173,12 +253,50 @@
     return `<div class="av"><div class="av-img" style="background-image:url('${p.thumb}')"></div><div class="av-veil"></div><span class="av-tag">${esc(p.scene||'预置')}</span><div class="av-name">${esc(p.name)}</div><div class="av-cta" onclick="location.href='create.html'">创建影片</div></div>`;
   }
 
-  // C6 操作菜单(prompt 极简实现,够用)
-  async function avMenu(id, name, isDefault){
-    const act = prompt(`形象「${name}」操作:输入 1=重命名  2=设为默认  3=删除`, '1');
-    if(act==='1'){ const n=prompt('新名称:', name); if(n&&n.trim()){ try{ await LJ.put('/avatars/'+id,{name:n.trim()}); await load(); }catch(e){alert(e.message);} } }
-    else if(act==='2'){ try{ await LJ.post('/avatars/'+id+'/default'); await load(); }catch(e){alert(e.message);} }
-    else if(act==='3'){ if(confirm(`删除形象 ${name}?`)){ try{ await LJ.del('/avatars/'+id); await load(); }catch(e){alert(e.message);} } }
+  // C6 操作菜单:锚定 ⋯ 的下拉(重命名/设默认/删除),替代 prompt 三连
+  let avMenuTarget=null;
+  function avMenu(id, name, isDefault, ev){
+    avMenuTarget={id,name,isDefault};
+    const pop=document.getElementById('avPop');
+    pop.querySelector('[data-act=default]').style.display = isDefault ? 'none' : '';
+    // 定位到点击的 ⋯ 附近
+    const btn=ev&&ev.currentTarget ? ev.currentTarget : (window.event&&window.event.currentTarget);
+    const r=(btn||document.body).getBoundingClientRect();
+    pop.style.top=(r.bottom+window.scrollY+6)+'px';
+    pop.style.left=Math.min(r.left+window.scrollX, window.innerWidth-200)+'px';
+    pop.classList.add('on');
+  }
+  function closeAvPop(){ document.getElementById('avPop').classList.remove('on'); }
+  document.addEventListener('click',e=>{ const p=document.getElementById('avPop'); if(p.classList.contains('on') && !p.contains(e.target) && !e.target.closest('.av-more')) closeAvPop(); });
+
+  async function avDoDefault(){
+    const t=avMenuTarget; closeAvPop(); if(!t) return;
+    try{ await LJ.post('/avatars/'+t.id+'/default'); await load(); window.LJToast&&window.LJToast('✓ 已设为默认形象'); }
+    catch(e){ window.LJToast?window.LJToast(e.message,'err'):alert(e.message); }
+  }
+  function avOpenRename(){
+    const t=avMenuTarget; closeAvPop(); if(!t) return;
+    document.getElementById('avRnInput').value=t.name;
+    document.getElementById('avRnMsg').textContent='';
+    document.getElementById('ov-avRename').classList.add('show');
+    setTimeout(()=>{const i=document.getElementById('avRnInput');i.focus();i.select();},60);
+  }
+  async function avDoRename(){
+    const t=avMenuTarget; const n=(document.getElementById('avRnInput').value||'').trim();
+    const msg=document.getElementById('avRnMsg');
+    if(!n){ msg.textContent='名称不能为空'; return; }
+    try{ await LJ.put('/avatars/'+t.id,{name:n}); closeModal('avRename'); await load(); window.LJToast&&window.LJToast('✓ 已重命名'); }
+    catch(e){ msg.textContent=e.message; }
+  }
+  function avOpenDelete(){
+    const t=avMenuTarget; closeAvPop(); if(!t) return;
+    document.getElementById('avDelName').textContent=t.name;
+    document.getElementById('ov-avDelete').classList.add('show');
+  }
+  async function avDoDelete(){
+    const t=avMenuTarget;
+    try{ await LJ.del('/avatars/'+t.id); closeModal('avDelete'); await load(); window.LJToast&&window.LJToast('已删除形象'); }
+    catch(e){ closeModal('avDelete'); window.LJToast?window.LJToast(e.message,'err'):alert(e.message); }
   }
 
   // C5 预置筛选:搜索 + 性别 + 横竖比
@@ -196,6 +314,11 @@
   }
   // 筛选 seg 点击
   document.querySelectorAll('#genderSeg button,#orientSeg button').forEach(b=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('button').forEach(x=>x.classList.remove('active'));this.classList.add('active');renderPresets();}));
+
+  // 弹窗:打开自动聚焦名称 + Esc 关闭 + 初始化按钮态
+  const _origOpen=window.openModal;
+  window.openModal=function(id){ _origOpen(id); if(id==='createRole'){ refreshAvBtn(); setTimeout(()=>document.getElementById('avName').focus(),60); } };
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape' && document.getElementById('ov-createRole').classList.contains('show')) closeModal('createRole'); });
 
   async function load(){
     try{
