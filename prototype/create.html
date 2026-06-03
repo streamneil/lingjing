@@ -15,34 +15,45 @@
     <div class="cfg-h"><span class="dot"></span>AI 头像影片</div>
 
     <div class="selr" onclick="openSheet('appearance')">
-      <div class="selr-th" style="background-image:url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=140&q=85&fit=crop&crop=faces')"></div>
-      <div class="selr-b"><h5>头像</h5><p>晓琳 · 主形象</p></div>
+      <div class="selr-th" id="avThumb"></div>
+      <div class="selr-b"><h5>头像</h5><p id="avPickLabel">从形象库选择</p></div>
       <div class="selr-ar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></div>
     </div>
 
     <div class="selr" onclick="openSheet('voices')">
       <div class="selr-th"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg></div>
-      <div class="selr-b"><h5>声音</h5><p>选择一个声音，或 <u onclick="event.stopPropagation();openSheet('voices')">克隆一个声音</u></p></div>
+      <div class="selr-b"><h5>声音</h5><p id="voicePickLabel">从音色库选择</p></div>
       <div class="selr-ar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></div>
     </div>
 
     <div class="script">
-      <textarea id="script" placeholder="输入需要 AI 配音的文字，或上传 / 录制音频…"></textarea>
-      <div class="f"><span class="h"><u>上传或录制音频</u></span><span class="c"><b id="cnt">0</b> / 4000</span></div>
+      <textarea id="script" maxlength="2000" placeholder="输入需要 AI 配音的文字…（≤2000 字）"></textarea>
+      <div class="f"><span class="h" id="estLabel">预估 — 点</span><span class="c"><b id="cnt">0</b> / 2000</span></div>
     </div>
 
     <div class="cfg-sp"></div>
 
+    <!-- 语速 / 音量(PRD E4)-->
+    <div class="cfg-sliders">
+      <div class="sld-row">
+        <span class="sld-lbl">语速</span>
+        <input type="range" id="speed" min="0.5" max="2" step="0.1" value="1" class="sld">
+        <span id="speedVal" class="sld-val">1.0×</span>
+      </div>
+      <div class="sld-row">
+        <span class="sld-lbl">音量</span>
+        <input type="range" id="volume" min="0" max="100" step="5" value="50" class="sld">
+        <span id="volumeVal" class="sld-val">50</span>
+      </div>
+    </div>
+
     <div class="cfg-row">
-      <div class="msel">品质 V1.0 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
-      <div class="msel">1080P <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
-      <div class="msel">16:9 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+      <div class="msel" id="resSel" data-res="720P" onclick="cycleRes()">分辨率 720P <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
     </div>
 
     <div class="cbtn-wrap">
-      <span class="cbtn-badge">限时</span>
-      <button class="cbtn" id="createBtn" onclick="alert('演示原型：进入生成队列，右侧对话流可查看进度')">
-        创建 <span class="gem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg> 10</span>
+      <button class="cbtn" id="createBtn">
+        <span id="cbtnLabel">创建</span> <span class="gem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg> <b id="estGem">—</b></span>
       </button>
     </div>
   </div>
@@ -50,11 +61,10 @@
   <!-- 右:对话流 -->
   <div class="feed">
     <div class="feed-tabs">
-      <button class="ftab active">全部</button>
-      <button class="ftab">影片</button>
-      <button class="ftab">图片</button>
-      <button class="ftab">音乐</button>
-      <button class="ftab">演讲</button>
+      <button class="ftab active" data-st="all">全部</button>
+      <button class="ftab" data-st="running">生成中</button>
+      <button class="ftab" data-st="done">已完成</button>
+      <button class="ftab" data-st="failed">失败</button>
     </div>
     <div class="feed-list">
 
@@ -67,83 +77,19 @@
           <a href="#" class="link-btn" style="font-size:12.5px">查看全部 →</a>
         </div>
         <div class="demo-strip">
-          <div class="dchip" onclick="alert('演示：套用此案例模板')"><div class="di" style="background-image:url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&q=85&fit=crop&crop=faces')"></div><div class="dv"></div><span class="dt">新闻播报</span><div class="dp"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-          <div class="dchip" onclick="alert('演示：套用此案例模板')"><div class="di" style="background-image:url('https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=300&q=85&fit=crop&crop=faces')"></div><div class="dv"></div><span class="dt">政策解读</span><div class="dp"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-          <div class="dchip" onclick="alert('演示：套用此案例模板')"><div class="di" style="background-image:url('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&q=85&fit=crop&crop=faces')"></div><div class="dv"></div><span class="dt">财经早报</span><div class="dp"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-          <div class="dchip" onclick="alert('演示：套用此案例模板')"><div class="di" style="background-image:url('https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=300&q=85&fit=crop&crop=faces')"></div><div class="dv"></div><span class="dt">出镜报道</span><div class="dp"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+          <div class="dchip" onclick="useTemplate('news')"><div class="di" style="background-image:url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&q=85&fit=crop&crop=faces')"></div><div class="dv"></div><span class="dt">新闻播报</span><div class="dp"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+          <div class="dchip" onclick="useTemplate('policy')"><div class="di" style="background-image:url('https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=300&q=85&fit=crop&crop=faces')"></div><div class="dv"></div><span class="dt">政策解读</span><div class="dp"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+          <div class="dchip" onclick="useTemplate('finance')"><div class="di" style="background-image:url('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&q=85&fit=crop&crop=faces')"></div><div class="dv"></div><span class="dt">财经早报</span><div class="dp"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+          <div class="dchip" onclick="useTemplate('field')"><div class="di" style="background-image:url('https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=300&q=85&fit=crop&crop=faces')"></div><div class="dv"></div><span class="dt">出镜报道</span><div class="dp"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
         </div>
       </div>
 
-      <!-- 生成中 -->
-      <div class="fitem" style="animation-delay:.05s">
-        <div class="fmeta">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c0-3 2.5-4.5 5.5-4.5"/><path d="M16 6v6M19 9h-6"/></svg>
-          <b>AI 虚拟人</b><span class="ts">06-01 15:18</span>
-          <span class="sp"></span>
-          <span class="st" style="color:var(--amber)"><span class="led led-run"></span>生成中</span>
-        </div>
-        <div class="fbubble">
-          <div class="mav" style="background-image:url('https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=90&q=85&fit=crop&crop=faces')"></div>
-          <div class="tx">本期我们关注城市新区建设最新进展，与惠民政策的深度解读。</div>
-        </div>
-        <div class="fvideo proc">
-          <div class="proc-in">
-            <div class="spinner"></div>
-            <div class="lbl">队列第 1 位 · 预计 40s</div>
-            <div class="proc-bar"><i></i></div>
-          </div>
-          <span class="tc">9:16</span>
-        </div>
-      </div>
-
-      <!-- 成品 -->
-      <div class="fitem" style="animation-delay:.1s">
-        <div class="fmeta">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c0-3 2.5-4.5 5.5-4.5"/><path d="M16 6v6M19 9h-6"/></svg>
-          <b>AI 虚拟人</b><span class="ts">06-01 15:16</span>
-          <span class="sp"></span>
-          <span class="st" style="color:var(--green)"><span class="led led-ok"></span>已完成</span>
-        </div>
-        <div class="fbubble">
-          <div class="mav" style="background-image:url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=90&q=85&fit=crop&crop=faces')"></div>
-          <div class="tx">各位观众晚上好，欢迎收看今天的新闻播报。首先为您介绍主要内容。</div>
-        </div>
-        <div class="fvideo">
-          <div class="por" style="background-image:url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&q=85&fit=crop&crop=faces')"></div>
-          <div class="play-ov"><div class="pb"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-          <span class="tc">00:08 · 16:9</span>
-        </div>
-        <div class="factions">
-          <button class="btn btn-dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>重新编辑</button>
-          <button class="btn btn-dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 4v4h-4"/></svg>重新生成</button>
-          <div class="sp"></div>
-          <button class="btn btn-dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>下载</button>
-          <button class="btn btn-dark" style="padding:11px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
-        </div>
-      </div>
-
-      <!-- 失败 -->
-      <div class="fitem" style="animation-delay:.15s">
-        <div class="fmeta">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c0-3 2.5-4.5 5.5-4.5"/><path d="M16 6v6M19 9h-6"/></svg>
-          <b>AI 虚拟人</b><span class="ts">06-01 12:00</span>
-          <span class="sp"></span>
-          <span class="st" style="color:var(--red)"><span class="led led-err"></span>生成失败</span>
-        </div>
-        <div class="fbubble">
-          <div class="mav" style="background-image:url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=90&q=85&fit=crop&crop=faces')"></div>
-          <div class="tx">欢迎收看本期财经观察，今天聚焦区域经济发展态势……</div>
-        </div>
-        <div class="fvideo err">
-          <div class="err-in">
-            <div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 9v4M12 17h.01"/><path d="M10.3 4 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 4a2 2 0 0 0-3.4 0Z"/></svg></div>
-            <div class="lbl">渲染超时，请重试</div>
-          </div>
-          <span class="tc">16:9</span>
-        </div>
-        <div class="factions">
-          <button class="btn btn-dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 4v4h-4"/></svg>重新生成</button>
-          <div class="sp"></div>
+      <!-- 真实作品历史由 loadHistory() 注入;空时显示引导 -->
+      <div class="fitem feed-empty" id="feedEmpty" style="animation-delay:.05s;display:none">
+        <div class="feed-empty-in">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c0-3 2.5-4.5 5.5-4.5"/><path d="M16 6v6M19 9h-6"/></svg>
+          <div class="t">还没有作品</div>
+          <div class="s">在左侧选好形象、音色,输入文案,点「创建」就能生成第一条数字人视频。</div>
         </div>
       </div>
 
@@ -160,15 +106,8 @@
     <div class="sf-close" onclick="closeSheet('appearance')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
   </div>
   <div class="sf-body">
-    <div class="grid-av" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));max-width:780px;">
-      <div class="av new" style="animation-delay:.05s" onclick="openModalFromSheet('createRole')">
-        <div class="av-new-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c0-3.3 2.6-5 5.5-5"/><path d="M18 7.5v6M15 10.5h6"/></svg><span>新增外观</span></div>
-      </div>
-      <div class="av pinned" style="animation-delay:.1s" onclick="closeSheet('appearance')">
-        <div class="av-img" style="background-image:url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=600&q=85&fit=crop&crop=faces')"></div>
-        <div class="av-veil"></div><div class="av-name">晓琳</div>
-        <div class="av-cta">选择此外观</div>
-      </div>
+    <div class="grid-av" id="avSheetGrid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));max-width:780px;">
+      <div style="color:var(--t4);padding:20px">加载形象中…</div>
     </div>
   </div>
 </div>
@@ -183,20 +122,11 @@
     <button class="btn btn-dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" style="width:15px;height:15px"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>克隆或设计</button>
   </div>
   <div class="ss-filters">
-    <div class="msel" style="min-width:170px">语言：全部 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
-    <div class="msel" style="min-width:170px">性别：全部 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+    <input id="voiceSearch" placeholder="搜索音色名称…" oninput="filterVoices(this.value)"
+      style="flex:1;max-width:320px;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:9px 13px;color:var(--t1);font-size:13px;font-family:var(--f);outline:none">
   </div>
-  <div class="ss-body">
-    <div class="vcard" onclick="pickVoice(this,'新闻播报 · 雅琴')"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>新闻播报 · 雅琴 <span class="hot">热门</span></div><div class="vc-d">女性 · 播音员 · 适合新闻、纪录片</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-    <div class="vcard" onclick="pickVoice(this,'沉稳男声 · 子墨')"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>沉稳男声 · 子墨 <span class="hot">热门</span></div><div class="vc-d">男性 · 沉稳 · 适合纪录片、教育</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-    <div class="vcard" onclick="pickVoice(this,'磁性男声 · 浩然')"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>磁性男声 · 浩然 <span class="hot">热门</span></div><div class="vc-d">成人 · 男性 · 磁性 · 适合广告、品牌</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-    <div class="vcard" onclick="pickVoice(this,'亲切女声 · 思雨')"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>亲切女声 · 思雨 <span class="hot">热门</span></div><div class="vc-d">成人 · 女性 · 亲切 · 适合 Vlog、播客</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-    <div class="vcard" onclick="pickVoice(this,'活泼女声 · 晓琳')"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>活泼女声 · 晓琳</div><div class="vc-d">女性 · 活泼 · 适合 Vlog、短视频</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-    <div class="vcard" onclick="pickVoice(this,'Expressive Narrator')"><div class="vc-b"><div class="vc-n"><span class="flag">🇺🇸</span>Expressive Narrator <span class="hot">热门</span></div><div class="vc-d">成人 · 男性 · 有声书 · 适合讲故事</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-    <div class="vcard" onclick="pickVoice(this,'Compelling Lady')"><div class="vc-b"><div class="vc-n"><span class="flag">🇺🇸</span>Compelling Lady <span class="hot">热门</span></div><div class="vc-d">成人 · 女性 · 播报 · 适合新闻、纪录片</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-    <div class="vcard" onclick="pickVoice(this,'港式女声')"><div class="vc-b"><div class="vc-n"><span class="flag">🇭🇰</span>港式女声 <span class="hot">热门</span></div><div class="vc-d">女性 · 礼貌 · 适合 AI 助手、教育</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-    <div class="vcard" onclick="pickVoice(this,'我的声音 1')"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>我的声音 1</div><div class="vc-d">克隆音色 · 12s 样本</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-    <div class="vcard" onclick="pickVoice(this,'台长配音')"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>台长配音</div><div class="vc-d">克隆音色 · 26s 样本</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+  <div class="ss-body" id="voiceSheetBody">
+    <div style="color:var(--t4);padding:20px">加载音色中…</div>
   </div>
 </div>
 
@@ -224,16 +154,286 @@
 
 <script src="shell.js"></script>
 <script src="app.js"></script>
+<script src="api.js"></script>
 <script>
   const ta=document.getElementById('script'), cnt=document.getElementById('cnt'), btn=document.getElementById('createBtn');
-  ta.addEventListener('input',()=>{cnt.textContent=ta.value.length;btn.classList.toggle('ready',ta.value.trim().length>0);});
-  document.querySelectorAll('.ftab,.ss-seg button').forEach(t=>t.addEventListener('click',function(){this.parentNode.querySelectorAll('.ftab,button').forEach(x=>x.classList.remove('active'));this.classList.add('active');}));
-  function pickVoice(el,name){
-    const row=document.querySelectorAll('.selr')[1];
-    row.querySelector('.selr-b h5').textContent='声音';
-    row.querySelector('.selr-b p').innerHTML=name;
-    closeSheet('voices');
+  document.querySelectorAll('.ss-seg button').forEach(t=>t.addEventListener('click',function(){this.parentNode.querySelectorAll('button').forEach(x=>x.classList.remove('active'));this.classList.add('active');}));
+
+  // ── feed 状态筛选(全部/生成中/已完成/失败)──
+  function fitemStatus(el){
+    const st=el.querySelector('.st');
+    if(!st) return 'demo';
+    if(st.querySelector('.led-run')) return 'running';
+    if(st.querySelector('.led-ok')) return 'done';
+    if(st.querySelector('.led-err')) return 'failed';
+    return 'demo';
   }
+  function applyFeedFilter(kind){
+    document.querySelectorAll('.feed-list .fitem').forEach(it=>{
+      if(it.id==='feedEmpty'){ it.style.display = (kind==='all' && !feedList.querySelector('.fitem[id^=job-]')) ? '' : 'none'; return; }
+      const s=fitemStatus(it);
+      it.style.display = (kind==='all' || s===kind) ? '' : 'none';
+    });
+  }
+  document.querySelectorAll('.ftab').forEach(t=>t.addEventListener('click',function(){
+    this.parentNode.querySelectorAll('.ftab').forEach(x=>x.classList.remove('active'));
+    this.classList.add('active');
+    applyFeedFilter(this.dataset.st||'all');
+  }));
+
+  // ── 案例模板:套用 = 回填示范文案 + 滚到配置(真行为,非 alert)──
+  const TEMPLATES={
+    news:'各位观众晚上好,欢迎收看本期新闻播报。今天的主要内容有:我市重点民生工程取得新进展,城市新区建设按下加速键。下面为您详细报道。',
+    policy:'近日,我市出台了一系列惠民新政策。为帮助大家更好地理解,本期我们邀请相关部门,对政策要点进行权威解读,并解答市民最关心的几个问题。',
+    finance:'欢迎收看财经早报。今天聚焦区域经济发展态势:多项指标稳中向好,重点产业持续发力。接下来,为您梳理今日值得关注的财经要闻。',
+    field:'我现在所在的位置是活动现场。可以看到,现场气氛热烈,各项准备工作已经就绪。接下来,我将为您带来第一手的现场报道。',
+  };
+  function useTemplate(key){
+    const txt=TEMPLATES[key]; if(!txt) return;
+    ta.value=txt; cnt.textContent=txt.length;
+    refreshCreateBtn(); scheduleEstimate();
+    document.querySelector('.cfg')?.scrollIntoView({behavior:'smooth',block:'start'});
+    ta.focus();
+    window.LJToast && window.LJToast('✓ 已套用示范文案,可直接修改后生成');
+  }
+
+  // ── 音色搜索 ──
+  function filterVoices(q){
+    q=(q||'').trim().toLowerCase();
+    document.querySelectorAll('#voiceSheetBody .vcard').forEach(c=>{
+      const t=c.textContent.toLowerCase();
+      c.style.display = (!q || t.includes(q)) ? '' : 'none';
+    });
+  }
+
+  function esc(s){ return (s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  const feedList = document.querySelector('.feed-list');
+
+  // ── 选中状态(T1:真实 id)──
+  let selectedAvatar = null; // {id,name,thumb}
+  let selectedVoice = null;  // {id,name}
+
+  // ── T1:从 /avatars /voices 动态拉,渲染到 sheet ──
+  async function loadPickers(){
+    try{
+      const av = await LJ.get('/avatars');
+      const grid = document.getElementById('avSheetGrid');
+      const items = [...(av.presets||[]), ...((av.custom||[]).filter(a=>a.status==='ready'))];
+      grid.innerHTML = items.map(a=>{
+        const bg = a.thumb ? `background-image:url('${a.thumb}')` : 'background:linear-gradient(160deg,#33333A,#1A1A1E)';
+        return `<div class="av" onclick='pickAvatar(${JSON.stringify({id:a.id,name:a.name,thumb:a.thumb||''}).replace(/'/g,"&#39;")})'><div class="av-img" style="${bg}"></div><div class="av-veil"></div><div class="av-name">${esc(a.name)}</div><div class="av-cta">选择此形象</div></div>`;
+      }).join('') || '<div style="color:var(--t4);padding:20px">暂无形象</div>';
+      // 默认选第一个预置
+      if(!selectedAvatar && items[0]) pickAvatar({id:items[0].id,name:items[0].name,thumb:items[0].thumb||''}, true);
+    }catch(e){}
+    try{
+      const vc = await LJ.get('/voices');
+      const body = document.getElementById('voiceSheetBody');
+      const items = [...((vc.clones||[]).filter(v=>v.status==='ready')), ...(vc.presets||[])];
+      body.innerHTML = items.map(v=>{
+        const desc = v.kind==='clone' ? '克隆音色' : `${v.gender||''} · ${v.desc||''}`;
+        return `<div class="vcard" onclick='pickVoice(${JSON.stringify({id:v.id,name:v.name}).replace(/'/g,"&#39;")})'><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>${esc(v.name)}${v.kind==='preset'?' <span class="hot">预置</span>':''}</div><div class="vc-d">${esc(desc)}</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>`;
+      }).join('') || '<div style="color:var(--t4);padding:20px">暂无音色</div>';
+      if(!selectedVoice && items[0]) pickVoice({id:items[0].id,name:items[0].name}, true);
+    }catch(e){}
+  }
+
+  function pickAvatar(a, silent){
+    selectedAvatar = a;
+    document.getElementById('avPickLabel').textContent = a.name;
+    const th=document.getElementById('avThumb');
+    if(a.thumb){ th.style.backgroundImage=`url('${a.thumb}')`; th.style.backgroundSize='cover'; th.style.backgroundPosition='center'; }
+    if(!silent) closeSheet('appearance');
+    refreshCreateBtn();
+  }
+  function pickVoice(a, silent){
+    selectedVoice = a;
+    document.getElementById('voicePickLabel').textContent = a.name;
+    if(!silent) closeSheet('voices');
+    refreshCreateBtn();
+  }
+
+  function cycleRes(){
+    const el=document.getElementById('resSel');
+    const next=el.dataset.res==='720P'?'480P':'720P';
+    el.dataset.res=next;
+    el.firstChild.textContent='分辨率 '+next+' ';
+    scheduleEstimate();
+  }
+
+  // ── T3:语速/音量控件 ──
+  const speedEl=document.getElementById('speed'), volEl=document.getElementById('volume');
+  speedEl.addEventListener('input',()=>document.getElementById('speedVal').textContent=parseFloat(speedEl.value).toFixed(1)+'×');
+  volEl.addEventListener('input',()=>document.getElementById('volumeVal').textContent=volEl.value);
+
+  // ── T4:费用预估(防抖)──
+  let estTimer=null;
+  function scheduleEstimate(){
+    clearTimeout(estTimer);
+    estTimer=setTimeout(async()=>{
+      const script=ta.value.trim();
+      if(!script){ document.getElementById('estLabel').textContent='预估 — 点'; document.getElementById('estGem').textContent='—'; return; }
+      try{
+        const r=await LJ.post('/jobs/estimate',{script,resolution:document.getElementById('resSel').dataset.res});
+        document.getElementById('estLabel').textContent='预估 '+r.cost+' 点';
+        document.getElementById('estGem').textContent=r.cost;
+      }catch(e){}
+    },350);
+  }
+  // 创建按钮:按"缺什么"反馈,而非点了才弹 alert
+  function refreshCreateBtn(){
+    const label=document.getElementById('cbtnLabel');
+    const hasScript=ta.value.trim().length>0;
+    const overLimit=ta.value.length>2000;
+    let ready=true, txt='创建';
+    if(!selectedAvatar){ ready=false; txt='请先选择形象'; }
+    else if(!selectedVoice){ ready=false; txt='请先选择音色'; }
+    else if(!hasScript){ ready=false; txt='请输入文案'; }
+    else if(overLimit){ ready=false; txt='文案超 2000 字'; }
+    btn.classList.toggle('ready',ready);
+    btn.disabled=!ready;
+    label.textContent=txt;
+  }
+  ta.addEventListener('input',()=>{
+    cnt.textContent=ta.value.length;
+    cnt.style.color = ta.value.length>2000 ? 'var(--red)' : '';
+    refreshCreateBtn();
+    scheduleEstimate();
+  });
+
+  // 登录态守卫 + 加载选择器 + T5 回填 + 真实作品历史
+  LJ.me().then(()=>{ loadPickers().then(prefillFromQuery); loadHistory(); }).catch(()=>{});
+
+  // ── 拉真实作品历史填充 feed(替代写死的演示卡)──
+  async function loadHistory(){
+    let jobs=[];
+    try{ jobs = await LJ.listJobs(); }catch(e){ return; }
+    const empty=document.getElementById('feedEmpty');
+    if(!Array.isArray(jobs) || !jobs.length){ if(empty) empty.style.display=''; return; }
+    if(empty) empty.style.display='none';
+    // 按创建时间正序渲染(renderCard 会把每张插到顶部 → 最终最新在最上)
+    const ordered=[...jobs].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+    for(const j of ordered){
+      try{
+        const detail=await LJ.getJob(j.id);
+        const script=(detail.input&&detail.input.script)||'';
+        renderCard({ id:detail.id, status:detail.status, progress:detail.progress,
+          videoUrl:detail.videoUrl, aiLabel:detail.aiLabel, error:detail.error }, script);
+        // 仍在进行中的任务,继续轮询到终态
+        if(detail.status==='queued'||detail.status==='running') track(detail.id, script);
+      }catch(e){}
+    }
+  }
+
+  // ── T5:?from=jobId 回填 ──
+  async function prefillFromQuery(){
+    const from=new URLSearchParams(location.search).get('from');
+    if(!from) return;
+    try{
+      const job=await LJ.getJob(from);
+      const inp=job.input||{};
+      if(inp.script){ ta.value=inp.script; cnt.textContent=inp.script.length; scheduleEstimate(); }
+      if(inp.resolution){ const el=document.getElementById('resSel'); el.dataset.res=inp.resolution; el.firstChild.textContent='分辨率 '+inp.resolution+' '; }
+      if(inp.speed){ speedEl.value=inp.speed; document.getElementById('speedVal').textContent=parseFloat(inp.speed).toFixed(1)+'×'; }
+      if(inp.volume!==undefined){ volEl.value=inp.volume; document.getElementById('volumeVal').textContent=inp.volume; }
+      if(inp.avatarRef) pickAvatar({id:inp.avatarRef,name:'(原形象)',thumb:''}, true);
+      if(inp.voiceRef) pickVoice({id:inp.voiceRef,name:'(原音色)'}, true);
+    }catch(e){}
+  }
+
+  // 把上游(DashScope/网关)的原始报错翻译成用户能懂的人话,避免 "Unexpected server response: 401" 这种英文泄漏
+  function humanizeError(raw){
+    const s=String(raw||'').toLowerCase();
+    if(!s) return '生成失败,请重试';
+    if(s.includes('401')||s.includes('unauthorized')||s.includes('auth')) return '生成服务鉴权失败,请联系管理员检查配置';
+    if(s.includes('403')) return '生成服务无访问权限,请联系管理员';
+    if(s.includes('429')||s.includes('rate')||s.includes('limit')) return '生成请求过于频繁,请稍后重试';
+    if(s.includes('timeout')||s.includes('timed out')||s.includes('etimedout')) return '渲染超时,请重试';
+    if(s.includes('insufficient')||s.includes('余额')||s.includes('credit')) return '点数余额不足,请充值后重试';
+    if(s.includes('inspection')||s.includes('审核')||s.includes('sensitive')) return '内容未通过审核,请调整文案或形象';
+    if(s.includes('network')||s.includes('econn')||s.includes('fetch')) return '网络连接异常,请重试';
+    if(/[一-龥]/.test(raw)) return raw; // 已是中文,直接展示
+    return '生成失败,请重试'; // 其余英文/未知错误,统一兜底
+  }
+
+  // 渲染/更新一个 job 卡片(三态:running/done/failed),复用原型 class。
+  function renderCard(job, scriptText){
+    const empty=document.getElementById('feedEmpty'); if(empty) empty.style.display='none';
+    let card = document.getElementById('job-'+job.id);
+    if(!card){
+      card = document.createElement('div');
+      card.className = 'fitem';
+      card.id = 'job-'+job.id;
+      feedList.insertBefore(card, feedList.firstChild); // 新任务置顶
+    }
+    const bubble = `<div class="fbubble"><div class="mav"></div><div class="tx">${esc(scriptText)}</div></div>`;
+    if(job.status==='queued' || job.status==='running'){
+      card.innerHTML = `
+        <div class="fmeta"><b>AI 虚拟人</b><span class="ts">刚刚</span><span class="sp"></span>
+          <span class="st" style="color:var(--amber)"><span class="led led-run"></span>${job.status==='queued'?'排队中':'生成中'}</span></div>
+        ${bubble}
+        <div class="fvideo proc"><div class="proc-in"><div class="spinner"></div>
+          <div class="lbl">${job.progress?('进度 '+job.progress+'%'):'已进入生成队列'}</div>
+          <div class="proc-bar"><i style="width:${job.progress||8}%"></i></div></div></div>`;
+    } else if(job.status==='done'){
+      const v = job.videoUrl ? `<video src="${job.videoUrl}" controls style="width:100%;border-radius:12px"></video>` :
+        `<div class="proc-in"><div class="lbl">成品已生成</div></div>`;
+      card.innerHTML = `
+        <div class="fmeta"><b>AI 虚拟人</b><span class="ts">刚刚</span><span class="sp"></span>
+          <span class="st" style="color:var(--green)"><span class="led led-ok"></span>已完成${job.aiLabel==='native'?' · 含AI标识':''}</span></div>
+        ${bubble}
+        <div class="fvideo">${v}</div>`;
+    } else { // failed
+      card.innerHTML = `
+        <div class="fmeta"><b>AI 虚拟人</b><span class="ts">刚刚</span><span class="sp"></span>
+          <span class="st" style="color:var(--red)"><span class="led led-err"></span>生成失败</span></div>
+        ${bubble}
+        <div class="fvideo err"><div class="err-in"><div class="ei">!</div>
+          <div class="lbl">${esc(humanizeError(job.error))}</div></div></div>
+        <div class="factions"><button class="btn btn-dark" onclick="retry('${job.id}','${esc(scriptText).replace(/'/g,"\\'")}')">重新生成</button><div class="sp"></div></div>`;
+    }
+  }
+
+  async function retry(id, scriptText){
+    try{ await LJ.retryJob(id); track(id, scriptText); }
+    catch(e){ alert(e.message); }
+  }
+
+  // 提交后持续轮询直到终态,实时刷新卡片
+  async function track(id, scriptText){
+    try{
+      await LJ.pollJob(id, (job)=>renderCard(job, scriptText));
+    }catch(e){ /* 已登录守卫处理 401;其余忽略 */ }
+  }
+
+  btn.addEventListener('click', async ()=>{
+    if(btn.disabled) return; // 未就绪时按钮已禁用,缺项在按钮文案上已提示
+    const script = ta.value.trim();
+    if(!script || !selectedAvatar || !selectedVoice) return;
+    btn.disabled = true;
+    const prev = btn.innerHTML;
+    btn.textContent = '提交中…';
+    try{
+      const res = await LJ.createJob({
+        avatarRef: selectedAvatar.id,    // T1:真实形象 id
+        voiceRef: selectedVoice.id,      // T1:真实音色 id
+        script,
+        resolution: document.getElementById('resSel').dataset.res,
+        speed: parseFloat(speedEl.value),   // T3
+        volume: parseInt(volEl.value, 10),  // T3
+      });
+      renderCard({ id: res.id, status: 'queued', progress: 0 }, script);
+      track(res.id, script);
+      ta.value=''; cnt.textContent='0'; scheduleEstimate();
+      window.LJToast && window.LJToast('✓ 已提交生成,可在右侧查看进度');
+    }catch(e){
+      window.LJToast ? window.LJToast('提交失败:'+e.message,'err') : alert('提交失败:'+e.message);
+    }finally{
+      btn.innerHTML=prev; refreshCreateBtn();
+    }
+  });
+
+  refreshCreateBtn(); // 初始态:按缺项给出提示
 </script>
 </body>
 </html>

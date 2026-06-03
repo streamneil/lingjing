@@ -10,8 +10,8 @@
   <div class="main-col">
     <main class="page">
       <div class="ph">
-        <div><h1 class="t-h1">成员与权限</h1><p class="desc">您的账号登录后即归属一个机构。机构 → 成员 → 角色三级管理；创作席位决定可同时创作的成员数。未自定义机构名时，默认使用 “{用户名}'s Organization”。</p></div>
-        <button class="btn btn-white"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>邀请成员</button>
+        <div><h1 class="t-h1">成员与权限</h1><p class="desc">按「机构 → 成员 → 角色」三级管理团队。管理员可邀请成员、分配角色、停用账号;创作席位决定可同时创作的成员数。各机构的形象、音色、作品相互隔离。</p></div>
+        <button class="btn btn-white" id="inviteBtn" onclick="invite()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>邀请成员</button>
       </div>
 
       <div class="stat-row">
@@ -29,7 +29,7 @@
 
       <table class="tbl">
         <thead><tr><th>成员</th><th>角色</th><th>占用席位</th><th>最近活跃</th><th>状态</th><th></th></tr></thead>
-        <tbody>
+        <tbody id="memberBody">
           <tr><td><div style="display:flex;align-items:center;gap:12px"><div class="mini-face" style="background-image:url('https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=80&q=80&fit=crop&crop=faces')"></div><div><div class="strong">王主管</div><div style="font-size:11.5px;color:var(--t4)">wang@rmt.cn</div></div></div></td><td><span class="bdg bdg-role">管理员</span></td><td class="num">—</td><td class="num">2 分钟前</td><td><span class="bdg bdg-ok">活跃</span></td><td style="text-align:right"><button class="btn btn-dark" style="padding:7px 11px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:15px;height:15px"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button></td></tr>
           <tr><td><div style="display:flex;align-items:center;gap:12px"><div class="mini-face" style="background-image:url('https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=80&q=80&fit=crop&crop=faces')"></div><div><div class="strong">李编导</div><div style="font-size:11.5px;color:var(--t4)">li@rmt.cn</div></div></div></td><td><span class="bdg bdg-role">创作者</span></td><td class="num">席位 #1</td><td class="num">5 分钟前</td><td><span class="bdg bdg-ok">活跃</span></td><td style="text-align:right"><button class="btn btn-dark" style="padding:7px 11px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:15px;height:15px"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button></td></tr>
           <tr><td><div style="display:flex;align-items:center;gap:12px"><div class="mini-face" style="background-image:url('https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=80&q=80&fit=crop&crop=faces')"></div><div><div class="strong">张记者</div><div style="font-size:11.5px;color:var(--t4)">zhang@rmt.cn</div></div></div></td><td><span class="bdg bdg-role">创作者</span></td><td class="num">席位 #2</td><td class="num">1 小时前</td><td><span class="bdg bdg-ok">活跃</span></td><td style="text-align:right"><button class="btn btn-dark" style="padding:7px 11px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:15px;height:15px"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button></td></tr>
@@ -54,7 +54,128 @@
     </main>
   </div>
 </div>
+
+<!-- 邀请成员弹窗(替代 3 个 prompt)-->
+<div class="ov" id="ov-invite" style="position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:none;place-items:center;z-index:300">
+  <div style="width:380px;max-width:92vw;background:var(--modal,#161618);border:1px solid var(--line);border-radius:18px;padding:26px">
+    <h3 style="font-size:18px;font-weight:700;margin-bottom:4px">邀请成员</h3>
+    <div style="color:var(--t3);font-size:12.5px;margin-bottom:20px">为机构添加成员并分配角色。用户名全平台唯一。</div>
+    <label style="display:block;font-size:12px;color:var(--t3);margin-bottom:7px">用户名</label>
+    <input id="invUser" placeholder="登录用户名(全平台唯一)" style="width:100%;box-sizing:border-box;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--t1);font-size:14px;outline:none;margin-bottom:14px">
+    <label style="display:block;font-size:12px;color:var(--t3);margin-bottom:7px">初始密码(≥6 位)</label>
+    <input id="invPass" type="password" placeholder="成员首次登录用,可后续自行修改" style="width:100%;box-sizing:border-box;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--t1);font-size:14px;outline:none;margin-bottom:14px">
+    <label style="display:block;font-size:12px;color:var(--t3);margin-bottom:9px">角色</label>
+    <div id="invRoleSeg" style="display:flex;gap:8px;margin-bottom:6px">
+      <button type="button" data-r="creator" class="ir-opt" onclick="pickRole(this)">创作者</button>
+      <button type="button" data-r="viewer" class="ir-opt" onclick="pickRole(this)">查看者</button>
+      <button type="button" data-r="admin" class="ir-opt" onclick="pickRole(this)">管理员</button>
+    </div>
+    <div id="invRoleDesc" style="font-size:11.5px;color:var(--t4);min-height:30px;line-height:1.6">创作者:可创建形象/音色/作品、发起生成,但不能管理成员。</div>
+    <div id="invMsg" style="color:var(--red);font-size:12.5px;min-height:16px;margin-bottom:4px"></div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn btn-dark" style="flex:1" onclick="document.getElementById('ov-invite').style.display='none'">取消</button>
+      <button class="btn btn-white" style="flex:1" id="invSubmit" onclick="submitInvite()">邀请</button>
+    </div>
+  </div>
+</div>
+<style>
+  .ir-opt{flex:1;padding:9px;border-radius:9px;background:var(--field,#121214);border:1px solid var(--line);color:var(--t2);font-size:13px;font-family:var(--f);cursor:pointer;transition:.15s}
+  .ir-opt:hover{border-color:var(--line-hi)}
+  .ir-opt.active{background:var(--blue-bg);border-color:var(--blue);color:var(--blue)}
+</style>
 <script src="shell.js"></script>
-<script>document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));this.classList.add('active');}));</script>
+<script src="api.js"></script>
+<script>
+  document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));this.classList.add('active');this.dataset.role!==undefined&&render(this.dataset.role);}));
+
+  const body = document.getElementById('memberBody');
+  let members = [], myRole = null;
+  const ROLE_CN = {admin:'管理员',creator:'创作者',viewer:'查看者'};
+  function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+  function fmtTime(ts){const d=new Date(ts);const p=n=>String(n).padStart(2,'0');return `${p(d.getMonth()+1)}-${p(d.getDate())}`;}
+
+  function row(m){
+    const initial = (m.username||'?').slice(0,1).toUpperCase();
+    const statusBdg = m.status==='active'
+      ? '<span class="bdg bdg-ok">活跃</span>'
+      : '<span class="bdg" style="background:rgba(255,82,71,.14);color:var(--red)">已停用</span>';
+    // 仅 admin 显示操作按钮(后端也有 403 兜底)
+    const actions = myRole==='admin' ? `<td style="text-align:right">
+      ${m.status==='active'
+        ? `<button class="btn btn-dark" style="padding:7px 11px;font-size:12px" onclick="disable('${m.id}','${esc(m.username)}')">停用</button>`
+        : `<button class="btn btn-dark" style="padding:7px 11px;font-size:12px" onclick="enable('${m.id}')">启用</button>`}
+      <button class="btn btn-dark" style="padding:7px 11px;font-size:12px" onclick="removeM('${m.id}','${esc(m.username)}')">移除</button>
+    </td>` : '<td></td>';
+    return `<tr>
+      <td><div style="display:flex;align-items:center;gap:12px"><div class="mini-face" style="background:linear-gradient(150deg,#2C2C32,#161618);display:grid;place-items:center;font-weight:700;font-size:13px;color:var(--t2)">${initial}</div><div><div class="strong">${esc(m.username)}</div></div></div></td>
+      <td><span class="bdg bdg-role">${ROLE_CN[m.role]||m.role}</span></td>
+      <td class="num">${m.role==='creator'?'创作席位':'—'}</td>
+      <td class="num">${fmtTime(m.created_at)}</td>
+      <td>${statusBdg}</td>
+      ${actions}
+    </tr>`;
+  }
+
+  function render(roleFilter){
+    let list = members;
+    if(roleFilter==='admin') list = members.filter(m=>m.role==='admin');
+    else if(roleFilter==='creator') list = members.filter(m=>m.role==='creator');
+    else if(roleFilter==='viewer') list = members.filter(m=>m.role==='viewer');
+    body.innerHTML = list.length ? list.map(row).join('')
+      : '<tr><td colspan="6" style="text-align:center;color:var(--t4);padding:40px">暂无成员</td></tr>';
+  }
+
+  // 邀请成员弹窗(替代 3 个浏览器 prompt)
+  let invRole='creator';
+  const ROLE_DESC={
+    creator:'创作者:可创建形象/音色/作品、发起生成,但不能管理成员。',
+    viewer:'查看者:只读作品、下载,不能发起生成或管理。',
+    admin:'管理员:成员管理、用量查看、系统配置,权限最高。',
+  };
+  function pickRole(b){ invRole=b.dataset.r; b.parentNode.querySelectorAll('.ir-opt').forEach(x=>x.classList.remove('active')); b.classList.add('active'); document.getElementById('invRoleDesc').textContent=ROLE_DESC[invRole]; }
+  function invite(){
+    if(myRole!=='admin'){ alert('仅管理员可邀请成员'); return; }
+    document.getElementById('invUser').value=''; document.getElementById('invPass').value='';
+    document.getElementById('invMsg').textContent=''; invRole='creator';
+    document.querySelectorAll('#invRoleSeg .ir-opt').forEach(b=>b.classList.toggle('active',b.dataset.r==='creator'));
+    document.getElementById('invRoleDesc').textContent=ROLE_DESC.creator;
+    document.getElementById('ov-invite').style.display='grid';
+    document.getElementById('invUser').focus();
+  }
+  async function submitInvite(){
+    const username=document.getElementById('invUser').value.trim();
+    const password=document.getElementById('invPass').value;
+    const msg=document.getElementById('invMsg'); msg.style.color='var(--red)';
+    if(!username){ msg.textContent='请输入用户名'; return; }
+    if(password.length<6){ msg.textContent='初始密码至少 6 位'; return; }
+    const btn=document.getElementById('invSubmit'); btn.disabled=true; btn.textContent='邀请中…';
+    try{
+      await LJ.post('/members',{username,password,role:invRole});
+      document.getElementById('ov-invite').style.display='none';
+      await load();
+    }catch(e){ msg.textContent=e.message; }
+    finally{ btn.disabled=false; btn.textContent='邀请'; }
+  }
+  async function disable(id,name){ if(!confirm(`停用 ${name}?其登录将立即失效。`))return; try{await LJ.post('/members/'+id+'/disable');await load();}catch(e){alert(e.message);} }
+  async function enable(id){ try{await LJ.post('/members/'+id+'/enable');await load();}catch(e){alert(e.message);} }
+  async function removeM(id,name){ if(!confirm(`移除 ${name}?不可恢复。`))return; try{await LJ.del('/members/'+id);await load();}catch(e){alert(e.message);} }
+
+  async function load(){
+    try{
+      const me = await LJ.me(); myRole = me.role;
+      if(myRole!=='admin'){
+        // 非 admin 没有 /members 权限,只显示自己 + 提示
+        document.getElementById('inviteBtn').style.display='none';
+        body.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--t4);padding:40px">仅管理员可查看成员列表</td></tr>`;
+        return;
+      }
+      members = await LJ.get('/members');
+      const chips=document.querySelectorAll('.chip');
+      ['all','admin','creator','viewer'].forEach((r,i)=>{if(chips[i])chips[i].dataset.role=r;});
+      render('all');
+    }catch(e){ /* 401 已跳转 */ }
+  }
+  load();
+</script>
 </body>
 </html>

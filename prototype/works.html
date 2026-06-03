@@ -33,9 +33,16 @@
         <button class="chip active">全部 · 19</button><button class="chip">生成中 · 2</button><button class="chip">已完成 · 14</button><button class="chip">草稿 · 3</button>
         <div class="sp"></div>
         <div class="search-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input placeholder="搜索作品…"></div>
-        <button class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>批量</button>
+        <button class="pill" id="batchBtn" onclick="toggleBatch()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>批量</button>
       </div>
-      <div class="work-grid">
+      <div id="batchBar" style="display:none;align-items:center;gap:12px;margin:-6px 0 14px;padding:11px 16px;background:var(--card);border:1px solid var(--line);border-radius:12px">
+        <span id="batchCount" style="font-size:13px;color:var(--t2)">已选 0 项</span>
+        <div class="sp" style="flex:1"></div>
+        <button class="btn btn-dark" style="padding:7px 13px;font-size:12.5px" onclick="batchDownload()">下载</button>
+        <button class="btn btn-dark" style="padding:7px 13px;font-size:12.5px;color:var(--red)" onclick="batchDelete()">删除</button>
+        <button class="btn btn-dark" style="padding:7px 13px;font-size:12.5px" onclick="toggleBatch()">取消</button>
+      </div>
+      <div class="work-grid" id="workGrid">
         <div class="work" style="animation-delay:.04s">
           <div class="work-thumb"><div class="por" style="background:linear-gradient(160deg,#33333A,#1A1A1E)"></div><div class="st"><span class="bdg bdg-run">● 渲染中 队列#1</span></div><span class="tc">9:16</span></div>
           <div class="work-b"><h4>融媒体新闻·晚间播报</h4><div class="m">晓琳 · 我的声音1 · 约 40s 后完成</div></div>
@@ -69,6 +76,127 @@
   </div>
 </div>
 <script src="shell.js"></script>
-<script>document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));this.classList.add('active');}));</script>
+<script src="api.js"></script>
+<script>
+  document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));this.classList.add('active');this.dataset.filter!==undefined&&render(this.dataset.filter);}));
+
+  const grid = document.getElementById('workGrid');
+  let allJobs = [];
+  function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+  function fmtTime(ts){const d=new Date(ts);const p=n=>String(n).padStart(2,'0');return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;}
+
+  const BADGE = {
+    queued:  '<span class="bdg bdg-dim">排队中</span>',
+    running: '<span class="bdg bdg-run">● 渲染中</span>',
+    done:    '<span class="bdg bdg-ok">已完成</span>',
+    failed:  '<span class="bdg" style="background:rgba(255,82,71,.14);color:var(--red)">● 失败</span>',
+  };
+
+  function card(job){
+    const thumb = job.status==='done'
+      ? `<div class="work-thumb" onclick="play('${job.id}')" style="cursor:pointer"><div class="por" style="background:linear-gradient(160deg,#33333A,#1A1A1E)"></div><div class="ov"><div class="pb"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div><div class="st">${BADGE.done}</div></div>`
+      : `<div class="work-thumb"><div class="por" style="background:linear-gradient(160deg,#33333A,#1A1A1E)"></div><div class="st">${BADGE[job.status]||''}</div></div>`;
+    const meta = job.status==='failed' ? esc(job.error||'生成失败')+' · 可重试'
+      : (job.status==='done' ? '已完成 · '+fmtTime(job.createdAt) : fmtTime(job.createdAt));
+    let actions = '';
+    if (job.status==='done') {
+      actions = `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn btn-dark" style="padding:6px 12px;font-size:12px" onclick="play('${job.id}')">播放</button>
+        <button class="btn btn-dark" style="padding:6px 12px;font-size:12px" onclick="download('${job.id}')">下载</button>
+        <button class="btn btn-dark" style="padding:6px 12px;font-size:12px" onclick="reedit('${job.id}')">重新编辑</button>
+      </div>`;
+    } else if (job.status==='failed') {
+      actions = `<button class="btn btn-dark" style="margin-top:8px;padding:6px 12px;font-size:12px" onclick="retry('${job.id}')">重新生成</button>`;
+    }
+    const checkbox = batchMode
+      ? `<div onclick="event.stopPropagation();toggleSel('${job.id}')" style="position:absolute;top:10px;left:10px;width:22px;height:22px;border-radius:6px;border:2px solid #fff;background:${selected.has(job.id)?'var(--blue)':'rgba(0,0,0,.4)'};cursor:pointer;z-index:5;display:grid;place-items:center">${selected.has(job.id)?'<svg viewBox=\"0 0 24 24\" width=\"13\" fill=\"none\" stroke=\"#fff\" stroke-width=\"3\"><path d=\"M20 6 9 17l-5-5\"/></svg>':''}</div>`
+      : '';
+    return `<div class="work" style="position:relative">${checkbox}${thumb}<div class="work-b"><h4>数字人视频</h4><div class="m">${meta}</div>${batchMode?'':actions}</div></div>`;
+  }
+
+  // ── T6:批量选择 ──
+  let batchMode=false; const selected=new Set();
+  function toggleBatch(){
+    batchMode=!batchMode; selected.clear();
+    document.getElementById('batchBtn').classList.toggle('active', batchMode);
+    document.getElementById('batchBar').style.display = batchMode?'flex':'none';
+    render(document.querySelector('.chip.active')?.dataset.filter||'all');
+  }
+  function toggleSel(id){
+    selected.has(id)?selected.delete(id):selected.add(id);
+    document.getElementById('batchCount').textContent='已选 '+selected.size+' 项';
+    render(document.querySelector('.chip.active')?.dataset.filter||'all');
+  }
+  async function batchDelete(){
+    if(!selected.size){ alert('请先选择作品'); return; }
+    if(!confirm(`删除选中的 ${selected.size} 个作品?`)) return;
+    for(const id of selected){ try{ await LJ.del('/jobs/'+id); }catch(e){} }
+    toggleBatch(); await load();
+  }
+  async function batchDownload(){
+    if(!selected.size){ alert('请先选择作品'); return; }
+    for(const id of selected){ try{ await download(id); await new Promise(r=>setTimeout(r,300)); }catch(e){} }
+  }
+
+  // 拿成品签名 URL(懒取,避免列表一次性签所有)
+  async function signedUrl(id){
+    const j = await LJ.getJob(id);
+    if (!j.videoUrl) throw new Error('成品 URL 暂不可用');
+    return j.videoUrl;
+  }
+  async function play(id){
+    try{
+      const url = await signedUrl(id);
+      // 简易播放浮层
+      const ov = document.createElement('div');
+      ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.85);display:grid;place-items:center;z-index:999';
+      ov.onclick=()=>ov.remove();
+      ov.innerHTML=`<video src="${url}" controls autoplay style="max-width:90vw;max-height:85vh;border-radius:14px"></video>`;
+      document.body.appendChild(ov);
+    }catch(e){ alert(e.message); }
+  }
+  async function download(id){
+    try{
+      const url = await signedUrl(id);
+      const a=document.createElement('a'); a.href=url; a.download='lingjing-'+id+'.mp4'; a.click();
+    }catch(e){ alert(e.message); }
+  }
+  function reedit(id){ location.href='create.html?from='+encodeURIComponent(id); }
+
+  function render(filter){
+    let list = allJobs;
+    if(filter==='running') list = allJobs.filter(j=>j.status==='running'||j.status==='queued');
+    else if(filter==='done') list = allJobs.filter(j=>j.status==='done');
+    else if(filter==='failed') list = allJobs.filter(j=>j.status==='failed');
+    if(!list.length){
+      grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--t4);padding:60px 0">暂无作品 · <a href="create.html" class="link-btn">去创作 →</a></div>`;
+      return;
+    }
+    grid.innerHTML = list.map(card).join('');
+  }
+
+  async function retry(id){
+    try{ await LJ.retryJob(id); await load(); }
+    catch(e){ alert(e.message); }
+  }
+
+  async function load(){
+    try{
+      allJobs = await LJ.listJobs();
+      // 更新筛选 chip 计数
+      const chips = document.querySelectorAll('.chip');
+      if(chips[0]) chips[0].textContent = '全部 · '+allJobs.length;
+      if(chips[1]) chips[1].textContent = '生成中 · '+allJobs.filter(j=>j.status==='running'||j.status==='queued').length;
+      if(chips[2]) chips[2].textContent = '已完成 · '+allJobs.filter(j=>j.status==='done').length;
+      if(chips[3]) chips[3].textContent = '失败 · '+allJobs.filter(j=>j.status==='failed').length;
+      const active = document.querySelector('.chip.active');
+      render(active&&active.dataset.filter||'all');
+    }catch(e){ /* 401 已被 api.js 跳转 */ }
+  }
+  // chip 加 filter 标记
+  const chips=document.querySelectorAll('.chip');
+  ['all','running','done','failed'].forEach((f,i)=>{if(chips[i])chips[i].dataset.filter=f;});
+  load();
+</script>
 </body>
 </html>

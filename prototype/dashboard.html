@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>概览 · 灵镜</title>
+<link rel="stylesheet" href="app.css">
+<style>
+  .dash{ display:flex; flex-direction:column; gap:22px; animation:rise .5s var(--ease-out) both; }
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+  /* 欢迎 + 余额 hero */
+  .hero{
+    display:grid; grid-template-columns:1.4fr 1fr; gap:18px;
+  }
+  @media(max-width:900px){ .hero{grid-template-columns:1fr} }
+  .greet{
+    border-radius:var(--r-lg); border:1px solid var(--line); padding:30px 32px;
+    background:
+      radial-gradient(120% 130% at 100% 0%, rgba(77,141,255,.12) 0%, transparent 55%),
+      var(--card);
+    box-shadow:var(--sh-card); position:relative; overflow:hidden;
+  }
+  .greet .hi{font-family:var(--f-en);font-size:13px;color:var(--t3);letter-spacing:.5px}
+  .greet h1{font-size:30px;font-weight:800;letter-spacing:-.6px;margin:8px 0 6px}
+  .greet h1 .role{font-size:13px;color:var(--blue);background:var(--blue-bg);border-radius:999px;padding:4px 11px;font-weight:600;vertical-align:middle;margin-left:8px}
+  .greet p{color:var(--t2);font-size:14px;max-width:46ch;line-height:1.7}
+  .greet .go{
+    margin-top:20px;display:inline-flex;align-items:center;gap:8px;background:var(--t1);color:#0A0A0B;
+    border:none;border-radius:999px;padding:12px 20px;font-size:14px;font-weight:700;font-family:var(--f);cursor:pointer;
+    text-decoration:none;box-shadow:var(--sh-white-btn);transition:transform .12s var(--ease);
+  }
+  .greet .go:hover{transform:translateY(-1px)}
+  .greet .go svg{width:17px;height:17px}
+
+  .credit{
+    border-radius:var(--r-lg);border:1px solid var(--line);padding:26px 28px;background:var(--card);
+    box-shadow:var(--sh-card);display:flex;flex-direction:column;justify-content:space-between;
+  }
+  .credit .lbl{display:flex;align-items:center;gap:8px;color:var(--t3);font-size:13px}
+  .credit .lbl svg{width:16px;height:16px;color:var(--amber)}
+  .credit .val{font-family:var(--f-mono);font-size:46px;font-weight:700;letter-spacing:-1px;margin:10px 0 4px;line-height:1}
+  .credit .val.low{color:var(--amber)}
+  .credit .meta{color:var(--t4);font-size:12px;font-family:var(--f-mono)}
+  .credit .warn{color:var(--amber);font-size:12.5px;margin-top:6px;display:none}
+  .credit .topup{margin-top:18px;align-self:flex-start;color:var(--t2);font-size:13px;text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:8px 16px;transition:.18s}
+  .credit .topup:hover{border-color:var(--line-hi);color:var(--t1)}
+
+  /* 统计 4 格 */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  @media(max-width:900px){ .stats{grid-template-columns:repeat(2,1fr)} }
+  .stat{
+    border-radius:var(--r);border:1px solid var(--line-soft);background:var(--card);padding:20px;
+    box-shadow:var(--sh-card);cursor:pointer;transition:.2s var(--ease-out);text-decoration:none;color:inherit;
+  }
+  .stat:hover{transform:translateY(-3px);border-color:var(--line-hi)}
+  .stat .si{width:34px;height:34px;border-radius:10px;background:var(--card-2);display:grid;place-items:center;color:var(--t2);margin-bottom:14px}
+  .stat .si svg{width:18px;height:18px}
+  .stat .sv{font-family:var(--f-mono);font-size:28px;font-weight:700;letter-spacing:-.5px}
+  .stat .sn{color:var(--t3);font-size:12.5px;margin-top:3px}
+
+  /* 区块标题 */
+  .sec{display:flex;align-items:center;gap:10px;margin:8px 0 2px}
+  .sec h3{font-size:15px;font-weight:700}
+  .sec .more{margin-left:auto;color:var(--t3);font-size:12.5px;text-decoration:none}
+  .sec .more:hover{color:var(--t1)}
+
+  /* 快捷创作 */
+  .quick{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  @media(max-width:900px){ .quick{grid-template-columns:1fr} }
+  .qcard{
+    border-radius:var(--r);border:1px solid var(--line-soft);background:var(--card);padding:20px 22px;
+    box-shadow:var(--sh-card);cursor:pointer;transition:.2s var(--ease-out);text-decoration:none;color:inherit;
+    display:flex;gap:14px;align-items:flex-start;
+  }
+  .qcard:hover{transform:translateY(-3px);border-color:var(--blue)}
+  .qcard .qi{width:38px;height:38px;border-radius:11px;background:var(--blue-bg);color:var(--blue);display:grid;place-items:center;flex-shrink:0}
+  .qcard .qi svg{width:19px;height:19px}
+  .qcard h4{font-size:14.5px;font-weight:600}
+  .qcard p{color:var(--t3);font-size:12.5px;margin-top:4px;line-height:1.6}
+
+  /* 最近作品 */
+  .recent{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+  .rcard{border-radius:var(--r);overflow:hidden;background:var(--card);border:1px solid var(--line-soft);box-shadow:var(--sh-card)}
+  .rthumb{aspect-ratio:9/16;background:linear-gradient(160deg,#33333A,#1A1A1E);position:relative;display:grid;place-items:center}
+  .rthumb .pb{width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.45);display:grid;place-items:center;backdrop-filter:blur(4px)}
+  .rthumb .pb svg{width:15px;height:15px;color:#fff}
+  .rbadge{position:absolute;top:8px;left:8px;font-family:var(--f-mono);font-size:10px;padding:3px 7px;border-radius:6px}
+  .rb-ok{background:rgba(52,199,89,.16);color:var(--green)}
+  .rb-run{background:rgba(255,178,62,.16);color:var(--amber)}
+  .rb-err{background:rgba(255,82,71,.16);color:var(--red)}
+  .rb-q{background:rgba(255,255,255,.08);color:var(--t3)}
+  .rcard .rb{padding:11px 12px}
+  .rcard .rb .rt{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rcard .rb .rd{color:var(--t4);font-size:11px;font-family:var(--f-mono);margin-top:3px}
+  .empty{grid-column:1/-1;text-align:center;color:var(--t4);padding:40px 0;font-size:13.5px}
+  .empty a{color:var(--blue);text-decoration:none}
+  .skel{opacity:.5}
+</style>
+</head>
+<body data-page="dashboard" data-crumb="概览">
+<div class="shell" id="shell-mount">
+  <div class="main-col">
+    <main class="page">
+      <div class="dash">
+
+        <!-- 欢迎 + 余额 -->
+        <div class="hero">
+          <div class="greet">
+            <div class="hi" id="greetHi">欢迎使用灵镜</div>
+            <h1>你好,<span id="greetName">…</span><span class="role" id="greetRole"></span></h1>
+            <p>从一张照片到一条口型自然的数字人播报,云端秒级生成。今天想创作点什么?</p>
+            <a class="go" href="create.html" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3Z"/></svg>开始创作</a>
+          </div>
+          <div class="credit">
+            <div>
+              <div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg>剩余点数</div>
+              <div class="val" id="balVal">—</div>
+              <div class="meta" id="balMeta">实时余额 · 每次生成按文案计费</div>
+              <div class="warn" id="balWarn">⚠ 余额不足,请及时充值</div>
+            </div>
+            <a class="topup" href="billing.html">查看用量 / 充值 →</a>
+          </div>
+        </div>
+
+        <!-- 统计 -->
+        <div class="stats" id="stats">
+          <a class="stat" href="works.html"><div class="si"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></div><div class="sv skel" id="cWorks">—</div><div class="sn">作品</div></a>
+          <a class="stat" href="avatars.html"><div class="si"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg></div><div class="sv skel" id="cAvatars">—</div><div class="sn">我的形象</div></a>
+          <a class="stat" href="voices.html"><div class="si"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg></div><div class="sv skel" id="cVoices">—</div><div class="sn">克隆音色</div></a>
+          <a class="stat" href="assets.html"><div class="si"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m3 15 5-5 4 4 3-3 6 6"/></svg></div><div class="sv skel" id="cAssets">—</div><div class="sn">素材</div></a>
+        </div>
+
+        <!-- 快捷创作 -->
+        <div class="sec"><h3>快捷创作</h3></div>
+        <div class="quick">
+          <a class="qcard" href="create.html" data-requires-create><div class="qi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg></div><div><h4>数字人视频</h4><p>选形象 + 音色 + 文案,生成口型自然的讲话视频</p></div></a>
+          <a class="qcard" href="avatars.html"><div class="qi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg></div><div><h4>创建形象</h4><p>上传照片或视频,即刻生成专属数字人形象</p></div></a>
+          <a class="qcard" href="voices.html"><div class="qi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg></div><div><h4>克隆音色</h4><p>上传 5–30s 样本,复刻专属音色用于配音</p></div></a>
+        </div>
+
+        <!-- 最近作品 -->
+        <div class="sec"><h3>最近作品</h3><a class="more" href="works.html">查看全部 →</a></div>
+        <div class="recent" id="recent">
+          <div class="empty">加载中…</div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="shell.js"></script>
+<script src="api.js"></script>
+<script>
+  const ROLE_CN={admin:'管理员',creator:'创作者',viewer:'查看者'};
+  function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+  function fmt(ts){const d=new Date(ts);const p=n=>String(n).padStart(2,'0');return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;}
+  const BADGE={done:['rb-ok','已完成'],running:['rb-run','生成中'],queued:['rb-q','排队中'],failed:['rb-err','失败']};
+
+  function jobCard(j){
+    const [cls,txt]=BADGE[j.status]||['rb-q',j.status];
+    const play = j.status==='done' ? `<div class="pb"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>` : '';
+    return `<a class="rcard" href="works.html" style="text-decoration:none;color:inherit">
+      <div class="rthumb"><span class="rbadge ${cls}">${txt}</span>${play}</div>
+      <div class="rb"><div class="rt">数字人视频</div><div class="rd">${fmt(j.createdAt)}</div></div>
+    </a>`;
+  }
+
+  async function load(){
+    let me;
+    try{ me = await LJ.me(); }catch(e){ return; /* 401 已跳转 */ }
+    document.getElementById('greetName').textContent = me.username;
+    document.getElementById('greetRole').textContent = ROLE_CN[me.role]||me.role;
+    const hr=new Date().getHours();
+    document.getElementById('greetHi').textContent = hr<6?'夜深了':hr<12?'早上好':hr<18?'下午好':'晚上好';
+
+    // 并行拉数据
+    const [bal,warn,jobs,avs,vcs,ast] = await Promise.all([
+      LJ.get('/credits/balance').catch(()=>({balance:0})),
+      LJ.get('/credits/warning').catch(()=>null),
+      LJ.get('/jobs').catch(()=>[]),
+      LJ.get('/avatars').catch(()=>({custom:[]})),
+      LJ.get('/voices').catch(()=>({clones:[]})),
+      LJ.get('/assets').catch(()=>[]),
+    ]);
+
+    const balEl=document.getElementById('balVal');
+    balEl.textContent=(bal.balance??0).toLocaleString('en-US');
+    if(warn&&warn.low){ balEl.classList.add('low'); document.getElementById('balWarn').style.display='block'; document.getElementById('balMeta').style.display='none'; }
+
+    const set=(id,n)=>{const el=document.getElementById(id);el.textContent=n;el.classList.remove('skel');};
+    set('cWorks', jobs.length);
+    set('cAvatars', (avs.custom||[]).length);
+    set('cVoices', (vcs.clones||[]).length);
+    set('cAssets', ast.length);
+
+    const recent=document.getElementById('recent');
+    if(!jobs.length){ recent.innerHTML=`<div class="empty">还没有作品 · <a href="create.html">去创作 →</a></div>`; }
+    else{ recent.innerHTML=jobs.slice(0,6).map(jobCard).join(''); }
+  }
+  load();
+</script>
+</body>
+</html>

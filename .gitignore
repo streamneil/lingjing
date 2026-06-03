@@ -6,8 +6,21 @@
 .idea/
 *.swp
 
+# 密钥 / 环境变量（绝不提交）
+.env
+.env.local
+*.local
+
+# 运行时数据库（本地/部署生成,绝不提交）
+*.db
+*.db-shm
+*.db-wal
+
 # 依赖 / 构建产物（将来工程化时用）
 node_modules/
 dist/
 .next/
 build/
+.gstack/
+probe-output.mp4
+probe-labeled.mp4

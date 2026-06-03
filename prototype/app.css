@@ -246,6 +246,18 @@ img { display: block; }
 
 .cfg-sp { flex: 1; min-height: 8px; }
 .cfg-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; }
+
+/* 语速 / 音量 滑块组 —— 独立块,不复用 .cfg-row(那是 grid,会把两行挤成一行) */
+.cfg-sliders { display: flex; flex-direction: column; gap: 12px; padding: 14px 15px; background: var(--field); border: 1px solid var(--line); border-radius: var(--r); }
+.sld-row { display: flex; align-items: center; gap: 13px; }
+.sld-lbl { font-size: 12.5px; color: var(--t3); width: 34px; flex: none; }
+.sld-val { font-family: var(--f-mono); font-size: 12px; color: var(--t2); width: 40px; text-align: right; flex: none; }
+.sld { flex: 1; -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px; background: var(--card-2); outline: none; cursor: pointer; }
+.sld::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 15px; height: 15px; border-radius: 50%; background: var(--t1); border: none; box-shadow: 0 1px 4px rgba(0,0,0,.5); transition: transform .12s; }
+.sld::-webkit-slider-thumb:hover { transform: scale(1.15); }
+.sld::-webkit-slider-thumb:active { transform: scale(.95); }
+.sld::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; background: var(--t1); border: none; box-shadow: 0 1px 4px rgba(0,0,0,.5); cursor: pointer; }
+.sld::-moz-range-track { height: 4px; border-radius: 2px; background: var(--card-2); }
 .msel { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 11px 13px; background: var(--field); border: 1px solid var(--line); border-radius: var(--r); font-size: 12.5px; color: var(--t2); cursor: pointer; font-weight: 600; transition: border-color .2s; }
 .msel:hover { border-color: var(--line-hi); }
 .msel svg { width: 13px; height: 13px; color: var(--t4); }
@@ -268,6 +280,11 @@ img { display: block; }
 .feed-list { display: flex; flex-direction: column; gap: 30px; }
 
 .fitem { animation: rise .6s var(--ease-out) both; }
+/* feed 空态:无作品时的引导 */
+.feed-empty-in { text-align: center; padding: 56px 28px; border: 1px dashed var(--line); border-radius: var(--r-lg); background: var(--card); }
+.feed-empty-in svg { width: 38px; height: 38px; color: var(--t4); margin-bottom: 14px; }
+.feed-empty-in .t { font-size: 15px; font-weight: 700; color: var(--t2); }
+.feed-empty-in .s { font-size: 12.5px; color: var(--t4); margin-top: 7px; line-height: 1.6; max-width: 320px; margin-left: auto; margin-right: auto; }
 .fmeta { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--t2); margin-bottom: 13px; }
 .fmeta svg { width: 16px; height: 16px; color: var(--t3); }
 .fmeta b { font-weight: 600; color: var(--t1); }
