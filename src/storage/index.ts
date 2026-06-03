@@ -1,67 +1,122 @@
-// 灵镜 存储层 — MinIO(S3 兼容)。托管/私有化同构:同一套代码,
-// 托管接云上 MinIO、私有化接客户内网 MinIO,docker-compose 内置。
+// 灵镜 存储层 — 双后端:阿里云 OSS(公网可达,生产用)或 MinIO(本地/私有化)。
 //
-// 决策来源:/plan-eng-review D3 —— 统一用 MinIO,不做 OSS/MinIO 双适配器,
-// 因为 MinIO 兼容 S3 API,以后托管想换阿里 OSS 也只是改 endpoint 配置。
+// 决策(2026-06 查证):wan2.2-s2v 必须能从公网下载素材(图片/音频)URL。
+// 本地 MinIO 是 127.0.0.1,百炼云端访问不到 → 生成任务卡 pending 直到超时。
+// 因此配了 OSS(region+bucket+AccessKey)就走 OSS(签名 URL 公网可达);
+// 否则回退 MinIO(本地开发/私有化内网,但需自行保证百炼可达)。
+//
+// 两后端实现同一组函数(putObject/putObjectFromUrl/getSignedUrl/getObject/ensureBucket),
+// 上层(worker/api)无感知。
 
 import { Client as MinioClient } from 'minio';
+import OSS from 'ali-oss';
 import { config } from '../config.js';
 
-const client = new MinioClient({
-  endPoint: config.minio.endPoint,
-  port: config.minio.port,
-  useSSL: config.minio.useSSL,
-  accessKey: config.minio.accessKey,
-  secretKey: config.minio.secretKey,
-});
-
-const BUCKET = config.minio.bucket;
-
-let ensured = false;
-/** 确保 bucket 存在(幂等)。首次写入前调用。 */
-export async function ensureBucket(): Promise<void> {
-  if (ensured) return;
-  const exists = await client.bucketExists(BUCKET).catch(() => false);
-  if (!exists) await client.makeBucket(BUCKET);
-  ensured = true;
+// ── 后端接口 ──
+interface StorageBackend {
+  ensureBucket(): Promise<void>;
+  putObject(key: string, data: Buffer | string, contentType?: string): Promise<string>;
+  putObjectFromUrl(key: string, url: string): Promise<string>;
+  getSignedUrl(key: string, expirySeconds?: number): Promise<string>;
+  getObject(key: string): Promise<Buffer>;
 }
 
-/** 上传一个对象(Buffer 或字符串),返回 object key。 */
-export async function putObject(
-  key: string,
-  data: Buffer | string,
-  contentType = 'application/octet-stream',
-): Promise<string> {
-  await ensureBucket();
-  const buf = typeof data === 'string' ? Buffer.from(data) : data;
-  await client.putObject(BUCKET, key, buf, buf.length, { 'Content-Type': contentType });
-  return key;
+// ── MinIO 后端(本地 / 私有化)──
+function makeMinioBackend(): StorageBackend {
+  const client = new MinioClient({
+    endPoint: config.minio.endPoint,
+    port: config.minio.port,
+    useSSL: config.minio.useSSL,
+    accessKey: config.minio.accessKey,
+    secretKey: config.minio.secretKey,
+  });
+  const BUCKET = config.minio.bucket;
+  let ensured = false;
+  return {
+    async ensureBucket() {
+      if (ensured) return;
+      const exists = await client.bucketExists(BUCKET).catch(() => false);
+      if (!exists) await client.makeBucket(BUCKET);
+      ensured = true;
+    },
+    async putObject(key, data, contentType = 'application/octet-stream') {
+      await this.ensureBucket();
+      const buf = typeof data === 'string' ? Buffer.from(data) : data;
+      await client.putObject(BUCKET, key, buf, buf.length, { 'Content-Type': contentType });
+      return key;
+    },
+    async putObjectFromUrl(key, url) {
+      await this.ensureBucket();
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`抓取远程对象失败 ${res.status}: ${url}`);
+      const contentType = res.headers.get('content-type') ?? 'application/octet-stream';
+      const buf = Buffer.from(await res.arrayBuffer());
+      await client.putObject(BUCKET, key, buf, buf.length, { 'Content-Type': contentType });
+      return key;
+    },
+    async getSignedUrl(key, expirySeconds = 3600) {
+      await this.ensureBucket();
+      return client.presignedGetObject(BUCKET, key, expirySeconds);
+    },
+    async getObject(key) {
+      await this.ensureBucket();
+      const stream = await client.getObject(BUCKET, key);
+      const chunks: Buffer[] = [];
+      for await (const chunk of stream) chunks.push(chunk as Buffer);
+      return Buffer.concat(chunks);
+    },
+  };
 }
 
-/** 从一个外部 URL(如百炼返回的视频地址)抓取并落库,返回 object key。 */
-export async function putObjectFromUrl(key: string, url: string): Promise<string> {
-  await ensureBucket();
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`抓取远程对象失败 ${res.status}: ${url}`);
-  const contentType = res.headers.get('content-type') ?? 'application/octet-stream';
-  const buf = Buffer.from(await res.arrayBuffer());
-  await client.putObject(BUCKET, key, buf, buf.length, { 'Content-Type': contentType });
-  return key;
+// ── OSS 后端(阿里云,公网可达;与百炼同生态)──
+function makeOssBackend(): StorageBackend {
+  const client = new OSS({
+    region: config.oss.region,
+    bucket: config.oss.bucket,
+    accessKeyId: config.oss.accessKeyId,
+    accessKeySecret: config.oss.accessKeySecret,
+    secure: true,
+  });
+  return {
+    // OSS bucket 由用户在控制台预建;此处不自动建桶(避免越权/区域错配)。
+    async ensureBucket() {
+      /* no-op:OSS bucket 预建 */
+    },
+    async putObject(key, data, contentType = 'application/octet-stream') {
+      const buf = typeof data === 'string' ? Buffer.from(data) : data;
+      await client.put(key, buf, { mime: contentType });
+      return key;
+    },
+    async putObjectFromUrl(key, url) {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`抓取远程对象失败 ${res.status}: ${url}`);
+      const contentType = res.headers.get('content-type') ?? 'application/octet-stream';
+      const buf = Buffer.from(await res.arrayBuffer());
+      await client.put(key, buf, { mime: contentType });
+      return key;
+    },
+    async getSignedUrl(key, expirySeconds = 3600) {
+      // OSS 签名 URL:公网可达,带过期。百炼能直接下载。
+      return client.signatureUrl(key, { expires: expirySeconds });
+    },
+    async getObject(key) {
+      const r = await client.get(key);
+      return Buffer.isBuffer(r.content) ? r.content : Buffer.from(r.content);
+    },
+  };
 }
 
-/** 生成临时签名 URL(默认 1 小时),供前端播放/下载,不暴露存储凭证。 */
-export async function getSignedUrl(key: string, expirySeconds = 3600): Promise<string> {
-  await ensureBucket();
-  return client.presignedGetObject(BUCKET, key, expirySeconds);
-}
+// ── 后端选择:配了 OSS 用 OSS,否则 MinIO ──
+const backend: StorageBackend = config.oss.enabled ? makeOssBackend() : makeMinioBackend();
 
-/** 读取对象为 Buffer(测试 / 后处理用)。 */
-export async function getObject(key: string): Promise<Buffer> {
-  await ensureBucket();
-  const stream = await client.getObject(BUCKET, key);
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream) chunks.push(chunk as Buffer);
-  return Buffer.concat(chunks);
-}
+export const storageBackendName = config.oss.enabled ? 'oss' : 'minio';
+
+export const ensureBucket = () => backend.ensureBucket();
+export const putObject = (key: string, data: Buffer | string, contentType?: string) =>
+  backend.putObject(key, data, contentType);
+export const putObjectFromUrl = (key: string, url: string) => backend.putObjectFromUrl(key, url);
+export const getSignedUrl = (key: string, expirySeconds?: number) =>
+  backend.getSignedUrl(key, expirySeconds);
+export const getObject = (key: string) => backend.getObject(key);
 
 export const storage = { putObject, putObjectFromUrl, getSignedUrl, getObject, ensureBucket };
