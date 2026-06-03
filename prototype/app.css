@@ -383,6 +383,22 @@ img { display: block; }
 .ubox:hover { border-color: var(--t3); background: rgba(255,255,255,.015); }
 .ubox .u { display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--t2); }
 .ubox .u svg { width: 30px; height: 30px; }
+/* C6 形象操作下拉(锚定 ⋯) */
+.av-pop { position: absolute; z-index: 350; min-width: 168px; background: var(--modal); border: 1px solid var(--line); border-radius: 12px; padding: 6px; box-shadow: var(--sh-pop); display: none; }
+.av-pop.on { display: block; animation: rise .15s var(--ease-out) both; }
+.av-pop button { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: none; border: none; color: var(--t2); font-family: var(--f); font-size: 13.5px; padding: 9px 11px; border-radius: 8px; cursor: pointer; transition: .12s; }
+.av-pop button:hover { background: var(--card-hi); color: var(--t1); }
+.av-pop button svg { width: 15px; height: 15px; color: var(--t4); }
+.av-pop button:hover svg { color: var(--t2); }
+.av-pop button.danger:hover { color: var(--red); }
+.av-pop button.danger:hover svg { color: var(--red); }
+/* 上传预览:所见即所得 */
+.upreview { position: relative; max-width: 244px; border-radius: var(--r); overflow: hidden; border: 1px solid var(--line-hi); cursor: pointer; }
+.upreview img { display: block; width: 100%; aspect-ratio: 16/10; object-fit: cover; background: var(--field); }
+.upreview-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; background: var(--card-hi); }
+.upreview-bar span { font-size: 12px; color: var(--t2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upreview-x { flex: none; background: none; border: none; color: var(--blue); font-family: var(--f); font-size: 12px; cursor: pointer; padding: 2px 4px; }
+.upreview-x:hover { text-decoration: underline; }
 .rtitle { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
 .rsub { font-size: 13px; color: var(--t3); margin-bottom: 16px; }
 .samples { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 8px; }
