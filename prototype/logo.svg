@@ -1,14 +1,10 @@
-<!-- 灵镜 Lingjing logo — 镜像 + 数字人头像 + 生成播放意象 -->
-<!-- 设计:两个镜像的圆弧组成"镜"(对称反射),中心留白形成头/播放三角的负空间。 -->
-<!-- 单色,适配白底黑字 pill 与黑底白 logo;currentColor 跟随上下文取色。 -->
+<!-- 灵镜 Lingjing logo — 镜中分身(方案 A2) -->
+<!-- 设计:外层圆角方"镜框"=镜;框内头肩剖影=数字人。负空间对比,单一强剖面,20px 仍清晰可辨。 -->
+<!-- 单色 currentColor 跟随上下文取色;页面内多数场景外框由容器(.mk/.logo-mark)提供,此处给独立完整版。 -->
 <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="灵镜">
-  <!-- 左半弧(实体) -->
-  <path d="M16 3.5C9.1 3.5 3.5 9.1 3.5 16S9.1 28.5 16 28.5"
-        stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
-  <!-- 右半弧(镜像,虚化点线 — 反射感) -->
-  <path d="M16 6.5C21.2 6.5 25.5 10.8 25.5 16S21.2 25.5 16 25.5"
-        stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity="0.45"/>
-  <!-- 中心:头肩剪影(数字人)+ 隐含播放方向 -->
-  <circle cx="16" cy="13" r="2.6" fill="currentColor"/>
-  <path d="M11.2 21.5c0-2.9 2.1-4.6 4.8-4.6s4.8 1.7 4.8 4.6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+  <!-- 镜框 -->
+  <rect x="4" y="4" width="24" height="24" rx="7" fill="currentColor"/>
+  <!-- 框内:头肩剖影(负空间反白)-->
+  <circle cx="16" cy="13" r="4" fill="#0A0A0B"/>
+  <path d="M8 25.5c0-4.4 3.4-7 8-7s8 2.6 8 7z" fill="#0A0A0B"/>
 </svg>
