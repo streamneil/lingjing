@@ -351,7 +351,8 @@
     if(s.includes('401')||s.includes('unauthorized')||s.includes('auth')) return '生成服务鉴权失败,请联系管理员检查配置';
     if(s.includes('403')) return '生成服务无访问权限,请联系管理员';
     if(s.includes('429')||s.includes('rate')||s.includes('limit')) return '生成请求过于频繁,请稍后重试';
-    if(s.includes('timeout')||s.includes('timed out')||s.includes('etimedout')) return '渲染超时,请重试';
+    if(s.includes('排队超时')||s.includes('繁忙')||s.includes('并发')) return '生成服务繁忙(免费档同时只跑 1 个任务),请稍后重试';
+    if(s.includes('timeout')||s.includes('timed out')||s.includes('etimedout')||s.includes('超时')) return '渲染超时,生成服务繁忙,请稍后重试';
     if(s.includes('insufficient')||s.includes('余额')||s.includes('credit')) return '点数余额不足,请充值后重试';
     // 图片/音频 URL 拉取失败:多因自定义素材存在本地 MinIO,云端生成服务访问不到(私有化/本地开发常见)
     if(s.includes('download')||s.includes('url error')||s.includes('invalidparameter')||s.includes('not accessible')||s.includes('无法访问')||s.includes('downloadfile')) return '生成服务无法访问素材文件(自定义形象/音频需公网可达);本地调试请改用预置形象,或配置公网存储';
