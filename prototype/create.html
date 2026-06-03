@@ -53,7 +53,7 @@
 
     <div class="cbtn-wrap">
       <button class="cbtn" id="createBtn">
-        创建 <span class="gem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg> <b id="estGem">—</b></span>
+        <span id="cbtnLabel">创建</span> <span class="gem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg> <b id="estGem">—</b></span>
       </button>
     </div>
   </div>
@@ -61,11 +61,10 @@
   <!-- 右:对话流 -->
   <div class="feed">
     <div class="feed-tabs">
-      <button class="ftab active">全部</button>
-      <button class="ftab">影片</button>
-      <button class="ftab">图片</button>
-      <button class="ftab">音乐</button>
-      <button class="ftab">演讲</button>
+      <button class="ftab active" data-st="all">全部</button>
+      <button class="ftab" data-st="running">生成中</button>
+      <button class="ftab" data-st="done">已完成</button>
+      <button class="ftab" data-st="failed">失败</button>
     </div>
     <div class="feed-list">
 
@@ -78,10 +77,10 @@
           <a href="#" class="link-btn" style="font-size:12.5px">查看全部 →</a>
         </div>
         <div class="demo-strip">
-          <div class="dchip" onclick="alert('演示：套用此案例模板')"><div class="di" style="background-image:url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&q=85&fit=crop&crop=faces')"></div><div class="dv"></div><span class="dt">新闻播报</span><div class="dp"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-          <div class="dchip" onclick="alert('演示：套用此案例模板')"><div class="di" style="background-image:url('https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=300&q=85&fit=crop&crop=faces')"></div><div class="dv"></div><span class="dt">政策解读</span><div class="dp"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-          <div class="dchip" onclick="alert('演示：套用此案例模板')"><div class="di" style="background-image:url('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&q=85&fit=crop&crop=faces')"></div><div class="dv"></div><span class="dt">财经早报</span><div class="dp"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-          <div class="dchip" onclick="alert('演示：套用此案例模板')"><div class="di" style="background-image:url('https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=300&q=85&fit=crop&crop=faces')"></div><div class="dv"></div><span class="dt">出镜报道</span><div class="dp"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+          <div class="dchip" onclick="useTemplate('news')"><div class="di" style="background-image:url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&q=85&fit=crop&crop=faces')"></div><div class="dv"></div><span class="dt">新闻播报</span><div class="dp"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+          <div class="dchip" onclick="useTemplate('policy')"><div class="di" style="background-image:url('https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=300&q=85&fit=crop&crop=faces')"></div><div class="dv"></div><span class="dt">政策解读</span><div class="dp"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+          <div class="dchip" onclick="useTemplate('finance')"><div class="di" style="background-image:url('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&q=85&fit=crop&crop=faces')"></div><div class="dv"></div><span class="dt">财经早报</span><div class="dp"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+          <div class="dchip" onclick="useTemplate('field')"><div class="di" style="background-image:url('https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=300&q=85&fit=crop&crop=faces')"></div><div class="dv"></div><span class="dt">出镜报道</span><div class="dp"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
         </div>
       </div>
 
@@ -187,23 +186,11 @@
     <button class="btn btn-dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" style="width:15px;height:15px"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>克隆或设计</button>
   </div>
   <div class="ss-filters">
-    <div class="msel" style="min-width:170px">语言：全部 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
-    <div class="msel" style="min-width:170px">性别：全部 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+    <input id="voiceSearch" placeholder="搜索音色名称…" oninput="filterVoices(this.value)"
+      style="flex:1;max-width:320px;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:9px 13px;color:var(--t1);font-size:13px;font-family:var(--f);outline:none">
   </div>
   <div class="ss-body" id="voiceSheetBody">
     <div style="color:var(--t4);padding:20px">加载音色中…</div>
-  </div>
-</div>
-
-    <div class="vcard" onclick="pickVoice(this,'沉稳男声 · 子墨')"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>沉稳男声 · 子墨 <span class="hot">热门</span></div><div class="vc-d">男性 · 沉稳 · 适合纪录片、教育</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-    <div class="vcard" onclick="pickVoice(this,'磁性男声 · 浩然')"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>磁性男声 · 浩然 <span class="hot">热门</span></div><div class="vc-d">成人 · 男性 · 磁性 · 适合广告、品牌</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-    <div class="vcard" onclick="pickVoice(this,'亲切女声 · 思雨')"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>亲切女声 · 思雨 <span class="hot">热门</span></div><div class="vc-d">成人 · 女性 · 亲切 · 适合 Vlog、播客</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-    <div class="vcard" onclick="pickVoice(this,'活泼女声 · 晓琳')"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>活泼女声 · 晓琳</div><div class="vc-d">女性 · 活泼 · 适合 Vlog、短视频</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-    <div class="vcard" onclick="pickVoice(this,'Expressive Narrator')"><div class="vc-b"><div class="vc-n"><span class="flag">🇺🇸</span>Expressive Narrator <span class="hot">热门</span></div><div class="vc-d">成人 · 男性 · 有声书 · 适合讲故事</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-    <div class="vcard" onclick="pickVoice(this,'Compelling Lady')"><div class="vc-b"><div class="vc-n"><span class="flag">🇺🇸</span>Compelling Lady <span class="hot">热门</span></div><div class="vc-d">成人 · 女性 · 播报 · 适合新闻、纪录片</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-    <div class="vcard" onclick="pickVoice(this,'港式女声')"><div class="vc-b"><div class="vc-n"><span class="flag">🇭🇰</span>港式女声 <span class="hot">热门</span></div><div class="vc-d">女性 · 礼貌 · 适合 AI 助手、教育</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-    <div class="vcard" onclick="pickVoice(this,'我的声音 1')"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>我的声音 1</div><div class="vc-d">克隆音色 · 12s 样本</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-    <div class="vcard" onclick="pickVoice(this,'台长配音')"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>台长配音</div><div class="vc-d">克隆音色 · 26s 样本</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
   </div>
 </div>
 
@@ -234,7 +221,54 @@
 <script src="api.js"></script>
 <script>
   const ta=document.getElementById('script'), cnt=document.getElementById('cnt'), btn=document.getElementById('createBtn');
-  document.querySelectorAll('.ftab,.ss-seg button').forEach(t=>t.addEventListener('click',function(){this.parentNode.querySelectorAll('.ftab,button').forEach(x=>x.classList.remove('active'));this.classList.add('active');}));
+  document.querySelectorAll('.ss-seg button').forEach(t=>t.addEventListener('click',function(){this.parentNode.querySelectorAll('button').forEach(x=>x.classList.remove('active'));this.classList.add('active');}));
+
+  // ── feed 状态筛选(全部/生成中/已完成/失败)──
+  function fitemStatus(el){
+    const st=el.querySelector('.st');
+    if(!st) return 'demo';
+    if(st.querySelector('.led-run')) return 'running';
+    if(st.querySelector('.led-ok')) return 'done';
+    if(st.querySelector('.led-err')) return 'failed';
+    return 'demo';
+  }
+  function applyFeedFilter(kind){
+    document.querySelectorAll('.feed-list .fitem').forEach(it=>{
+      const s=fitemStatus(it);
+      const show = kind==='all' || s===kind || (kind==='all'); // demo(案例)仅在"全部"显示
+      it.style.display = (kind==='all' ? '' : (s===kind ? '' : 'none'));
+    });
+  }
+  document.querySelectorAll('.ftab').forEach(t=>t.addEventListener('click',function(){
+    this.parentNode.querySelectorAll('.ftab').forEach(x=>x.classList.remove('active'));
+    this.classList.add('active');
+    applyFeedFilter(this.dataset.st||'all');
+  }));
+
+  // ── 案例模板:套用 = 回填示范文案 + 滚到配置(真行为,非 alert)──
+  const TEMPLATES={
+    news:'各位观众晚上好,欢迎收看本期新闻播报。今天的主要内容有:我市重点民生工程取得新进展,城市新区建设按下加速键。下面为您详细报道。',
+    policy:'近日,我市出台了一系列惠民新政策。为帮助大家更好地理解,本期我们邀请相关部门,对政策要点进行权威解读,并解答市民最关心的几个问题。',
+    finance:'欢迎收看财经早报。今天聚焦区域经济发展态势:多项指标稳中向好,重点产业持续发力。接下来,为您梳理今日值得关注的财经要闻。',
+    field:'我现在所在的位置是活动现场。可以看到,现场气氛热烈,各项准备工作已经就绪。接下来,我将为您带来第一手的现场报道。',
+  };
+  function useTemplate(key){
+    const txt=TEMPLATES[key]; if(!txt) return;
+    ta.value=txt; cnt.textContent=txt.length;
+    refreshCreateBtn(); scheduleEstimate();
+    document.querySelector('.cfg')?.scrollIntoView({behavior:'smooth',block:'start'});
+    ta.focus();
+    window.LJToast && window.LJToast('✓ 已套用示范文案,可直接修改后生成');
+  }
+
+  // ── 音色搜索 ──
+  function filterVoices(q){
+    q=(q||'').trim().toLowerCase();
+    document.querySelectorAll('#voiceSheetBody .vcard').forEach(c=>{
+      const t=c.textContent.toLowerCase();
+      c.style.display = (!q || t.includes(q)) ? '' : 'none';
+    });
+  }
 
   function esc(s){ return (s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   const feedList = document.querySelector('.feed-list');
@@ -274,11 +308,13 @@
     const th=document.getElementById('avThumb');
     if(a.thumb){ th.style.backgroundImage=`url('${a.thumb}')`; th.style.backgroundSize='cover'; th.style.backgroundPosition='center'; }
     if(!silent) closeSheet('appearance');
+    refreshCreateBtn();
   }
   function pickVoice(a, silent){
     selectedVoice = a;
     document.getElementById('voicePickLabel').textContent = a.name;
     if(!silent) closeSheet('voices');
+    refreshCreateBtn();
   }
 
   function cycleRes(){
@@ -308,9 +344,24 @@
       }catch(e){}
     },350);
   }
+  // 创建按钮:按"缺什么"反馈,而非点了才弹 alert
+  function refreshCreateBtn(){
+    const label=document.getElementById('cbtnLabel');
+    const hasScript=ta.value.trim().length>0;
+    const overLimit=ta.value.length>2000;
+    let ready=true, txt='创建';
+    if(!selectedAvatar){ ready=false; txt='请先选择形象'; }
+    else if(!selectedVoice){ ready=false; txt='请先选择音色'; }
+    else if(!hasScript){ ready=false; txt='请输入文案'; }
+    else if(overLimit){ ready=false; txt='文案超 2000 字'; }
+    btn.classList.toggle('ready',ready);
+    btn.disabled=!ready;
+    label.textContent=txt;
+  }
   ta.addEventListener('input',()=>{
     cnt.textContent=ta.value.length;
-    btn.classList.toggle('ready',ta.value.trim().length>0);
+    cnt.style.color = ta.value.length>2000 ? 'var(--red)' : '';
+    refreshCreateBtn();
     scheduleEstimate();
   });
 
@@ -383,11 +434,9 @@
   }
 
   btn.addEventListener('click', async ()=>{
+    if(btn.disabled) return; // 未就绪时按钮已禁用,缺项在按钮文案上已提示
     const script = ta.value.trim();
-    if(!script){ alert('请输入文案'); return; }
-    if(script.length>2000){ alert('文案不能超过 2000 字'); return; }
-    if(!selectedAvatar){ alert('请选择形象'); return; }
-    if(!selectedVoice){ alert('请选择音色'); return; }
+    if(!script || !selectedAvatar || !selectedVoice) return;
     btn.disabled = true;
     const prev = btn.innerHTML;
     btn.textContent = '提交中…';
@@ -403,12 +452,15 @@
       renderCard({ id: res.id, status: 'queued', progress: 0 }, script);
       track(res.id, script);
       ta.value=''; cnt.textContent='0'; scheduleEstimate();
+      window.LJToast && window.LJToast('✓ 已提交生成,可在右侧查看进度');
     }catch(e){
-      alert('提交失败:'+e.message);
+      window.LJToast ? window.LJToast('提交失败:'+e.message,'err') : alert('提交失败:'+e.message);
     }finally{
-      btn.disabled=false; btn.innerHTML=prev;
+      btn.innerHTML=prev; refreshCreateBtn();
     }
   });
+
+  refreshCreateBtn(); // 初始态:按缺项给出提示
 </script>
 </body>
 </html>
