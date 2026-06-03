@@ -61,6 +61,20 @@ export const config = {
     bucket: optional('MINIO_BUCKET', 'lingjing'),
   },
 
+  // 阿里云 OSS:配了 region+bucket 即启用(否则回退本地 MinIO)。
+  // wan2.2-s2v 需公网可达的素材 URL —— OSS 公网域名满足,本地 MinIO 不满足。
+  // accessKey/secret 复用 DashScope 同账号的 AccessKey(RAM 用户授权 OSS 即可)。
+  oss: {
+    region: optional('OSS_REGION', ''), // 如 oss-cn-hangzhou
+    bucket: optional('OSS_BUCKET', ''),
+    accessKeyId: optional('OSS_ACCESS_KEY_ID', ''),
+    accessKeySecret: optional('OSS_ACCESS_KEY_SECRET', ''),
+    // 是否启用 OSS:region 与 bucket 都非空时启用
+    get enabled(): boolean {
+      return !!(this.region && this.bucket && this.accessKeyId && this.accessKeySecret);
+    },
+  },
+
   // ── 数据库（Slice1 用 SQLite，够单租户单机；Slice2 多租户可换 Postgres）──
   db: {
     file: optional('DB_FILE', 'lingjing.db'),
