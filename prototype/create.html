@@ -218,12 +218,14 @@
     try{
       const av = await LJ.get('/avatars');
       const grid = document.getElementById('avSheetGrid');
-      const items = [...(av.presets||[]), ...((av.custom||[]).filter(a=>a.status==='ready'))];
+      // 自定义形象排在预置前面:用户刚建好的形象应当是默认,而不是预置晓琳
+      const myAvatars = (av.custom||[]).filter(a=>a.status==='ready');
+      const items = [...myAvatars, ...(av.presets||[])];
       grid.innerHTML = items.map(a=>{
         const bg = a.thumb ? `background-image:url('${a.thumb}')` : 'background:linear-gradient(160deg,#33333A,#1A1A1E)';
         return `<div class="av" onclick='pickAvatar(${JSON.stringify({id:a.id,name:a.name,thumb:a.thumb||''}).replace(/'/g,"&#39;")})'><div class="av-img" style="${bg}"></div><div class="av-veil"></div><div class="av-name">${esc(a.name)}</div><div class="av-cta">选择此形象</div></div>`;
       }).join('') || '<div style="color:var(--t4);padding:20px">暂无形象</div>';
-      // 默认选第一个预置
+      // 默认选第一个:有自定义形象优先选自定义,否则选预置
       if(!selectedAvatar && items[0]) pickAvatar({id:items[0].id,name:items[0].name,thumb:items[0].thumb||''}, true);
     }catch(e){}
     try{
@@ -231,7 +233,8 @@
       const body = document.getElementById('voiceSheetBody');
       const items = [...((vc.clones||[]).filter(v=>v.status==='ready')), ...(vc.presets||[])];
       body.innerHTML = items.map(v=>{
-        const desc = v.kind==='clone' ? '克隆音色' : `${v.gender||''} · ${v.desc||''}`;
+        // 声音复刻能力尚未接入,克隆音色暂以预置音色生成 —— 明确告知,避免用户误以为是本人声音
+        const desc = v.kind==='clone' ? '克隆音色 · 复刻能力即将开放,暂用预置音色' : `${v.gender||''} · ${v.desc||''}`;
         return `<div class="vcard" onclick='pickVoice(${JSON.stringify({id:v.id,name:v.name}).replace(/'/g,"&#39;")})'><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>${esc(v.name)}${v.kind==='preset'?' <span class="hot">预置</span>':''}</div><div class="vc-d">${esc(desc)}</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>`;
       }).join('') || '<div style="color:var(--t4);padding:20px">暂无音色</div>';
       if(!selectedVoice && items[0]) pickVoice({id:items[0].id,name:items[0].name}, true);

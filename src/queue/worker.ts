@@ -57,12 +57,20 @@ async function resolveImageUrl(avatarRef: string, tenantId: string): Promise<str
 
 /** 把 voiceRef 解析为 CosyVoice 可用的音色标识。 */
 function resolveVoiceName(voiceRef: string, tenantId: string): string {
-  if (isPresetVoice(voiceRef)) return voiceRef; // 预置音色名直接用
+  if (isPresetVoice(voiceRef)) return voiceRef; // 预置音色名(longjing 等)直接用
   const clone = getVoice(voiceRef, tenantId);
-  if (clone) return clone.id; // 克隆音色 id(真实克隆音色由百炼声音复刻产出)
+  if (clone) {
+    // 克隆音色当前是占位:真实百炼"声音复刻"尚未接入,clone.id 是本地 UUID,
+    // 不是 CosyVoice 合法 voice,直接传会 418。在真实复刻接入前,回退到预置音色
+    // 让生成可用(而非整条任务失败)。接入后改为返回复刻产出的 voice id。
+    return DEFAULT_PRESET_VOICE;
+  }
   // 兜底:用默认预置,避免整个任务因音色解析失败而崩
-  return 'longxiaochun';
+  return DEFAULT_PRESET_VOICE;
 }
+
+// 默认回退音色:cosyvoice-v1 合法音色名(新闻播报场景)
+const DEFAULT_PRESET_VOICE = 'longjing';
 
 /** 处理单个 job 的完整管线。抛错由调用方捕获并标 failed(失败隔离)。 */
 async function processJob(job: JobRow): Promise<void> {
