@@ -272,7 +272,7 @@ img { display: block; }
 .cbtn .gem svg { width: 14px; height: 14px; }
 
 /* —— 右:对话流 —— */
-.feed { background: var(--card); border: 1px solid var(--line-soft); border-radius: var(--r-lg); padding: 22px 26px 30px; box-shadow: var(--sh-card); animation: rise .6s .08s var(--ease-out) both; }
+.feed { min-width: 0; background: var(--card); border: 1px solid var(--line-soft); border-radius: var(--r-lg); padding: 22px 26px 30px; box-shadow: var(--sh-card); animation: rise .6s .08s var(--ease-out) both; }
 .feed-tabs { display: flex; gap: 2px; margin-bottom: 24px; border-bottom: 1px solid var(--line-soft); padding-bottom: 14px; }
 .ftab { padding: 8px 16px; border-radius: var(--r-pill); font-size: 14px; font-weight: 600; color: var(--t3); background: none; border: none; cursor: pointer; font-family: var(--f); transition: color .2s, background .2s; }
 .ftab:hover { color: var(--t2); }
