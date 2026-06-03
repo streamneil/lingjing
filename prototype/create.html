@@ -34,16 +34,16 @@
     <div class="cfg-sp"></div>
 
     <!-- 语速 / 音量(PRD E4)-->
-    <div class="cfg-row" style="flex-direction:column;gap:14px;align-items:stretch">
-      <div style="display:flex;align-items:center;gap:12px">
-        <span style="font-size:12.5px;color:var(--t3);width:42px">语速</span>
-        <input type="range" id="speed" min="0.5" max="2" step="0.1" value="1" style="flex:1">
-        <span id="speedVal" style="font-family:var(--f-mono);font-size:12px;color:var(--t2);width:36px;text-align:right">1.0×</span>
+    <div class="cfg-sliders">
+      <div class="sld-row">
+        <span class="sld-lbl">语速</span>
+        <input type="range" id="speed" min="0.5" max="2" step="0.1" value="1" class="sld">
+        <span id="speedVal" class="sld-val">1.0×</span>
       </div>
-      <div style="display:flex;align-items:center;gap:12px">
-        <span style="font-size:12.5px;color:var(--t3);width:42px">音量</span>
-        <input type="range" id="volume" min="0" max="100" step="5" value="50" style="flex:1">
-        <span id="volumeVal" style="font-family:var(--f-mono);font-size:12px;color:var(--t2);width:36px;text-align:right">50</span>
+      <div class="sld-row">
+        <span class="sld-lbl">音量</span>
+        <input type="range" id="volume" min="0" max="100" step="5" value="50" class="sld">
+        <span id="volumeVal" class="sld-val">50</span>
       </div>
     </div>
 
@@ -84,76 +84,12 @@
         </div>
       </div>
 
-      <!-- 生成中 -->
-      <div class="fitem" style="animation-delay:.05s">
-        <div class="fmeta">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c0-3 2.5-4.5 5.5-4.5"/><path d="M16 6v6M19 9h-6"/></svg>
-          <b>AI 虚拟人</b><span class="ts">06-01 15:18</span>
-          <span class="sp"></span>
-          <span class="st" style="color:var(--amber)"><span class="led led-run"></span>生成中</span>
-        </div>
-        <div class="fbubble">
-          <div class="mav" style="background-image:url('https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=90&q=85&fit=crop&crop=faces')"></div>
-          <div class="tx">本期我们关注城市新区建设最新进展，与惠民政策的深度解读。</div>
-        </div>
-        <div class="fvideo proc">
-          <div class="proc-in">
-            <div class="spinner"></div>
-            <div class="lbl">队列第 1 位 · 预计 40s</div>
-            <div class="proc-bar"><i></i></div>
-          </div>
-          <span class="tc">9:16</span>
-        </div>
-      </div>
-
-      <!-- 成品 -->
-      <div class="fitem" style="animation-delay:.1s">
-        <div class="fmeta">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c0-3 2.5-4.5 5.5-4.5"/><path d="M16 6v6M19 9h-6"/></svg>
-          <b>AI 虚拟人</b><span class="ts">06-01 15:16</span>
-          <span class="sp"></span>
-          <span class="st" style="color:var(--green)"><span class="led led-ok"></span>已完成</span>
-        </div>
-        <div class="fbubble">
-          <div class="mav" style="background-image:url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=90&q=85&fit=crop&crop=faces')"></div>
-          <div class="tx">各位观众晚上好，欢迎收看今天的新闻播报。首先为您介绍主要内容。</div>
-        </div>
-        <div class="fvideo">
-          <div class="por" style="background-image:url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&q=85&fit=crop&crop=faces')"></div>
-          <div class="play-ov"><div class="pb"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
-          <span class="tc">00:08 · 16:9</span>
-        </div>
-        <div class="factions">
-          <button class="btn btn-dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>重新编辑</button>
-          <button class="btn btn-dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 4v4h-4"/></svg>重新生成</button>
-          <div class="sp"></div>
-          <button class="btn btn-dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>下载</button>
-          <button class="btn btn-dark" style="padding:11px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
-        </div>
-      </div>
-
-      <!-- 失败 -->
-      <div class="fitem" style="animation-delay:.15s">
-        <div class="fmeta">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c0-3 2.5-4.5 5.5-4.5"/><path d="M16 6v6M19 9h-6"/></svg>
-          <b>AI 虚拟人</b><span class="ts">06-01 12:00</span>
-          <span class="sp"></span>
-          <span class="st" style="color:var(--red)"><span class="led led-err"></span>生成失败</span>
-        </div>
-        <div class="fbubble">
-          <div class="mav" style="background-image:url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=90&q=85&fit=crop&crop=faces')"></div>
-          <div class="tx">欢迎收看本期财经观察，今天聚焦区域经济发展态势……</div>
-        </div>
-        <div class="fvideo err">
-          <div class="err-in">
-            <div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 9v4M12 17h.01"/><path d="M10.3 4 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 4a2 2 0 0 0-3.4 0Z"/></svg></div>
-            <div class="lbl">渲染超时，请重试</div>
-          </div>
-          <span class="tc">16:9</span>
-        </div>
-        <div class="factions">
-          <button class="btn btn-dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 4v4h-4"/></svg>重新生成</button>
-          <div class="sp"></div>
+      <!-- 真实作品历史由 loadHistory() 注入;空时显示引导 -->
+      <div class="fitem feed-empty" id="feedEmpty" style="animation-delay:.05s;display:none">
+        <div class="feed-empty-in">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c0-3 2.5-4.5 5.5-4.5"/><path d="M16 6v6M19 9h-6"/></svg>
+          <div class="t">还没有作品</div>
+          <div class="s">在左侧选好形象、音色,输入文案,点「创建」就能生成第一条数字人视频。</div>
         </div>
       </div>
 
@@ -234,9 +170,9 @@
   }
   function applyFeedFilter(kind){
     document.querySelectorAll('.feed-list .fitem').forEach(it=>{
+      if(it.id==='feedEmpty'){ it.style.display = (kind==='all' && !feedList.querySelector('.fitem[id^=job-]')) ? '' : 'none'; return; }
       const s=fitemStatus(it);
-      const show = kind==='all' || s===kind || (kind==='all'); // demo(案例)仅在"全部"显示
-      it.style.display = (kind==='all' ? '' : (s===kind ? '' : 'none'));
+      it.style.display = (kind==='all' || s===kind) ? '' : 'none';
     });
   }
   document.querySelectorAll('.ftab').forEach(t=>t.addEventListener('click',function(){
@@ -365,8 +301,29 @@
     scheduleEstimate();
   });
 
-  // 登录态守卫 + 加载选择器 + T5 回填
-  LJ.me().then(()=>{ loadPickers().then(prefillFromQuery); }).catch(()=>{});
+  // 登录态守卫 + 加载选择器 + T5 回填 + 真实作品历史
+  LJ.me().then(()=>{ loadPickers().then(prefillFromQuery); loadHistory(); }).catch(()=>{});
+
+  // ── 拉真实作品历史填充 feed(替代写死的演示卡)──
+  async function loadHistory(){
+    let jobs=[];
+    try{ jobs = await LJ.listJobs(); }catch(e){ return; }
+    const empty=document.getElementById('feedEmpty');
+    if(!Array.isArray(jobs) || !jobs.length){ if(empty) empty.style.display=''; return; }
+    if(empty) empty.style.display='none';
+    // 按创建时间正序渲染(renderCard 会把每张插到顶部 → 最终最新在最上)
+    const ordered=[...jobs].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+    for(const j of ordered){
+      try{
+        const detail=await LJ.getJob(j.id);
+        const script=(detail.input&&detail.input.script)||'';
+        renderCard({ id:detail.id, status:detail.status, progress:detail.progress,
+          videoUrl:detail.videoUrl, aiLabel:detail.aiLabel, error:detail.error }, script);
+        // 仍在进行中的任务,继续轮询到终态
+        if(detail.status==='queued'||detail.status==='running') track(detail.id, script);
+      }catch(e){}
+    }
+  }
 
   // ── T5:?from=jobId 回填 ──
   async function prefillFromQuery(){
@@ -384,8 +341,24 @@
     }catch(e){}
   }
 
+  // 把上游(DashScope/网关)的原始报错翻译成用户能懂的人话,避免 "Unexpected server response: 401" 这种英文泄漏
+  function humanizeError(raw){
+    const s=String(raw||'').toLowerCase();
+    if(!s) return '生成失败,请重试';
+    if(s.includes('401')||s.includes('unauthorized')||s.includes('auth')) return '生成服务鉴权失败,请联系管理员检查配置';
+    if(s.includes('403')) return '生成服务无访问权限,请联系管理员';
+    if(s.includes('429')||s.includes('rate')||s.includes('limit')) return '生成请求过于频繁,请稍后重试';
+    if(s.includes('timeout')||s.includes('timed out')||s.includes('etimedout')) return '渲染超时,请重试';
+    if(s.includes('insufficient')||s.includes('余额')||s.includes('credit')) return '点数余额不足,请充值后重试';
+    if(s.includes('inspection')||s.includes('审核')||s.includes('sensitive')) return '内容未通过审核,请调整文案或形象';
+    if(s.includes('network')||s.includes('econn')||s.includes('fetch')) return '网络连接异常,请重试';
+    if(/[一-龥]/.test(raw)) return raw; // 已是中文,直接展示
+    return '生成失败,请重试'; // 其余英文/未知错误,统一兜底
+  }
+
   // 渲染/更新一个 job 卡片(三态:running/done/failed),复用原型 class。
   function renderCard(job, scriptText){
+    const empty=document.getElementById('feedEmpty'); if(empty) empty.style.display='none';
     let card = document.getElementById('job-'+job.id);
     if(!card){
       card = document.createElement('div');
@@ -416,7 +389,7 @@
           <span class="st" style="color:var(--red)"><span class="led led-err"></span>生成失败</span></div>
         ${bubble}
         <div class="fvideo err"><div class="err-in"><div class="ei">!</div>
-          <div class="lbl">${esc(job.error||'生成失败')}</div></div></div>
+          <div class="lbl">${esc(humanizeError(job.error))}</div></div></div>
         <div class="factions"><button class="btn btn-dark" onclick="retry('${job.id}','${esc(scriptText).replace(/'/g,"\\'")}')">重新生成</button><div class="sp"></div></div>`;
     }
   }
