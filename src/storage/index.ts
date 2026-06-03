@@ -70,13 +70,21 @@ function makeMinioBackend(): StorageBackend {
 
 // ── OSS 后端(阿里云,公网可达;与百炼同生态)──
 function makeOssBackend(): StorageBackend {
-  const client = new OSS({
-    region: config.oss.region,
-    bucket: config.oss.bucket,
-    accessKeyId: config.oss.accessKeyId,
-    accessKeySecret: config.oss.accessKeySecret,
-    secure: true,
-  });
+  // 懒初始化:OSS 配置错误(如 region 不合规)不应让整个服务启动即崩 + 白屏。
+  // 改为首次用到时才建客户端,出错只让该次存储操作失败(任务标 failed),Web 仍可访问。
+  let client: OSS | null = null;
+  const getClient = (): OSS => {
+    if (!client) {
+      client = new OSS({
+        region: config.oss.region,
+        bucket: config.oss.bucket,
+        accessKeyId: config.oss.accessKeyId,
+        accessKeySecret: config.oss.accessKeySecret,
+        secure: true,
+      });
+    }
+    return client;
+  };
   return {
     // OSS bucket 由用户在控制台预建;此处不自动建桶(避免越权/区域错配)。
     async ensureBucket() {
@@ -84,7 +92,7 @@ function makeOssBackend(): StorageBackend {
     },
     async putObject(key, data, contentType = 'application/octet-stream') {
       const buf = typeof data === 'string' ? Buffer.from(data) : data;
-      await client.put(key, buf, { mime: contentType });
+      await getClient().put(key, buf, { mime: contentType });
       return key;
     },
     async putObjectFromUrl(key, url) {
@@ -92,15 +100,15 @@ function makeOssBackend(): StorageBackend {
       if (!res.ok) throw new Error(`抓取远程对象失败 ${res.status}: ${url}`);
       const contentType = res.headers.get('content-type') ?? 'application/octet-stream';
       const buf = Buffer.from(await res.arrayBuffer());
-      await client.put(key, buf, { mime: contentType });
+      await getClient().put(key, buf, { mime: contentType });
       return key;
     },
     async getSignedUrl(key, expirySeconds = 3600) {
       // OSS 签名 URL:公网可达,带过期。百炼能直接下载。
-      return client.signatureUrl(key, { expires: expirySeconds });
+      return getClient().signatureUrl(key, { expires: expirySeconds });
     },
     async getObject(key) {
-      const r = await client.get(key);
+      const r = await getClient().get(key);
       return Buffer.isBuffer(r.content) ? r.content : Buffer.from(r.content);
     },
   };
