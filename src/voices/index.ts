@@ -9,11 +9,14 @@ import { TERMS_VERSION } from '../legal/index.js';
 const now = () => Date.now();
 
 // 预置人声(PRD 要求 40 个;Slice1 起步给代表性几个,真实接百炼后扩充)
+// id 必须是 cosyvoice-v1 模型的**合法音色名**(传给 TTS 引擎的 voice 参数)。
+// 不能用模型名(如 cosyvoice-v1)当 voice —— 那会让引擎返回 418(音色不匹配)。
+// v1 音色名见 https://help.aliyun.com/zh/model-studio/cosyvoice-voice-list(v2 才带 _v2 后缀)。
 const PRESETS: { id: string; name: string; lang: string; gender: string; desc: string }[] = [
-  { id: 'cosyvoice-v1', name: '新闻播报 · 雅琴', lang: '中文', gender: '女', desc: '播音员 · 新闻、纪录片' },
-  { id: 'cosyvoice-male-1', name: '沉稳男声 · 子墨', lang: '中文', gender: '男', desc: '沉稳 · 纪录片、教育' },
-  { id: 'cosyvoice-female-2', name: '亲切女声 · 思雨', lang: '中文', gender: '女', desc: '亲切 · Vlog、播客' },
-  { id: 'cosyvoice-male-2', name: '磁性男声 · 浩然', lang: '中文', gender: '男', desc: '磁性 · 广告、品牌' },
+  { id: 'longjing', name: '新闻播报 · 雅琴', lang: '中文', gender: '女', desc: '播音员 · 新闻、纪录片' },
+  { id: 'longshu', name: '沉稳男声 · 子墨', lang: '中文', gender: '男', desc: '沉稳 · 纪录片、教育' },
+  { id: 'longxiaochun', name: '亲切女声 · 思雨', lang: '中文', gender: '女', desc: '亲切 · Vlog、播客' },
+  { id: 'longcheng', name: '磁性男声 · 浩然', lang: '中文', gender: '男', desc: '磁性 · 广告、品牌' },
 ];
 
 export function listPresets() {

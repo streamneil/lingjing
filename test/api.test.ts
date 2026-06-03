@@ -41,7 +41,7 @@ describe('POST /api/jobs 校验(已登录 creator)', () => {
   });
 
   it('合法入参 → 202 + jobId', async () => {
-    const r = await client.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'cosyvoice-v1', script: '正常文案' });
+    const r = await client.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'longjing', script: '正常文案' });
     expect(r.status).toBe(202);
     expect(r.body.id).toBeTruthy();
     expect(r.body.status).toBe('queued');
