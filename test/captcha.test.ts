@@ -12,37 +12,36 @@ const { Client } = await import('./helpers.js');
 
 const app = createApp();
 
-describe('滑块 challenge / verify', () => {
-  it('出题返回 challengeId + gapX + trackW', async () => {
+describe('滑块 challenge / verify(拖到底式)', () => {
+  it('出题返回 challengeId + trackW', async () => {
     const c = new Client(app);
     const r = await c.get('/api/captcha/challenge');
     expect(r.status).toBe(200);
     expect(typeof r.body.challengeId).toBe('string');
-    expect(typeof r.body.gapX).toBe('number');
     expect(typeof r.body.trackW).toBe('number');
   });
 
-  it('落点正确 → 发 captchaToken', async () => {
+  it('拖到末端(x=trackW)→ 发 captchaToken', async () => {
     const c = new Client(app);
     const ch = await c.get('/api/captcha/challenge');
-    const v = await c.post('/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.gapX });
+    const v = await c.post('/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.trackW });
     expect(v.status).toBe(200);
     expect(v.body.ok).toBe(true);
     expect(typeof v.body.captchaToken).toBe('string');
   });
 
-  it('落点偏差大 → 400', async () => {
+  it('没拖到底(x 远小于 trackW)→ 400', async () => {
     const c = new Client(app);
     const ch = await c.get('/api/captcha/challenge');
-    const v = await c.post('/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.gapX + 100 });
+    const v = await c.post('/api/captcha/verify', { challengeId: ch.body.challengeId, x: Math.floor(ch.body.trackW / 2) });
     expect(v.status).toBe(400);
   });
 
   it('challenge 一次性:同 challengeId 再 verify → 400', async () => {
     const c = new Client(app);
     const ch = await c.get('/api/captcha/challenge');
-    await c.post('/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.gapX }); // 第一次成功（消费 challenge）
-    const again = await c.post('/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.gapX });
+    await c.post('/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.trackW }); // 第一次成功（消费 challenge）
+    const again = await c.post('/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.trackW });
     expect(again.status).toBe(400); // challenge 已删
   });
 });
@@ -54,7 +53,7 @@ describe('captcha_token 一次性（登录场景）', () => {
     // 手动走一遍:challenge → verify 拿 token → 用同一 token 登录两次
     const c = new Client(app);
     const ch = await c.get('/api/captcha/challenge');
-    const v = await c.post('/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.gapX });
+    const v = await c.post('/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.trackW });
     const token = v.body.captchaToken;
     const first = await c.post('/api/login', { username: 'capuser', password: 'pw123456', captchaToken: token });
     expect(first.status).toBe(200);

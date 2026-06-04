@@ -17,19 +17,17 @@ window.LJCaptcha = (function () {
     const css = `
     .ljc{position:relative;height:46px;border-radius:12px;background:var(--field,#101012);border:1px solid var(--line,#232327);overflow:hidden;user-select:none;touch-action:none}
     .ljc-fill{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,rgba(77,141,255,.10),rgba(77,141,255,.22));border-right:1px solid var(--blue,#4D8DFF);transition:none}
-    .ljc-gap{position:absolute;top:50%;transform:translateY(-50%);width:30px;height:30px;border-radius:7px;background:rgba(255,255,255,.025);box-shadow:inset 0 0 0 1px rgba(255,255,255,.10);display:flex;align-items:center;justify-content:center}
-    .ljc-gap svg{opacity:.35}
-    .ljc-hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--t3,#717179);pointer-events:none;letter-spacing:.3px}
+    .ljc-hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--t3,#717179);pointer-events:none;letter-spacing:.3px;padding-left:${HANDLE_W}px}
     .ljc-hint .arrows{display:inline-flex;margin-left:8px;color:var(--t4,#4A4A51);animation:ljc-nudge 1.4s var(--ease,ease) infinite}
     @keyframes ljc-nudge{0%,100%{transform:translateX(0);opacity:.5}50%{transform:translateX(4px);opacity:1}}
-    .ljc-handle{position:absolute;left:3px;top:3px;bottom:3px;width:${HANDLE_W}px;border-radius:9px;background:linear-gradient(180deg,#fff,#E9E9EE);display:flex;align-items:center;justify-content:center;cursor:grab;box-shadow:0 3px 10px -2px rgba(0,0,0,.5),0 1px 0 rgba(255,255,255,.6) inset;transition:background .2s}
+    .ljc-handle{position:absolute;left:3px;top:3px;bottom:3px;width:${HANDLE_W}px;border-radius:9px;background:linear-gradient(180deg,#fff,#E9E9EE);display:flex;align-items:center;justify-content:center;cursor:grab;box-shadow:0 3px 10px -2px rgba(0,0,0,.5),0 1px 0 rgba(255,255,255,.6) inset;transition:background .2s;z-index:2}
     .ljc-handle:active{cursor:grabbing}
     .ljc-handle svg{color:#0A0A0B}
     .ljc.ok{border-color:var(--green,#34C759)}
     .ljc.ok .ljc-fill{background:rgba(52,199,89,.16);border-right-color:var(--green,#34C759)}
     .ljc.ok .ljc-handle{background:linear-gradient(180deg,#3DDc6A,#2BA84C)}
     .ljc.ok .ljc-handle svg{color:#fff}
-    .ljc.ok .ljc-hint{color:var(--green,#34C759)}
+    .ljc.ok .ljc-hint{color:var(--green,#34C759);padding-left:0}
     .ljc.err{border-color:var(--red,#FF5247);animation:ljc-shake .35s}
     .ljc.err .ljc-handle{background:linear-gradient(180deg,#FF6B61,#E5392E)}
     @keyframes ljc-shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}`;
@@ -39,24 +37,20 @@ window.LJCaptcha = (function () {
   // 手柄图标:>>(待拖)/ ✓(过验)
   const ARROW_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 6l6 6-6 6M13 6l6 6-6 6"/></svg>';
   const CHECK_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 6"/></svg>';
-  // 缺口里的浅拼图凹槽提示
-  const GAP_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg>';
 
   function mount(container, { onPass, onReset } = {}) {
     injectStyle();
-    let challengeId = null, gapX = 0, trackW = 280, token = null, dragging = false, startX = 0, curX = 0;
+    let challengeId = null, trackW = 280, token = null, dragging = false, startX = 0, curX = 0;
 
     container.innerHTML = `
       <div class="ljc">
         <div class="ljc-fill"></div>
-        <div class="ljc-gap">${GAP_SVG}</div>
-        <div class="ljc-hint">拖动滑块对齐缺口<span class="arrows">›››</span></div>
+        <div class="ljc-hint">拖动滑块到最右端完成验证<span class="arrows">›››</span></div>
         <div class="ljc-handle">${ARROW_SVG}</div>
       </div>`;
 
     const root = container.querySelector('.ljc');
     const fill = container.querySelector('.ljc-fill');
-    const gap = container.querySelector('.ljc-gap');
     const hint = container.querySelector('.ljc-hint');
     const handle = container.querySelector('.ljc-handle');
 
@@ -64,10 +58,7 @@ window.LJCaptcha = (function () {
       token = null;
       try {
         const c = await LJ.get('/captcha/challenge');
-        challengeId = c.challengeId; gapX = c.gapX; trackW = c.trackW || root.clientWidth;
-        // 缺口按服务端坐标换算到当前轨宽显示位置
-        const scale = (root.clientWidth || trackW) / trackW;
-        gap.style.left = Math.round(gapX * scale) + 'px';
+        challengeId = c.challengeId; trackW = c.trackW || root.clientWidth;
         reset();
       } catch (e) {
         hint.innerHTML = '验证加载失败,点此重试';
@@ -79,14 +70,16 @@ window.LJCaptcha = (function () {
       curX = 0; handle.style.left = '3px'; fill.style.width = '0px';
       handle.innerHTML = ARROW_SVG;
       root.classList.remove('ok', 'err');
-      hint.style.display = 'flex'; hint.innerHTML = '拖动滑块对齐缺口<span class="arrows">›››</span>';
+      hint.style.display = 'flex'; hint.innerHTML = '拖动滑块到最右端完成验证<span class="arrows">›››</span>';
       root.onclick = null;
       if (onReset) onReset();
     }
 
+    // 轨道可拖最大像素(末端)。提交时按 trackW 换算到服务端坐标。
+    function maxTravel() { return root.clientWidth - HANDLE_W - 6; }
+
     function setX(x) {
-      const max = root.clientWidth - HANDLE_W - 6;
-      curX = Math.max(0, Math.min(max, x));
+      curX = Math.max(0, Math.min(maxTravel(), x));
       handle.style.left = (curX + 3) + 'px';
       fill.style.width = (curX + HANDLE_W) + 'px';
       hint.style.display = 'none';
@@ -95,13 +88,15 @@ window.LJCaptcha = (function () {
     async function release() {
       if (!dragging) return;
       dragging = false;
-      // 前端落点换算到服务端轨宽坐标(缺口 x 以 trackW 为基)
-      const scale = trackW / (root.clientWidth || trackW);
-      const submitX = Math.round(curX * scale);
+      const max = maxTravel();
+      // 没拖到底:直接弹回,不打服务端(省一次请求 + 不消费 challenge)
+      if (curX < max - 4) { snapBack(); return; }
+      // 拖到底:提交服务端坐标的末端值(trackW),服务端按"到末端"判过
       try {
-        const r = await LJ.post('/captcha/verify', { challengeId, x: submitX });
+        const r = await LJ.post('/captcha/verify', { challengeId, x: trackW });
         token = r.captchaToken;
         root.classList.add('ok');
+        handle.style.left = (max + 3) + 'px'; fill.style.width = (max + HANDLE_W) + 'px';
         handle.innerHTML = CHECK_SVG;
         hint.style.display = 'flex'; hint.innerHTML = '验证通过';
         if (onPass) onPass(token);
@@ -109,6 +104,15 @@ window.LJCaptcha = (function () {
         root.classList.add('err');
         setTimeout(load, 450); // 失败重新出题
       }
+    }
+
+    // 未拖到底:动画弹回起点 + 恢复提示
+    function snapBack() {
+      handle.style.transition = 'left .2s var(--ease,ease)';
+      fill.style.transition = 'width .2s var(--ease,ease)';
+      curX = 0; handle.style.left = '3px'; fill.style.width = '0px';
+      hint.style.display = 'flex';
+      setTimeout(() => { handle.style.transition = ''; fill.style.transition = ''; }, 220);
     }
 
     function onDown(e) {

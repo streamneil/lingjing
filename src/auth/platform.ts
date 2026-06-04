@@ -42,12 +42,12 @@ export function bootstrapSuperadmin(): void {
   console.log(`[超管] 初始平台超管已创建:${username}(密码取自 SUPERADMIN_PASS)`);
 }
 
-// ── 滑块行为验证 ──
+// ── 滑块行为验证(拖到底式)──
+// 简单直觉:把滑块拖到最右端即过(无缺口对齐认知负担)。challenge 仍发一次性行,
+// 保留"一次性 token"安全语义;target_x 固定为轨道末端,verify 判断是否拖到末端附近。
 const CAPTCHA_TTL_MS = 2 * 60 * 1000; // challenge / token 2 分钟过期
-const CAPTCHA_TOLERANCE = 6; // 位置比对容差(px)
-const CAPTCHA_TRACK_W = 280; // 滑轨宽度(前端一致)
-const CAPTCHA_GAP_MIN = 60; // 缺口最小 x(避开两端)
-const CAPTCHA_GAP_MAX = 240;
+const CAPTCHA_TRACK_W = 280; // 滑轨参考宽度(前端按实际轨宽换算后提交,服务端按此判末端)
+const CAPTCHA_END_THRESHOLD = 12; // 距末端 ≤ 此值(px,服务端坐标)算"拖到底"
 
 /** 惰性清理过期 challenge / token(每次出题/校验顺带,免定时 job)。 */
 function sweepCaptcha(): void {
@@ -56,34 +56,31 @@ function sweepCaptcha(): void {
   db.prepare(`DELETE FROM captcha_token WHERE expires_at < ?`).run(t);
 }
 
-/** 出题:生成缺口 x(存服务端),返回 challenge_id + 缺口位置供前端渲染拼图。
- *  注意:target_x 也返回给前端用于"画缺口图"——前端需要知道缺口在哪才能画,
- *  但校验时服务端用自己存的值比对前端提交的滑块落点,前端篡改返回值无用
- *  (它改的是自己画的图,服务端比的是自己存的 target)。真挡的是不渲染滑块、
- *  直接 POST /login 的无头脚本(没 token 直接 400)。 */
-export function createCaptchaChallenge(): { challengeId: string; gapX: number; trackW: number } {
+/** 出题:发一次性 challenge 行(target_x 固定为轨道末端),返回 challenge_id + trackW。
+ *  前端把滑块拖到最右端即过,无需知道缺口位置(拖到底式,直觉)。
+ *  真挡的是不渲染滑块、直接 POST /login 的无头脚本(没 token 直接 400)。 */
+export function createCaptchaChallenge(): { challengeId: string; trackW: number } {
   sweepCaptcha();
-  // 伪随机缺口位置:用 token 字节派生(环境禁用 Math.random,且这里只需不可预测性中等)。
-  const seed = parseInt(genToken().slice(0, 8), 16);
-  const gapX = CAPTCHA_GAP_MIN + (seed % (CAPTCHA_GAP_MAX - CAPTCHA_GAP_MIN));
   const id = randomUUID();
   const t = now();
+  // target_x = 轨道末端(trackW);verify 判断提交 x 是否拖到末端附近。
   db.prepare(
     `INSERT INTO captcha_challenge (id,target_x,created_at,expires_at) VALUES (?,?,?,?)`,
-  ).run(id, gapX, t, t + CAPTCHA_TTL_MS);
-  return { challengeId: id, gapX, trackW: CAPTCHA_TRACK_W };
+  ).run(id, CAPTCHA_TRACK_W, t, t + CAPTCHA_TTL_MS);
+  return { challengeId: id, trackW: CAPTCHA_TRACK_W };
 }
 
-/** 校验滑块落点。位置在容差内 → 消费 challenge + 发一次性 token。失败/过期 → null。 */
+/** 校验:滑块拖到末端附近(距 target_x ≤ 阈值)→ 消费 challenge + 发一次性 token。失败/过期 → null。 */
 export function verifyCaptchaSlide(challengeId: string, x: number): string | null {
   sweepCaptcha();
   const row = db
     .prepare(`SELECT target_x, expires_at FROM captcha_challenge WHERE id=?`)
     .get(challengeId) as { target_x: number; expires_at: number } | undefined;
   if (!row || row.expires_at < now()) return null;
-  // challenge 一次性:无论成败都删(防同一 challenge 暴力试 x)
+  // challenge 一次性:无论成败都删(防同一 challenge 暴力试)
   db.prepare(`DELETE FROM captcha_challenge WHERE id=?`).run(challengeId);
-  if (!Number.isFinite(x) || Math.abs(x - row.target_x) > CAPTCHA_TOLERANCE) return null;
+  // 拖到底:x 达到末端附近即过(x >= target_x - 阈值)。
+  if (!Number.isFinite(x) || x < row.target_x - CAPTCHA_END_THRESHOLD) return null;
   const token = genToken();
   const t = now();
   db.prepare(
