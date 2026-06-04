@@ -13,7 +13,7 @@
 
       <div class="set-card" style="animation-delay:.04s">
         <h3>机构信息</h3><div class="h-desc">您的账号所属一个机构（工作空间）。机构内的形象、音色、作品相互隔离。</div>
-        <div class="set-row"><div class="info"><div class="k">机构名称</div><div class="v">展示在系统各处与生成记录中,建议填写机构全称(如「XX 市融媒体中心」)</div></div><div class="ctl"><div style="display:flex;gap:8px;align-items:center"><input class="iline" id="orgName" style="padding:9px 13px;width:220px" value=""><button class="btn btn-dark" onclick="saveOrgName()">保存</button></div></div></div>
+        <div class="set-row"><div class="info"><div class="k">机构名称</div><div class="v">展示在系统各处与生成记录中,建议填写机构全称(如「XX 市融媒体中心」)</div></div><div class="ctl"><div style="display:flex;gap:8px;align-items:center"><input id="orgName" style="padding:9px 13px;width:220px;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;color:var(--t1);font-size:14px;font-family:var(--f);outline:none" value=""><button class="btn btn-dark" onclick="saveOrgName()">保存</button></div></div></div>
         <div class="set-row"><div class="info"><div class="k">机构 Logo</div><div class="v">显示在侧栏品牌区。建议透明背景 PNG，≤5MB（PNG / JPEG / WEBP）</div></div><div class="ctl"><div style="display:flex;gap:10px;align-items:center"><div id="logoPreview" style="width:40px;height:40px;border-radius:9px;background:var(--field,#121214);border:1px solid var(--line);background-size:contain;background-position:center;background-repeat:no-repeat"></div><input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="uploadLogo()"><button class="btn btn-dark" onclick="document.getElementById('logoFile').click()">上传</button></div></div></div>
         <div class="set-row"><div class="info"><div class="k">交付模式</div><div class="v">部署时确定，如需变更请联系部署方</div></div><div class="ctl"><span class="bdg bdg-role" id="deliveryBadge">托管</span></div></div>
       </div>
@@ -21,7 +21,7 @@
       <div class="set-card" style="animation-delay:.12s">
         <h3>内容合规与 AI 标识</h3><div class="h-desc">融媒体 / 政企硬性要求：生成内容添加 AI 生成标识，并对文案做敏感词预检。</div>
         <div class="set-row"><div class="info"><div class="k">AI 生成标识(水印)</div><div class="v">在生成视频右下角添加“AI 合成”标识与元数据</div></div><div class="ctl"><div class="switch on" id="aiLabelSwitch" onclick="this.classList.toggle('on');saveAiLabel()"><i></i></div></div></div>
-        <div class="set-row"><div class="info"><div class="k">AI 标识文案</div><div class="v">水印显示的文字（≤20 字，默认「AI 合成」）</div></div><div class="ctl"><div style="display:flex;gap:8px;align-items:center"><input class="iline" id="aiLabelText" maxlength="20" style="padding:9px 13px;width:180px" placeholder="AI 合成"><button class="btn btn-dark" onclick="saveLabelText()">保存</button></div></div></div>
+        <div class="set-row"><div class="info"><div class="k">AI 标识文案</div><div class="v">水印显示的文字（≤20 字，默认「AI 合成」）</div></div><div class="ctl"><div style="display:flex;gap:8px;align-items:center"><input id="aiLabelText" maxlength="20" style="padding:9px 13px;width:180px;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;color:var(--t1);font-size:14px;font-family:var(--f);outline:none" placeholder="AI 合成"><button class="btn btn-dark" onclick="saveLabelText()">保存</button></div></div></div>
         <div class="set-row"><div class="info"><div class="k">敏感词预检</div><div class="v">生成前对文案做本地敏感词预检（不可关闭，合规要求）</div></div><div class="ctl"><span class="bdg bdg-ok">已启用</span></div></div>
       </div>
 
