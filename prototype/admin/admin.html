@@ -159,10 +159,8 @@
         <div class="msec-h">机构设置</div>
         <label>机构名称</label>
         <input id="mName" placeholder="机构名称">
-        <div class="mrow2">
-          <div><label>创作席位上限</label><input id="mSeats" type="number" min="1"></div>
-          <div><label>交付模式</label><select id="mDelivery"><option value="hosted">托管</option><option value="private">私有化</option></select></div>
-        </div>
+        <label>创作席位上限</label>
+        <input id="mSeats" type="number" min="1">
         <div class="mmsg" id="mSetMsg"></div>
         <div style="margin-top:10px"><button class="ok" style="width:auto;padding:9px 18px;border-radius:999px" id="mSetBtn" onclick="saveTenantSettings()">保存设置</button></div>
       </div>
@@ -284,7 +282,6 @@
     document.getElementById('mSub').textContent='机构 ID '+t.id;
     document.getElementById('mName').value=t.name;
     document.getElementById('mSeats').value=t.max_creator_seats;
-    document.getElementById('mDelivery').value=t.delivery;
     document.getElementById('mSetMsg').textContent='';
     document.getElementById('manageOv').classList.add('on');
     await loadTenantUsers();
@@ -293,14 +290,13 @@
   async function saveTenantSettings(){
     const name=document.getElementById('mName').value.trim();
     const maxCreatorSeats=parseInt(document.getElementById('mSeats').value,10);
-    const delivery=document.getElementById('mDelivery').value;
     const msg=document.getElementById('mSetMsg');
     if(!name){ msg.textContent='机构名称不能为空'; return; }
     const btn=document.getElementById('mSetBtn'); btn.disabled=true;
     try{
-      await PA('PUT',`/api/tenants/${mgTenant.id}`,{name,maxCreatorSeats,delivery});
+      await PA('PUT',`/api/tenants/${mgTenant.id}`,{name,maxCreatorSeats}); // 交付模式不在 admin 设置
       msg.style.color='var(--green)'; msg.textContent='✓ 已保存';
-      mgTenant.name=name; mgTenant.delivery=delivery; mgTenant.max_creator_seats=maxCreatorSeats;
+      mgTenant.name=name; mgTenant.max_creator_seats=maxCreatorSeats;
       document.getElementById('mTitle').textContent='管理 · '+name;
       await load(); // 刷新主表
       setTimeout(()=>{ msg.textContent=''; msg.style.color='var(--red)'; },1500);
