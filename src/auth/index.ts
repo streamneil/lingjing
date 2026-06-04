@@ -196,6 +196,55 @@ export function listUsers(tenantId: string): Omit<UserRow, 'password_hash'>[] {
     .all(tenantId) as Omit<UserRow, 'password_hash'>[];
 }
 
+// ── 平台超管专用(在租户之上,无旧密码校验)──
+//
+// 与租户自助操作的区别:超管重置密码不需要旧密码(运营帮租户找回),且作废该用户
+// 所有 session 强制重登。租户名改:租户侧只读(ORG_NAME_READONLY),仅超管能改。
+
+/** 超管重置某用户密码(免旧密码)。重置后作废其所有 session。返回 false=用户不存在。 */
+export function adminResetPassword(tenantId: string, userId: string, newPassword: string): boolean {
+  if (!newPassword || newPassword.length < 6) throw new Error('新密码至少 6 位');
+  const u = db.prepare(`SELECT 1 FROM user WHERE id=? AND tenant_id=?`).get(userId, tenantId);
+  if (!u) return false;
+  const tx = db.transaction(() => {
+    db.prepare(`UPDATE user SET password_hash=? WHERE id=? AND tenant_id=?`).run(hashPassword(newPassword), userId, tenantId);
+    db.prepare(`DELETE FROM session WHERE user_id=?`).run(userId); // 作废所有 session,强制重登
+  });
+  tx();
+  return true;
+}
+
+/** 超管改租户配置(name / max_creator_seats / delivery)。只更新传入的字段。返回 false=租户不存在。 */
+export function updateTenant(
+  tenantId: string,
+  patch: { name?: string; maxCreatorSeats?: number; delivery?: 'hosted' | 'private' },
+): boolean {
+  const t = db.prepare(`SELECT 1 FROM tenant WHERE id=?`).get(tenantId);
+  if (!t) return false;
+  const sets: string[] = [];
+  const vals: (string | number)[] = [];
+  if (patch.name !== undefined) {
+    const name = patch.name.trim();
+    if (!name) throw new Error('机构名称不能为空');
+    sets.push('name=?'); vals.push(name);
+  }
+  if (patch.maxCreatorSeats !== undefined) {
+    if (!Number.isInteger(patch.maxCreatorSeats) || patch.maxCreatorSeats < 1) throw new Error('席位上限须为正整数');
+    // 不能把上限降到低于当前持席位创作者数(否则现有创作者被锁,统计卡显示超额)
+    const held = countCreatorsHoldingSeat(tenantId);
+    if (patch.maxCreatorSeats < held) throw new Error(`席位上限不能低于当前已用席位数(${held})`);
+    sets.push('max_creator_seats=?'); vals.push(patch.maxCreatorSeats);
+  }
+  if (patch.delivery !== undefined) {
+    if (patch.delivery !== 'hosted' && patch.delivery !== 'private') throw new Error('交付模式非法');
+    sets.push('delivery=?'); vals.push(patch.delivery);
+  }
+  if (!sets.length) return true; // 无字段变更,幂等
+  vals.push(tenantId);
+  db.prepare(`UPDATE tenant SET ${sets.join(', ')} WHERE id=?`).run(...vals);
+  return true;
+}
+
 // ── 登录 / 会话 ──
 export interface AuthedUser {
   id: string;

@@ -67,6 +67,24 @@
   .mbtns .cancel{border:1px solid var(--line);background:none;color:var(--t2)}
   .mbtns .ok{border:none;background:var(--amber);color:#0A0A0B}
   .mbtns .ok:disabled{opacity:.5;cursor:not-allowed}
+  /* 租户详情宽弹窗 */
+  .modal.mwide{width:540px;max-height:86vh;overflow-y:auto}
+  .msec{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+  .msec:first-of-type{margin-top:14px}
+  .msec-h{font-size:12px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;font-family:var(--f-en);margin-bottom:4px}
+  .mrow2{display:flex;gap:12px}
+  .mrow2>div{flex:1}
+  .muser-list{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+  .muser{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .muser .ui{min-width:0}
+  .muser .un{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .muser .meta{font-size:11px;color:var(--t4);margin-top:2px;font-family:var(--f-mono)}
+  .muser .uacts{display:flex;gap:6px;flex-shrink:0}
+  .rbdg{display:inline-block;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:600;margin-left:6px;vertical-align:middle}
+  .rbdg-admin{background:rgba(255,178,62,.13);color:var(--amber)}
+  .rbdg-creator{background:var(--blue-bg);color:var(--blue)}
+  .rbdg-viewer{background:rgba(255,255,255,.06);color:var(--t3)}
+  .rbdg-off{background:rgba(255,82,71,.13);color:var(--red)}
   .toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:var(--card-hi);border:1px solid var(--line-hi);color:var(--t1);padding:12px 20px;border-radius:12px;font-size:13.5px;box-shadow:var(--sh-pop);z-index:500;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(-4px)}
 </style>
@@ -90,15 +108,13 @@
     </div>
   </div>
 
-  <!-- 新建租户 -->
+  <!-- 新建租户(只建托管;私有化是独立部署交付,不在此管理)-->
   <div class="ov" id="tenantOv">
     <div class="modal">
       <h3>新建租户</h3>
-      <p class="mdesc">为新机构开通账号。机构名称由平台设定,租户用户不能自行修改。</p>
+      <p class="mdesc">为新机构开通托管账号。机构名称由平台设定,租户用户不能自行修改;创建后可在「管理」里改名/调整配置。</p>
       <label>机构名称</label>
       <input id="tName" placeholder="如:XX 区融媒体中心">
-      <label>交付模式</label>
-      <select id="tDelivery"><option value="hosted">托管(hosted)</option><option value="private">私有化(private)</option></select>
       <div class="mmsg" id="tMsg"></div>
       <div class="mbtns"><button class="cancel" onclick="closeOv('tenantOv')">取消</button><button class="ok" id="tOk" onclick="submitTenant()">创建</button></div>
     </div>
@@ -130,6 +146,46 @@
       <div class="qa"><button data-v="1000">+1,000</button><button data-v="5000">+5,000</button><button data-v="10000">+10,000</button></div>
       <div class="mmsg" id="gMsg"></div>
       <div class="mbtns"><button class="cancel" onclick="closeOv('grantOv')">取消</button><button class="ok" id="gOk" onclick="submitGrant()">确认充值</button></div>
+    </div>
+  </div>
+
+  <!-- 租户详情管理(改名/席位/交付 + 用户列表)-->
+  <div class="ov" id="manageOv">
+    <div class="modal mwide">
+      <h3 id="mTitle">租户管理</h3>
+      <p class="mdesc" id="mSub"></p>
+
+      <div class="msec">
+        <div class="msec-h">机构设置</div>
+        <label>机构名称</label>
+        <input id="mName" placeholder="机构名称">
+        <div class="mrow2">
+          <div><label>创作席位上限</label><input id="mSeats" type="number" min="1"></div>
+          <div><label>交付模式</label><select id="mDelivery"><option value="hosted">托管</option><option value="private">私有化</option></select></div>
+        </div>
+        <div class="mmsg" id="mSetMsg"></div>
+        <div style="margin-top:10px"><button class="ok" style="width:auto;padding:9px 18px;border-radius:999px" id="mSetBtn" onclick="saveTenantSettings()">保存设置</button></div>
+      </div>
+
+      <div class="msec">
+        <div class="msec-h">用户(<span id="mUserCount">0</span>)</div>
+        <div id="mUsers" class="muser-list"><div class="empty" style="padding:20px">加载中…</div></div>
+      </div>
+
+      <div class="mbtns"><button class="cancel" onclick="closeOv('manageOv')" style="flex:none;padding:11px 24px">关闭</button></div>
+    </div>
+  </div>
+
+  <!-- 重置密码(二级弹窗)-->
+  <div class="ov" id="resetOv" style="z-index:420">
+    <div class="modal">
+      <h3>重置密码</h3>
+      <p class="mdesc" id="rFor"></p>
+      <label>新密码(至少 6 位)</label>
+      <input id="rPass" type="text" placeholder="设置新密码">
+      <p style="font-size:11.5px;color:var(--t4);margin-top:8px">重置后该用户当前所有登录会话立即失效,需用新密码重新登录。</p>
+      <div class="mmsg" id="rMsg"></div>
+      <div class="mbtns"><button class="cancel" onclick="closeOv('resetOv')">取消</button><button class="ok" id="rOk" onclick="submitReset()">确认重置</button></div>
     </div>
   </div>
 
@@ -170,6 +226,7 @@
           <td><div class="acts">
             <button class="act" onclick='openUser(${JSON.stringify(t.id)},${JSON.stringify(t.name)})'>开户</button>
             <button class="act pri" onclick='openGrantFor(${JSON.stringify(t.id)},${JSON.stringify(t.name)})'>充值</button>
+            <button class="act" onclick='openManage(${JSON.stringify(t.id)})'>管理</button>
           </div></td>
         </tr>`).join('');
     }catch(e){ /* 401 已跳转 */ }
@@ -180,11 +237,10 @@
   function openTenant(){ document.getElementById('tName').value=''; document.getElementById('tMsg').textContent=''; document.getElementById('tenantOv').classList.add('on'); }
   async function submitTenant(){
     const name=document.getElementById('tName').value.trim();
-    const delivery=document.getElementById('tDelivery').value;
     const msg=document.getElementById('tMsg');
     if(!name){ msg.textContent='机构名称不能为空'; return; }
     const ok=document.getElementById('tOk'); ok.disabled=true;
-    try{ await PA('POST','/api/tenants',{name,delivery}); closeOv('tenantOv'); toast('✓ 租户已创建'); await load(); }
+    try{ await PA('POST','/api/tenants',{name}); closeOv('tenantOv'); toast('✓ 租户已创建'); await load(); }
     catch(e){ msg.textContent=e.message; } finally{ ok.disabled=false; }
   }
 
@@ -212,6 +268,84 @@
     const ok=document.getElementById('gOk'); ok.disabled=true; ok.textContent='充值中…'; // 防双击（D6）
     try{ const r=await PA('POST',`/api/tenants/${curTenant}/grant`,{amount}); closeOv('grantOv'); toast(`✓ 已充值 ${fmtN(amount)} 点，当前余额 ${fmtN(r.balance)}`); await load(); }
     catch(e){ msg.textContent=e.message; } finally{ ok.disabled=false; ok.textContent='确认充值'; }
+  }
+
+  // ── 租户详情管理 ──
+  let mgTenant=null;       // 当前管理的租户对象(含 name/delivery/max_creator_seats)
+  let resetUser=null;      // 当前重置密码的目标用户
+
+  async function openManage(id){
+    // 从已加载的租户列表拿基础信息(再补 max_creator_seats —— 列表已含)
+    const { tenants }=await PA('GET','/api/tenants');
+    const t=tenants.find(x=>x.id===id);
+    if(!t){ toast('租户不存在'); return; }
+    mgTenant=t;
+    document.getElementById('mTitle').textContent='管理 · '+t.name;
+    document.getElementById('mSub').textContent='机构 ID '+t.id;
+    document.getElementById('mName').value=t.name;
+    document.getElementById('mSeats').value=t.max_creator_seats;
+    document.getElementById('mDelivery').value=t.delivery;
+    document.getElementById('mSetMsg').textContent='';
+    document.getElementById('manageOv').classList.add('on');
+    await loadTenantUsers();
+  }
+
+  async function saveTenantSettings(){
+    const name=document.getElementById('mName').value.trim();
+    const maxCreatorSeats=parseInt(document.getElementById('mSeats').value,10);
+    const delivery=document.getElementById('mDelivery').value;
+    const msg=document.getElementById('mSetMsg');
+    if(!name){ msg.textContent='机构名称不能为空'; return; }
+    const btn=document.getElementById('mSetBtn'); btn.disabled=true;
+    try{
+      await PA('PUT',`/api/tenants/${mgTenant.id}`,{name,maxCreatorSeats,delivery});
+      msg.style.color='var(--green)'; msg.textContent='✓ 已保存';
+      mgTenant.name=name; mgTenant.delivery=delivery; mgTenant.max_creator_seats=maxCreatorSeats;
+      document.getElementById('mTitle').textContent='管理 · '+name;
+      await load(); // 刷新主表
+      setTimeout(()=>{ msg.textContent=''; msg.style.color='var(--red)'; },1500);
+    }catch(e){ msg.style.color='var(--red)'; msg.textContent=e.message; }
+    finally{ btn.disabled=false; }
+  }
+
+  async function loadTenantUsers(){
+    const box=document.getElementById('mUsers');
+    try{
+      const { users }=await PA('GET',`/api/tenants/${mgTenant.id}/users`);
+      document.getElementById('mUserCount').textContent=users.length;
+      if(!users.length){ box.innerHTML='<div class="empty" style="padding:20px">该租户暂无用户</div>'; return; }
+      const ROLE={admin:['rbdg-admin','管理员'],creator:['rbdg-creator','创作者'],viewer:['rbdg-viewer','查看者']};
+      box.innerHTML=users.map(u=>{
+        const r=ROLE[u.role]||['rbdg-viewer',u.role];
+        const off=u.status==='disabled';
+        return `<div class="muser">
+          <div class="ui"><div class="un">${esc(u.display_name||u.username)}<span class="rbdg ${r[0]}">${r[1]}</span>${off?'<span class="rbdg rbdg-off">已停用</span>':''}</div>
+            <div class="meta">${esc(u.username)}</div></div>
+          <div class="uacts">
+            <button class="act" onclick='openReset(${JSON.stringify(u.id)},${JSON.stringify(u.username)})'>重置密码</button>
+            <button class="act" onclick='toggleUser(${JSON.stringify(u.id)},${off?'"enable"':'"disable"'})'>${off?'启用':'停用'}</button>
+          </div></div>`;
+      }).join('');
+    }catch(e){ box.innerHTML='<div class="empty" style="padding:20px">加载失败</div>'; }
+  }
+
+  function openReset(uid,username){
+    resetUser=uid;
+    document.getElementById('rFor').textContent=`为用户「${username}」设置新密码`;
+    document.getElementById('rPass').value=''; document.getElementById('rMsg').textContent='';
+    document.getElementById('resetOv').classList.add('on');
+  }
+  async function submitReset(){
+    const newPassword=document.getElementById('rPass').value;
+    const msg=document.getElementById('rMsg');
+    if(!newPassword||newPassword.length<6){ msg.textContent='新密码至少 6 位'; return; }
+    const ok=document.getElementById('rOk'); ok.disabled=true;
+    try{ await PA('POST',`/api/tenants/${mgTenant.id}/users/${resetUser}/reset-password`,{newPassword}); closeOv('resetOv'); toast('✓ 密码已重置,该用户需重新登录'); }
+    catch(e){ msg.textContent=e.message; } finally{ ok.disabled=false; }
+  }
+  async function toggleUser(uid,action){
+    try{ await PA('POST',`/api/tenants/${mgTenant.id}/users/${uid}/${action}`); toast(action==='disable'?'✓ 已停用':'✓ 已启用'); await loadTenantUsers(); await load(); }
+    catch(e){ toast(e.message); }
   }
 
   document.getElementById('logoutBtn').onclick=async()=>{ try{ await PA('POST','/logout'); }catch{} location.href='/admin/login'; };
