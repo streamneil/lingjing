@@ -182,6 +182,12 @@ img { display: block; }
 .av:hover .av-cta, .av.pinned .av-cta { opacity: 1; transform: translateY(0); }
 .av-cta:hover { background: #fff; }
 
+/* 当前选中态:蓝边框 + 右上勾选徽章,一眼可辨"在用哪个" */
+.av.selected { border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue), var(--sh-card); }
+.av.selected .av-cta { opacity: 1; transform: translateY(0); background: var(--blue); color: #fff; }
+.av-check { position: absolute; top: 13px; right: 13px; width: 26px; height: 26px; border-radius: 50%; background: var(--blue); display: grid; place-items: center; color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.4); z-index: 2; }
+.av-check svg { width: 15px; height: 15px; }
+
 /* 创建卡 */
 .av.new { background: transparent; border: 1.5px dashed var(--line-hi); display: grid; place-items: center; box-shadow: none; }
 .av.new:hover { border-color: var(--t3); background: var(--card); transform: translateY(-6px); }

@@ -107,7 +107,7 @@
     <div class="sf-close" onclick="closeSheet('appearance')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
   </div>
   <div class="sf-body">
-    <div class="grid-av" id="avSheetGrid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));max-width:780px;">
+    <div class="grid-av" id="avSheetGrid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));max-width:1080px;margin:0 auto;">
       <div style="color:var(--t4);padding:20px">加载形象中…</div>
     </div>
   </div>
@@ -222,12 +222,17 @@
       // 自定义形象排在预置前面:用户刚建好的形象应当是默认,而不是预置晓琳
       const myAvatars = (av.custom||[]).filter(a=>a.status==='ready');
       const items = [...myAvatars, ...(av.presets||[])];
-      grid.innerHTML = items.map(a=>{
+      const checkSvg = '<div class="av-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></div>';
+      const avCards = items.map(a=>{
         const bg = a.thumb ? `background-image:url('${a.thumb}')` : 'background:linear-gradient(160deg,#33333A,#1A1A1E)';
-        return `<div class="av" onclick='pickAvatar(${JSON.stringify({id:a.id,name:a.name,thumb:a.thumb||'',orientation:a.orientation||'portrait'}).replace(/'/g,"&#39;")})'><div class="av-img" style="${bg}"></div><div class="av-veil"></div><div class="av-name">${esc(a.name)}</div><div class="av-cta">选择此形象</div></div>`;
-      }).join('') || '<div style="color:var(--t4);padding:20px">暂无形象</div>';
-      // 默认选第一个:有自定义形象优先选自定义,否则选预置
-      if(!selectedAvatar && items[0]) pickAvatar({id:items[0].id,name:items[0].name,thumb:items[0].thumb||''}, true);
+        const sel = selectedAvatar && selectedAvatar.id===a.id;
+        return `<div class="av${sel?' selected':''}" data-avid="${a.id}" onclick='pickAvatar(${JSON.stringify({id:a.id,name:a.name,thumb:a.thumb||'',orientation:a.orientation||'portrait'}).replace(/'/g,"&#39;")})'><div class="av-img" style="${bg}"></div><div class="av-veil"></div>${sel?checkSvg:''}<div class="av-name">${esc(a.name)}</div><div class="av-cta">${sel?'✓ 当前使用':'选择此形象'}</div></div>`;
+      }).join('');
+      // 上传卡:跳形象库走完整上传+授权流程(不在此重做)。
+      const uploadCard = `<div class="av new" onclick="location.href='avatars.html'"><div class="av-new-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg><span>上传自己的形象</span></div></div>`;
+      grid.innerHTML = (avCards + uploadCard) || '<div style="color:var(--t4);padding:20px">暂无形象</div>';
+      // 默认选第一个:有自定义形象优先选自定义,否则选预置(带 orientation,首屏比例提示也准)
+      if(!selectedAvatar && items[0]) pickAvatar({id:items[0].id,name:items[0].name,thumb:items[0].thumb||'',orientation:items[0].orientation||'portrait'}, true);
     }catch(e){}
     try{
       const vc = await LJ.get('/voices');
@@ -263,6 +268,15 @@
     const r=RATIO_CN[a.orientation]||'竖屏 9:16';
     const hint=document.getElementById('ratioHint');
     if(hint) hint.innerHTML=`本次视频:<b style="color:var(--t2)">${r}</b>(由所选形象图决定);清晰度可选 480P / 720P。`;
+    // sheet 内选中态跟随:高亮当前卡(蓝边框+勾选+"当前使用"),其余复位。
+    document.querySelectorAll('#avSheetGrid .av[data-avid]').forEach(el=>{
+      const on = el.dataset.avid===a.id;
+      el.classList.toggle('selected', on);
+      let chk = el.querySelector('.av-check');
+      if(on && !chk){ chk=document.createElement('div'); chk.className='av-check'; chk.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>'; el.insertBefore(chk, el.querySelector('.av-name')); }
+      else if(!on && chk){ chk.remove(); }
+      const cta=el.querySelector('.av-cta'); if(cta) cta.textContent = on?'✓ 当前使用':'选择此形象';
+    });
     if(!silent) closeSheet('appearance');
     refreshCreateBtn();
   }
