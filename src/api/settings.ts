@@ -85,12 +85,12 @@ settingsRouter.put('/settings', requireRole('admin'), (req: Request, res: Respon
   if (delivery !== undefined) {
     return res.status(400).json({ error: '交付模式不可运行时修改,请联系部署方', code: 'DELIVERY_READONLY' });
   }
+  // 机构名称只读:开通账号时平台设定,用户不可改(防 curl 改名)。
+  if (orgName !== undefined) {
+    return res.status(400).json({ error: '机构名称不可修改,请联系平台', code: 'ORG_NAME_READONLY' });
+  }
   if (defaultResolution !== undefined && !['720P', '480P'].includes(defaultResolution)) {
     return res.status(400).json({ error: '默认分辨率非法(仅 720P / 480P)' });
-  }
-
-  if (typeof orgName === 'string' && orgName.trim()) {
-    db.prepare(`UPDATE tenant SET name=? WHERE id=?`).run(orgName.trim(), tenantId);
   }
   if (typeof aiLabelEnabled === 'boolean') {
     setSetting(tenantId, 'ai_label_enabled', String(aiLabelEnabled));
