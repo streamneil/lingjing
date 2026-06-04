@@ -60,6 +60,24 @@ describe('积分流转', () => {
     expect(balance(T)).toBe(100); // 还回了,失败不扣
   });
 
+  it('release 幂等:重复调用不重复退款(回归 — 失败重试曾导致积分凭空增加)', () => {
+    grant(T, 100);
+    reserve(T, 'j1', 30);
+    release(T, 'j1');
+    release(T, 'j1'); // 第二次(模拟失败处理被触发两次 / 重试后再失败)
+    release(T, 'j1'); // 第三次
+    expect(balance(T)).toBe(100); // 仍是 100,不能变成 130/160
+  });
+
+  it('settle 后再 release 不重复退款(成功任务不应被释放)', () => {
+    grant(T, 100);
+    reserve(T, 'j1', 30);
+    settle(T, 'j1', 30); // 成功结算,净扣 30
+    expect(balance(T)).toBe(70);
+    release(T, 'j1'); // 误触发释放
+    expect(balance(T)).toBe(70); // 仍扣着 30,不能退回变 100
+  });
+
   it('余额不足时 reserve 抛错,不产生负余额', () => {
     grant(T, 10);
     expect(() => reserve(T, 'j1', 50)).toThrow('余额不足');
