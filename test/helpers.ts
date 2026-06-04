@@ -114,8 +114,8 @@ export class Client {
    *  loginPath 默认租户登录 /api/login;超管登录传 /admin/login。 */
   async login(username: string, password: string, loginPath = '/api/login'): Promise<Res> {
     const ch = await this.request('GET', '/api/captcha/challenge');
-    // 服务端容差内即过:直接提交缺口目标 x(测试不模拟真人拖拽)
-    const v = await this.request('POST', '/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.gapX });
+    // 拖到底式:提交末端 x(trackW),服务端按"到末端"判过(测试不模拟真人拖拽)
+    const v = await this.request('POST', '/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.trackW });
     return this.request('POST', loginPath, { username, password, captchaToken: v.body.captchaToken });
   }
 
