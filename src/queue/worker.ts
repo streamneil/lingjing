@@ -55,17 +55,18 @@ async function resolveImageUrl(avatarRef: string, tenantId: string): Promise<str
   throw new Error(`形象不可用:${avatarRef}`);
 }
 
-/** 把 voiceRef 解析为 CosyVoice 可用的音色标识。 */
-function resolveVoiceName(voiceRef: string, tenantId: string): string {
-  if (isPresetVoice(voiceRef)) return voiceRef; // 预置音色名(longjing 等)直接用
+/** 把 voiceRef 解析为 {voice, model}。
+ *  预置音色用 ttsModel(v1,免费、够用);克隆音色用 cloneModel(v3.5,保真度高,
+ *  复刻与合成必须同模型)。复刻未产出则回退预置(v1)。 */
+function resolveVoice(voiceRef: string, tenantId: string): { voice: string; model: string } {
+  if (isPresetVoice(voiceRef)) return { voice: voiceRef, model: config.baichuan.ttsModel };
   const clone = getVoice(voiceRef, tenantId);
-  if (clone) {
-    // 真实声音复刻:用百炼返回的 provider_voice_id 合成本人声音。
-    // 若复刻未产出(降级 failed),回退预置音色避免任务整体失败。
-    return clone.provider_voice_id || DEFAULT_PRESET_VOICE;
+  if (clone?.provider_voice_id) {
+    // 真实声音复刻:voice_id + 同复刻模型 = 本人声音
+    return { voice: clone.provider_voice_id, model: config.baichuan.cloneModel };
   }
-  // 兜底:用默认预置,避免整个任务因音色解析失败而崩
-  return DEFAULT_PRESET_VOICE;
+  // 克隆未产出 / 解析失败:回退预置音色(v1),避免任务整体失败
+  return { voice: DEFAULT_PRESET_VOICE, model: config.baichuan.ttsModel };
 }
 
 // 默认回退音色:cosyvoice-v1 合法音色名(新闻播报场景)
@@ -84,9 +85,9 @@ async function processJob(job: JobRow): Promise<void> {
   const imageUrl = await resolveImageUrl(input.avatarRef, job.tenant_id);
   //    2b. 文案 → CosyVoice TTS → 音频 → 落 MinIO → 公网签名 URL
   //        (wan2.2-s2v 不做 TTS,需现成音频;这是查证后的真实链路)
-  const voice = resolveVoiceName(input.voiceRef, job.tenant_id);
+  const { voice, model: ttsModel } = resolveVoice(input.voiceRef, job.tenant_id);
   const audioBuf = await synthesizeSpeech({
-    text: input.script, voice,
+    text: input.script, voice, model: ttsModel,
     rate: input.speed ?? 1, volume: input.volume ?? 50,
   });
   // wan2.2-s2v 硬约束:音频 <20s 且 <15M,超了会被百炼直接拒。提前拦截给清晰错误。

@@ -115,7 +115,7 @@ export function synthesizeSpeech(params: TtsParams): Promise<Buffer> {
  *  返回百炼的 voice_id,存库后合成时当 voice 用。 */
 export async function createClonedVoice(audioUrl: string, prefix: string): Promise<string> {
   const apiKey = config.baichuan.apiKey();
-  const targetModel = config.baichuan.ttsModel; // 与合成同模型(cosyvoice-v1)
+  const targetModel = config.baichuan.cloneModel; // 复刻专用模型(v3.5,保真度高);与合成同模型
   const res = await fetch(`${config.baichuan.baseUrl}/services/audio/tts/customization`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
