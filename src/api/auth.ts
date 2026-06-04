@@ -9,7 +9,9 @@ import {
   createUser,
   setUserStatus,
   removeUser,
+  changeRole,
   listUsers,
+  seatUsage,
   updateDisplayName,
   changePassword,
 } from '../auth/index.js';
@@ -84,8 +86,20 @@ authRouter.post('/me/password', requireAuth, (req: Request, res: Response) => {
 });
 
 // ── 成员管理(仅 admin)──
+//
+// 业务错误带 code(SEATS_FULL/LAST_ADMIN/SELF_ACTION/INVALID_ROLE)→ 409 + {error,code};
+// 前端按 code 分支(席位满弹窗内联 / 其余 toast),不 string-match 中文文案。
+function memberError(res: Response, e: unknown): Response {
+  const code = (e as { code?: string })?.code;
+  const error = e instanceof Error ? e.message : '操作失败';
+  if (code) return res.status(409).json({ error, code });
+  return res.status(409).json({ error });
+}
+
 authRouter.get('/members', requireRole('admin'), (req: Request, res: Response) => {
-  return res.json(listUsers(req.user!.tenantId));
+  const tid = req.user!.tenantId;
+  // 附带席位用量供统计卡(已用 = 持席位 creator 数,上限 = max_creator_seats)。
+  return res.json({ members: listUsers(tid), seats: seatUsage(tid) });
 });
 
 authRouter.post('/members', requireRole('admin'), (req: Request, res: Response) => {
@@ -93,29 +107,52 @@ authRouter.post('/members', requireRole('admin'), (req: Request, res: Response) 
   if (!username || !password || !role) {
     return res.status(400).json({ error: '缺少 username / password / role' });
   }
-  if (!['admin', 'creator', 'viewer'].includes(role)) {
-    return res.status(400).json({ error: '角色非法' });
-  }
   try {
     const u = createUser(req.user!.tenantId, username, password, role as Role);
     audit(req, 'member_add', `${u.username}(${u.role})`);
     return res.status(201).json({ id: u.id, username: u.username, role: u.role });
   } catch (e) {
-    return res.status(409).json({ error: e instanceof Error ? e.message : '创建失败' });
+    return memberError(res, e);
   }
 });
 
 authRouter.post('/members/:id/disable', requireRole('admin'), (req: Request, res: Response) => {
-  const ok = setUserStatus(req.user!.tenantId, req.params.id!, 'disabled');
-  return ok ? res.json({ ok: true }) : res.status(404).json({ error: '成员不存在' });
+  try {
+    const ok = setUserStatus(req.user!.tenantId, req.params.id!, 'disabled', req.user!.id);
+    return ok ? res.json({ ok: true }) : res.status(404).json({ error: '成员不存在' });
+  } catch (e) {
+    return memberError(res, e);
+  }
 });
 
 authRouter.post('/members/:id/enable', requireRole('admin'), (req: Request, res: Response) => {
-  const ok = setUserStatus(req.user!.tenantId, req.params.id!, 'active');
-  return ok ? res.json({ ok: true }) : res.status(404).json({ error: '成员不存在' });
+  try {
+    const ok = setUserStatus(req.user!.tenantId, req.params.id!, 'active', req.user!.id);
+    return ok ? res.json({ ok: true }) : res.status(404).json({ error: '成员不存在' });
+  } catch (e) {
+    return memberError(res, e);
+  }
 });
 
 authRouter.delete('/members/:id', requireRole('admin'), (req: Request, res: Response) => {
-  const ok = removeUser(req.user!.tenantId, req.params.id!);
-  return ok ? res.json({ ok: true }) : res.status(404).json({ error: '成员不存在' });
+  try {
+    const ok = removeUser(req.user!.tenantId, req.params.id!, req.user!.id);
+    return ok ? res.json({ ok: true }) : res.status(404).json({ error: '成员不存在' });
+  } catch (e) {
+    return memberError(res, e);
+  }
+});
+
+// 改角色:闭合席位不变量漏洞(→creator 走席位校验,admin 降级走 last-admin 校验)。
+authRouter.put('/members/:id/role', requireRole('admin'), (req: Request, res: Response) => {
+  const { role } = req.body ?? {};
+  if (!role) return res.status(400).json({ error: '缺少 role' });
+  try {
+    const ok = changeRole(req.user!.tenantId, req.params.id!, role as Role, req.user!.id);
+    if (!ok) return res.status(404).json({ error: '成员不存在' });
+    audit(req, 'member_role', `${req.params.id}→${role}`);
+    return res.json({ ok: true });
+  } catch (e) {
+    return memberError(res, e);
+  }
 });

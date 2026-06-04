@@ -212,9 +212,9 @@ describe('停用即生效', () => {
     await victim.post('/api/login', { username: 'tobedisabled', password: 'pw123456' });
     expect((await victim.get('/api/me')).status).toBe(200);
 
-    // 找到该成员 id 并停用
+    // 找到该成员 id 并停用(/members 现返回 {members, seats})
     const members = await admin.get('/api/members');
-    const target = members.body.find((m: any) => m.username === 'tobedisabled');
+    const target = members.body.members.find((m: any) => m.username === 'tobedisabled');
     const dis = await admin.post(`/api/members/${target.id}/disable`, {});
     expect(dis.status).toBe(200);
 

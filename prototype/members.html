@@ -14,27 +14,19 @@
         <button class="btn btn-white" id="inviteBtn" onclick="invite()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>邀请成员</button>
       </div>
 
-      <div class="stat-row">
-        <div class="stat" style="animation-delay:.04s"><div class="lbl">机构</div><div class="val" style="font-size:22px">融媒体中心</div><div class="sub">ORG-2049</div></div>
-        <div class="stat" style="animation-delay:.08s"><div class="lbl">创作席位</div><div class="val">7 <small>/ 10</small></div><div class="bar"><i style="width:70%"></i></div><div class="sub">已用 7，余 3</div></div>
-        <div class="stat" style="animation-delay:.12s"><div class="lbl">成员总数</div><div class="val">12</div><div class="sub">管理员 2 · 创作者 7 · 查看者 3</div></div>
-        <div class="stat" style="animation-delay:.16s"><div class="lbl">套餐</div><div class="val" style="font-size:22px">专业版</div><div class="sub">按量计费 · 余 1,280 点</div></div>
+      <div class="stat-row" id="statRow">
+        <!-- 统计卡由 renderStats() 用真实数据填充(机构/创作席位/成员总数/角色分布) -->
       </div>
 
       <div class="bar">
-        <div class="search-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input placeholder="搜索成员…"></div>
+        <div class="search-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input id="searchIn" placeholder="搜索成员…"></div>
         <div class="sp"></div>
-        <button class="chip active">全部</button><button class="chip">管理员</button><button class="chip">创作者</button><button class="chip">查看者</button>
+        <button class="chip active" data-role="all">全部</button><button class="chip" data-role="admin">管理员</button><button class="chip" data-role="creator">创作者</button><button class="chip" data-role="viewer">查看者</button>
       </div>
 
       <table class="tbl">
         <thead><tr><th>成员</th><th>角色</th><th>占用席位</th><th>最近活跃</th><th>状态</th><th></th></tr></thead>
-        <tbody id="memberBody">
-          <tr><td><div style="display:flex;align-items:center;gap:12px"><div class="mini-face" style="background-image:url('https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=80&q=80&fit=crop&crop=faces')"></div><div><div class="strong">王主管</div><div style="font-size:11.5px;color:var(--t4)">wang@rmt.cn</div></div></div></td><td><span class="bdg bdg-role">管理员</span></td><td class="num">—</td><td class="num">2 分钟前</td><td><span class="bdg bdg-ok">活跃</span></td><td style="text-align:right"><button class="btn btn-dark" style="padding:7px 11px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:15px;height:15px"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button></td></tr>
-          <tr><td><div style="display:flex;align-items:center;gap:12px"><div class="mini-face" style="background-image:url('https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=80&q=80&fit=crop&crop=faces')"></div><div><div class="strong">李编导</div><div style="font-size:11.5px;color:var(--t4)">li@rmt.cn</div></div></div></td><td><span class="bdg bdg-role">创作者</span></td><td class="num">席位 #1</td><td class="num">5 分钟前</td><td><span class="bdg bdg-ok">活跃</span></td><td style="text-align:right"><button class="btn btn-dark" style="padding:7px 11px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:15px;height:15px"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button></td></tr>
-          <tr><td><div style="display:flex;align-items:center;gap:12px"><div class="mini-face" style="background-image:url('https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=80&q=80&fit=crop&crop=faces')"></div><div><div class="strong">张记者</div><div style="font-size:11.5px;color:var(--t4)">zhang@rmt.cn</div></div></div></td><td><span class="bdg bdg-role">创作者</span></td><td class="num">席位 #2</td><td class="num">1 小时前</td><td><span class="bdg bdg-ok">活跃</span></td><td style="text-align:right"><button class="btn btn-dark" style="padding:7px 11px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:15px;height:15px"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button></td></tr>
-          <tr><td><div style="display:flex;align-items:center;gap:12px"><div class="mini-face" style="background:linear-gradient(150deg,#2C2C32,#161618);display:grid;place-items:center;font-weight:700;font-size:13px;color:var(--t2)">陈</div><div><div class="strong">陈审核</div><div style="font-size:11.5px;color:var(--t4)">chen@rmt.cn</div></div></div></td><td><span class="bdg bdg-role">查看者</span></td><td class="num">—</td><td class="num">昨天</td><td><span class="bdg bdg-dim">空闲</span></td><td style="text-align:right"><button class="btn btn-dark" style="padding:7px 11px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:15px;height:15px"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button></td></tr>
-        </tbody>
+        <tbody id="memberBody"></tbody>
       </table>
 
       <div class="set-card" style="margin-top:24px">
@@ -82,47 +74,112 @@
   .ir-opt{flex:1;padding:9px;border-radius:9px;background:var(--field,#121214);border:1px solid var(--line);color:var(--t2);font-size:13px;font-family:var(--f);cursor:pointer;transition:.15s}
   .ir-opt:hover{border-color:var(--line-hi)}
   .ir-opt.active{background:var(--blue-bg);border-color:var(--blue);color:var(--blue)}
+  /* 骨架屏:加载占位灰条 */
+  .skel-bar{height:18px;border-radius:6px;background:linear-gradient(90deg,var(--card-2,#1c1c20) 25%,var(--line,#2a2a30) 37%,var(--card-2,#1c1c20) 63%);background-size:400% 100%;animation:skel 1.3s ease infinite}
+  @keyframes skel{0%{background-position:100% 50%}100%{background-position:0 50%}}
+  /* 移动端:≤640px 表格转卡片(每成员一卡,不横向溢出)*/
+  @media (max-width:640px){
+    .tbl thead{display:none}
+    .tbl,.tbl tbody,.tbl tr,.tbl td{display:block;width:100%;box-sizing:border-box}
+    .tbl tr{margin-bottom:12px;border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--card,#141418)}
+    .tbl td{border:none;padding:6px 4px;text-align:left!important}
+    .tbl td.num{color:var(--t3)}
+    .tbl td[style*="text-align:right"]{text-align:left!important}
+    .skel-row td{padding:6px 4px}
+  }
 </style>
 <script src="shell.js"></script>
 <script src="api.js"></script>
 <script>
-  document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));this.classList.add('active');this.dataset.role!==undefined&&render(this.dataset.role);}));
+  // chip data-role 已在 HTML 静态写死(全部/管理员/创作者/查看者),不依赖 load() 赋值 —— 加载前点也有效。
+  let curFilter='all';
+  document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',function(){
+    this.parentNode.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));
+    this.classList.add('active'); curFilter=this.dataset.role; render(curFilter);
+  }));
 
   const body = document.getElementById('memberBody');
-  let members = [], myRole = null;
+  let members = [], seats = null, myId = null, myRole = null;
   const ROLE_CN = {admin:'管理员',creator:'创作者',viewer:'查看者'};
   function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-  function fmtTime(ts){const d=new Date(ts);const p=n=>String(n).padStart(2,'0');return `${p(d.getMonth()+1)}-${p(d.getDate())}`;}
 
-  function row(m){
-    const initial = (m.username||'?').slice(0,1).toUpperCase();
+  // 相对时间:真实 last_active(null=从未登录)。
+  function fmtActive(ts){
+    if(!ts) return '从未登录';
+    const diff=Date.now()-ts, m=60000, h=3600000, d=86400000;
+    if(diff<m) return '刚刚';
+    if(diff<h) return Math.floor(diff/m)+' 分钟前';
+    if(diff<d) return Math.floor(diff/h)+' 小时前';
+    if(diff<7*d) return Math.floor(diff/d)+' 天前';
+    const dt=new Date(ts), p=n=>String(n).padStart(2,'0');
+    return `${dt.getFullYear()}-${p(dt.getMonth()+1)}-${p(dt.getDate())}`;
+  }
+
+  // 席位占用号:creator 按 created_at 升序(列表已按此序),第 N 个 creator 显示「席位 #N」。
+  function seatNoMap(){
+    const map={}; let n=0;
+    members.forEach(m=>{ if(m.role==='creator'){ n++; map[m.id]='席位 #'+n; } });
+    return map;
+  }
+
+  function row(m, seatNo){
+    const name = esc(m.display_name||m.username);
+    const initial = (m.display_name||m.username||'?').slice(0,1).toUpperCase();
     const statusBdg = m.status==='active'
       ? '<span class="bdg bdg-ok">活跃</span>'
       : '<span class="bdg" style="background:rgba(255,82,71,.14);color:var(--red)">已停用</span>';
-    // 仅 admin 显示操作按钮(后端也有 403 兜底)
-    const actions = myRole==='admin' ? `<td style="text-align:right">
+    // 仅 admin 显示操作按钮(后端也有 403/code 兜底);不渲染针对自己的危险操作。
+    const isSelf = m.id===myId;
+    const actions = myRole==='admin' ? `<td style="text-align:right;white-space:nowrap">
+      ${isSelf ? '<span style="color:var(--t4);font-size:12px">本人</span>' : `
+      <button class="btn btn-dark" style="padding:7px 11px;font-size:12px" aria-label="改角色" onclick="openRole('${m.id}','${name}','${m.role}')">改角色</button>
       ${m.status==='active'
-        ? `<button class="btn btn-dark" style="padding:7px 11px;font-size:12px" onclick="disable('${m.id}','${esc(m.username)}')">停用</button>`
-        : `<button class="btn btn-dark" style="padding:7px 11px;font-size:12px" onclick="enable('${m.id}')">启用</button>`}
-      <button class="btn btn-dark" style="padding:7px 11px;font-size:12px" onclick="removeM('${m.id}','${esc(m.username)}')">移除</button>
+        ? `<button class="btn btn-dark" style="padding:7px 11px;font-size:12px" aria-label="停用 ${name}" onclick="disable('${m.id}','${name}')">停用</button>`
+        : `<button class="btn btn-dark" style="padding:7px 11px;font-size:12px" aria-label="启用 ${name}" onclick="enable('${m.id}')">启用</button>`}
+      <button class="btn btn-dark" style="padding:7px 11px;font-size:12px" aria-label="移除 ${name}" onclick="removeM('${m.id}','${name}')">移除</button>`}
     </td>` : '<td></td>';
     return `<tr>
-      <td><div style="display:flex;align-items:center;gap:12px"><div class="mini-face" style="background:linear-gradient(150deg,#2C2C32,#161618);display:grid;place-items:center;font-weight:700;font-size:13px;color:var(--t2)">${initial}</div><div><div class="strong">${esc(m.username)}</div></div></div></td>
+      <td><div style="display:flex;align-items:center;gap:12px"><div class="mini-face" style="background:linear-gradient(150deg,#2C2C32,#161618);display:grid;place-items:center;font-weight:700;font-size:13px;color:var(--t2)">${initial}</div><div><div class="strong">${name}</div></div></div></td>
       <td><span class="bdg bdg-role">${ROLE_CN[m.role]||m.role}</span></td>
-      <td class="num">${m.role==='creator'?'创作席位':'—'}</td>
-      <td class="num">${fmtTime(m.created_at)}</td>
+      <td class="num">${seatNo||'—'}</td>
+      <td class="num">${fmtActive(m.last_active)}</td>
       <td>${statusBdg}</td>
       ${actions}
     </tr>`;
   }
 
   function render(roleFilter){
+    const sn = seatNoMap();
     let list = members;
-    if(roleFilter==='admin') list = members.filter(m=>m.role==='admin');
-    else if(roleFilter==='creator') list = members.filter(m=>m.role==='creator');
-    else if(roleFilter==='viewer') list = members.filter(m=>m.role==='viewer');
-    body.innerHTML = list.length ? list.map(row).join('')
+    if(['admin','creator','viewer'].includes(roleFilter)) list = members.filter(m=>m.role===roleFilter);
+    body.innerHTML = list.length ? list.map(m=>row(m, sn[m.id])).join('')
       : '<tr><td colspan="6" style="text-align:center;color:var(--t4);padding:40px">暂无成员</td></tr>';
+  }
+
+  // 真实统计卡:机构名 / 创作席位(已用/上限) / 成员总数 / 角色分布。
+  function renderStats(orgName){
+    const total=members.length;
+    const nAdmin=members.filter(m=>m.role==='admin').length;
+    const nCreator=members.filter(m=>m.role==='creator').length;
+    const nViewer=members.filter(m=>m.role==='viewer').length;
+    const used=seats?seats.used:nCreator, limit=seats?seats.limit:10;
+    const pct=limit>0?Math.min(100,Math.round(used/limit*100)):0;
+    document.getElementById('statRow').innerHTML = `
+      <div class="stat" style="animation-delay:.04s"><div class="lbl">机构</div><div class="val" style="font-size:22px">${esc(orgName||'我的机构')}</div></div>
+      <div class="stat" style="animation-delay:.08s"><div class="lbl">创作席位</div><div class="val">${used} <small>/ ${limit}</small></div><div class="bar"><i style="width:${pct}%"></i></div><div class="sub">已用 ${used}，余 ${Math.max(0,limit-used)}</div></div>
+      <div class="stat" style="animation-delay:.12s"><div class="lbl">成员总数</div><div class="val">${total}</div><div class="sub">管理员 ${nAdmin} · 创作者 ${nCreator} · 查看者 ${nViewer}</div></div>`;
+  }
+
+  // 错误码 → 用户文案兜底(后端已带中文 message,这里仅作 code 分支判断的语义来源)。
+  function isSeatsFull(e){ return e && e.code==='SEATS_FULL'; }
+
+  // 骨架屏:加载期 3 行灰色闪动占位(与作品库/创作台一致),不闪假数据。
+  function skeleton(){
+    body.innerHTML = Array.from({length:3}).map(()=>
+      `<tr class="skel-row"><td colspan="6"><div class="skel-bar"></div></td></tr>`).join('');
+  }
+  function errorRow(){
+    body.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--t4);padding:40px">加载失败 <button class="btn btn-dark" style="margin-left:8px;padding:6px 12px;font-size:12px" onclick="load()">重试</button></td></tr>`;
   }
 
   // 邀请成员弹窗(替代 3 个浏览器 prompt)
@@ -132,12 +189,12 @@
     viewer:'查看者:只读作品、下载,不能发起生成或管理。',
     admin:'管理员:成员管理、用量查看、系统配置,权限最高。',
   };
-  function pickRole(b){ invRole=b.dataset.r; b.parentNode.querySelectorAll('.ir-opt').forEach(x=>x.classList.remove('active')); b.classList.add('active'); document.getElementById('invRoleDesc').textContent=ROLE_DESC[invRole]; }
+  function pickRole(b){ invRole=b.dataset.r; b.parentNode.querySelectorAll('.ir-opt').forEach(x=>{x.classList.remove('active');x.setAttribute('aria-pressed','false');}); b.classList.add('active'); b.setAttribute('aria-pressed','true'); document.getElementById('invRoleDesc').textContent=ROLE_DESC[invRole]; }
   function invite(){
     if(myRole!=='admin'){ window.LJToast('仅管理员可邀请成员','err'); return; }
     document.getElementById('invUser').value=''; document.getElementById('invPass').value='';
     document.getElementById('invMsg').textContent=''; invRole='creator';
-    document.querySelectorAll('#invRoleSeg .ir-opt').forEach(b=>b.classList.toggle('active',b.dataset.r==='creator'));
+    document.querySelectorAll('#invRoleSeg .ir-opt').forEach(b=>{const on=b.dataset.r==='creator';b.classList.toggle('active',on);b.setAttribute('aria-pressed',String(on));});
     document.getElementById('invRoleDesc').textContent=ROLE_DESC.creator;
     document.getElementById('ov-invite').style.display='grid';
     document.getElementById('invUser').focus();
@@ -152,28 +209,50 @@
     try{
       await LJ.post('/members',{username,password,role:invRole});
       document.getElementById('ov-invite').style.display='none';
+      window.LJToast('已邀请「'+username+'」');
       await load();
-    }catch(e){ msg.textContent=e.message; }
+    }catch(e){ msg.textContent=e.message; }  // 含席位满 SEATS_FULL 文案
     finally{ btn.disabled=false; btn.textContent='邀请'; }
   }
   async function disable(id,name){ if(!(await window.LJConfirm({title:'停用成员',body:`停用「<b style="color:var(--t1)">${esc(name)}</b>」?其登录将立即失效。`,confirmText:'停用',danger:true})))return; try{await LJ.post('/members/'+id+'/disable');await load();window.LJToast('已停用成员');}catch(e){window.LJToast(e.message,'err');} }
   async function enable(id){ try{await LJ.post('/members/'+id+'/enable');await load();window.LJToast('已启用成员');}catch(e){window.LJToast(e.message,'err');} }
-  async function removeM(id,name){ if(!(await window.LJConfirm({title:'移除成员',body:`移除「<b style="color:var(--t1)">${esc(name)}</b>」?此操作不可恢复。`,confirmText:'移除',danger:true})))return; try{await LJ.del('/members/'+id);await load();window.LJToast('已移除成员');}catch(e){window.LJToast(e.message,'err');} }
+  async function removeM(id,name){ if(!(await window.LJConfirm({title:'移除成员',body:`移除「<b style="color:var(--t1)">${esc(name)}</b>」?此操作不可恢复,并释放其创作席位。`,confirmText:'移除',danger:true})))return; try{await LJ.del('/members/'+id);await load();window.LJToast('已移除成员');}catch(e){window.LJToast(e.message,'err');} }
+
+  // 改角色:简单 confirm 选新角色(三选一循环切换不够直观,这里用三个 confirm 按钮的轻弹窗)。
+  async function openRole(id,name,cur){
+    const roles=['admin','creator','viewer'].filter(r=>r!==cur);
+    const pick = await window.LJConfirm({
+      title:`修改「${esc(name)}」的角色`,
+      body:`当前:<b style="color:var(--t1)">${ROLE_CN[cur]}</b>。改为 ${roles.map(r=>ROLE_CN[r]).join(' 或 ')}?<br><span style="color:var(--t4);font-size:12px">改为创作者会占用一个创作席位。</span>`,
+      confirmText:'改为 '+ROLE_CN[roles[0]],
+      cancelText:'改为 '+ROLE_CN[roles[1]],
+    });
+    // LJConfirm 返回 true=confirm(roles[0]) / false=cancel。cancel 既可能是关闭也可能是选 roles[1] —
+    // 为避免歧义,这里只支持「升/降一级」的明确选择:confirm=roles[0]。取消则不动作。
+    const newRole = pick ? roles[0] : null;
+    if(!newRole) return;
+    try{ await LJ.put('/members/'+id+'/role',{role:newRole}); await load(); window.LJToast('已改为'+ROLE_CN[newRole]); }
+    catch(e){ window.LJToast(e.message,'err'); }
+  }
 
   async function load(){
+    skeleton();
     try{
-      const me = await LJ.me(); myRole = me.role;
+      const me = await LJ.me(); myRole = me.role; myId = me.id;
       if(myRole!=='admin'){
-        // 非 admin 没有 /members 权限,只显示自己 + 提示
         document.getElementById('inviteBtn').style.display='none';
+        document.getElementById('statRow').innerHTML='';
         body.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--t4);padding:40px">仅管理员可查看成员列表</td></tr>`;
         return;
       }
-      members = await LJ.get('/members');
-      const chips=document.querySelectorAll('.chip');
-      ['all','admin','creator','viewer'].forEach((r,i)=>{if(chips[i])chips[i].dataset.role=r;});
-      render('all');
-    }catch(e){ /* 401 已跳转 */ }
+      const data = await LJ.get('/members');   // { members, seats }
+      members = data.members||[]; seats = data.seats||null;
+      renderStats(me.tenantName);
+      render(curFilter);
+    }catch(e){
+      if(e && e.status===401) return;  // 已跳转登录
+      errorRow();
+    }
   }
   load();
 </script>

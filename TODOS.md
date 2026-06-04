@@ -47,3 +47,16 @@
 - **Why:** 体验连贯,用户不用手动刷新看进度。
 - **Context:** 来自 /plan-ceo-review D3.6。create.html 对话流已有轮询,复用其模式即可。非断裂(手动刷新可见),优先级低。
 - **Priority:** P3
+
+### T-SEAT-BILLING:席位与计费/订单后端打通
+- **What:** 把 tenant.max_creator_seats 接入真实计费——"升级套餐买更多席位"的支付流程。
+- **Why:** 本轮席位已真实强制(默认 10,超限拦截),但上限值现在靠后台/SQL 手设;商业化需让客户自助升级。
+- **Context:** 来自 /plan-design-review 成员模块 D7。当前无计费后端,max_creator_seats 是 tenant 字段。
+- **Depends on:** 计费/订单后端(尚不存在)。
+- **Priority:** P2
+
+### T-ROLE-CHANGE:改已有成员角色
+- **What:** 后端 PUT /members/:id/role 接口 + UI,允许 admin 调整已有成员角色(creator↔viewer↔admin)。
+- **Why:** 当前只能在邀请时定角色;改角色得删了重建,丢历史。
+- **Context:** 来自 /plan-design-review 成员模块 Pass7。需复用席位校验(viewer→creator 要查席位)+ last-admin 校验(admin→其他要保最后一个 admin)。
+- **Priority:** P2
