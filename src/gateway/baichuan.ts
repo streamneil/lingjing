@@ -108,7 +108,8 @@ export class BaichuanGateway implements CapabilityGateway {
     if (normalized === 'succeeded') {
       // 查证(2026-06 官方):成品在 output.results.video_url(results 是对象,非数组)。URL 有效期 24h。
       result.videoUrl = out.results?.video_url ?? out.video_url;
-      // wan2.2-s2v 成品默认不自带 AI 标识(我方需 ffmpeg 后处理加合规水印,见 worker TODO)。
+      // wan2.2-s2v 成品默认不自带 AI 标识;由 worker 调 applyAiLabel(pipeline/ai-label.ts)
+      // ffmpeg 后处理打"AI 合成"水印 + 元数据(已实现,受 tenant_setting.ai_label_enabled 控制)。
       result.aiLabel = 'none';
     }
     if (normalized === 'failed') {

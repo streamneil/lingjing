@@ -206,8 +206,25 @@
       if(chips[3]) chips[3].textContent = '失败 · '+allJobs.filter(j=>j.status==='failed').length;
       const active = document.querySelector('.chip.active');
       render(active&&active.dataset.filter||'all');
+      schedulePoll();  // 有生成中任务则继续轮询,全终态则停
     }catch(e){ /* 401 已被 api.js 跳转 */ }
   }
+
+  // 列表级自动轮询:仅当存在 queued/running 任务时启动;全部终态停轮;
+  // 离页(visibilitychange 隐藏)暂停,回到页面立即拉一次。复用 load() 全量刷新。
+  let pollTimer=null;
+  const POLL_MS=5000;
+  function hasActive(){ return allJobs.some(j=>j.status==='queued'||j.status==='running'); }
+  function schedulePoll(){
+    clearTimeout(pollTimer); pollTimer=null;
+    if(!hasActive() || document.hidden) return;       // 无生成中 或 页面隐藏 → 不排
+    pollTimer=setTimeout(load, POLL_MS);
+  }
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.hidden){ clearTimeout(pollTimer); pollTimer=null; }
+    else if(hasActive()){ load(); }                   // 回到页面立即刷新一次
+  });
+
   // chip 加 filter 标记
   const chips=document.querySelectorAll('.chip');
   ['all','running','done','failed'].forEach((f,i)=>{if(chips[i])chips[i].dataset.filter=f;});

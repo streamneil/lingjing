@@ -12,7 +12,7 @@
       <div class="ph">
         <div>
           <h1 class="t-h1">数字人形象</h1>
-          <p class="desc">上传一张照片即可生成专属数字人；上传高清视频可定制高精专属主播。云端生成，即开即用。</p>
+          <p class="desc">上传一张照片即可生成专属数字人；上传视频可从中提取形象。云端生成，即开即用。</p>
         </div>
         <button class="btn btn-white" onclick="openModal('createRole')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>创建数字人</button>
       </div>
@@ -61,7 +61,7 @@
     <div class="mh"><h3>创建数字人</h3><div class="mc" onclick="closeModal('createRole')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></div></div>
     <div class="mb">
       <div class="iline"><label>名称</label><input id="avName" placeholder="输入数字人名称"></div>
-      <div style="display:flex;gap:8px;margin-bottom:16px;"><div class="choice-seg" id="avModeSeg" style="flex:1;display:flex;"><button class="active" style="flex:1" data-mode="photo" onclick="setAvMode('photo')">照片快速生成</button><button style="flex:1" data-mode="video" onclick="setAvMode('video')">视频提取形象</button><button style="flex:1" data-mode="hifi" onclick="setAvMode('hifi')">高精定制</button></div></div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;"><div class="choice-seg" id="avModeSeg" style="flex:1;display:flex;"><button class="active" style="flex:1" data-mode="photo" onclick="setAvMode('photo')">照片快速生成</button><button style="flex:1" data-mode="video" onclick="setAvMode('video')">视频提取形象</button></div></div>
       <input type="file" id="avPhoto" accept="image/jpeg,image/png,image/webp" style="display:none">
       <input type="file" id="avVideo" accept="video/mp4,video/quicktime" style="display:none">
       <input type="file" id="avProof" accept="image/*,application/pdf" style="display:none">
@@ -72,7 +72,6 @@
           <div class="upreview-bar"><span id="avPreviewName"></span><button type="button" class="upreview-x" onclick="event.stopPropagation();clearUpload()">重新选择</button></div>
         </div>
       </div>
-      <div id="avHifiNote" style="display:none;background:rgba(255,178,62,.1);border:1px solid rgba(255,178,62,.25);border-radius:12px;padding:14px;margin-bottom:8px;color:var(--t2);font-size:13px;line-height:1.6">⏳ <b style="color:#FFB23E">高精形象定制训练</b>:基于客户高清视频训练专属高保真分身。该能力为<b>二期 / 私有化签约后</b>开放(训练长时、按分身计费、需厂商审核)。当前可先用「照片」或「视频提取」快速生成。</div>
       <div class="iline" id="avOrientRow" style="margin-bottom:12px"><label>比例</label><div class="choice-seg" id="avOrientSeg" style="flex:1;display:flex"><button class="active" data-o="portrait" style="flex:1" onclick="pickOrient(this)">竖屏 9:16</button><button data-o="landscape" style="flex:1" onclick="pickOrient(this)">横屏 16:9</button></div></div>
       <div class="rtitle" id="avReqTitle">照片要求</div><div class="rsub" id="avReqSub">格式 jpg / jpeg / png / webp，文件 &lt; 30MB</div>
       <div class="samples">
@@ -122,16 +121,15 @@
 
   function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 
-  // 创建模式:photo | video | hifi
+  // 创建模式:photo | video
   let avMode='photo', avOrient='portrait';
   function setAvMode(m){
     avMode=m;
     document.querySelectorAll('#avModeSeg button').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));
-    const uz=document.getElementById('avUzone'), hifi=document.getElementById('avHifiNote');
+    const uz=document.getElementById('avUzone');
     const reqT=document.getElementById('avReqTitle'), reqS=document.getElementById('avReqSub');
-    if(m==='hifi'){ uz.style.display='none'; hifi.style.display='block'; }
-    else{
-      uz.style.display=''; hifi.style.display='none';
+    {
+      uz.style.display='';
       if(m==='video'){ uz.setAttribute('onclick',"document.getElementById('avVideo').click()"); reqT.textContent='视频要求'; reqS.textContent='格式 mp4 / mov，<30MB,正脸清晰;系统自动提取首帧为形象'; }
       else{ uz.setAttribute('onclick',"document.getElementById('avPhoto').click()"); reqT.textContent='照片要求'; reqS.textContent='格式 jpg / jpeg / png / webp，文件 < 30MB'; }
     }
@@ -191,10 +189,9 @@
     const btn=document.getElementById('avCreateBtn');
     const name=(document.getElementById('avName').value||'').trim();
     const hasFile = avMode==='video' ? !!document.getElementById('avVideo').files[0]
-                  : avMode==='photo' ? !!document.getElementById('avPhoto').files[0] : false;
+                  : !!document.getElementById('avPhoto').files[0];
     let txt='创建数字人', ok=true;
-    if(avMode==='hifi'){ txt='高精定制(二期开放)'; ok=false; }
-    else if(!name){ txt='请输入名称'; ok=false; }
+    if(!name){ txt='请输入名称'; ok=false; }
     else if(!hasFile){ txt = avMode==='video'?'请上传视频':'请上传照片'; ok=false; }
     else if(!consented){ txt='请勾选已获授权'; ok=false; }
     btn.disabled=!ok; btn.textContent=txt;

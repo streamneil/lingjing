@@ -31,7 +31,7 @@
 
       <div class="set-card" style="margin-top:24px">
         <h3>角色权限</h3>
-        <div class="h-desc">三种内置角色的能力边界。私有化版可自定义角色(二期)。</div>
+        <div class="h-desc">三种内置角色的能力边界。</div>
         <table class="tbl" style="box-shadow:none;border:none">
           <thead><tr><th>权限</th><th style="text-align:center">管理员</th><th style="text-align:center">创作者</th><th style="text-align:center">查看者</th></tr></thead>
           <tbody>
@@ -67,6 +67,26 @@
     <div style="display:flex;gap:10px;margin-top:8px">
       <button class="btn btn-dark" style="flex:1" onclick="document.getElementById('ov-invite').style.display='none'">取消</button>
       <button class="btn btn-white" style="flex:1" id="invSubmit" onclick="submitInvite()">邀请</button>
+    </div>
+  </div>
+</div>
+
+<!-- 改角色弹窗(清晰单选,复用 .ir-opt 分段控件)-->
+<div class="ov" id="ov-role" style="position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:none;place-items:center;z-index:300">
+  <div style="width:380px;max-width:92vw;background:var(--modal,#161618);border:1px solid var(--line);border-radius:18px;padding:26px">
+    <h3 style="font-size:18px;font-weight:700;margin-bottom:4px">修改角色</h3>
+    <div id="roleWho" style="color:var(--t3);font-size:12.5px;margin-bottom:20px"></div>
+    <label style="display:block;font-size:12px;color:var(--t3);margin-bottom:9px">新角色</label>
+    <div id="roleSeg" style="display:flex;gap:8px;margin-bottom:6px">
+      <button type="button" data-r="creator" class="ir-opt" onclick="pickNewRole(this)">创作者</button>
+      <button type="button" data-r="viewer" class="ir-opt" onclick="pickNewRole(this)">查看者</button>
+      <button type="button" data-r="admin" class="ir-opt" onclick="pickNewRole(this)">管理员</button>
+    </div>
+    <div id="roleDesc" style="font-size:11.5px;color:var(--t4);min-height:30px;line-height:1.6"></div>
+    <div id="roleMsg" style="color:var(--red);font-size:12.5px;min-height:16px;margin-bottom:4px"></div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn btn-dark" style="flex:1" onclick="document.getElementById('ov-role').style.display='none'">取消</button>
+      <button class="btn btn-white" style="flex:1" id="roleSubmit" onclick="submitRole()">保存</button>
     </div>
   </div>
 </div>
@@ -218,21 +238,40 @@
   async function enable(id){ try{await LJ.post('/members/'+id+'/enable');await load();window.LJToast('已启用成员');}catch(e){window.LJToast(e.message,'err');} }
   async function removeM(id,name){ if(!(await window.LJConfirm({title:'移除成员',body:`移除「<b style="color:var(--t1)">${esc(name)}</b>」?此操作不可恢复,并释放其创作席位。`,confirmText:'移除',danger:true})))return; try{await LJ.del('/members/'+id);await load();window.LJToast('已移除成员');}catch(e){window.LJToast(e.message,'err');} }
 
-  // 改角色:简单 confirm 选新角色(三选一循环切换不够直观,这里用三个 confirm 按钮的轻弹窗)。
-  async function openRole(id,name,cur){
-    const roles=['admin','creator','viewer'].filter(r=>r!==cur);
-    const pick = await window.LJConfirm({
-      title:`修改「${esc(name)}」的角色`,
-      body:`当前:<b style="color:var(--t1)">${ROLE_CN[cur]}</b>。改为 ${roles.map(r=>ROLE_CN[r]).join(' 或 ')}?<br><span style="color:var(--t4);font-size:12px">改为创作者会占用一个创作席位。</span>`,
-      confirmText:'改为 '+ROLE_CN[roles[0]],
-      cancelText:'改为 '+ROLE_CN[roles[1]],
+  // 改角色:清晰单选弹窗(复用 .ir-opt 分段控件,与邀请一致)。
+  let roleTargetId=null, roleNewRole=null, roleCur=null;
+  function pickNewRole(b){
+    roleNewRole=b.dataset.r;
+    b.parentNode.querySelectorAll('.ir-opt').forEach(x=>{x.classList.remove('active');x.setAttribute('aria-pressed','false');});
+    b.classList.add('active'); b.setAttribute('aria-pressed','true');
+    document.getElementById('roleDesc').textContent=ROLE_DESC[roleNewRole]
+      + (roleNewRole==='creator' ? ' 升为创作者会占用一个创作席位。' : '');
+  }
+  function openRole(id,name,cur){
+    roleTargetId=id; roleCur=cur; roleNewRole=null;
+    document.getElementById('roleWho').innerHTML=`成员「<b style="color:var(--t1)">${esc(name)}</b>」当前为 <b style="color:var(--t1)">${ROLE_CN[cur]}</b>,选择新角色:`;
+    document.getElementById('roleMsg').textContent='';
+    document.getElementById('roleDesc').textContent='';
+    // 当前角色按钮置灰(选它无意义),其余可选,初始不选中
+    document.querySelectorAll('#roleSeg .ir-opt').forEach(b=>{
+      const isCur=b.dataset.r===cur;
+      b.classList.remove('active'); b.setAttribute('aria-pressed','false');
+      b.disabled=isCur; b.style.opacity=isCur?'.4':''; b.style.cursor=isCur?'not-allowed':'pointer';
     });
-    // LJConfirm 返回 true=confirm(roles[0]) / false=cancel。cancel 既可能是关闭也可能是选 roles[1] —
-    // 为避免歧义,这里只支持「升/降一级」的明确选择:confirm=roles[0]。取消则不动作。
-    const newRole = pick ? roles[0] : null;
-    if(!newRole) return;
-    try{ await LJ.put('/members/'+id+'/role',{role:newRole}); await load(); window.LJToast('已改为'+ROLE_CN[newRole]); }
-    catch(e){ window.LJToast(e.message,'err'); }
+    document.getElementById('ov-role').style.display='grid';
+  }
+  async function submitRole(){
+    const msg=document.getElementById('roleMsg'); msg.style.color='var(--red)';
+    if(!roleNewRole){ msg.textContent='请选择新角色'; return; }
+    if(roleNewRole===roleCur){ msg.textContent='与当前角色相同'; return; }
+    const btn=document.getElementById('roleSubmit'); btn.disabled=true; btn.textContent='保存中…';
+    try{
+      await LJ.put('/members/'+roleTargetId+'/role',{role:roleNewRole});
+      document.getElementById('ov-role').style.display='none';
+      window.LJToast('已改为'+ROLE_CN[roleNewRole]);
+      await load();
+    }catch(e){ msg.textContent=e.message; }  // 含 SEATS_FULL / LAST_ADMIN 文案(后端带 code)
+    finally{ btn.disabled=false; btn.textContent='保存'; }
   }
 
   async function load(){
