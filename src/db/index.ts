@@ -195,6 +195,27 @@ addColumnIfMissing('user', 'display_name', `display_name TEXT`);
 addColumnIfMissing('authorization', 'terms_version', `terms_version TEXT`);
 addColumnIfMissing('voice', 'provider_voice_id', `provider_voice_id TEXT`);
 
+// 成员与权限升级:
+//  - tenant.max_creator_seats:创作席位上限(licensing 真相源,默认 10)。
+//    NOT NULL DEFAULT 安全:旧行由 SQLite ALTER 自动回填默认值(同 avatar.is_default)。
+//  - user.last_active:最近活跃时间戳(resolveSession throttle 写,可空=从未活跃)。
+const tenantHadSeats = (db.prepare(`PRAGMA table_info(tenant)`).all() as { name: string }[]).some(
+  (c) => c.name === 'max_creator_seats',
+);
+addColumnIfMissing('tenant', 'max_creator_seats', `max_creator_seats INTEGER NOT NULL DEFAULT 10`);
+addColumnIfMissing('user', 'last_active', `last_active INTEGER`);
+
+// clamp 迁移(仅刚加列时跑一次):现有租户若已超 10 个创作者,把上限抬到当前数,
+// 否则统计卡显示「15/10」且 create/enable 全被拦,现有客户一上来就被锁死无救济。
+if (!tenantHadSeats) {
+  db.prepare(
+    `UPDATE tenant SET max_creator_seats = MAX(10, (
+       SELECT COUNT(*) FROM user
+       WHERE user.tenant_id = tenant.id AND user.role='creator' AND user.status='active'
+     ))`,
+  ).run();
+}
+
 // 用户名全局唯一(登录免输机构 ID):在 user.username 上建唯一索引。
 // 旧库若已有重名用户会建索引失败 —— 用 try 包裹并告警,交付时人工清理重名。
 try {
@@ -229,6 +250,7 @@ export interface TenantRow {
   id: string;
   name: string;
   delivery: 'hosted' | 'private';
+  max_creator_seats: number;
   created_at: number;
 }
 
@@ -240,6 +262,7 @@ export interface UserRow {
   password_hash: string;
   role: Role;
   status: UserStatus;
+  last_active: number | null;
   created_at: number;
 }
 

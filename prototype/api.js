@@ -30,6 +30,7 @@ window.LJ = (function () {
       const msg = (data && data.error) || `请求失败 (${res.status})`;
       const err = new Error(msg);
       err.status = res.status;
+      if (data && data.code) err.code = data.code; // 业务错误码(SEATS_FULL/LAST_ADMIN/…),前端按 code 分支
       throw err;
     }
     return data;
