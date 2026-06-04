@@ -30,12 +30,15 @@ export interface CreateVoiceParams {
   tenantId: string;
   userId: string;
   name: string;
-  sourceKey: string; // 样本音频已落 MinIO
+  sourceKey: string; // 样本音频已落 OSS/MinIO
   consent: boolean;
   proofKey?: string;
+  providerVoiceId?: string; // 百炼声音复刻返回的 voice_id;有则状态 ready 且可合成本人声音
 }
 
-/** 克隆音色:强制授权,否则拒绝。先写 authorization 存证再建 voice。 */
+/** 克隆音色:强制授权,否则拒绝。先写 authorization 存证再建 voice。
+ *  providerVoiceId 有 → 真实复刻已完成(status=ready,合成用本人声音);
+ *  无 → 复刻未产出(降级),status=failed 让前端可见、避免误用。 */
 export function createCloneVoice(p: CreateVoiceParams): VoiceRow {
   if (!p.consent) {
     const err = new Error('必须确认"已获被克隆人本人授权"才能克隆音色');
@@ -53,15 +56,19 @@ export function createCloneVoice(p: CreateVoiceParams): VoiceRow {
     tenant_id: p.tenantId,
     name: p.name,
     kind: 'clone',
-    status: 'ready', // 真实接百炼 cloneVoice 后改 processing→ready
+    status: p.providerVoiceId ? 'ready' : 'failed',
     source_key: p.sourceKey,
+    provider_voice_id: p.providerVoiceId ?? null,
     authorization_id: authId,
     created_at: now(),
   };
   db.prepare(
-    `INSERT INTO voice (id,tenant_id,name,kind,status,source_key,authorization_id,created_at)
-     VALUES (?,?,?,?,?,?,?,?)`,
-  ).run(v.id, v.tenant_id, v.name, v.kind, v.status, v.source_key, v.authorization_id, v.created_at);
+    `INSERT INTO voice (id,tenant_id,name,kind,status,source_key,provider_voice_id,authorization_id,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    v.id, v.tenant_id, v.name, v.kind, v.status, v.source_key, v.provider_voice_id,
+    v.authorization_id, v.created_at,
+  );
   return v;
 }
 

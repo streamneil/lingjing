@@ -60,10 +60,9 @@ function resolveVoiceName(voiceRef: string, tenantId: string): string {
   if (isPresetVoice(voiceRef)) return voiceRef; // 预置音色名(longjing 等)直接用
   const clone = getVoice(voiceRef, tenantId);
   if (clone) {
-    // 克隆音色当前是占位:真实百炼"声音复刻"尚未接入,clone.id 是本地 UUID,
-    // 不是 CosyVoice 合法 voice,直接传会 418。在真实复刻接入前,回退到预置音色
-    // 让生成可用(而非整条任务失败)。接入后改为返回复刻产出的 voice id。
-    return DEFAULT_PRESET_VOICE;
+    // 真实声音复刻:用百炼返回的 provider_voice_id 合成本人声音。
+    // 若复刻未产出(降级 failed),回退预置音色避免任务整体失败。
+    return clone.provider_voice_id || DEFAULT_PRESET_VOICE;
   }
   // 兜底:用默认预置,避免整个任务因音色解析失败而崩
   return DEFAULT_PRESET_VOICE;

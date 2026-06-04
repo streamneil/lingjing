@@ -131,6 +131,7 @@ db.exec(`
     kind          TEXT NOT NULL DEFAULT 'preset',   -- preset | clone
     status        TEXT NOT NULL DEFAULT 'ready',    -- processing | ready | failed
     source_key    TEXT,                             -- 样本音频在 MinIO 的 key
+    provider_voice_id TEXT,                          -- 百炼声音复刻返回的 voice_id(克隆音色合成时用)
     authorization_id TEXT,                          -- 关联授权(克隆必填)
     created_at    INTEGER NOT NULL
   );
@@ -192,6 +193,7 @@ addColumnIfMissing('avatar', 'orientation', `orientation TEXT DEFAULT 'portrait'
 addColumnIfMissing('avatar', 'is_default', `is_default INTEGER NOT NULL DEFAULT 0`);
 addColumnIfMissing('user', 'display_name', `display_name TEXT`);
 addColumnIfMissing('authorization', 'terms_version', `terms_version TEXT`);
+addColumnIfMissing('voice', 'provider_voice_id', `provider_voice_id TEXT`);
 
 // 用户名全局唯一(登录免输机构 ID):在 user.username 上建唯一索引。
 // 旧库若已有重名用户会建索引失败 —— 用 try 包裹并告警,交付时人工清理重名。
@@ -310,6 +312,7 @@ export interface VoiceRow {
   kind: VoiceKind;
   status: VoiceStatus;
   source_key: string | null;
+  provider_voice_id: string | null;
   authorization_id: string | null;
   created_at: number;
 }

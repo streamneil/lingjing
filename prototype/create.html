@@ -234,8 +234,10 @@
       const body = document.getElementById('voiceSheetBody');
       const items = [...((vc.clones||[]).filter(v=>v.status==='ready')), ...(vc.presets||[])];
       body.innerHTML = items.map(v=>{
-        // 声音复刻能力尚未接入,克隆音色暂以预置音色生成 —— 明确告知,避免用户误以为是本人声音
-        const desc = v.kind==='clone' ? '克隆音色 · 复刻能力即将开放,暂用预置音色' : `${v.gender||''} · ${v.desc||''}`;
+        // 克隆音色:复刻成功(ready)= 本人声音可用;失败(failed)= 复刻未成,暂用预置
+        const desc = v.kind==='clone'
+          ? (v.status==='ready' ? '克隆音色 · 本人声音' : '克隆音色 · 复刻未完成,暂用预置')
+          : `${v.gender||''} · ${v.desc||''}`;
         return `<div class="vcard" onclick='pickVoice(${JSON.stringify({id:v.id,name:v.name}).replace(/'/g,"&#39;")})'><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>${esc(v.name)}${v.kind==='preset'?' <span class="hot">预置</span>':''}</div><div class="vc-d">${esc(desc)}</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>`;
       }).join('') || '<div style="color:var(--t4);padding:20px">暂无音色</div>';
       if(!selectedVoice && items[0]) pickVoice({id:items[0].id,name:items[0].name}, true);
