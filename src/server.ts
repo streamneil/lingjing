@@ -12,7 +12,6 @@ import { authRouter } from './api/auth.js';
 import { creditsRouter } from './api/credits.js';
 import { avatarsRouter } from './api/avatars.js';
 import { voicesRouter } from './api/voices.js';
-import { assetsRouter } from './api/assets.js';
 import { settingsRouter } from './api/settings.js';
 import { legalRouter } from './api/legal.js';
 import { adminRouter } from './api/admin.js';
@@ -44,7 +43,6 @@ export function createApp() {
   app.use('/api', creditsRouter);
   app.use('/api', avatarsRouter);
   app.use('/api', voicesRouter);
-  app.use('/api', assetsRouter);
   app.use('/api', settingsRouter);
   app.use('/api', legalRouter);
   app.use('/api', jobsRouter);
