@@ -104,3 +104,33 @@ export function synthesizeSpeech(params: TtsParams): Promise<Buffer> {
     });
   });
 }
+
+// ── 声音复刻(voice enrollment)──
+// 查证(2026-06,阿里官方):POST /services/audio/tts/customization,model=voice-enrollment,
+// action=create_voice,传 target_model + prefix + 公网音频 URL → 返回 output.voice_id。
+// 复刻出的 voice_id(形如 cosyvoice-v1-<prefix>-xxxx)配合同一个 target_model 合成本人声音。
+// 实测确认:target_model=cosyvoice-v1(新账号有免费额度),voice_id 直接传给 synthesizeSpeech 的 voice。
+
+/** 创建复刻音色。audioUrl 须公网可达(OSS 签名 URL);prefix 仅数字+小写字母、<10 字符。
+ *  返回百炼的 voice_id,存库后合成时当 voice 用。 */
+export async function createClonedVoice(audioUrl: string, prefix: string): Promise<string> {
+  const apiKey = config.baichuan.apiKey();
+  const targetModel = config.baichuan.ttsModel; // 与合成同模型(cosyvoice-v1)
+  const res = await fetch(`${config.baichuan.baseUrl}/services/audio/tts/customization`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'voice-enrollment',
+      input: { action: 'create_voice', target_model: targetModel, prefix, url: audioUrl },
+    }),
+  });
+  const json = (await res.json().catch(() => ({}))) as {
+    output?: { voice_id?: string };
+    message?: string;
+    code?: string;
+  };
+  if (res.status !== 200 || !json.output?.voice_id) {
+    throw new Error(`声音复刻失败 HTTP ${res.status}: ${json.message ?? json.code ?? '未知错误'}`);
+  }
+  return json.output.voice_id;
+}

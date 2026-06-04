@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { listPresets, listClones, createCloneVoice, deleteVoice, getVoice } from '../voices/index.js';
 import { putObject, getSignedUrl } from '../storage/index.js';
+import { createClonedVoice } from '../gateway/cosyvoice.js';
 import { audit } from '../audit/index.js';
 
 export const voicesRouter = Router();
@@ -58,7 +59,22 @@ voicesRouter.post(
         await putObject(proofKey, proof.buffer, proof.mimetype);
       }
 
-      const v = createCloneVoice({ tenantId, userId: req.user!.id, name, sourceKey: sampleKey, consent, proofKey });
+      // 真实声音复刻:样本公网 URL(OSS 签名)→ 百炼 create_voice → voice_id。
+      // 复刻须公网可达,本地 MinIO 不行(同 wan2.2 素材问题),失败则降级建一个 failed 音色。
+      let providerVoiceId: string | undefined;
+      try {
+        const sampleUrl = await getSignedUrl(sampleKey, 3600);
+        // prefix:仅数字+小写字母、<10 字符。用租户+随机派生一个合法短前缀。
+        const prefix = ('v' + randomUUID().replace(/[^a-z0-9]/g, '')).slice(0, 9);
+        providerVoiceId = await createClonedVoice(sampleUrl, prefix);
+      } catch (cloneErr) {
+        // 复刻失败(如本地 MinIO 不可达 / 样本不合规):不阻断,建 failed 音色,前端可见原因。
+        console.warn('声音复刻失败:', cloneErr instanceof Error ? cloneErr.message : cloneErr);
+      }
+
+      const v = createCloneVoice({
+        tenantId, userId: req.user!.id, name, sourceKey: sampleKey, consent, proofKey, providerVoiceId,
+      });
       audit(req, 'clone_voice', v.id);
       res.status(201).json({ id: v.id, name: v.name, status: v.status });
     } catch (e) {
