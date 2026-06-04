@@ -41,7 +41,7 @@
   const sb = `
   <aside class="sidebar">
     <div class="sb-brand">
-      <span class="logo-mark" id="lj-brand-mark"><svg viewBox="0 0 32 32" fill="none"><path d="M7 6h4.2v13H18v4H7z" fill="#0A0A0B"/><path d="M25 6v11.5a4.5 4.5 0 0 1-8.2 2.6" fill="none" stroke="#0A0A0B" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 6h6" fill="none" stroke="#0A0A0B" stroke-width="3.2" stroke-linecap="round"/></svg></span>
+      <span class="logo-mark" id="lj-brand-mark"><svg viewBox="0 0 100 100" fill="none"><circle cx="37" cy="50" r="29" stroke="#0E0E0E" stroke-width="5"/><circle cx="63" cy="50" r="29" stroke="#0E0E0E" stroke-width="5"/><path d="M50 24.08 A29 29 0 0 1 50 75.92 A29 29 0 0 1 50 24.08 Z" fill="#0E0E0E"/></svg></span>
       <span class="nm">Lingjing</span><span class="cjk">灵镜</span>
     </div>
     <nav class="sb-nav">${items}</nav>
