@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>平台运营登录 · 灵镜</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --void:#060607; --bg:#0A0A0B; --card:#161618; --card-hi:#1C1C1F; --field:#101012;
+    --line:#232327; --line-soft:#1A1A1D; --hairline:rgba(255,255,255,.06);
+    --t1:#F6F6F8; --t2:#ABABB2; --t3:#717179; --t4:#4A4A51;
+    --blue:#4D8DFF; --blue-bg:rgba(77,141,255,.13); --red:#FF5247; --green:#34C759; --amber:#FFB23E;
+    --f:'Noto Sans SC',sans-serif; --f-en:'Manrope',sans-serif; --f-mono:'Space Mono',monospace;
+    --ease:cubic-bezier(.22,.61,.36,1);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:var(--f);background:var(--void);color:var(--t1);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px;position:relative;overflow:hidden;-webkit-font-smoothing:antialiased}
+  body::before{content:"";position:fixed;inset:0;z-index:0;background:radial-gradient(60% 50% at 50% -10%,rgba(255,178,62,.08) 0%,transparent 60%),radial-gradient(50% 50% at 100% 100%,rgba(77,141,255,.05) 0%,transparent 55%),var(--bg)}
+  .wrap{position:relative;z-index:1;width:100%;max-width:400px;animation:rise .6s var(--ease) both}
+  @keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+  .brand{display:flex;flex-direction:column;align-items:center;text-align:center;margin-bottom:24px}
+  .mk{width:52px;height:52px;border-radius:15px;background:linear-gradient(135deg,var(--amber),#E8902B);display:grid;place-items:center;box-shadow:0 16px 40px -14px rgba(255,178,62,.4);margin-bottom:14px;font-weight:800;font-size:22px;color:#0A0A0B;font-family:var(--f-en)}
+  .nm b{font-size:20px;font-weight:700;letter-spacing:.5px}
+  .tag{margin-top:8px;font-size:12px;color:var(--amber);letter-spacing:2px;font-family:var(--f-mono);text-transform:uppercase}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:32px 30px 28px;box-shadow:0 40px 100px -34px rgba(0,0,0,.9)}
+  .card h2{font-size:19px;font-weight:700;text-align:center}
+  .card .sub{color:var(--t3);font-size:12.5px;margin-top:6px;margin-bottom:24px;text-align:center}
+  .fld{margin-bottom:14px}
+  .fld label{display:block;font-size:11px;color:var(--t3);margin-bottom:7px;font-family:var(--f-en);letter-spacing:.5px;text-transform:uppercase;font-weight:600}
+  .fld input{width:100%;background:var(--field);border:1px solid var(--line);border-radius:11px;padding:12px 14px;color:var(--t1);font-size:14px;font-family:var(--f);outline:none;transition:border-color .18s,box-shadow .18s}
+  .fld input::placeholder{color:var(--t4)}
+  .fld input:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(255,178,62,.13)}
+  .submit{width:100%;margin-top:8px;background:var(--amber);color:#0A0A0B;border:none;border-radius:999px;padding:13px;font-size:14px;font-weight:700;font-family:var(--f);cursor:pointer;letter-spacing:1px;transition:transform .12s var(--ease),opacity .18s}
+  .submit:hover{transform:translateY(-1px)}
+  .submit:disabled{opacity:.5;cursor:not-allowed;transform:none}
+  .err{color:var(--red);font-size:12px;margin-top:12px;min-height:16px;text-align:center}
+  .hint{color:var(--t4);font-size:11px;margin-top:18px;text-align:center;border-top:1px solid var(--line-soft);padding-top:14px;line-height:1.6}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand">
+      <span class="mk">灵</span>
+      <div class="nm"><b>灵镜 · 平台运营</b></div>
+      <div class="tag">Platform Admin</div>
+    </div>
+    <form class="card" id="lgForm">
+      <h2>超管登录</h2>
+      <div class="sub">平台运营后台 · 管理租户与充值</div>
+      <div class="fld">
+        <label>超管账号</label>
+        <input id="username" placeholder="admin" autocomplete="username" required autofocus>
+      </div>
+      <div class="fld">
+        <label>密码</label>
+        <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" required>
+      </div>
+      <div class="fld" style="margin-bottom:6px">
+        <label>安全验证</label>
+        <div id="lgCaptcha"></div>
+      </div>
+      <button class="submit" id="lgBtn" type="submit" disabled>登 录</button>
+      <div class="err" id="lgErr"></div>
+      <div class="hint">仅限平台运营人员。租户用户请访问 <a href="/login.html" style="color:var(--t3)">机构登录</a></div>
+    </form>
+  </div>
+<script src="/api.js"></script>
+<script src="/captcha.js"></script>
+<script>
+  // 超管登录用独立端点 /admin/login(cookie lj_padmin / Path=/admin)。
+  const form=document.getElementById('lgForm'),btn=document.getElementById('lgBtn'),err=document.getElementById('lgErr');
+  let captchaToken=null;
+  const cap=LJCaptcha.mount(document.getElementById('lgCaptcha'),{
+    onPass:(t)=>{ captchaToken=t; btn.disabled=false; },
+    onReset:()=>{ captchaToken=null; btn.disabled=true; },
+  });
+  form.addEventListener('submit',async(e)=>{
+    e.preventDefault(); err.textContent='';
+    if(!captchaToken){ err.textContent='请先完成滑块验证'; return; }
+    btn.disabled=true; btn.textContent='登录中…';
+    try{
+      const res=await fetch('/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',
+        body:JSON.stringify({username:document.getElementById('username').value.trim(),password:document.getElementById('password').value,captchaToken})});
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok) throw new Error(data.error||'登录失败');
+      location.href='/admin/';
+    }catch(ex){
+      err.textContent='✕ '+(ex.message||'登录失败'); btn.textContent='登 录';
+      captchaToken=null; cap.reset(); // token 一次性,失败重验
+    }
+  });
+</script>
+</body>
+</html>

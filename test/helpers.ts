@@ -109,6 +109,16 @@ export class Client {
     });
   }
 
+  /** 测试登录助手:自动走滑块(challenge → verify 拿 token)再 POST /login。
+   *  防暴破上线后 /login 必携 captcha_token,测试登录统一走这里,免每处手动过滑块。
+   *  loginPath 默认租户登录 /api/login;超管登录传 /admin/login。 */
+  async login(username: string, password: string, loginPath = '/api/login'): Promise<Res> {
+    const ch = await this.request('GET', '/api/captcha/challenge');
+    // 服务端容差内即过:直接提交缺口目标 x(测试不模拟真人拖拽)
+    const v = await this.request('POST', '/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.gapX });
+    return this.request('POST', loginPath, { username, password, captchaToken: v.body.captchaToken });
+  }
+
   get(path: string) {
     return this.request('GET', path);
   }

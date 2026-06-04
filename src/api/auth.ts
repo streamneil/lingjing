@@ -23,15 +23,20 @@ import {
 } from '../auth/middleware.js';
 import { audit, writeAudit } from '../audit/index.js';
 import { resolveSession } from '../auth/index.js';
+import { consumeCaptchaToken } from '../auth/platform.js';
 import type { Role } from '../db/index.js';
 
 export const authRouter = Router();
 
-// 登录:(username, password) → 设 session cookie(用户名全局唯一,租户从账号反查)
+// 登录:(username, password) → 设 session cookie(用户名全局唯一,租户从账号反查)。
+// 防暴破(D8/D9):必携 captcha_token(滑块过后服务端发的一次性凭证),消费即弃。
 authRouter.post('/login', (req: Request, res: Response) => {
-  const { username, password } = req.body ?? {};
+  const { username, password, captchaToken } = req.body ?? {};
   if (!username || !password) {
     return res.status(400).json({ error: '缺少 username / password' });
+  }
+  if (!consumeCaptchaToken(captchaToken)) {
+    return res.status(400).json({ error: '请先完成滑块验证' });
   }
   try {
     const token = login(username, password);

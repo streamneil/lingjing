@@ -43,8 +43,8 @@ window.LJ = (function () {
     del: (p) => call('DELETE', p),
 
     // 便捷方法
-    login: (username, password) =>
-      call('POST', '/login', { username, password }),
+    login: (username, password, captchaToken) =>
+      call('POST', '/login', { username, password, captchaToken }),
     logout: () => call('POST', '/logout'),
     me: () => call('GET', '/me'),
 

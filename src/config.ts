@@ -93,6 +93,16 @@ export const config = {
     },
   },
 
+  // ── 平台超管引导（/plan-ceo-review D5 + /plan-eng-review B3）──
+  // 首次启动 platform_admin 表空时,用这两个 env 建初始超管。
+  // user 默认 admin;pass 函数式校验:仅 bootstrap 真要建超管时才 required，
+  // 未设则 required() 抛错拒绝启动（绝不用默认口令，否则=后门）。
+  // 测试/已建超管的环境不跑 bootstrap，故不会因缺 pass 而崩。
+  superadmin: {
+    username: optional('SUPERADMIN_USER', 'admin'),
+    password: () => required('SUPERADMIN_PASS'),
+  },
+
   // ── 数据库（Slice1 用 SQLite，够单租户单机；Slice2 多租户可换 Postgres）──
   db: {
     file: optional('DB_FILE', 'lingjing.db'),

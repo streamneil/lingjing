@@ -33,7 +33,7 @@ beforeAll(() => {
 // 保持调用处签名不变:loginAs(tenantId, '角色'),内部拼成全局唯一用户名
 async function loginAs(tenantId: string, role: string): Promise<InstanceType<typeof Client>> {
   const c = new Client(app);
-  const r = await c.post('/api/login', { username: `${tag(tenantId)}_${role}`, password: 'pw123456' });
+  const r = await c.login(`${tag(tenantId)}_${role}`, 'pw123456');
   expect(r.status).toBe(200);
   return c;
 }
@@ -41,7 +41,7 @@ async function loginAs(tenantId: string, role: string): Promise<InstanceType<typ
 describe('认证', () => {
   it('密码错误 → 401', async () => {
     const c = new Client(app);
-    const r = await c.post('/api/login', { username: 'A_admin', password: '错的' });
+    const r = await c.login('A_admin', '错的'); // 滑块过了但密码错 → 401
     expect(r.status).toBe(401);
   });
 
@@ -120,19 +120,20 @@ describe('租户隔离', () => {
 });
 
 describe('积分 + 审计 API', () => {
-  it('非 admin 不能发放积分 → 403', async () => {
-    const c = await loginAs(tenantA, 'creator');
-    const r = await c.post('/api/credits/grant', { amount: 100 });
-    expect(r.status).toBe(403);
+  // 回归(/plan-eng-review E-3.1):租户自助充值接口已删除,收归平台超管。
+  // 租户侧无论什么角色都不能再充值 —— 接口本身不存在(404),堵 SaaS 收入洞。
+  it('租户侧充值接口已删除 → 404(admin 也不能自充)', async () => {
+    const c = await loginAs(tenantA, 'admin');
+    const r = await c.post('/api/credits/grant', { amount: 500 });
+    expect(r.status).toBe(404);
+    // 余额未变(没有任何途径让租户自己加分)
   });
 
-  it('admin 发放积分 → 余额增加', async () => {
+  it('余额查询仍可用(租户看自己)', async () => {
     const c = await loginAs(tenantA, 'admin');
-    const before = (await c.get('/api/credits/balance')).body.balance;
-    const g = await c.post('/api/credits/grant', { amount: 500 });
-    expect(g.status).toBe(200);
-    const after = (await c.get('/api/credits/balance')).body.balance;
-    expect(after).toBe(before + 500);
+    const bal = await c.get('/api/credits/balance');
+    expect(bal.status).toBe(200);
+    expect(typeof bal.body.balance).toBe('number');
   });
 
   it('费用预估返回 cost', async () => {
@@ -147,7 +148,7 @@ describe('积分 + 审计 API', () => {
     const poorTenant = createTenant('穷台').id;
     createUser(poorTenant, 'poor_creator', 'pw123456', 'creator');
     const c = new Client(app);
-    await c.post('/api/login', { username: 'poor_creator', password: 'pw123456' });
+    await c.login('poor_creator', 'pw123456');
     const r = await c.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'longjing', script: '需要扣分的文案' });
     expect(r.status).toBe(402);
   });
@@ -209,7 +210,7 @@ describe('停用即生效', () => {
     // 新建一个成员并登录(用户名全局唯一)
     await admin.post('/api/members', { username: 'tobedisabled', password: 'pw123456', role: 'creator' });
     const victim = new Client(app);
-    await victim.post('/api/login', { username: 'tobedisabled', password: 'pw123456' });
+    await victim.login('tobedisabled', 'pw123456');
     expect((await victim.get('/api/me')).status).toBe(200);
 
     // 找到该成员 id 并停用(/members 现返回 {members, seats})

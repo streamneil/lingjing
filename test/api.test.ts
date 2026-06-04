@@ -18,7 +18,7 @@ beforeAll(async () => {
   tenantId = t.id;
   createUser(tenantId, 'creator1', 'pw123456', 'creator');
   grant(tenantId, 10000); // 有积分才能发起生成(Slice3 计费门)
-  const r = await client.post('/api/login', { username: 'creator1', password: 'pw123456' });
+  const r = await client.login('creator1', 'pw123456');
   expect(r.status).toBe(200);
 });
 

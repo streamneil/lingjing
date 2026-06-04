@@ -103,6 +103,51 @@ db.exec(`
   );
 `);
 
+// ── 平台超管(跨租户高权限,与租户 user/session 物理隔离)──
+// 决策来源:/plan-ceo-review D1 + /plan-eng-review。
+// platform_admin 独立表:admin 不占租户 user 表 → 租户永远用不了 admin。
+// platform_session 独立会话:cookie lj_padmin / Path=/admin,与租户 lj_session 不串位。
+// 一个租户侧越权 bug 提不了平台权(独立表 + 独立 cookie + 独立路由三重隔离)。
+//
+// 防暴破(/plan-ceo-review D8/D9):仅滑块行为验证,无 IP 锁定。
+//   captcha_challenge:后端出题(目标 x 存服务端,前端拿不到答案)。
+//   captcha_token:滑块过后发的一次性凭证,登录必携,消费即 DELETE。
+db.exec(`
+  CREATE TABLE IF NOT EXISTS platform_admin (
+    id            TEXT PRIMARY KEY,
+    username      TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at    INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS platform_session (
+    token       TEXT PRIMARY KEY,
+    padmin_id   TEXT NOT NULL,
+    created_at  INTEGER NOT NULL,
+    expires_at  INTEGER NOT NULL,
+    FOREIGN KEY (padmin_id) REFERENCES platform_admin(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_psession_padmin ON platform_session(padmin_id);
+
+  CREATE TABLE IF NOT EXISTS captcha_challenge (
+    id          TEXT PRIMARY KEY,
+    target_x    INTEGER NOT NULL,         -- 缺口目标 x(校验时比对前端提交的 x,容差内即过)
+    created_at  INTEGER NOT NULL,
+    expires_at  INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS captcha_token (
+    token       TEXT PRIMARY KEY,         -- 滑块过后发的一次性登录凭证
+    created_at  INTEGER NOT NULL,
+    expires_at  INTEGER NOT NULL
+  );
+`);
+
+// audit_log 加 actor_type 列(/plan-ceo-review D11):区分操作者是租户 user 还是平台超管。
+//   user_id 语义 = actor_id;actor_type=platform_admin 时 user_id 指向 platform_admin.id。
+//   跨租户充值记目标租户 tenant_id,租户 admin 能在自己审计看到"平台充值 N"。
+//   DEFAULT 'user':历史行回填 user,前端 else 分支兼容。
+
 // ── Slice 3:形象库 + 授权存证 ──
 // avatar:预置(preset)/ 自定义照片(photo)/ 自定义视频(video)。
 //   自定义形象状态机:processing(处理中)→ ready(可用) / failed。
@@ -189,6 +234,7 @@ function addColumnIfMissing(table: string, column: string, ddl: string): void {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
   }
 }
+addColumnIfMissing('audit_log', 'actor_type', `actor_type TEXT NOT NULL DEFAULT 'user'`);
 addColumnIfMissing('avatar', 'orientation', `orientation TEXT DEFAULT 'portrait'`);
 addColumnIfMissing('avatar', 'is_default', `is_default INTEGER NOT NULL DEFAULT 0`);
 addColumnIfMissing('user', 'display_name', `display_name TEXT`);
@@ -286,14 +332,31 @@ export interface LedgerRow {
   created_at: number;
 }
 
+export type ActorType = 'user' | 'platform_admin';
+
 export interface AuditRow {
   id: string;
   tenant_id: string;
-  user_id: string | null;
+  user_id: string | null; // 语义 = actor_id;actor_type=platform_admin 时指向 platform_admin.id
+  actor_type: ActorType;
   action: string;
   target: string | null;
   ip: string | null;
   created_at: number;
+}
+
+export interface PlatformAdminRow {
+  id: string;
+  username: string;
+  password_hash: string;
+  created_at: number;
+}
+
+export interface PlatformSessionRow {
+  token: string;
+  padmin_id: string;
+  created_at: number;
+  expires_at: number;
 }
 
 export type AvatarKind = 'preset' | 'photo' | 'video';
