@@ -5,7 +5,11 @@
 
 import { randomUUID } from 'node:crypto';
 import type { Request } from 'express';
-import { db, type AuditRow } from '../db/index.js';
+import { db, type AuditRow, type ActorType } from '../db/index.js';
+
+// 平台级审计的虚拟租户 id:超管自身操作(非针对具体租户的,如登录)记在此,
+// 与任何真实租户的 audit_log 视图隔离,供平台级审计追溯(/plan-ceo-review C1/E3)。
+export const PLATFORM_TENANT = '__platform__';
 
 function clientIp(req: Request): string | null {
   const xf = req.headers['x-forwarded-for'];
@@ -13,28 +17,50 @@ function clientIp(req: Request): string | null {
   return req.socket?.remoteAddress ?? null;
 }
 
-/** 从已鉴权请求写一条审计(req.user 必须存在)。 */
+/** 从已鉴权请求写一条租户审计(req.user 必须存在)。 */
 export function audit(req: Request, action: string, target?: string): void {
   writeAudit(req.user?.tenantId ?? 'unknown', req.user?.id ?? null, action, target ?? null, clientIp(req));
 }
 
-/** 低层写入(登录场景 req.user 还没挂,直接传 tenant/user)。 */
+/** 低层写入(登录场景 req.user 还没挂,直接传 tenant/user)。actorType 默认 user。
+ *  超管操作传 actorType='platform_admin' + actorId=platform_admin.id;
+ *  跨租户操作的 tenantId 记目标租户,租户 admin 能在自己审计看到"平台 X 操作"。 */
 export function writeAudit(
   tenantId: string,
   userId: string | null,
   action: string,
   target: string | null,
   ip: string | null,
+  actorType: ActorType = 'user',
 ): void {
   db.prepare(
-    `INSERT INTO audit_log (id,tenant_id,user_id,action,target,ip,created_at)
-     VALUES (?,?,?,?,?,?,?)`,
-  ).run(randomUUID(), tenantId, userId, action, target, ip, Date.now());
+    `INSERT INTO audit_log (id,tenant_id,user_id,actor_type,action,target,ip,created_at)
+     VALUES (?,?,?,?,?,?,?,?)`,
+  ).run(randomUUID(), tenantId, userId, actorType, action, target, ip, Date.now());
 }
 
-/** 查审计(admin 可见)。 */
+/** 平台超管操作审计(actor_type=platform_admin)。
+ *  targetTenant:针对某租户的操作记目标租户(租户侧可见);纯平台操作记 PLATFORM_TENANT。 */
+export function writePlatformAudit(
+  padminId: string,
+  action: string,
+  targetTenant: string,
+  target: string | null,
+  ip: string | null,
+): void {
+  writeAudit(targetTenant, padminId, action, target, ip, 'platform_admin');
+}
+
+/** 查租户审计(admin 可见)。 */
 export function listAudit(tenantId: string, limit = 200): AuditRow[] {
   return db
     .prepare(`SELECT * FROM audit_log WHERE tenant_id=? ORDER BY created_at DESC LIMIT ?`)
     .all(tenantId, limit) as AuditRow[];
+}
+
+/** 平台级审计:所有超管操作(跨所有目标租户 + 纯平台操作),供 /admin 追溯。 */
+export function listPlatformAudit(limit = 200): AuditRow[] {
+  return db
+    .prepare(`SELECT * FROM audit_log WHERE actor_type='platform_admin' ORDER BY created_at DESC LIMIT ?`)
+    .all(limit) as AuditRow[];
 }

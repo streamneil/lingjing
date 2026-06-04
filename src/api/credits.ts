@@ -6,8 +6,8 @@
 
 import { Router, type Request, type Response } from 'express';
 import { requireAuth, requireRole } from '../auth/middleware.js';
-import { balance, ledger, grant } from '../credits/index.js';
-import { listAudit, audit } from '../audit/index.js';
+import { balance, ledger } from '../credits/index.js';
+import { listAudit } from '../audit/index.js';
 
 export const creditsRouter = Router();
 
@@ -50,16 +50,9 @@ creditsRouter.get('/credits/warning', requireAuth, (req: Request, res: Response)
   return res.json({ balance: bal, low: bal < LOW, threshold: LOW });
 });
 
-// 后台发放(仅 admin)
-creditsRouter.post('/credits/grant', requireRole('admin'), (req: Request, res: Response) => {
-  const { amount, note } = req.body ?? {};
-  if (typeof amount !== 'number' || amount <= 0) {
-    return res.status(400).json({ error: 'amount 必须为正数' });
-  }
-  grant(req.user!.tenantId, amount, note);
-  audit(req, 'grant_credit', `+${amount}`);
-  return res.json({ ok: true, balance: balance(req.user!.tenantId) });
-});
+// 充值已收归平台超管(POST /admin/api/tenants/:id/grant)。
+// 租户自助充值是 SaaS 收入漏洞(租户 admin 给自己无限充值),已删除(/plan-ceo-review D3)。
+// 余额/消费记录查询保留(租户可看自己),充值入口只在 /admin。
 
 // 审计日志(仅 admin)
 creditsRouter.get('/audit', requireRole('admin'), (req: Request, res: Response) => {

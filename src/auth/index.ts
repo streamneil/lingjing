@@ -3,8 +3,7 @@
 // 决策来源:/plan-eng-review D16 —— server session(存 DB)而非 JWT,
 // 因为政企客户要"管理员一键停用成员即生效":删 session / 停用 user 立刻断登录。
 
-import { randomUUID, randomBytes } from 'node:crypto';
-import bcrypt from 'bcryptjs';
+import { randomUUID } from 'node:crypto';
 import {
   db,
   type Role,
@@ -13,10 +12,10 @@ import {
   type UserRow,
   type SessionRow,
 } from '../db/index.js';
+import { hashPassword, verifyPassword, dummyVerify, genToken } from './crypto.js';
 
 const now = () => Date.now();
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 天
-const BCRYPT_ROUNDS = 10;
 
 // ── 机构 ──
 export function createTenant(name: string, delivery: 'hosted' | 'private' = 'hosted'): TenantRow {
@@ -69,6 +68,11 @@ export function seatUsage(tenantId: string): { used: number; limit: number } {
   return { used: countCreatorsHoldingSeat(tenantId), limit: seatLimit(tenantId) };
 }
 
+// 平台保留用户名:租户用户不能占用(大小写折叠后比对)。真正的隔离靠 platform_admin
+// 独立表 + 独立 cookie + 独立端点(/plan-ceo-review B5)——这里只是 UX 防呆,避免租户
+// 建一个叫 admin 的用户造成"我以为我是超管"的混淆,不承担安全职责。
+const RESERVED_USERNAMES = new Set(['admin', 'administrator', 'root', 'superadmin', 'system']);
+
 export function createUser(
   tenantId: string,
   username: string,
@@ -76,12 +80,15 @@ export function createUser(
   role: Role,
 ): UserRow {
   if (!['admin', 'creator', 'viewer'].includes(role)) throw memberErr('INVALID_ROLE', '角色非法');
+  if (RESERVED_USERNAMES.has(username.trim().toLowerCase())) {
+    throw new Error('该用户名为平台保留字,请换一个(如机构简称+姓名)');
+  }
   const u: UserRow = {
     id: randomUUID(),
     tenant_id: tenantId,
     username,
     display_name: username, // 默认昵称=用户名,可在个人信息里改
-    password_hash: bcrypt.hashSync(password, BCRYPT_ROUNDS),
+    password_hash: hashPassword(password),
     role,
     status: 'active',
     last_active: null,
@@ -208,13 +215,13 @@ export function login(username: string, password: string): string {
   // 统一报错文案,避免泄露"用户是否存在"
   const fail = () => new Error('用户名或密码错误');
   if (!u) {
-    bcrypt.compareSync(password, '$2b$10$invalidinvalidinvalidinvalidinvalidinvalidinv'); // 抵消时序差异
+    dummyVerify(password); // 抵消时序差异
     throw fail();
   }
   if (u.status === 'disabled') throw new Error('账号已被停用');
-  if (!bcrypt.compareSync(password, u.password_hash)) throw fail();
+  if (!verifyPassword(password, u.password_hash)) throw fail();
 
-  const token = randomBytes(32).toString('hex');
+  const token = genToken();
   const t = now();
   db.prepare(
     `INSERT INTO session (token,user_id,tenant_id,created_at,expires_at) VALUES (?,?,?,?,?)`,
@@ -269,9 +276,9 @@ export function updateDisplayName(userId: string, displayName: string): void {
 export function changePassword(userId: string, oldPassword: string, newPassword: string, keepToken?: string): void {
   const u = db.prepare(`SELECT * FROM user WHERE id=?`).get(userId) as UserRow | undefined;
   if (!u) throw new Error('用户不存在');
-  if (!bcrypt.compareSync(oldPassword, u.password_hash)) throw new Error('原密码错误');
+  if (!verifyPassword(oldPassword, u.password_hash)) throw new Error('原密码错误');
   if (newPassword.length < 6) throw new Error('新密码至少 6 位');
-  db.prepare(`UPDATE user SET password_hash=? WHERE id=?`).run(bcrypt.hashSync(newPassword, BCRYPT_ROUNDS), userId);
+  db.prepare(`UPDATE user SET password_hash=? WHERE id=?`).run(hashPassword(newPassword), userId);
   // 改密后作废其它会话(保留当前这个,避免把自己踢下线)
   if (keepToken) db.prepare(`DELETE FROM session WHERE user_id=? AND token!=?`).run(userId, keepToken);
   else db.prepare(`DELETE FROM session WHERE user_id=?`).run(userId);
