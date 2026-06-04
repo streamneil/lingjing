@@ -23,6 +23,7 @@ vi.mock('../src/gateway/cosyvoice.js', () => ({
 vi.mock('../src/pipeline/ai-label.js', () => ({
   applyAiLabel: vi.fn(async (buf: Buffer) => ({ buffer: buf, applied: true })),
   probeAudioDuration: vi.fn(async () => 5), // 假装 5s,通过时长校验
+  concatVideos: vi.fn(async (bufs: Buffer[]) => bufs[0]), // 单/多段:返回首段(测试不跑真 ffmpeg)
 }));
 
 // worker 取回成品时会 fetch(videoUrl);测试里桩掉为假视频字节

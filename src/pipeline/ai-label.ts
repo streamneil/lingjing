@@ -82,6 +82,44 @@ export async function extractFirstFrame(videoBuf: Buffer): Promise<Buffer | null
   }
 }
 
+/**
+ * 拼接多段视频为一条(长文案分段生成后用)。各段同源图片 → 同分辨率/编码,
+ * 用 ffmpeg concat demuxer 无损拼接(-c copy)。ffmpeg 不可用时抛错(调用方决定降级)。
+ * 单段时调用方应直接返回该段,无需拼接。
+ */
+export async function concatVideos(segmentBuffers: Buffer[]): Promise<Buffer> {
+  if (segmentBuffers.length === 0) throw new Error('concatVideos: 无片段');
+  if (segmentBuffers.length === 1) return segmentBuffers[0]!;
+  if (!(await ffmpegAvailable())) throw new Error('ffmpeg 不可用,无法拼接多段视频');
+  const dir = await mkdtemp(join(tmpdir(), 'lj-concat-'));
+  const parts: string[] = [];
+  const listPath = join(dir, 'list.txt');
+  try {
+    for (let i = 0; i < segmentBuffers.length; i++) {
+      const p = join(dir, `seg-${i}.mp4`);
+      await writeFile(p, segmentBuffers[i]!);
+      parts.push(p);
+    }
+    // concat demuxer:list.txt 每行 file '<path>';-safe 0 允许绝对路径。
+    await writeFile(listPath, parts.map((p) => `file '${p}'`).join('\n'));
+    const outPath = join(dir, 'out.mp4');
+    // 先试无损 -c copy(同源同编码,最快);各段时间基不一致致 copy 失败时,
+    // 回退重编码(-c:v libx264 -c:a aac)保证拼接成功。
+    try {
+      await runFfmpeg(['-y', '-f', 'concat', '-safe', '0', '-i', listPath, '-c', 'copy', outPath]);
+    } catch {
+      await runFfmpeg([
+        '-y', '-f', 'concat', '-safe', '0', '-i', listPath,
+        '-c:v', 'libx264', '-preset', 'veryfast', '-c:a', 'aac', outPath,
+      ]);
+    }
+    return await readFile(outPath);
+  } finally {
+    await Promise.all(parts.map((p) => unlink(p).catch(() => {})));
+    await unlink(listPath).catch(() => {});
+  }
+}
+
 export interface LabelOptions {
   text?: string; // 标识文案,默认"AI 合成"
 }

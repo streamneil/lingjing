@@ -37,6 +37,7 @@ vi.mock('../src/storage/index.js', () => ({
 vi.mock('../src/pipeline/ai-label.js', () => ({
   applyAiLabel: vi.fn(async (buf: Buffer) => ({ buffer: buf, applied: true })),
   probeAudioDuration: vi.fn(async () => 5),
+  concatVideos: vi.fn(async (bufs: Buffer[]) => bufs[0]),
 }));
 
 const _realFetch = globalThis.fetch;
