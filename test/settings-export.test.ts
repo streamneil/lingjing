@@ -76,18 +76,25 @@ describe('系统设置', () => {
     expect(put.body.code).toBe('DELIVERY_READONLY');
   });
 
-  it('admin 改机构名 → 读回生效', async () => {
+  it('机构名称只读:admin 传 orgName → 400(平台设定,不可改)', async () => {
     const c = await loginAs('admin');
     const put = await c.put('/api/settings', { orgName: '改名后的台' });
+    expect(put.status).toBe(400);
+    expect(put.body.code).toBe('ORG_NAME_READONLY');
+  });
+
+  it('admin 改默认分辨率 → 读回生效(可改的设置仍生效)', async () => {
+    const c = await loginAs('admin');
+    const put = await c.put('/api/settings', { defaultResolution: '480P' });
     expect(put.status).toBe(200);
-    expect((await c.get('/api/settings')).body.orgName).toBe('改名后的台');
+    expect((await c.get('/api/settings')).body.defaultResolution).toBe('480P');
   });
 
   it('viewer 可读但不能改设置 → 403', async () => {
     const c = await loginAs('viewer');
     expect((await c.get('/api/settings')).status).toBe(200); // viewer 可读
-    const put = await c.put('/api/settings', { orgName: '试图改名' });
-    expect(put.status).toBe(403); // viewer 不能改
+    const put = await c.put('/api/settings', { defaultResolution: '720P' });
+    expect(put.status).toBe(403); // viewer 不能改(requireRole 先于 body 校验)
   });
 });
 

@@ -13,9 +13,8 @@
 
       <div class="set-card" style="animation-delay:.04s">
         <h3>机构信息</h3><div class="h-desc">您的账号所属一个机构（工作空间）。机构内的形象、音色、作品相互隔离。</div>
-        <div class="set-row"><div class="info"><div class="k">机构名称</div><div class="v">展示在系统各处与生成记录中,建议填写机构全称(如「XX 市融媒体中心」)</div></div><div class="ctl"><div style="display:flex;gap:8px;align-items:center"><input id="orgName" style="padding:9px 13px;width:220px;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;color:var(--t1);font-size:14px;font-family:var(--f);outline:none" value=""><button class="btn btn-dark" onclick="saveOrgName()">保存</button></div></div></div>
+        <div class="set-row"><div class="info"><div class="k">机构名称</div><div class="v">开通账号时由平台设定，展示在系统各处与生成记录中（如需变更请联系平台）</div></div><div class="ctl"><span class="strong" id="orgName" style="font-size:15px"></span></div></div>
         <div class="set-row"><div class="info"><div class="k">机构 Logo</div><div class="v">显示在侧栏品牌区。建议透明背景 PNG，≤5MB（PNG / JPEG / WEBP）</div></div><div class="ctl"><div style="display:flex;gap:10px;align-items:center"><div id="logoPreview" style="width:40px;height:40px;border-radius:9px;background:var(--field,#121214);border:1px solid var(--line);background-size:contain;background-position:center;background-repeat:no-repeat"></div><input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="uploadLogo()"><button class="btn btn-dark" onclick="document.getElementById('logoFile').click()">上传</button></div></div></div>
-        <div class="set-row"><div class="info"><div class="k">交付模式</div><div class="v">部署时确定，如需变更请联系部署方</div></div><div class="ctl"><span class="bdg bdg-role" id="deliveryBadge">托管</span></div></div>
       </div>
 
       <div class="set-card" style="animation-delay:.12s">
@@ -44,11 +43,11 @@
 <script src="shell.js"></script>
 <script src="api.js"></script>
 <script>
-  // 默认分辨率分段控件:点击即保存(交付模式已改只读 badge,无分段控件)。
+  // 默认分辨率分段控件:点击即保存。
   document.querySelectorAll('#resSeg button').forEach(b=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('button').forEach(x=>x.classList.remove('active'));this.classList.add('active');saveResolution(this.dataset.v);}));
 
   let canEdit=false;
-  async function saveOrgName(){ if(!guard())return; try{ await put({orgName:document.getElementById('orgName').value}); window.LJToast('✓ 已保存'); }catch(e){window.LJToast(e.message,'err');} }
+  // 机构名称只读:开通账号时平台设定,用户不可改(无 saveOrgName)。
   // 用 PUT(api.js 没封装 put,直接 fetch)
   async function put(body){
     const res=await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify(body)});
@@ -88,8 +87,7 @@
     try{
       const me=await LJ.me(); canEdit=me.role==='admin';
       const s=await LJ.get('/settings');
-      document.getElementById('orgName').value=s.orgName||'';
-      document.getElementById('deliveryBadge').textContent = s.delivery==='private'?'私有化':'托管';
+      document.getElementById('orgName').textContent=s.orgName||'—';
       const sw=document.getElementById('aiLabelSwitch'); sw.classList.toggle('on',!!s.aiLabelEnabled);
       document.getElementById('aiLabelText').value = s.aiLabelText||'';
       document.querySelectorAll('#resSeg button').forEach(b=>b.classList.toggle('active', b.dataset.v===(s.defaultResolution||'720P')));
