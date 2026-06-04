@@ -16,7 +16,8 @@ const now = () => Date.now();
 
 // ── 计价:字数 × 单价 × 分辨率系数 ──
 const PRICE_PER_CHAR = 0.05; // 每字 0.05 积分(可配置;占位值)
-const RES_FACTOR: Record<string, number> = { '720P': 0.6, '1080P': 1, '4K': 2 };
+// 分辨率计价系数。480P 必须低于 720P,否则"更便宜"的选项反而更贵(eng-review D-E7)。
+const RES_FACTOR: Record<string, number> = { '480P': 0.4, '720P': 0.6, '1080P': 1, '4K': 2 };
 const MIN_COST = 1;
 
 /** 生成前费用预估(积分),与 reserve / settle 用同一函数,保证一致(验收第4条)。 */

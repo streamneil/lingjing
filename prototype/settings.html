@@ -14,20 +14,20 @@
       <div class="set-card" style="animation-delay:.04s">
         <h3>机构信息</h3><div class="h-desc">您的账号所属一个机构（工作空间）。机构内的形象、音色、作品相互隔离。</div>
         <div class="set-row"><div class="info"><div class="k">机构名称</div><div class="v">展示在系统各处与生成记录中,建议填写机构全称(如「XX 市融媒体中心」)</div></div><div class="ctl"><div style="display:flex;gap:8px;align-items:center"><input class="iline" id="orgName" style="padding:9px 13px;width:220px" value=""><button class="btn btn-dark" onclick="saveOrgName()">保存</button></div></div></div>
-        <div class="set-row"><div class="info"><div class="k">交付模式</div><div class="v">托管(平台云账号)/ 私有化(客户自有云账号,能力网关切换)</div></div><div class="ctl"><div class="choice-seg" id="deliverySeg"><button data-v="hosted" class="active">托管</button><button data-v="private">私有化</button></div></div></div>
+        <div class="set-row"><div class="info"><div class="k">机构 Logo</div><div class="v">显示在侧栏品牌区。建议透明背景 PNG，≤5MB（PNG / JPEG / WEBP）</div></div><div class="ctl"><div style="display:flex;gap:10px;align-items:center"><div id="logoPreview" style="width:40px;height:40px;border-radius:9px;background:var(--field,#121214);border:1px solid var(--line);background-size:contain;background-position:center;background-repeat:no-repeat"></div><input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="uploadLogo()"><button class="btn btn-dark" onclick="document.getElementById('logoFile').click()">上传</button></div></div></div>
+        <div class="set-row"><div class="info"><div class="k">交付模式</div><div class="v">部署时确定，如需变更请联系部署方</div></div><div class="ctl"><span class="bdg bdg-role" id="deliveryBadge">托管</span></div></div>
       </div>
 
       <div class="set-card" style="animation-delay:.12s">
-        <h3>内容合规与 AI 标识</h3><div class="h-desc">融媒体 / 政企硬性要求：生成内容按监管添加 AI 生成标识，并留存审计。</div>
+        <h3>内容合规与 AI 标识</h3><div class="h-desc">融媒体 / 政企硬性要求：生成内容添加 AI 生成标识，并对文案做敏感词预检。</div>
         <div class="set-row"><div class="info"><div class="k">AI 生成标识(水印)</div><div class="v">在生成视频右下角添加“AI 合成”标识与元数据</div></div><div class="ctl"><div class="switch on" id="aiLabelSwitch" onclick="this.classList.toggle('on');saveAiLabel()"><i></i></div></div></div>
-        <div class="set-row"><div class="info"><div class="k">内容送审</div><div class="v">文案 / 形象 / 音频生成前自动审核拦截违规</div></div><div class="ctl"><div class="switch on" onclick="this.classList.toggle('on')"><i></i></div></div></div>
-        <div class="set-row"><div class="info"><div class="k">操作审计日志</div><div class="v">记录谁、何时、生成了什么(政企合规留存)</div></div><div class="ctl"><div class="switch on" onclick="this.classList.toggle('on')"><i></i></div></div></div>
+        <div class="set-row"><div class="info"><div class="k">AI 标识文案</div><div class="v">水印显示的文字（≤20 字，默认「AI 合成」）</div></div><div class="ctl"><div style="display:flex;gap:8px;align-items:center"><input class="iline" id="aiLabelText" maxlength="20" style="padding:9px 13px;width:180px" placeholder="AI 合成"><button class="btn btn-dark" onclick="saveLabelText()">保存</button></div></div></div>
+        <div class="set-row"><div class="info"><div class="k">敏感词预检</div><div class="v">生成前对文案做本地敏感词预检（不可关闭，合规要求）</div></div><div class="ctl"><span class="bdg bdg-ok">已启用</span></div></div>
       </div>
 
       <div class="set-card" style="animation-delay:.16s">
-        <h3>默认创作参数</h3><div class="h-desc">机构级默认值，创作时可单独覆盖。</div>
-        <div class="set-row"><div class="info"><div class="k">默认分辨率</div></div><div class="ctl"><div class="choice-seg"><button class="active">720P</button><button>480P</button></div></div></div>
-        <div class="set-row"><div class="info"><div class="k">默认视频比例</div></div><div class="ctl"><div class="choice-seg"><button class="active">竖屏 9:16</button><button>横屏 16:9</button></div></div></div>
+        <h3>默认创作参数</h3><div class="h-desc">机构级默认值，新建创作时套用，创作时可单独覆盖。视频比例由所选形象图决定，无需在此设置。</div>
+        <div class="set-row"><div class="info"><div class="k">默认分辨率</div></div><div class="ctl"><div class="choice-seg" id="resSeg"><button data-v="720P" class="active">720P</button><button data-v="480P">480P</button></div></div></div>
       </div>
 
       <!-- T8:审计日志(仅 admin)-->
@@ -44,7 +44,8 @@
 <script src="shell.js"></script>
 <script src="api.js"></script>
 <script>
-  document.querySelectorAll('.choice-seg button').forEach(b=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('button').forEach(x=>x.classList.remove('active'));this.classList.add('active');if(this.parentNode.id==='deliverySeg')saveDelivery(this.dataset.v);}));
+  // 默认分辨率分段控件:点击即保存(交付模式已改只读 badge,无分段控件)。
+  document.querySelectorAll('#resSeg button').forEach(b=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('button').forEach(x=>x.classList.remove('active'));this.classList.add('active');saveResolution(this.dataset.v);}));
 
   let canEdit=false;
   async function saveOrgName(){ if(!guard())return; try{ await put({orgName:document.getElementById('orgName').value}); window.LJToast('✓ 已保存'); }catch(e){window.LJToast(e.message,'err');} }
@@ -57,8 +58,25 @@
     return d;
   }
   function guard(){ if(!canEdit){ window.LJToast('仅管理员可修改设置','err'); return false; } return true; }
-  async function saveDelivery(v){ if(!guard())return; try{await put({delivery:v});}catch(e){window.LJToast(e.message,'err');} }
   async function saveAiLabel(){ if(!guard()){document.getElementById('aiLabelSwitch').classList.toggle('on');return;} try{await put({aiLabelEnabled:document.getElementById('aiLabelSwitch').classList.contains('on')});}catch(e){window.LJToast(e.message,'err');} }
+  async function saveLabelText(){ if(!guard())return; try{ await put({aiLabelText:document.getElementById('aiLabelText').value}); window.LJToast('✓ 已保存'); }catch(e){window.LJToast(e.message,'err');} }
+  async function saveResolution(v){ if(!guard())return; try{ await put({defaultResolution:v}); window.LJToast('✓ 默认分辨率已设为 '+v); }catch(e){window.LJToast(e.message,'err');} }
+  async function uploadLogo(){
+    if(!guard())return;
+    const f=document.getElementById('logoFile').files[0]; if(!f) return;
+    const fd=new FormData(); fd.append('logo', f);
+    try{
+      const res=await fetch('/api/settings/logo',{method:'POST',body:fd,credentials:'same-origin'});
+      const d=await res.json().catch(()=>({}));
+      if(!res.ok) throw new Error(d.error||'上传失败');
+      window.LJToast('✓ Logo 已更新');
+      // 刷新预览 + 侧栏(加时间戳破缓存)
+      const me=await LJ.me();
+      const url='/api/org-logo/'+me.tenantId+'?t='+Date.now();
+      document.getElementById('logoPreview').style.backgroundImage='url('+url+')';
+    }catch(e){ window.LJToast(e.message,'err'); }
+    finally{ document.getElementById('logoFile').value=''; }
+  }
 
   function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
   function fmtT(ts){const d=new Date(ts);const p=n=>String(n).padStart(2,'0');return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;}
@@ -71,8 +89,12 @@
       const me=await LJ.me(); canEdit=me.role==='admin';
       const s=await LJ.get('/settings');
       document.getElementById('orgName').value=s.orgName||'';
-      document.querySelectorAll('#deliverySeg button').forEach(b=>b.classList.toggle('active',b.dataset.v===s.delivery));
+      document.getElementById('deliveryBadge').textContent = s.delivery==='private'?'私有化':'托管';
       const sw=document.getElementById('aiLabelSwitch'); sw.classList.toggle('on',!!s.aiLabelEnabled);
+      document.getElementById('aiLabelText').value = s.aiLabelText||'';
+      document.querySelectorAll('#resSeg button').forEach(b=>b.classList.toggle('active', b.dataset.v===(s.defaultResolution||'720P')));
+      // Logo 预览(公开读路径;无 logo 留空,onerror 不触发因为不设 src)
+      if(s.orgLogoKey){ document.getElementById('logoPreview').style.backgroundImage='url(/api/org-logo/'+me.tenantId+'?t='+Date.now()+')'; }
 
       // T8:审计日志(仅 admin 可见+可查)
       if(me.role==='admin'){

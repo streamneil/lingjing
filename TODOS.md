@@ -80,3 +80,11 @@
 - **Why:** 托管 SaaS 系统自带 ffmpeg;私有化(护城河)是离线内网,漏一个二进制依赖交付时会卡壳。
 - **Context:** 来自 /plan-ceo-review 项目收尾 D5/TODO3。与 T-PUBLIC-URL 同类私有化交付细节。本轮水印已做优雅降级(ffmpeg 缺失跳过烙字但标 ai_label)。
 - **Priority:** P2  **Depends on:** 私有化首单落地
+
+## CEO 审计补充(2026-06-04,HOLD SCOPE — 系统设置)
+
+### T-SETTINGS-AUDIT-DIFF:设置变更字段级审计
+- **What:** update_settings 审计记录改了哪个字段、旧值→新值,而非只记一条"改了设置"。
+- **Why:** 政企合规可能要求设置变更可追溯到字段。送审已改常开(消除最敏感操作),但默认参数/AI 标识文案变更仍值得留痕。
+- **Context:** 来自 /plan-ceo-review 系统设置审计。audit 表可加 detail 字段;settings.ts:66 现只 audit('update_settings')。
+- **Priority:** P2  **Depends on:** audit 表加 detail 列
