@@ -10,20 +10,51 @@
 window.LJCaptcha = (function () {
   const HANDLE_W = 44;
 
+  // 一次性注入组件样式(避免依赖宿主页 CSS 变量缺失)。
+  let styleInjected = false;
+  function injectStyle() {
+    if (styleInjected) return; styleInjected = true;
+    const css = `
+    .ljc{position:relative;height:46px;border-radius:12px;background:var(--field,#101012);border:1px solid var(--line,#232327);overflow:hidden;user-select:none;touch-action:none}
+    .ljc-fill{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,rgba(77,141,255,.10),rgba(77,141,255,.22));border-right:1px solid var(--blue,#4D8DFF);transition:none}
+    .ljc-gap{position:absolute;top:50%;transform:translateY(-50%);width:30px;height:30px;border-radius:7px;background:rgba(255,255,255,.025);box-shadow:inset 0 0 0 1px rgba(255,255,255,.10);display:flex;align-items:center;justify-content:center}
+    .ljc-gap svg{opacity:.35}
+    .ljc-hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--t3,#717179);pointer-events:none;letter-spacing:.3px}
+    .ljc-hint .arrows{display:inline-flex;margin-left:8px;color:var(--t4,#4A4A51);animation:ljc-nudge 1.4s var(--ease,ease) infinite}
+    @keyframes ljc-nudge{0%,100%{transform:translateX(0);opacity:.5}50%{transform:translateX(4px);opacity:1}}
+    .ljc-handle{position:absolute;left:3px;top:3px;bottom:3px;width:${HANDLE_W}px;border-radius:9px;background:linear-gradient(180deg,#fff,#E9E9EE);display:flex;align-items:center;justify-content:center;cursor:grab;box-shadow:0 3px 10px -2px rgba(0,0,0,.5),0 1px 0 rgba(255,255,255,.6) inset;transition:background .2s}
+    .ljc-handle:active{cursor:grabbing}
+    .ljc-handle svg{color:#0A0A0B}
+    .ljc.ok{border-color:var(--green,#34C759)}
+    .ljc.ok .ljc-fill{background:rgba(52,199,89,.16);border-right-color:var(--green,#34C759)}
+    .ljc.ok .ljc-handle{background:linear-gradient(180deg,#3DDc6A,#2BA84C)}
+    .ljc.ok .ljc-handle svg{color:#fff}
+    .ljc.ok .ljc-hint{color:var(--green,#34C759)}
+    .ljc.err{border-color:var(--red,#FF5247);animation:ljc-shake .35s}
+    .ljc.err .ljc-handle{background:linear-gradient(180deg,#FF6B61,#E5392E)}
+    @keyframes ljc-shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}`;
+    const el = document.createElement('style'); el.textContent = css; document.head.appendChild(el);
+  }
+
+  // 手柄图标:>>(待拖)/ ✓(过验)
+  const ARROW_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 6l6 6-6 6M13 6l6 6-6 6"/></svg>';
+  const CHECK_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 6"/></svg>';
+  // 缺口里的浅拼图凹槽提示
+  const GAP_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg>';
+
   function mount(container, { onPass, onReset } = {}) {
+    injectStyle();
     let challengeId = null, gapX = 0, trackW = 280, token = null, dragging = false, startX = 0, curX = 0;
 
     container.innerHTML = `
-      <div class="ljc-track" style="position:relative;height:42px;border-radius:10px;background:var(--field,#101012);border:1px solid var(--line,#232327);overflow:hidden;user-select:none">
-        <div class="ljc-fill" style="position:absolute;left:0;top:0;bottom:0;width:0;background:var(--blue-bg,rgba(77,141,255,.13));border-right:1px solid var(--blue,#4D8DFF)"></div>
-        <div class="ljc-gap" style="position:absolute;top:9px;width:24px;height:24px;border-radius:6px;border:1px dashed var(--t3,#717179);background:rgba(255,255,255,.03)"></div>
-        <div class="ljc-hint" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12.5px;color:var(--t3,#717179);pointer-events:none">拖动滑块完成验证</div>
-        <div class="ljc-handle" style="position:absolute;left:0;top:0;bottom:0;width:${HANDLE_W}px;border-radius:9px;background:var(--t1,#F6F6F8);display:flex;align-items:center;justify-content:center;cursor:grab;box-shadow:0 2px 8px rgba(0,0,0,.4)">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#0A0A0B" stroke-width="2.4" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>
-        </div>
+      <div class="ljc">
+        <div class="ljc-fill"></div>
+        <div class="ljc-gap">${GAP_SVG}</div>
+        <div class="ljc-hint">拖动滑块对齐缺口<span class="arrows">›››</span></div>
+        <div class="ljc-handle">${ARROW_SVG}</div>
       </div>`;
 
-    const track = container.querySelector('.ljc-track');
+    const root = container.querySelector('.ljc');
     const fill = container.querySelector('.ljc-fill');
     const gap = container.querySelector('.ljc-gap');
     const hint = container.querySelector('.ljc-hint');
@@ -33,52 +64,56 @@ window.LJCaptcha = (function () {
       token = null;
       try {
         const c = await LJ.get('/captcha/challenge');
-        challengeId = c.challengeId; gapX = c.gapX; trackW = c.trackW || track.clientWidth;
-        gap.style.left = gapX + 'px';
+        challengeId = c.challengeId; gapX = c.gapX; trackW = c.trackW || root.clientWidth;
+        // 缺口按服务端坐标换算到当前轨宽显示位置
+        const scale = (root.clientWidth || trackW) / trackW;
+        gap.style.left = Math.round(gapX * scale) + 'px';
         reset();
       } catch (e) {
-        hint.textContent = '验证加载失败,点此重试';
-        track.onclick = load;
+        hint.innerHTML = '验证加载失败,点此重试';
+        root.onclick = load;
       }
     }
 
     function reset() {
-      curX = 0; handle.style.left = '0px'; fill.style.width = '0px';
-      handle.style.background = 'var(--t1,#F6F6F8)';
-      hint.style.display = 'flex'; hint.textContent = '拖动滑块完成验证';
-      track.onclick = null;
+      curX = 0; handle.style.left = '3px'; fill.style.width = '0px';
+      handle.innerHTML = ARROW_SVG;
+      root.classList.remove('ok', 'err');
+      hint.style.display = 'flex'; hint.innerHTML = '拖动滑块对齐缺口<span class="arrows">›››</span>';
+      root.onclick = null;
       if (onReset) onReset();
     }
 
     function setX(x) {
-      const max = track.clientWidth - HANDLE_W;
+      const max = root.clientWidth - HANDLE_W - 6;
       curX = Math.max(0, Math.min(max, x));
-      handle.style.left = curX + 'px';
+      handle.style.left = (curX + 3) + 'px';
       fill.style.width = (curX + HANDLE_W) + 'px';
       hint.style.display = 'none';
     }
 
     async function release() {
       if (!dragging) return;
-      dragging = false; handle.style.cursor = 'grab';
+      dragging = false;
       // 前端落点换算到服务端轨宽坐标(缺口 x 以 trackW 为基)
-      const scale = trackW / (track.clientWidth || trackW);
+      const scale = trackW / (root.clientWidth || trackW);
       const submitX = Math.round(curX * scale);
       try {
         const r = await LJ.post('/captcha/verify', { challengeId, x: submitX });
         token = r.captchaToken;
-        handle.style.background = 'var(--green,#34C759)';
-        hint.style.display = 'flex'; hint.textContent = '✓ 验证通过';
+        root.classList.add('ok');
+        handle.innerHTML = CHECK_SVG;
+        hint.style.display = 'flex'; hint.innerHTML = '验证通过';
         if (onPass) onPass(token);
       } catch (e) {
-        handle.style.background = 'var(--red,#FF5247)';
-        setTimeout(load, 500); // 失败重新出题
+        root.classList.add('err');
+        setTimeout(load, 450); // 失败重新出题
       }
     }
 
     function onDown(e) {
       if (token) return;
-      dragging = true; handle.style.cursor = 'grabbing';
+      dragging = true;
       startX = (e.touches ? e.touches[0].clientX : e.clientX) - curX;
     }
     function onMove(e) {
