@@ -132,7 +132,6 @@
           <a class="stat" href="works.html"><div class="si"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></div><div class="sv skel" id="cWorks">—</div><div class="sn">作品</div></a>
           <a class="stat" href="avatars.html"><div class="si"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg></div><div class="sv skel" id="cAvatars">—</div><div class="sn">我的形象</div></a>
           <a class="stat" href="voices.html"><div class="si"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg></div><div class="sv skel" id="cVoices">—</div><div class="sn">克隆音色</div></a>
-          <a class="stat" href="assets.html"><div class="si"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m3 15 5-5 4 4 3-3 6 6"/></svg></div><div class="sv skel" id="cAssets">—</div><div class="sn">素材</div></a>
         </div>
 
         <!-- 快捷创作 -->
@@ -192,13 +191,12 @@
     document.getElementById('greetHi').textContent = hr<6?'夜深了':hr<12?'早上好':hr<18?'下午好':'晚上好';
 
     // 并行拉数据
-    const [bal,warn,jobs,avs,vcs,ast] = await Promise.all([
+    const [bal,warn,jobs,avs,vcs] = await Promise.all([
       LJ.get('/credits/balance').catch(()=>({balance:0})),
       LJ.get('/credits/warning').catch(()=>null),
       LJ.get('/jobs').catch(()=>[]),
       LJ.get('/avatars').catch(()=>({custom:[]})),
       LJ.get('/voices').catch(()=>({clones:[]})),
-      LJ.get('/assets').catch(()=>[]),
     ]);
 
     const balEl=document.getElementById('balVal');
@@ -209,7 +207,6 @@
     set('cWorks', jobs.length);
     set('cAvatars', (avs.custom||[]).length);
     set('cVoices', (vcs.clones||[]).length);
-    set('cAssets', ast.length);
 
     const recent=document.getElementById('recent');
     if(!jobs.length){ recent.innerHTML=`<div class="empty">还没有作品 · <a href="create.html">去创作 →</a></div>`; }

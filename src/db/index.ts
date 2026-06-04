@@ -182,6 +182,9 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_voice_tenant ON voice(tenant_id);
 
+  -- 已弃用:素材库模块(零消费方死端口)已删除,见 ~/.claude/plans/remove-asset-library.md。
+  -- 建表语句保留不 DROP:CREATE TABLE 幂等无害,现有库若有素材数据不被毁(数据安全)。
+  -- 将来若重建素材库(且接真消费方),复用此表;否则确认无数据后可单独清表。
   CREATE TABLE IF NOT EXISTS asset (
     id            TEXT PRIMARY KEY,
     tenant_id     TEXT NOT NULL,
@@ -403,13 +406,3 @@ export interface VoiceRow {
   created_at: number;
 }
 
-export interface AssetRow {
-  id: string;
-  tenant_id: string;
-  name: string;
-  type: 'image' | 'video' | 'audio';
-  source_key: string;
-  size: number | null;
-  created_by: string | null;
-  created_at: number;
-}
