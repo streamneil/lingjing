@@ -48,8 +48,9 @@
     </div>
 
     <div class="cfg-row">
-      <div class="msel" id="resSel" data-res="720P" onclick="cycleRes()">分辨率 720P <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+      <div class="msel" id="resSel" data-res="720P" onclick="cycleRes()">清晰度 720P <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
     </div>
+    <div style="font-size:11px;color:var(--t4);margin-top:-4px;line-height:1.5">视频比例由所选形象图决定(竖图出竖屏、横图出横屏);清晰度可选 480P / 720P。</div>
 
     <div class="cbtn-wrap">
       <button class="cbtn" id="createBtn">
@@ -260,7 +261,7 @@
     const el=document.getElementById('resSel');
     const next=el.dataset.res==='720P'?'480P':'720P';
     el.dataset.res=next;
-    el.firstChild.textContent='分辨率 '+next+' ';
+    el.firstChild.textContent='清晰度 '+next+' ';
     scheduleEstimate();
   }
 
@@ -336,7 +337,7 @@
       const job=await LJ.getJob(from);
       const inp=job.input||{};
       if(inp.script){ ta.value=inp.script; cnt.textContent=inp.script.length; scheduleEstimate(); }
-      if(inp.resolution){ const el=document.getElementById('resSel'); el.dataset.res=inp.resolution; el.firstChild.textContent='分辨率 '+inp.resolution+' '; }
+      if(inp.resolution){ const el=document.getElementById('resSel'); el.dataset.res=inp.resolution; el.firstChild.textContent='清晰度 '+inp.resolution+' '; }
       if(inp.speed){ speedEl.value=inp.speed; document.getElementById('speedVal').textContent=parseFloat(inp.speed).toFixed(1)+'×'; }
       if(inp.volume!==undefined){ volEl.value=inp.volume; document.getElementById('volumeVal').textContent=inp.volume; }
       if(inp.avatarRef) pickAvatar({id:inp.avatarRef,name:'(原形象)',thumb:''}, true);
@@ -372,7 +373,10 @@
       card.id = 'job-'+job.id;
       feedList.insertBefore(card, feedList.firstChild); // 新任务置顶
     }
-    const bubble = `<div class="fbubble"><div class="mav"></div><div class="tx">${esc(scriptText)}</div></div>`;
+    // 气泡左侧圆形:显示当前虚拟人形象缩略图(取本次选中的形象,有就铺图)
+    const avThumb = (job.avatarThumb) || (selectedAvatar && selectedAvatar.thumb) || '';
+    const mavStyle = avThumb ? `background-image:url('${avThumb}');background-size:cover;background-position:center` : '';
+    const bubble = `<div class="fbubble"><div class="mav" style="${mavStyle}"></div><div class="tx">${esc(scriptText)}</div></div>`;
     if(job.status==='queued' || job.status==='running'){
       card.innerHTML = `
         <div class="fmeta"><b>AI 虚拟人</b><span class="ts">刚刚</span><span class="sp"></span>
@@ -382,13 +386,22 @@
           <div class="lbl">${job.progress?('进度 '+job.progress+'%'):'已进入生成队列'}</div>
           <div class="proc-bar"><i style="width:${job.progress||8}%"></i></div></div></div>`;
     } else if(job.status==='done'){
-      const v = job.videoUrl ? `<video src="${job.videoUrl}" controls style="width:100%;border-radius:12px"></video>` :
-        `<div class="proc-in"><div class="lbl">成品已生成</div></div>`;
+      // 视频按比例自适应:限制最大高度,object-fit:contain 保证竖屏/横屏都完整可见不裁切
+      const v = job.videoUrl
+        ? `<video src="${job.videoUrl}" controls playsinline preload="metadata" style="width:100%;max-height:520px;object-fit:contain;background:#000;border-radius:12px;display:block"></video>`
+        : `<div class="proc-in"><div class="lbl">成品已生成</div></div>`;
+      const actions = job.videoUrl ? `<div class="factions">
+        <button class="btn btn-dark" onclick="reedit('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>重新编辑</button>
+        <button class="btn btn-dark" onclick="retry('${job.id}','${esc(scriptText).replace(/'/g,"\\'")}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 4v4h-4"/></svg>重新生成</button>
+        <div class="sp"></div>
+        <button class="btn btn-white" onclick="dlVideo('${job.videoUrl}','${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>下载</button>
+      </div>` : '';
       card.innerHTML = `
         <div class="fmeta"><b>AI 虚拟人</b><span class="ts">刚刚</span><span class="sp"></span>
           <span class="st" style="color:var(--green)"><span class="led led-ok"></span>已完成${job.aiLabel==='native'?' · 含AI标识':''}</span></div>
         ${bubble}
-        <div class="fvideo">${v}</div>`;
+        <div class="fvideo" style="aspect-ratio:auto;height:auto;min-height:0">${v}</div>
+        ${actions}`;
     } else { // failed
       card.innerHTML = `
         <div class="fmeta"><b>AI 虚拟人</b><span class="ts">刚刚</span><span class="sp"></span>
@@ -403,6 +416,13 @@
   async function retry(id, scriptText){
     try{ await LJ.retryJob(id); track(id, scriptText); }
     catch(e){ window.LJToast(e.message,'err'); }
+  }
+  // 重新编辑:回到创作台并回填原作品参数(?from=jobId,prefillFromQuery 处理)
+  function reedit(id){ location.href = 'create.html?from=' + encodeURIComponent(id); }
+  // 下载成品:用 a[download] 触发(视频是 OSS 签名 URL,直接拉)
+  function dlVideo(url, id){
+    try{ const a=document.createElement('a'); a.href=url; a.download='lingjing-'+id+'.mp4'; a.target='_blank'; document.body.appendChild(a); a.click(); a.remove(); window.LJToast('开始下载…'); }
+    catch(e){ window.LJToast('下载失败:'+e.message,'err'); }
   }
 
   // 提交后持续轮询直到终态,实时刷新卡片

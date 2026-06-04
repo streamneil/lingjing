@@ -73,11 +73,12 @@ export function settle(tenantId: string, jobId: string, actualCost: number): voi
   insert(tenantId, 'settle', diff, jobId, `结算实扣 ${actualCost}`);
 }
 
-/** 失败释放:把该 job 的预扣全额还回。 */
-export function release(tenantId: string, jobId: string): void {
-  const reserved = reservedFor(jobId);
-  if (reserved > 0) insert(tenantId, 'release', reserved, jobId, '生成失败释放');
-}
+/** 失败释放:把该 job **尚未释放/结算**的预扣还回。
+ *  幂等:用净未结清额计算,重复调用(失败→重试→再失败)不会重复退款。 */
+export const release = db.transaction((tenantId: string, jobId: string): void => {
+  const outstanding = outstandingReserved(jobId);
+  if (outstanding > 0) insert(tenantId, 'release', outstanding, jobId, '生成失败释放');
+});
 
 /** 某 job 已预扣的绝对额(reserve 是负数,这里返回正值)。 */
 function reservedFor(jobId: string): number {
@@ -87,6 +88,25 @@ function reservedFor(jobId: string): number {
     )
     .get(jobId) as { s: number };
   return -row.s;
+}
+
+/** 某 job 当前**尚未结清**的预扣额,用于 release 幂等。
+ *  规则:
+ *   - 已 settle(成功结算)→ 预扣已被消费,无可释放(返回 0)。
+ *   - 未 settle → 可释放 = 预扣总额 - 已 release。重复 release 时该值降到 0,不再退。
+ *  这样 release 多次调用、或对已成功任务误调,都不会重复退款(积分凭空增加)。 */
+function outstandingReserved(jobId: string): number {
+  const row = db
+    .prepare(
+      `SELECT
+         COALESCE(SUM(CASE WHEN kind='reserve' THEN -amount ELSE 0 END),0) AS reserved,
+         COALESCE(SUM(CASE WHEN kind='release' THEN amount ELSE 0 END),0) AS released,
+         COALESCE(SUM(CASE WHEN kind='settle'  THEN 1 ELSE 0 END),0)      AS settleCount
+       FROM credit_ledger WHERE job_id=?`,
+    )
+    .get(jobId) as { reserved: number; released: number; settleCount: number };
+  if (row.settleCount > 0) return 0; // 已结算,预扣已消费,不可再释放
+  return row.reserved - row.released; // 未结算:剩余可释放额(重复 release 自然降到 0)
 }
 
 /** 消费记录(可查询/导出,验收第H3)。 */
