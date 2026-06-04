@@ -60,3 +60,23 @@
 - **Why:** 当前只能在邀请时定角色;改角色得删了重建,丢历史。
 - **Context:** 来自 /plan-design-review 成员模块 Pass7。需复用席位校验(viewer→creator 要查席位)+ last-admin 校验(admin→其他要保最后一个 admin)。
 - **Priority:** P2
+
+## CEO 审计补充(2026-06-04,HOLD SCOPE — 项目收尾)
+
+### T-MODERATION-API:内容审核接阿里云内容安全 Green 真实 API
+- **What:** moderateScript/moderateOutput 从本地敏感词表升级为阿里云内容安全(Green)文本/图像检测 API。
+- **Why:** 本轮做的是本地敏感词表过渡,覆盖有限;政企/广电审计可能要求真实内容检测(政治敏感、违禁、涉黄涉暴)。
+- **Context:** 来自 /plan-ceo-review 项目收尾 D6。钩子已在 worker.ts:80/146 调用,接入成本低(换 moderation.ts 实现即可)。成片营业样先调低门槛(未达限放行加日志),避免阻断命脉。
+- **Priority:** P2  **Depends on:** 阿里云内容安全 API 查证 + 开通
+
+### T-VOICE-MIGRATION:声音迁移(歌曲演唱迁移)
+- **What:** 上传歌曲,用克隆音色完成演唱迁移,自动识别并校正歌词。
+- **Why:** 原 landing 页列为"即将上线"(本轮已从界面撤下,不再公开承诺)。是与 s2v/CosyVoice 不同的另一整套能力。
+- **Context:** 来自 /plan-ceo-review 项目收尾 D2/TODO2。界面已按用户要求撤掉"即将上线"标。做之前需先验证百炼是否支持演唱迁移(SVC/歌声合成),否则要自建管线。
+- **Priority:** P3  **Depends on:** 百炼演唱迁移能力验证
+
+### T-FFMPEG-PRIVATE:私有化交付 ffmpeg 装包
+- **What:** AI 水印用系统 ffmpeg;私有化进客户内网时需把 ffmpeg 纳入装包/镜像清单。
+- **Why:** 托管 SaaS 系统自带 ffmpeg;私有化(护城河)是离线内网,漏一个二进制依赖交付时会卡壳。
+- **Context:** 来自 /plan-ceo-review 项目收尾 D5/TODO3。与 T-PUBLIC-URL 同类私有化交付细节。本轮水印已做优雅降级(ffmpeg 缺失跳过烙字但标 ai_label)。
+- **Priority:** P2  **Depends on:** 私有化首单落地
