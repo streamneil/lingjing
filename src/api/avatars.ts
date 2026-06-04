@@ -18,7 +18,7 @@ import {
   setDefaultAvatar,
 } from '../avatars/index.js';
 import { putObject, getSignedUrl } from '../storage/index.js';
-import { extractFirstFrame } from '../pipeline/ai-label.js';
+import { extractFirstFrame, detectOrientation } from '../pipeline/ai-label.js';
 import { audit } from '../audit/index.js';
 
 export const avatarsRouter = Router();
@@ -76,6 +76,7 @@ avatarsRouter.post(
     try {
       let sourceKey: string;
       let kind: 'photo' | 'video';
+      let imageBuf: Buffer; // 形象图字节,用于检真实比例
       if (video) {
         // C3:从视频提取首帧 → 落 MinIO 作形象图(ffmpeg)
         const frame = await extractFirstFrame(video.buffer);
@@ -83,12 +84,19 @@ avatarsRouter.post(
         sourceKey = `avatars/${tenantId}/${randomUUID()}.jpg`;
         await putObject(sourceKey, frame, 'image/jpeg');
         kind = 'video';
+        imageBuf = frame;
       } else {
         const ext = (photo!.originalname.split('.').pop() || 'jpg').toLowerCase();
         sourceKey = `avatars/${tenantId}/${randomUUID()}.${ext}`;
         await putObject(sourceKey, photo!.buffer, photo!.mimetype);
         kind = 'photo';
+        imageBuf = photo!.buffer;
       }
+
+      // wan2.2-s2v 按图片真实比例出视频。用 ffprobe 检真实朝向覆盖用户手选(防比例标记擒谎);
+      // ffprobe 不可用(私有化未装)则回退用户手选值,不阻断上传。
+      const detected = await detectOrientation(imageBuf);
+      const finalOrientation = detected ?? orientation;
 
       let proofKey: string | undefined;
       if (proof) {
@@ -98,7 +106,7 @@ avatarsRouter.post(
       }
 
       const av = createCustomAvatar({
-        tenantId, userId: req.user!.id, name, kind, sourceKey, consent, proofKey, orientation,
+        tenantId, userId: req.user!.id, name, kind, sourceKey, consent, proofKey, orientation: finalOrientation,
       });
       audit(req, 'create_avatar', av.id);
       res.status(201).json({ id: av.id, name: av.name, status: av.status, kind });
