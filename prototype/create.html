@@ -50,7 +50,7 @@
     <div class="cfg-row">
       <div class="msel" id="resSel" data-res="720P" onclick="cycleRes()">清晰度 720P <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
     </div>
-    <div style="font-size:11px;color:var(--t4);margin-top:-4px;line-height:1.5">视频比例由所选形象图决定(竖图出竖屏、横图出横屏);清晰度可选 480P / 720P。</div>
+    <div id="ratioHint" style="font-size:11px;color:var(--t4);margin-top:-4px;line-height:1.5">视频比例由所选形象图决定;清晰度可选 480P / 720P。</div>
 
     <div class="cbtn-wrap">
       <button class="cbtn" id="createBtn">
@@ -224,7 +224,7 @@
       const items = [...myAvatars, ...(av.presets||[])];
       grid.innerHTML = items.map(a=>{
         const bg = a.thumb ? `background-image:url('${a.thumb}')` : 'background:linear-gradient(160deg,#33333A,#1A1A1E)';
-        return `<div class="av" onclick='pickAvatar(${JSON.stringify({id:a.id,name:a.name,thumb:a.thumb||''}).replace(/'/g,"&#39;")})'><div class="av-img" style="${bg}"></div><div class="av-veil"></div><div class="av-name">${esc(a.name)}</div><div class="av-cta">选择此形象</div></div>`;
+        return `<div class="av" onclick='pickAvatar(${JSON.stringify({id:a.id,name:a.name,thumb:a.thumb||'',orientation:a.orientation||'portrait'}).replace(/'/g,"&#39;")})'><div class="av-img" style="${bg}"></div><div class="av-veil"></div><div class="av-name">${esc(a.name)}</div><div class="av-cta">选择此形象</div></div>`;
       }).join('') || '<div style="color:var(--t4);padding:20px">暂无形象</div>';
       // 默认选第一个:有自定义形象优先选自定义,否则选预置
       if(!selectedAvatar && items[0]) pickAvatar({id:items[0].id,name:items[0].name,thumb:items[0].thumb||''}, true);
@@ -253,11 +253,16 @@
     }
   }
 
+  const RATIO_CN={portrait:'竖屏 9:16',landscape:'横屏 16:9',square:'方形 1:1'};
   function pickAvatar(a, silent){
     selectedAvatar = a;
     document.getElementById('avPickLabel').textContent = a.name;
     const th=document.getElementById('avThumb');
     if(a.thumb){ th.style.backgroundImage=`url('${a.thumb}')`; th.style.backgroundSize='cover'; th.style.backgroundPosition='center'; }
+    // 选定后提示本次会出什么比例(由形象图决定,模型不支持独立选比例)。
+    const r=RATIO_CN[a.orientation]||'竖屏 9:16';
+    const hint=document.getElementById('ratioHint');
+    if(hint) hint.innerHTML=`本次视频:<b style="color:var(--t2)">${r}</b>(由所选形象图决定);清晰度可选 480P / 720P。`;
     if(!silent) closeSheet('appearance');
     refreshCreateBtn();
   }
