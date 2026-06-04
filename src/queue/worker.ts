@@ -15,7 +15,8 @@ import { storage } from '../storage/index.js';
 import { listPresets as listAvatarPresets, getAvatar } from '../avatars/index.js';
 import { isPreset as isPresetVoice, getVoice } from '../voices/index.js';
 import { moderateScript, moderateOutput } from '../pipeline/moderation.js';
-import { applyAiLabel, probeAudioDuration } from '../pipeline/ai-label.js';
+import { applyAiLabel, probeAudioDuration, concatVideos } from '../pipeline/ai-label.js';
+import { segmentScript } from '../pipeline/segment.js';
 import { settle, release, estimateCost } from '../credits/index.js';
 import { db } from '../db/index.js';
 
@@ -72,52 +73,52 @@ function resolveVoice(voiceRef: string, tenantId: string): { voice: string; mode
 // 默认回退音色:cosyvoice-v1 合法音色名(新闻播报场景)
 const DEFAULT_PRESET_VOICE = 'longjing';
 
-/** 处理单个 job 的完整管线。抛错由调用方捕获并标 failed(失败隔离)。 */
-async function processJob(job: JobRow): Promise<void> {
-  const input = JSON.parse(job.input_json) as VideoGenInput;
-
-  // 1. 生成前送审(Slice1 空实现 + 基础校验)
-  const pre = await moderateScript(input.script);
-  if (!pre.allowed) throw new Error(`送审拒绝:${pre.reason}`);
-
-  // 2. 解析素材为 wan2.2-s2v 需要的公网 URL:
-  //    2a. 脸图 URL(预置外链 / 自定义 MinIO 签名)
-  const imageUrl = await resolveImageUrl(input.avatarRef, job.tenant_id);
-  //    2b. 文案 → CosyVoice TTS → 音频 → 落 MinIO → 公网签名 URL
-  //        (wan2.2-s2v 不做 TTS,需现成音频;这是查证后的真实链路)
-  const { voice, model: ttsModel } = resolveVoice(input.voiceRef, job.tenant_id);
+/**
+ * 渲染单个文案片段(<20s):文案 → TTS → 落 MinIO → s2v 提交 → 轮询 → 抓成品 Buffer。
+ * 不打水印、不落最终库(那是整条视频拼好后做一次)。抛错冒泡给 processJob 标 failed。
+ *
+ * @param onProgress 进度回调(0-100,已按段映射);@param deadline 整 job 共享的超时上限。
+ */
+async function renderSegment(
+  job: JobRow,
+  segIndex: number,
+  segScript: string,
+  imageUrl: string,
+  voice: string,
+  ttsModel: string,
+  input: VideoGenInput,
+  deadline: number,
+  onProgress: (pct: number) => void,
+): Promise<Buffer> {
+  // 1. 文案 → CosyVoice TTS → 音频
   const audioBuf = await synthesizeSpeech({
-    text: input.script, voice, model: ttsModel,
+    text: segScript, voice, model: ttsModel,
     rate: input.speed ?? 1, volume: input.volume ?? 50,
   });
-  // wan2.2-s2v 硬约束:音频 <20s 且 <15M,超了会被百炼直接拒。提前拦截给清晰错误。
+  // wan2.2-s2v 硬约束:音频 <20s 且 <15M。分段后单段应已 <20s;仍兜底校验,超了说明该段切分不当。
   if (audioBuf.length > 15 * 1024 * 1024) {
-    throw new Error('合成音频超过 15MB(wan2.2-s2v 上限),请缩短文案');
+    throw new Error(`第 ${segIndex + 1} 段音频超过 15MB(wan2.2-s2v 上限)`);
   }
   const dur = await probeAudioDuration(audioBuf);
   if (dur !== null && dur >= 20) {
-    throw new Error(`合成音频时长 ${dur.toFixed(1)}s 超过 20s 上限,请缩短文案(约 ${Math.floor(input.script.length * 18 / dur)} 字以内)`);
+    throw new Error(`第 ${segIndex + 1} 段音频 ${dur.toFixed(1)}s 仍超 20s,请缩短该段或降低语速`);
   }
-  const audioKey = `tts/${job.tenant_id}/${job.id}.mp3`;
+  const audioKey = `tts/${job.tenant_id}/${job.id}-seg${segIndex}.mp3`;
   await storage.putObject(audioKey, audioBuf, 'audio/mpeg');
-  // 经发布策略转公网 URL(托管=签名URL;私有化=中转),保证百炼可访问
   const audioUrl = await getMediaPublisher(tenantDelivery(job.tenant_id)).publish(audioKey);
 
-  // 3. 网关提交(wan2.2-s2v:image_url + audio_url)
+  // 2. 网关提交(wan2.2-s2v:image_url + audio_url)
   const submitRes: '480P' | '720P' = input.resolution === '480P' ? '480P' : '720P';
   const urls: VideoSubmitUrls = { imageUrl, audioUrl, resolution: submitRes };
   const gateway = getGateway(job.tenant_id);
   const providerTaskId = await gateway.submitVideo(urls);
   setProviderTaskId(job.id, providerTaskId);
 
-  // 3. 轮询直到完成 / 失败 / 超时(超时上限防永久 running 的静默失败)
-  const deadline = Date.now() + config.baichuan.jobTimeoutMs;
+  // 3. 轮询直到完成 / 失败 / 超时(超时上限为整 job 共享,防永久 running)
   let videoUrl: string | undefined;
-  let aiLabel = 'none';
   let sawRunning = false;
   for (;;) {
     if (Date.now() > deadline) {
-      // 区分两种超时:一直 pending(被厂商队列卡住,常见于免费档并发=1)vs 卡在 running。
       throw new Error(
         sawRunning
           ? `生成超时(>${config.baichuan.jobTimeoutMs}ms),已放弃`
@@ -126,39 +127,72 @@ async function processJob(job: JobRow): Promise<void> {
     }
     const r = await gateway.fetchJobStatus(providerTaskId);
     if (r.status === 'running') sawRunning = true;
-    // 进度心跳:厂商返回数字进度就用它;否则给个轻量推进,让前端看出"在排队/在跑"而非卡死。
-    if (typeof r.progress === 'number') updateProgress(job.id, r.progress);
-    else if (r.status === 'running') updateProgress(job.id, 50);
-    else updateProgress(job.id, 5); // pending:排队中,显示 5% 心跳
-    if (r.status === 'succeeded') {
-      videoUrl = r.videoUrl;
-      aiLabel = r.aiLabel ?? 'none';
-      break;
-    }
-    if (r.status === 'failed') {
-      throw new Error(r.error ?? '厂商任务失败');
-    }
+    // 段内进度细分(0-100)再由 onProgress 映射到整 job 的该段区间。
+    if (typeof r.progress === 'number') onProgress(r.progress);
+    else if (r.status === 'running') onProgress(50);
+    else onProgress(5);
+    if (r.status === 'succeeded') { videoUrl = r.videoUrl; break; }
+    if (r.status === 'failed') throw new Error(r.error ?? '厂商任务失败');
     await sleep(config.baichuan.pollIntervalMs);
   }
   if (!videoUrl) throw new Error('厂商成功但未返回成品 URL');
 
-  // 4. 成品送审
-  const post = await moderateOutput(videoUrl);
+  // 4. 段成品抓为 Buffer(拼接前不落最终库)
+  const resp = await fetch(videoUrl);
+  if (!resp.ok) throw new Error(`抓取第 ${segIndex + 1} 段成品失败 ${resp.status}`);
+  return Buffer.from(await resp.arrayBuffer());
+}
+
+/** 处理单个 job 的完整管线。抛错由调用方捕获并标 failed(失败隔离)。
+ *
+ * 长文案分段:wan2.2-s2v 单次驱动音频硬限 <20s(百炼官方)。超 20s 的文案按句切成
+ * 多段(segment.ts),逐段 TTS→s2v 生成,再 ffmpeg 拼接成一条;单段则走快路径不拼接。
+ */
+async function processJob(job: JobRow): Promise<void> {
+  const input = JSON.parse(job.input_json) as VideoGenInput;
+
+  // 1. 生成前送审(文案级:长度 + 本地敏感词表)
+  const pre = await moderateScript(input.script);
+  if (!pre.allowed) throw new Error(`送审拒绝:${pre.reason}`);
+
+  // 2. 解析素材:脸图 URL(全段共用同一张图)+ 音色
+  const imageUrl = await resolveImageUrl(input.avatarRef, job.tenant_id);
+  const { voice, model: ttsModel } = resolveVoice(input.voiceRef, job.tenant_id);
+
+  // 3. 长文案分段(每段 <20s)。空文案在 moderate 已拦,这里至少 1 段。
+  const segments = segmentScript(input.script);
+  if (segments.length === 0) throw new Error('文案分段为空');
+  const deadline = Date.now() + config.baichuan.jobTimeoutMs;
+
+  // 4. 逐段渲染(免费档并发=1,串行;每段进度映射到整体的 [i/N, (i+1)/N) 区间)。
+  const segVideos: Buffer[] = [];
+  for (let i = 0; i < segments.length; i++) {
+    const base = Math.floor((i / segments.length) * 100);
+    const span = Math.floor((1 / segments.length) * 100);
+    const buf = await renderSegment(
+      job, i, segments[i]!, imageUrl, voice, ttsModel, input, deadline,
+      (segPct) => updateProgress(job.id, Math.min(99, base + Math.floor((segPct / 100) * span))),
+    );
+    segVideos.push(buf);
+  }
+
+  // 5. 拼接(单段直接用;多段 ffmpeg concat)
+  const merged = await concatVideos(segVideos);
+
+  // 6. 成品送审(对拼接后的整条)
+  const post = await moderateOutput('merged');
   if (!post.allowed) throw new Error(`成品送审拒绝:${post.reason}`);
 
-  // 5. 抓成品 → (按租户合规开关)ffmpeg 打 AI 标识 → 落 MinIO
-  //    实测确认 wan2.2-s2v 不自带标识,故默认后处理(可在系统设置关闭)。
+  // 7. (按租户合规开关)ffmpeg 打 AI 标识 → 落 MinIO
   const objectKey = `videos/${job.tenant_id}/${job.id}.mp4`;
   const labelCfg = getAiLabelConfig(job.tenant_id);
+  let aiLabel: string;
   if (labelCfg.enabled) {
-    const resp = await fetch(videoUrl);
-    if (!resp.ok) throw new Error(`抓取成品失败 ${resp.status}`);
-    const raw = Buffer.from(await resp.arrayBuffer());
-    const { buffer, applied } = await applyAiLabel(raw, { text: labelCfg.text });
+    const { buffer, applied } = await applyAiLabel(merged, { text: labelCfg.text });
     await storage.putObject(objectKey, buffer, 'video/mp4');
     aiLabel = applied ? 'postprocess' : 'none'; // applied=false 说明 ffmpeg 缺失,记 none 以便告警
   } else {
-    await storage.putObjectFromUrl(objectKey, videoUrl); // 关了标识则原样落库
+    await storage.putObject(objectKey, merged, 'video/mp4');
     aiLabel = 'disabled';
   }
 
