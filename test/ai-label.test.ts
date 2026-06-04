@@ -4,9 +4,16 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { spawnSync } from 'node:child_process';
 
-const { applyAiLabel, probeAudioDuration } = await import('../src/pipeline/ai-label.js');
+const { applyAiLabel, probeAudioDuration, detectOrientation } = await import('../src/pipeline/ai-label.js');
 
 const hasFfmpeg = spawnSync('ffmpeg', ['-version']).status === 0;
+
+// 用 ffmpeg 造指定宽高的测试图(检 detectOrientation 的真实比例推导)
+function makeTestImage(w: number, h: number): Buffer {
+  const out = `/tmp/lj-test-img-${w}x${h}.png`;
+  spawnSync('ffmpeg', ['-y', '-f', 'lavfi', '-i', `color=c=gray:s=${w}x${h}:d=1`, '-frames:v', '1', out]);
+  return require('node:fs').readFileSync(out);
+}
 
 // 用 ffmpeg 现造一个 1s 测试视频 / 2s 测试音频(避免依赖外部素材)
 function makeTestVideo(): Buffer {
@@ -36,6 +43,21 @@ describe.skipIf(!hasFfmpeg)('音频时长校验', () => {
     expect(dur).not.toBeNull();
     expect(dur!).toBeGreaterThan(1.5);
     expect(dur!).toBeLessThan(3);
+  });
+});
+
+describe.skipIf(!hasFfmpeg)('detectOrientation 检图片真实比例', () => {
+  it('横图(320x180)→ landscape', async () => {
+    expect(await detectOrientation(makeTestImage(320, 180))).toBe('landscape');
+  });
+  it('竖图(180x320)→ portrait', async () => {
+    expect(await detectOrientation(makeTestImage(180, 320))).toBe('portrait');
+  });
+  it('方图(256x256)→ square', async () => {
+    expect(await detectOrientation(makeTestImage(256, 256))).toBe('square');
+  });
+  it('坏数据(非图片)→ null(调用方回退手选)', async () => {
+    expect(await detectOrientation(Buffer.from('not an image'))).toBeNull();
   });
 });
 

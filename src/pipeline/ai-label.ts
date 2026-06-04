@@ -62,6 +62,51 @@ export async function probeAudioDuration(audioBuf: Buffer): Promise<number | nul
 }
 
 /**
+ * 用 ffprobe 读图片真实宽高,推出比例朝向。ffprobe 不可用或读失败返回 null
+ * (调用方据此回退用户手选值)。
+ *
+ * 为什么需要:wan2.2-s2v 按输入图片真实比例出视频(官方:输出与输入图宽高比一致),
+ * 而上传时 orientation 是用户手选的,可能与图不符。检真实比例覆盖手选,使比例标记不擒谎。
+ *
+ *   w > h  → landscape(横屏 16:9 类)
+ *   w < h  → portrait (竖屏 9:16 类)
+ *   |w-h| 在 5% 内 → square(方形)
+ */
+export async function detectOrientation(
+  imageBuf: Buffer,
+): Promise<'portrait' | 'landscape' | 'square' | null> {
+  if (!(await ffmpegAvailable())) return null;
+  const dir = await mkdtemp(join(tmpdir(), 'lj-orient-'));
+  const inPath = join(dir, 'img');
+  try {
+    await writeFile(inPath, imageBuf);
+    return await new Promise<'portrait' | 'landscape' | 'square' | null>((resolve) => {
+      const p = spawn('ffprobe', [
+        '-v', 'error', '-select_streams', 'v:0',
+        '-show_entries', 'stream=width,height',
+        '-of', 'csv=s=x:p=0', inPath,
+      ]);
+      let out = '';
+      p.stdout.on('data', (d) => (out += d.toString()));
+      p.on('error', () => resolve(null));
+      p.on('close', () => {
+        const parts = out.trim().split('x').map(Number);
+        const w = parts[0], h = parts[1];
+        if (w === undefined || h === undefined || !Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
+          return resolve(null);
+        }
+        const ratio = w / h;
+        if (ratio > 1.05) resolve('landscape');
+        else if (ratio < 0.95) resolve('portrait');
+        else resolve('square');
+      });
+    });
+  } finally {
+    await unlink(inPath).catch(() => {});
+  }
+}
+
+/**
  * C3:从视频抽取首帧为 JPG(作自定义形象图)。ffmpeg 不可用或抽帧失败返回 null。
  */
 export async function extractFirstFrame(videoBuf: Buffer): Promise<Buffer | null> {

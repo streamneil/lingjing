@@ -81,8 +81,12 @@
   /* 最近作品 */
   .recent{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
   .rcard{border-radius:var(--r);overflow:hidden;background:var(--card);border:1px solid var(--line-soft);box-shadow:var(--sh-card)}
-  .rthumb{aspect-ratio:9/16;background:linear-gradient(160deg,#33333A,#1A1A1E);position:relative;display:grid;place-items:center}
-  .rthumb .pb{width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.45);display:grid;place-items:center;backdrop-filter:blur(4px)}
+  /* 4:3 取景框 + object-fit:contain:任意比例视频完整显示(竖屏/横屏都不裁) */
+  .rthumb{aspect-ratio:4/3;background:#0A0A0B;position:relative;display:grid;place-items:center;overflow:hidden}
+  .rthumb video{width:100%;height:100%;object-fit:contain;background:#000}
+  .rthumb .ph{color:var(--t4);font-size:11px;display:flex;flex-direction:column;align-items:center;gap:6px}
+  .rthumb .ph svg{width:24px;height:24px}
+  .rthumb .pb{position:absolute;width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.45);display:grid;place-items:center;backdrop-filter:blur(4px)}
   .rthumb .pb svg{width:15px;height:15px;color:#fff}
   .rbadge{position:absolute;top:8px;left:8px;font-family:var(--f-mono);font-size:10px;padding:3px 7px;border-radius:6px}
   .rb-ok{background:rgba(52,199,89,.16);color:var(--green)}
@@ -159,10 +163,22 @@
 
   function jobCard(j){
     const [cls,txt]=BADGE[j.status]||['rb-q',j.status];
-    const play = j.status==='done' ? `<div class="pb"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>` : '';
+    // 缩略图:done+videoUrl → 视频首帧做封面(preload=metadata 只拉首帧),按真实比例显示;
+    // 其余态给占位(生成中文字 / 失败叹号)。修复此前灰盒黑块从不渲染视频的 bug。
+    let inner;
+    if(j.status==='done' && j.videoUrl){
+      inner = `<video src="${j.videoUrl}#t=0.1" preload="metadata" muted playsinline></video>
+        <div class="pb"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>`;
+    } else if(j.status==='running'||j.status==='queued'){
+      inner = `<div class="ph"><div class="spinner" style="width:22px;height:22px;border:2.5px solid var(--line);border-top-color:var(--amber);border-radius:50%;animation:spin 1s linear infinite"></div>${j.status==='queued'?'排队中':'生成中'}</div>`;
+    } else {
+      inner = `<div class="ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 9v4M12 17h.01"/><path d="M10.3 4 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 4a2 2 0 0 0-3.4 0Z"/></svg>${j.status==='failed'?'生成失败':'暂无成品'}</div>`;
+    }
+    // 标题:用文案前 12 字区分作品,无文案才退「数字人视频」。
+    const title = (j.script||'').trim().slice(0,12) || '数字人视频';
     return `<a class="rcard" href="works.html" style="text-decoration:none;color:inherit">
-      <div class="rthumb"><span class="rbadge ${cls}">${txt}</span>${play}</div>
-      <div class="rb"><div class="rt">数字人视频</div><div class="rd">${fmt(j.createdAt)}</div></div>
+      <div class="rthumb"><span class="rbadge ${cls}">${txt}</span>${inner}</div>
+      <div class="rb"><div class="rt" title="${esc(j.script||'')}">${esc(title)}${(j.script||'').length>12?'…':''}</div><div class="rd">${fmt(j.createdAt)}</div></div>
     </a>`;
   }
 

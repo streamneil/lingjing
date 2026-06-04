@@ -237,6 +237,13 @@
 
   let DATA = { presets: [], custom: [] };
 
+  // 比例 badge:wan2.2-s2v 按形象图比例出视频,显示该形象会出什么比例,用户心里有数。
+  function ratioBadge(orientation){
+    const map={portrait:'竖屏 9:16',landscape:'横屏 16:9',square:'方形 1:1'};
+    const txt=map[orientation]||'竖屏 9:16';
+    return `<span class="av-tag" style="top:auto;bottom:8px;right:8px;left:auto;background:rgba(0,0,0,.55);color:#fff;backdrop-filter:blur(4px)">${txt}</span>`;
+  }
+
   // 自定义卡:含 C6 操作(重命名/设默认/删除)+ 默认徽章
   function customCard(a){
     const bg = a.thumb ? `background-image:url('${a.thumb}')` : 'background:linear-gradient(160deg,#33333A,#1A1A1E)';
@@ -246,11 +253,11 @@
         : `<span class="av-tag">${a.kind==='video'?'视频':'自定义'}</span>`);
     const cta = a.status==='ready' ? `<div class="av-cta" onclick="location.href='create.html'">创建影片</div>` : '';
     const menu = `<div class="av-more" onclick="event.stopPropagation();avMenu('${a.id}','${esc(a.name)}',${a.isDefault?1:0},event)"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></div>`;
-    return `<div class="av"><div class="av-img" style="${bg}"></div><div class="av-veil"></div>${status}<div class="av-name">${esc(a.name)}</div>${menu}${cta}</div>`;
+    return `<div class="av"><div class="av-img" style="${bg}"></div><div class="av-veil"></div>${status}${ratioBadge(a.orientation)}<div class="av-name">${esc(a.name)}</div>${menu}${cta}</div>`;
   }
   // 预置卡(只读)
   function presetCard(p){
-    return `<div class="av"><div class="av-img" style="background-image:url('${p.thumb}')"></div><div class="av-veil"></div><span class="av-tag">${esc(p.scene||'预置')}</span><div class="av-name">${esc(p.name)}</div><div class="av-cta" onclick="location.href='create.html'">创建影片</div></div>`;
+    return `<div class="av"><div class="av-img" style="background-image:url('${p.thumb}')"></div><div class="av-veil"></div><span class="av-tag">${esc(p.scene||'预置')}</span>${ratioBadge(p.orientation)}<div class="av-name">${esc(p.name)}</div><div class="av-cta" onclick="location.href='create.html'">创建影片</div></div>`;
   }
 
   // C6 操作菜单:锚定 ⋯ 的下拉(重命名/设默认/删除),替代 prompt 三连
