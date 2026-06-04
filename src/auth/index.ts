@@ -194,6 +194,7 @@ export interface AuthedUser {
   id: string;
   tenantId: string;
   tenantName: string;
+  orgLogoKey: string | null; // 机构 logo 存储 key,前端据此拼 /api/org-logo/<tenant>(空则用默认图标)
   username: string;
   displayName: string;
   role: Role;
@@ -248,8 +249,13 @@ export function resolveSession(token: string | undefined): AuthedUser | null {
     }
   }
   const t = db.prepare(`SELECT name FROM tenant WHERE id=?`).get(u.tenant_id) as { name: string } | undefined;
+  // 机构 logo key(供前端拼公开读路径;不在此签名,零额外开销)。
+  const logoRow = db
+    .prepare(`SELECT value FROM tenant_setting WHERE tenant_id=? AND key='org_logo_key'`)
+    .get(u.tenant_id) as { value: string } | undefined;
   return {
     id: u.id, tenantId: u.tenant_id, tenantName: t?.name || '我的机构',
+    orgLogoKey: logoRow?.value ?? null,
     username: u.username, displayName: u.display_name || u.username, role: u.role,
   };
 }

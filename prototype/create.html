@@ -242,6 +242,15 @@
       }).join('') || '<div style="color:var(--t4);padding:20px">暂无音色</div>';
       if(!selectedVoice && items[0]) pickVoice({id:items[0].id,name:items[0].name}, true);
     }catch(e){}
+    // 默认分辨率:仅"新建"(?from= 不存在)时套用机构默认;"重新编辑"由 prefillFromQuery 回填原作品值,
+    // 不被默认污染(直接 gate 在 ?from=,而非靠 prefill 后覆盖——老作品可能无 resolution,后者会漏)。
+    if(!new URLSearchParams(location.search).get('from')){
+      try{
+        const s = await LJ.get('/settings');
+        const el=document.getElementById('resSel');
+        if(s.defaultResolution && el){ el.dataset.res=s.defaultResolution; el.firstChild.textContent='清晰度 '+s.defaultResolution+' '; }
+      }catch(e){}
+    }
   }
 
   function pickAvatar(a, silent){

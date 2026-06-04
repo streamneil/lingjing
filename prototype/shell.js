@@ -41,7 +41,7 @@
   const sb = `
   <aside class="sidebar">
     <div class="sb-brand">
-      <span class="logo-mark"><svg viewBox="0 0 32 32" fill="none"><path d="M7 6h4.2v13H18v4H7z" fill="#0A0A0B"/><path d="M25 6v11.5a4.5 4.5 0 0 1-8.2 2.6" fill="none" stroke="#0A0A0B" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 6h6" fill="none" stroke="#0A0A0B" stroke-width="3.2" stroke-linecap="round"/></svg></span>
+      <span class="logo-mark" id="lj-brand-mark"><svg viewBox="0 0 32 32" fill="none"><path d="M7 6h4.2v13H18v4H7z" fill="#0A0A0B"/><path d="M25 6v11.5a4.5 4.5 0 0 1-8.2 2.6" fill="none" stroke="#0A0A0B" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 6h6" fill="none" stroke="#0A0A0B" stroke-width="3.2" stroke-linecap="round"/></svg></span>
       <span class="nm">Lingjing</span><span class="cjk">灵镜</span>
     </div>
     <nav class="sb-nav">${items}</nav>
@@ -130,6 +130,18 @@
       const acc = document.getElementById('lj-account');
       const menu = document.getElementById('lj-menu');
       const display = u.displayName || u.username;
+      // 机构 Logo:有则替换默认品牌图标(公开读路径,onerror 回退默认 SVG)。
+      if (u.orgLogoKey) {
+        const mark = document.getElementById('lj-brand-mark');
+        if (mark) {
+          const img = new Image();
+          img.src = '/api/org-logo/' + u.tenantId;
+          img.alt = u.tenantName || '机构';
+          img.style.cssText = 'width:100%;height:100%;object-fit:contain;border-radius:7px';
+          img.onload = () => { mark.innerHTML = ''; mark.appendChild(img); };
+          // onerror:不替换,保留默认 SVG 图标
+        }
+      }
       if (acc){
         acc.textContent = display.slice(0,1).toUpperCase();
         acc.title = display;

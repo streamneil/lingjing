@@ -69,19 +69,24 @@ describe('系统设置', () => {
     expect(r.body.aiLabelEnabled).toBe(true);
   });
 
-  it('admin 改交付模式为 private,读回生效', async () => {
+  it('交付模式只读:admin 传 delivery → 400(不可运行时改)', async () => {
     const c = await loginAs('admin');
-    const put = await c.put('/api/settings', { delivery: 'private', orgName: '改名后的台' });
+    const put = await c.put('/api/settings', { delivery: 'private' });
+    expect(put.status).toBe(400); // 交付模式部署时定,后端拒绝运行时修改
+    expect(put.body.code).toBe('DELIVERY_READONLY');
+  });
+
+  it('admin 改机构名 → 读回生效', async () => {
+    const c = await loginAs('admin');
+    const put = await c.put('/api/settings', { orgName: '改名后的台' });
     expect(put.status).toBe(200);
-    const r = await c.get('/api/settings');
-    expect(r.body.delivery).toBe('private');
-    expect(r.body.orgName).toBe('改名后的台');
+    expect((await c.get('/api/settings')).body.orgName).toBe('改名后的台');
   });
 
   it('viewer 可读但不能改设置 → 403', async () => {
     const c = await loginAs('viewer');
     expect((await c.get('/api/settings')).status).toBe(200); // viewer 可读
-    const put = await c.put('/api/settings', { delivery: 'hosted' });
+    const put = await c.put('/api/settings', { orgName: '试图改名' });
     expect(put.status).toBe(403); // viewer 不能改
   });
 });
