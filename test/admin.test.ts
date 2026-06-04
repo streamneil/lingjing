@@ -133,3 +133,113 @@ describe('跨租户充值（收入收口）', () => {
     expect(r.status).toBe(400);
   });
 });
+
+describe('新建租户固定 hosted(A1:去私有化)', () => {
+  it('建租户忽略 delivery=private,落 hosted', async () => {
+    const c = await padminLogin();
+    const r = await c.post('/admin/api/tenants', { name: '托管台', delivery: 'private' });
+    expect(r.status).toBe(201);
+    expect(r.body.delivery).toBe('hosted'); // 新建只建托管,private 被忽略
+  });
+});
+
+describe('租户详情管理(A2)', () => {
+  it('改机构名 → 生效', async () => {
+    const c = await padminLogin();
+    const t = createTenant('改名前').id;
+    const r = await c.put(`/admin/api/tenants/${t}`, { name: '改名后' });
+    expect(r.status).toBe(200);
+    const list = await c.get('/admin/api/tenants');
+    expect(list.body.tenants.find((x: any) => x.id === t).name).toBe('改名后');
+  });
+  it('改席位上限 + 交付模式 → 生效', async () => {
+    const c = await padminLogin();
+    const t = createTenant('配置台').id;
+    const r = await c.put(`/admin/api/tenants/${t}`, { maxCreatorSeats: 25, delivery: 'private' });
+    expect(r.status).toBe(200);
+    const row = await c.get('/admin/api/tenants');
+    const tt = row.body.tenants.find((x: any) => x.id === t);
+    expect(tt.max_creator_seats).toBe(25);
+    expect(tt.delivery).toBe('private');
+  });
+  it('席位上限降到低于已用 → 400', async () => {
+    const c = await padminLogin();
+    const t = createTenant('满席台').id;
+    createUser(t, 'seat-c1', 'pw123456', 'creator');
+    createUser(t, 'seat-c2', 'pw123456', 'creator');
+    const r = await c.put(`/admin/api/tenants/${t}`, { maxCreatorSeats: 1 }); // 已用 2 > 1
+    expect(r.status).toBe(400);
+  });
+  it('改空名 → 400', async () => {
+    const c = await padminLogin();
+    const r = await c.put(`/admin/api/tenants/${tenantId}`, { name: '  ' });
+    expect(r.status).toBe(400);
+  });
+  it('改不存在租户 → 404', async () => {
+    const c = await padminLogin();
+    const r = await c.put(`/admin/api/tenants/nope`, { name: 'x' });
+    expect(r.status).toBe(404);
+  });
+
+  it('列租户用户', async () => {
+    const c = await padminLogin();
+    const r = await c.get(`/admin/api/tenants/${tenantId}/users`);
+    expect(r.status).toBe(200);
+    expect(Array.isArray(r.body.users)).toBe(true);
+    expect(r.body.users.find((u: any) => u.username === 'tadmin')).toBeTruthy();
+    expect(r.body.users[0].password_hash).toBeUndefined(); // 不泄密码 hash
+  });
+
+  it('重置用户密码(免旧密码)→ 新密码可登录,旧密码失效', async () => {
+    const c = await padminLogin();
+    const t = createTenant('重置台').id;
+    const u = createUser(t, 'reset-user', 'oldpw123', 'creator');
+    const r = await c.post(`/admin/api/tenants/${t}/users/${u.id}/reset-password`, { newPassword: 'newpw456' });
+    expect(r.status).toBe(200);
+    // 新密码能登录
+    const ok = await new Client(app).login('reset-user', 'newpw456');
+    expect(ok.status).toBe(200);
+    // 旧密码失效
+    const bad = await new Client(app).login('reset-user', 'oldpw123');
+    expect(bad.status).toBe(401);
+  });
+  it('重置密码 <6 位 → 400', async () => {
+    const c = await padminLogin();
+    const t = createTenant('短密台').id;
+    const u = createUser(t, 'short-pw-user', 'pw123456', 'creator');
+    const r = await c.post(`/admin/api/tenants/${t}/users/${u.id}/reset-password`, { newPassword: '123' });
+    expect(r.status).toBe(400);
+  });
+  it('重置不存在用户 → 404', async () => {
+    const c = await padminLogin();
+    const r = await c.post(`/admin/api/tenants/${tenantId}/users/nope/reset-password`, { newPassword: 'newpw456' });
+    expect(r.status).toBe(404);
+  });
+
+  it('停用 + 启用用户', async () => {
+    const c = await padminLogin();
+    const t = createTenant('停用台').id;
+    createUser(t, 'disable-admin', 'pw123456', 'admin'); // 留一个 admin 保底
+    const u = createUser(t, 'to-disable', 'pw123456', 'creator');
+    const dis = await c.post(`/admin/api/tenants/${t}/users/${u.id}/disable`);
+    expect(dis.status).toBe(200);
+    const users1 = await c.get(`/admin/api/tenants/${t}/users`);
+    expect(users1.body.users.find((x: any) => x.id === u.id).status).toBe('disabled');
+    const en = await c.post(`/admin/api/tenants/${t}/users/${u.id}/enable`);
+    expect(en.status).toBe(200);
+  });
+  it('停用最后一个 admin → 409(LAST_ADMIN 保护)', async () => {
+    const c = await padminLogin();
+    const t = createTenant('独管台').id;
+    const a = createUser(t, 'only-admin', 'pw123456', 'admin');
+    const r = await c.post(`/admin/api/tenants/${t}/users/${a.id}/disable`);
+    expect(r.status).toBe(409);
+  });
+
+  it('B2 隔离:租户 session 打租户管理路由 → 401', async () => {
+    const tenant = new Client(app);
+    await tenant.login('tadmin', 'pw123456');
+    const r = await tenant.put(`/admin/api/tenants/${tenantId}`, { name: 'hack' });
+    expect(r.status).toBe(401);
+  });
+});

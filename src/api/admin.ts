@@ -17,7 +17,14 @@ import { Router, type Request, type Response } from 'express';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { db, type TenantRow } from '../db/index.js';
-import { createTenant, createUser } from '../auth/index.js';
+import {
+  createTenant,
+  createUser,
+  listUsers,
+  updateTenant,
+  adminResetPassword,
+  setUserStatus,
+} from '../auth/index.js';
 import { grant, balance } from '../credits/index.js';
 import { writePlatformAudit, PLATFORM_TENANT } from '../audit/index.js';
 import {
@@ -93,13 +100,14 @@ adminRouter.get('/api/tenants', requirePlatformAdmin, (_req: Request, res: Respo
 });
 
 adminRouter.post('/api/tenants', requirePlatformAdmin, (req: Request, res: Response) => {
-  const { name, delivery } = req.body ?? {};
+  const { name } = req.body ?? {};
   if (!name || typeof name !== 'string' || !name.trim()) {
     return res.status(400).json({ error: '机构名称不能为空' });
   }
-  const dlv = delivery === 'private' ? 'private' : 'hosted';
-  const t = createTenant(name.trim(), dlv);
-  writePlatformAudit(req.padmin!.id, 'tenant_create', t.id, `${t.name}(${dlv})`, padminIp(req));
+  // 新建租户固定 hosted:私有化是独立部署交付,不在 SaaS 超管这里管(A1)。
+  // 若需把某租户标为私有化,走租户详情的"改交付模式"(PUT /api/tenants/:id)。
+  const t = createTenant(name.trim(), 'hosted');
+  writePlatformAudit(req.padmin!.id, 'tenant_create', t.id, t.name, padminIp(req));
   return res.status(201).json({ id: t.id, name: t.name, delivery: t.delivery });
 });
 
@@ -140,4 +148,75 @@ adminRouter.post('/api/tenants/:id/grant', requirePlatformAdmin, (req: Request, 
   // 记目标租户:租户 admin 能在自己审计看到"平台于 X 时充值 N"(D11/C1)
   writePlatformAudit(req.padmin!.id, 'grant_credit', tenantId, `+${amount}`, padminIp(req));
   return res.json({ ok: true, balance: balance(tenantId) });
+});
+
+// ── 租户详情管理 ──
+// 小工具:校验租户存在,不存在直接 404 写响应并返回 false。
+function ensureTenant(tenantId: string, res: Response): boolean {
+  if (!db.prepare(`SELECT 1 FROM tenant WHERE id=?`).get(tenantId)) {
+    res.status(404).json({ error: '租户不存在' });
+    return false;
+  }
+  return true;
+}
+
+// 改租户配置(机构名 / 席位上限 / 交付模式)。租户侧机构名只读,只有超管能改。
+adminRouter.put('/api/tenants/:id', requirePlatformAdmin, (req: Request, res: Response) => {
+  const tenantId = req.params.id!;
+  if (!ensureTenant(tenantId, res)) return;
+  const { name, maxCreatorSeats, delivery } = req.body ?? {};
+  try {
+    const ok = updateTenant(tenantId, { name, maxCreatorSeats, delivery });
+    if (!ok) return res.status(404).json({ error: '租户不存在' });
+    const changed = [
+      name !== undefined ? `名称→${name}` : null,
+      maxCreatorSeats !== undefined ? `席位→${maxCreatorSeats}` : null,
+      delivery !== undefined ? `交付→${delivery}` : null,
+    ].filter(Boolean).join(' ');
+    writePlatformAudit(req.padmin!.id, 'tenant_update', tenantId, changed || '无变更', padminIp(req));
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(400).json({ error: e instanceof Error ? e.message : '更新失败' });
+  }
+});
+
+// 列租户下的用户(重置密码/停用启用的前提)。
+adminRouter.get('/api/tenants/:id/users', requirePlatformAdmin, (req: Request, res: Response) => {
+  const tenantId = req.params.id!;
+  if (!ensureTenant(tenantId, res)) return;
+  return res.json({ users: listUsers(tenantId) });
+});
+
+// 重置租户用户密码(免旧密码,运营帮租户找回;作废其所有 session 强制重登)。
+adminRouter.post('/api/tenants/:id/users/:uid/reset-password', requirePlatformAdmin, (req: Request, res: Response) => {
+  const tenantId = req.params.id!;
+  const userId = req.params.uid!;
+  if (!ensureTenant(tenantId, res)) return;
+  const { newPassword } = req.body ?? {};
+  try {
+    const ok = adminResetPassword(tenantId, userId, newPassword);
+    if (!ok) return res.status(404).json({ error: '用户不存在' });
+    writePlatformAudit(req.padmin!.id, 'tenant_user_reset_pw', tenantId, userId, padminIp(req));
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(400).json({ error: e instanceof Error ? e.message : '重置失败' });
+  }
+});
+
+// 停用 / 启用租户用户(复用 setUserStatus;超管操作不传 actingUserId,无自停保护需求)。
+adminRouter.post('/api/tenants/:id/users/:uid/:action(disable|enable)', requirePlatformAdmin, (req: Request, res: Response) => {
+  const tenantId = req.params.id!;
+  const userId = req.params.uid!;
+  const status = req.params.action === 'disable' ? 'disabled' : 'active';
+  if (!ensureTenant(tenantId, res)) return;
+  try {
+    const ok = setUserStatus(tenantId, userId, status);
+    if (!ok) return res.status(404).json({ error: '用户不存在' });
+    writePlatformAudit(req.padmin!.id, `tenant_user_${req.params.action}`, tenantId, userId, padminIp(req));
+    return res.json({ ok: true });
+  } catch (e) {
+    // setUserStatus 抛 LAST_ADMIN(停用最后一个 admin)等业务错
+    const code = (e as { code?: string })?.code;
+    return res.status(409).json({ error: e instanceof Error ? e.message : '操作失败', ...(code ? { code } : {}) });
+  }
 });
