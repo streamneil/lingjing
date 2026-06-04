@@ -8,8 +8,11 @@
   .work-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; }
   .work { border-radius:var(--r-lg); overflow:hidden; background:var(--card); border:1px solid var(--line-soft); box-shadow:var(--sh-card); cursor:pointer; transition:.2s var(--ease-out); animation:rise .6s var(--ease-out) both; }
   .work:hover { transform:translateY(-4px); border-color:var(--line-hi); }
-  .work-thumb { aspect-ratio:16/9; position:relative; background:#000; display:grid; place-items:center; overflow:hidden; }
-  .work-thumb .por { width:26%; aspect-ratio:3/4; border-radius:7px; background-size:cover; background-position:center; }
+  /* 缩略图:固定 4:3 取景框,内部视频/占位 object-fit:contain 按真实比例完整显示(竖屏不裁) */
+  .work-thumb { aspect-ratio:4/3; position:relative; background:#0A0A0B; display:grid; place-items:center; overflow:hidden; }
+  .work-thumb video, .work-thumb .por-vid { width:100%; height:100%; object-fit:contain; display:block; background:#0A0A0B; }
+  .work-thumb .ph { display:flex; flex-direction:column; align-items:center; gap:8px; color:var(--t4); font-size:11px; }
+  .work-thumb .ph svg { width:30px; height:30px; }
   .work-thumb .ov { position:absolute; inset:0; background:rgba(0,0,0,.2); opacity:0; display:grid; place-items:center; transition:.2s; }
   .work:hover .ov { opacity:1; }
   .work-thumb .ov .pb { width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.92);display:grid;place-items:center; }
@@ -93,9 +96,19 @@
   };
 
   function card(job){
-    const thumb = job.status==='done'
-      ? `<div class="work-thumb" onclick="play('${job.id}')" style="cursor:pointer"><div class="por" style="background:linear-gradient(160deg,#33333A,#1A1A1E)"></div><div class="ov"><div class="pb"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div><div class="st">${BADGE.done}</div></div>`
-      : `<div class="work-thumb"><div class="por" style="background:linear-gradient(160deg,#33333A,#1A1A1E)"></div><div class="st">${BADGE[job.status]||''}</div></div>`;
+    // 缩略图:已完成且有视频 → 用视频首帧做封面(preload=metadata 只拉首帧,不下整片),
+    // 按视频真实比例显示(竖屏不裁);否则按状态给占位(生成中转圈 / 失败叹号 / 无视频)。
+    let thumb;
+    if(job.status==='done' && job.videoUrl){
+      thumb = `<div class="work-thumb" onclick="play('${job.id}')" style="cursor:pointer">
+        <video src="${job.videoUrl}#t=0.1" preload="metadata" muted playsinline></video>
+        <div class="ov"><div class="pb"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>
+        <div class="st">${BADGE.done}</div></div>`;
+    } else if(job.status==='running'||job.status==='queued'){
+      thumb = `<div class="work-thumb"><div class="ph"><div class="spinner" style="width:26px;height:26px;border:3px solid var(--line);border-top-color:var(--amber);border-radius:50%;animation:spin 1s linear infinite"></div>${job.status==='queued'?'排队中':'生成中'}${job.progress?' '+job.progress+'%':''}</div><div class="st">${BADGE[job.status]||''}</div></div>`;
+    } else { // failed / 无视频
+      thumb = `<div class="work-thumb"><div class="ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 9v4M12 17h.01"/><path d="M10.3 4 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 4a2 2 0 0 0-3.4 0Z"/></svg>${job.status==='failed'?'生成失败':'暂无成品'}</div><div class="st">${BADGE[job.status]||''}</div></div>`;
+    }
     const meta = job.status==='failed' ? esc(job.error||'生成失败')+' · 可重试'
       : (job.status==='done' ? '已完成 · '+fmtTime(job.createdAt) : fmtTime(job.createdAt));
     let actions = '';
@@ -111,7 +124,9 @@
     const checkbox = batchMode
       ? `<div onclick="event.stopPropagation();toggleSel('${job.id}')" style="position:absolute;top:10px;left:10px;width:22px;height:22px;border-radius:6px;border:2px solid #fff;background:${selected.has(job.id)?'var(--blue)':'rgba(0,0,0,.4)'};cursor:pointer;z-index:5;display:grid;place-items:center">${selected.has(job.id)?'<svg viewBox=\"0 0 24 24\" width=\"13\" fill=\"none\" stroke=\"#fff\" stroke-width=\"3\"><path d=\"M20 6 9 17l-5-5\"/></svg>':''}</div>`
       : '';
-    return `<div class="work" style="position:relative">${checkbox}${thumb}<div class="work-b"><h4>数字人视频</h4><div class="m">${meta}</div>${batchMode?'':actions}</div></div>`;
+    // 标题:用文案前 16 字区分作品(看一眼就知道是哪条),没文案才退回"数字人视频"。
+    const title = (job.script||'').trim().slice(0,16) || '数字人视频';
+    return `<div class="work" style="position:relative">${checkbox}${thumb}<div class="work-b"><h4 title="${esc(job.script||'')}">${esc(title)}${(job.script||'').length>16?'…':''}</h4><div class="m">${meta}</div>${batchMode?'':actions}</div></div>`;
   }
 
   // ── T6:批量选择 ──

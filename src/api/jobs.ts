@@ -85,15 +85,32 @@ jobsRouter.post('/jobs/estimate', requireAuth, (req: Request, res: Response) => 
 });
 
 // 作品列表 — 任何登录角色(含 viewer)可读本租户作品
-jobsRouter.get('/jobs', requireAuth, (req: Request, res: Response) => {
-  const jobs = listJobsForTenant(req.user!.tenantId).map((j) => ({
-    id: j.id,
-    status: j.status,
-    progress: j.progress,
-    type: j.type,
-    error: j.error,
-    createdAt: j.created_at,
-  }));
+jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
+  const rows = listJobsForTenant(req.user!.tenantId);
+  const jobs = await Promise.all(
+    rows.map(async (j) => {
+      // 成品签名 URL:作品库卡片用它做视频首帧封面 + 播放/下载;非 done 为 null。
+      const videoUrl =
+        j.status === 'done' && j.output_url ? await getSignedUrl(j.output_url).catch(() => null) : null;
+      // 文案:供卡片标题(取前几字)与区分作品;解析失败给空串不崩。
+      let script = '';
+      try {
+        script = (JSON.parse(j.input_json) as { script?: string }).script ?? '';
+      } catch {
+        /* 旧/坏数据忽略 */
+      }
+      return {
+        id: j.id,
+        status: j.status,
+        progress: j.progress,
+        type: j.type,
+        error: j.error,
+        videoUrl,
+        script,
+        createdAt: j.created_at,
+      };
+    }),
+  );
   return res.json(jobs);
 });
 
