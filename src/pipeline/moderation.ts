@@ -4,21 +4,29 @@
 // 准入门槛(深度合成强监管),不是后期 filter。生成管线从 Slice1 就预留这个钩子,
 // 这样二期接真实审核(百炼内容安全 / 阿里内容安全)时不用改动整个任务流。
 //
-// Slice 1:空实现(放行 + 记日志)。C-research 问清百炼送审能力后,在此接真实审核。
+// 过渡方案:长度保护 + 本地敏感词表(见 sensitive-words.ts)。
+// 真实文本/成品审核(阿里云内容安全 Green)记 TODO(T-MODERATION-API),
+// 接入时只换本实现,worker 管线(worker.ts:80/146 调用)不动。
+
+import { findSensitiveWord } from './sensitive-words.js';
 
 export interface ModerationVerdict {
   allowed: boolean;
   reason?: string; // 拒绝原因(用户可见)
 }
 
-/** 生成前:审文案。Slice1 放行,留接口。 */
+/** 生成前:审文案。长度保护 + 本地敏感词表。 */
 export async function moderateScript(script: string): Promise<ModerationVerdict> {
-  // TODO(二期): 接真实文本审核。Slice1 仅做最基础长度保护(命脉闭环约束)。
   if (script.trim().length === 0) {
     return { allowed: false, reason: '文案为空' };
   }
   if (script.length > 2000) {
     return { allowed: false, reason: '文案超过 2000 字上限' };
+  }
+  // 本地敏感词表过渡:命中即拒,不向用户回显具体词(避免摸边界绕过)。
+  const hit = findSensitiveWord(script);
+  if (hit) {
+    return { allowed: false, reason: '文案包含敏感内容,无法生成,请修改后重试' };
   }
   return { allowed: true };
 }
