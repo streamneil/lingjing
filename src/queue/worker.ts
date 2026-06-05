@@ -209,10 +209,34 @@ let stopped = false;
  * 启动 worker 轮询循环。失败隔离的关键就在这个 try/catch:
  * processJob 无论怎么抛,都只标当前 job failed,循环继续拉下一个。
  */
+/**
+ * 启动恢复:把上次进程退出时卡在 running 的 job 标 failed + 释放预扣积分。
+ *
+ * 为什么需要:单进程跑到一半被 docker restart / OOM / 部署更新杀掉,
+ * 该 job 永远停在 running —— claimNextJob 只领 queued,永不重领它,
+ * 用户预扣的积分也不会 release(收入/信任问题,Docker 部署就绪 D11)。
+ *
+ * 单进程模型下 startWorker 时不会有"真正在跑"的 running,所以这里看到的
+ * running 一定是上次崩溃的残留,安全地全部标失败。复用 catch 分支同款
+ * markFailed + release(per-(tenant,job),故先 SELECT 拿 tenant_id)。
+ */
+export function recoverStuckJobs(): void {
+  const rows = db
+    .prepare(`SELECT id, tenant_id FROM job WHERE status='running'`)
+    .all() as { id: string; tenant_id: string }[];
+  for (const r of rows) {
+    markFailed(r.id, '服务重启中断,请重新发起生成');
+    release(r.tenant_id, r.id); // 释放预扣积分(失败不扣)
+  }
+  if (rows.length) console.log(`[worker] 启动恢复:${rows.length} 个中断的 running 任务已标失败 + 释放积分`);
+}
+
 export function startWorker(): void {
   if (running) return;
   running = true;
   stopped = false;
+
+  recoverStuckJobs(); // 进队列循环前先清理上次崩溃残留
 
   (async () => {
     while (!stopped) {

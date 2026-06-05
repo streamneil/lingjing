@@ -22,6 +22,7 @@ import {
 } from '../db/index.js';
 import { config } from '../config.js';
 import { hashPassword, verifyPassword, dummyVerify, genToken } from './crypto.js';
+import { secureAttr } from './cookie.js';
 
 const now = () => Date.now();
 const PADMIN_SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 小时绝对过期(超管高权限,比租户 7 天短)
@@ -170,15 +171,15 @@ function readPadminCookie(req: Request): string | undefined {
 
 export function setPadminCookie(res: Response, token: string): void {
   // Path=/admin:cookie 只在 /admin/* 请求携带,不泄到租户页。SameSite=Strict:超管后台无跨站需求。
-  // Secure 生产开(本地非 HTTPS 留空);HttpOnly 防 XSS 偷 token。
+  // Secure 由 COOKIE_SECURE env 控(生产 HTTPS 带,本地裸 HTTP 不带否则超管登不进);HttpOnly 防 XSS。
   res.setHeader(
     'Set-Cookie',
-    `${PADMIN_COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/admin; Max-Age=${8 * 3600}`,
+    `${PADMIN_COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/admin${secureAttr()}; Max-Age=${8 * 3600}`,
   );
 }
 
 export function clearPadminCookie(res: Response): void {
-  res.setHeader('Set-Cookie', `${PADMIN_COOKIE}=; HttpOnly; SameSite=Strict; Path=/admin; Max-Age=0`);
+  res.setHeader('Set-Cookie', `${PADMIN_COOKIE}=; HttpOnly; SameSite=Strict; Path=/admin${secureAttr()}; Max-Age=0`);
 }
 
 export function readPadminToken(req: Request): string | undefined {

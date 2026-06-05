@@ -16,6 +16,7 @@
 
 import type { Request, Response, NextFunction } from 'express';
 import { resolveSession, type AuthedUser } from './index.js';
+import { secureAttr } from './cookie.js';
 
 // 把当前用户挂到 req 上(扩展 Express 类型)
 declare global {
@@ -41,15 +42,15 @@ function readSessionCookie(req: Request): string | undefined {
 }
 
 export function setSessionCookie(res: Response, token: string): void {
-  // HttpOnly 防 XSS 偷 token;SameSite=Lax 防基础 CSRF。Slice1 本地非 HTTPS,Secure 留给生产。
+  // HttpOnly 防 XSS 偷 token;SameSite=Lax 防基础 CSRF;Secure 由 COOKIE_SECURE env 控(生产 HTTPS 带)。
   res.setHeader(
     'Set-Cookie',
-    `${COOKIE_NAME}=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${7 * 24 * 3600}`,
+    `${COOKIE_NAME}=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/${secureAttr()}; Max-Age=${7 * 24 * 3600}`,
   );
 }
 
 export function clearSessionCookie(res: Response): void {
-  res.setHeader('Set-Cookie', `${COOKIE_NAME}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
+  res.setHeader('Set-Cookie', `${COOKIE_NAME}=; HttpOnly; SameSite=Lax; Path=/${secureAttr()}; Max-Age=0`);
 }
 
 /** 解析 session 并挂 req.user(不强制登录,后续中间件决定)。 */
