@@ -25,6 +25,9 @@ const prototypeDir = resolve(__dirname, '..', 'prototype');
 
 export function createApp() {
   const app = express();
+  // 信任前面一层反代(生产 Caddy 终结 TLS 后到 app 是明文 HTTP)。
+  // 让 req.protocol / X-Forwarded-Proto 反映原始 HTTPS。仅信一层,防伪造。
+  app.set('trust proxy', 1);
   app.use(express.json({ limit: '1mb' }));
 
   app.get('/healthz', (_req, res) => res.json({ ok: true }));
@@ -65,11 +68,19 @@ export function createApp() {
 const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
   bootstrapSuperadmin(); // 首启建初始超管(无 SUPERADMIN_PASS 在此抛错拒启)
+  // OSS 未配齐告警(Docker 部署就绪 D15):wan2.2-s2v 需公网可达素材 URL,
+  // 内网 minio 百炼访问不到。没配 OSS 时生成会卡 pending 超时,这里早告警而非运行时才暴雷。
+  if (!config.oss.enabled) {
+    console.warn(
+      '[警告] OSS 未配齐(OSS_REGION/BUCKET/ACCESS_KEY_ID/ACCESS_KEY_SECRET)。' +
+        '托管部署下数字人生成需公网可达素材 URL,内网 MinIO 百炼访问不到 → 生成会卡 pending 超时。' +
+        '生产请在 .env 配置 OSS。',
+    );
+  }
   const app = createApp();
   startWorker();
   app.listen(config.port, () => {
-    console.log(`灵镜 Slice1 启动: http://localhost:${config.port}`);
-    console.log(`  形象库首页: http://localhost:${config.port}/index.html`);
+    console.log(`灵镜启动: http://localhost:${config.port}`);
     console.log(`  worker: 已启动(DB 队列轮询)`);
   });
 }

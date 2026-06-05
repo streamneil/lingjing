@@ -1,0 +1,13 @@
+# 灵镜 Caddy 反代 — 自动 HTTPS(Let's Encrypt)+ 反代到 app。
+#
+# 域名从 env 注入(${LJ_DOMAIN}),邮箱用于证书到期通知。
+# Caddy 自动申请并续期证书(HTTP-01 challenge 走 80,故 compose 必须映射 80+443)。
+# reverse_proxy 默认传 X-Forwarded-Proto,配合 app 的 trust proxy 让 cookie Secure 生效。
+
+{
+	email {$LJ_ACME_EMAIL}
+}
+
+{$LJ_DOMAIN} {
+	reverse_proxy app:9372
+}

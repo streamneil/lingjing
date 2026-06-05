@@ -1,17 +1,38 @@
-# 灵镜 Slice 1 — 两服务:app + MinIO。
-# 决策来源:/plan-eng-review D3(MinIO 同构)+ D11(去 Redis,DB 队列)。
-# 私有化交付就是把这份 compose 丢进客户内网。
+# 灵镜 — 生产部署:caddy(HTTPS 反代) + app + MinIO。
+# 决策来源:/plan-eng-review D3(MinIO 同构)+ D11(去 Redis,DB 队列)+ Docker 部署就绪 review。
+#
+# 安全边界(Docker 部署就绪 D5/E-1.2):
+#   - 只有 caddy 对公网映射端口(80 ACME challenge + 443 HTTPS)。
+#   - app(9372)和 minio(9000/9001)都不对外映射,只同 Docker 网络互访。
+#     这样没人能绕过 caddy 直连 app 伪造 X-Forwarded-Proto,也没人公网访问 minio 桶。
+# 私有化交付就是把这份 compose + .env 丢进客户内网(域名换成内网域名/自签证书)。
 
 services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"   # ACME HTTP-01 challenge 必须(只映 443 证书申不下来)
+      - "443:443" # HTTPS
+    environment:
+      LJ_DOMAIN: ${LJ_DOMAIN}            # 你的域名(A 记录须先指向本机)
+      LJ_ACME_EMAIL: ${LJ_ACME_EMAIL:-}  # 证书到期通知邮箱
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data    # 证书持久化(别每次重启重申,防 Let's Encrypt 限流)
+      - caddy-config:/config
+
   minio:
     image: minio/minio:latest
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
-    ports:
-      - "9000:9000" # S3 API
-      - "9001:9001" # 控制台
+      # 口令无默认值:缺失即报错,不静默用弱口令 minioadmin 上生产(D14)。
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?需在 .env 设置 MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?需在 .env 设置 MINIO_SECRET_KEY}
+    # 不对外映射端口(D5):只同网络 app 访问 minio:9000。生产用 OSS 时 minio 仅作占位。
     volumes:
       - minio-data:/data
     healthcheck:
@@ -22,24 +43,45 @@ services:
 
   app:
     build: .
+    restart: unless-stopped
     depends_on:
-      - minio
+      minio:
+        condition: service_healthy   # 等 minio ready 再起,避免首启连接被拒(D17)
     environment:
       PORT: 9372
-      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY}
+      TZ: ${TZ:-Asia/Shanghai}        # 审计/积分时间戳按本地时区,别差 8 小时(D13)
+      # 平台超管引导(缺 SUPERADMIN_PASS 拒启,这是设计)
+      SUPERADMIN_USER: ${SUPERADMIN_USER:-admin}
+      SUPERADMIN_PASS: ${SUPERADMIN_PASS:?需在 .env 设置 SUPERADMIN_PASS}
+      # 生产经 caddy HTTPS,cookie 必须带 Secure
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:?需在 .env 设置 DASHSCOPE_API_KEY}
       BAICHUAN_AVATAR_MODEL: ${BAICHUAN_AVATAR_MODEL:-}
       BAICHUAN_PRESET_AVATAR: ${BAICHUAN_PRESET_AVATAR:-}
       BAICHUAN_PRESET_VOICE: ${BAICHUAN_PRESET_VOICE:-cosyvoice-v1}
+      # 阿里云 OSS(生成视频需公网可达素材 URL,内网 minio 百炼访问不到)
+      OSS_REGION: ${OSS_REGION:-}
+      OSS_BUCKET: ${OSS_BUCKET:-}
+      OSS_ACCESS_KEY_ID: ${OSS_ACCESS_KEY_ID:-}
+      OSS_ACCESS_KEY_SECRET: ${OSS_ACCESS_KEY_SECRET:-}
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?需在 .env 设置 MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?需在 .env 设置 MINIO_SECRET_KEY}
       DB_FILE: /data/lingjing.db
-    ports:
-      - "9372:9372"
+    # 不对外映射端口(E-1.2):只 caddy 同网络反代 app:9372。
     volumes:
       - app-data:/data
+    healthcheck:
+      # node:22-slim 无 curl,用 node 原生 fetch 探测(A3)
+      test: ["CMD", "node", "-e", "fetch('http://localhost:9372/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
 volumes:
   minio-data:
   app-data:
+  caddy-data:
+  caddy-config:
