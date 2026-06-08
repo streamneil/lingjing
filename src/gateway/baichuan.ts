@@ -134,7 +134,7 @@ export class BaichuanGateway implements CapabilityGateway {
       {
         model,
         input: { prompt: input.prompt },
-        parameters: { n, size: IMG_SIZE[input.resolution ?? '1K'] ?? IMG_SIZE['1K'] },
+        parameters: { n, size: imageSize(input.ratio, input.resolution) },
       },
       { 'X-DashScope-Async': 'enable' },
     );
@@ -171,12 +171,28 @@ export class BaichuanGateway implements CapabilityGateway {
   }
 }
 
-// 分辨率档 → qwen-image size 参数(占位映射,按控制台实际支持尺寸调整)。
-const IMG_SIZE: Record<string, string> = {
-  '1K': '1024*1024',
-  '2K': '1440*1440',
-  '4K': '2048*2048',
+// (比例 + 分辨率)→ qwen-image size 参数(W*H)。
+// 比例决定长宽比,分辨率决定边长基数。占位映射,按控制台实际支持尺寸调整。
+const RES_BASE: Record<string, number> = { '1K': 1024, '2K': 1440, '4K': 2048 };
+// 比例 → [宽系数, 高系数](归一到基数)。auto/未知 → 1:1。
+const RATIO_WH: Record<string, [number, number]> = {
+  '1:1': [1, 1],
+  '16:9': [16, 9],
+  '9:16': [9, 16],
+  '3:4': [3, 4],
+  '4:3': [4, 3],
+  '3:2': [3, 2],
+  '2:3': [2, 3],
 };
+export function imageSize(ratio?: string, resolution?: string): string {
+  const base = RES_BASE[resolution ?? '1K'] ?? 1024;
+  const [rw, rh] = RATIO_WH[ratio ?? '1:1'] ?? [1, 1];
+  // 以较长边贴近 base,按比例算另一边,8 像素对齐(多数模型要求 8 倍数)。
+  const long = base;
+  const short = Math.round((base * Math.min(rw, rh)) / Math.max(rw, rh) / 8) * 8;
+  const [w, h] = rw >= rh ? [long, short] : [short, long];
+  return `${w}*${h}`;
+}
 
 /**
  * 网关工厂 —— 厂商凭证/实现的切换点(护城河:一套代码两种交付)。

@@ -40,6 +40,7 @@ export interface ImageGenInput {
   prompt: string; // 文生图提示词
   count?: number; // 出图张数 1-4(worker 已 clamp)
   resolution?: string; // 1K | 2K | 4K(占位,按 qwen-image 实际尺寸参数映射)
+  ratio?: string; // 比例:auto | 16:9 | 9:16 | 1:1 | 3:4 | 4:3 | 3:2 | 2:3(与 resolution 共同决定 size)
 }
 
 export interface ImageJobResult {

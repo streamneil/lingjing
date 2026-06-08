@@ -7,12 +7,46 @@
 <link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
 <link rel="stylesheet" href="app.css">
 <style>
-  /* 图片网格画廊(右侧):多图自适应 */
   .img-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; }
   .img-grid img { width:100%; border-radius:12px; display:block; background:var(--field); aspect-ratio:1; object-fit:cover; }
+
+  /* 二级 tab(图片转图片/文字转图片/模板)*/
+  .sub-tabs { display:flex; gap:4px; background:var(--field); border:1px solid var(--line); border-radius:var(--r); padding:4px; margin-bottom:14px; }
+  .sub-tabs button { flex:1; background:none; border:none; color:var(--t3); font-family:var(--f); font-size:13.5px; font-weight:500; padding:9px; border-radius:10px; cursor:pointer; transition:.15s; position:relative; }
+  .sub-tabs button:hover { color:var(--t1); }
+  .sub-tabs button.active { background:var(--card-hi); color:var(--t1); }
+  .sub-tabs button .soon-dot { font-family:var(--f-mono); font-size:8px; color:var(--t4); border:1px solid var(--line); padding:0 4px; border-radius:3px; margin-left:5px; vertical-align:middle; }
+  .sub-tabs button .hot { font-family:var(--f-en); font-size:9px; font-weight:700; color:var(--blue); background:var(--blue-bg); padding:1px 5px; border-radius:4px; margin-left:5px; vertical-align:middle; }
+
+  /* 上传区(图转图,占位即将上线)*/
+  .uploadbox { border:1.5px dashed var(--line-hi); border-radius:var(--r); padding:34px 20px; text-align:center; color:var(--t3); }
+  .uploadbox svg { width:34px; height:34px; color:var(--t4); margin-bottom:10px; }
+  .uploadbox .soon-tag { display:inline-block; margin-top:10px; font-family:var(--f-mono); font-size:10px; color:var(--blue); border:1px solid var(--blue); padding:3px 10px; border-radius:999px; }
+
+  /* 比例选择 */
+  .ratio-row { display:flex; gap:6px; flex-wrap:wrap; }
+  .ratio-cell { flex:1; min-width:54px; display:flex; flex-direction:column; align-items:center; gap:5px; padding:9px 4px; border:1px solid var(--line); border-radius:10px; background:var(--field); color:var(--t3); cursor:pointer; transition:.15s; }
+  .ratio-cell:hover { color:var(--t1); border-color:var(--line-hi); }
+  .ratio-cell.on { background:var(--card-hi); color:var(--t1); border-color:var(--line-hi); }
+  .ratio-cell .glyph { width:18px; height:18px; border:1.6px solid currentColor; border-radius:3px; }
+  .ratio-cell .lbl { font-size:10.5px; font-family:var(--f-mono); }
+
+  /* 解析度 / 输出 段选 */
   .seg-row { display:flex; gap:8px; }
-  .seg-row .seg { flex:1; text-align:center; padding:9px; border-radius:10px; background:var(--field); border:1px solid var(--line); color:var(--t3); font-size:13px; cursor:pointer; transition:.15s; }
+  .seg-row .seg { flex:1; text-align:center; padding:10px; border-radius:10px; background:var(--field); border:1px solid var(--line); color:var(--t3); font-size:13px; cursor:pointer; transition:.15s; }
+  .seg-row .seg:hover { color:var(--t1); }
   .seg-row .seg.on { background:var(--card-hi); color:var(--t1); border-color:var(--line-hi); }
+
+  .cfg-label { font-size:12px; color:var(--t3); margin:14px 0 7px; }
+  .cfg-label:first-of-type { margin-top:0; }
+
+  /* 模板选择行 */
+  .tpl-pick { display:flex; align-items:center; gap:13px; padding:15px 16px; border:1px solid var(--line); border-radius:var(--r); background:var(--card); cursor:pointer; transition:.15s; }
+  .tpl-pick:hover { border-color:var(--line-hi); }
+  .tpl-pick .ti { width:46px; height:46px; border-radius:11px; background:var(--field); border:1px solid var(--line); display:grid; place-items:center; }
+  .tpl-pick .ti svg { width:22px; height:22px; color:var(--t2); }
+  .tpl-pick h5 { font-size:15px; font-weight:600; color:var(--t1); }
+  .tpl-pick p { font-size:12px; color:var(--t4); margin-top:2px; }
 </style>
 </head>
 <body data-page="ai-image" data-crumb="创作工具 > AI 图片">
@@ -21,25 +55,65 @@
   <div class="studio">
   <!-- 左:配置 -->
   <div class="cfg">
-    <div class="cfg-h"><span class="dot"></span>AI 图片</div>
+    <div class="cfg-h"><span class="dot"></span>AI 图像生成器</div>
 
-    <div class="script">
-      <textarea id="prompt" maxlength="800" placeholder="描述你想生成的图片…(如:一位新闻主播在演播室,正面，专业灯光)"></textarea>
-      <div class="f"><span class="h" id="estLabel">预估 — 点</span><span class="c"><b id="cnt">0</b> / 800</span></div>
+    <!-- 二级 tab -->
+    <div class="sub-tabs" id="subTabs">
+      <button data-mode="img2img">图片转图片<span class="soon-dot">即将上线</span></button>
+      <button class="active" data-mode="text2img">文字转图片</button>
+      <button data-mode="template">模板<span class="hot">热门</span></button>
     </div>
 
-    <div style="font-size:12px;color:var(--t3);margin:2px 0">出图张数</div>
+    <!-- 图转图(占位,即将上线)-->
+    <div class="mode-pane" id="pane-img2img" style="display:none">
+      <div class="cfg-label">图片 <span style="color:var(--t4)">(最多 14 张图片)</span></div>
+      <div class="uploadbox">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m3 16 5-5 4 4 3-3 6 6"/></svg>
+        <div>点击或拖放图片以上传</div>
+        <div class="soon-tag">即将上线</div>
+      </div>
+    </div>
+
+    <!-- 模板选择(仅 template 模式)-->
+    <div class="mode-pane" id="pane-template" style="display:none">
+      <div class="tpl-pick" onclick="window.LJToast&&window.LJToast('模板库即将上线,可先用文字描述')">
+        <div class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m12 3 2.4 5.6L20 9l-4.3 3.8L17 18l-5-2.7L7 18l1.3-5.2L4 9l5.6-.4Z"/></svg></div>
+        <div><h5>模板</h5><p>为您的图像选择一个模板</p></div>
+        <div style="margin-left:auto;color:var(--t4)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px"><path d="m9 6 6 6-6 6"/></svg></div>
+      </div>
+    </div>
+
+    <!-- 提示词(text2img + template 共用)-->
+    <div class="mode-pane" id="pane-prompt">
+      <div class="cfg-label">提示</div>
+      <div class="script">
+        <textarea id="prompt" maxlength="800" placeholder="详细描述您想要创建的图像…(如:一位新闻主播在演播室,正面，专业灯光)"></textarea>
+        <div class="f"><span class="h" id="estLabel">预估 — 点</span><span class="c"><b id="cnt">0</b> / 800</span></div>
+      </div>
+    </div>
+
+    <!-- 比例 -->
+    <div class="cfg-label">比例</div>
+    <div class="ratio-row" id="ratioRow"></div>
+
+    <!-- 解析度 -->
+    <div class="cfg-label">解析度</div>
+    <div class="seg-row" id="resSeg">
+      <div class="seg on" data-res="1K">1K</div>
+      <div class="seg" data-res="2K">2K</div>
+      <div class="seg" data-res="4K">4K</div>
+    </div>
+
+    <!-- 输出张数 -->
+    <div class="cfg-label">输出</div>
     <div class="seg-row" id="countSeg">
-      <div class="seg on" data-n="1">1 张</div>
-      <div class="seg" data-n="2">2 张</div>
-      <div class="seg" data-n="4">4 张</div>
+      <div class="seg on" data-n="1">1</div>
+      <div class="seg" data-n="2">2</div>
+      <div class="seg" data-n="3">3</div>
+      <div class="seg" data-n="4">4</div>
     </div>
 
     <div class="cfg-sp"></div>
-
-    <div class="cfg-row">
-      <div class="msel" id="resSel" data-res="1K" onclick="cycleRes()">分辨率 1K <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
-    </div>
 
     <div class="cbtn-wrap">
       <button class="cbtn" id="createBtn">
@@ -57,7 +131,6 @@
       <button class="ftab" data-st="failed">失败</button>
     </div>
     <div class="feed-list">
-      <!-- 样片画廊(空状态:还没生成过时显示) -->
       <div class="fitem" id="sampleGallery" style="animation-delay:.02s">
         <div class="fmeta">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m12 3 2.4 5.6L20 9l-4.3 3.8L17 18l-5-2.7L7 18l1.3-5.2L4 9l5.6-.4Z"/></svg>
@@ -68,13 +141,6 @@
           <img src="https://images.unsplash.com/photo-1495020689067-958852a7765e?w=400&q=80" onclick="useSample('财经新闻配图:城市天际线与上升的图表，蓝色调，专业')" style="cursor:pointer">
           <img src="https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?w=400&q=80" onclick="useSample('政务宣传海报背景:庄重的红色调，党徽元素，简洁大气')" style="cursor:pointer">
           <img src="https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?w=400&q=80" onclick="useSample('科技新闻缩略图:抽象数据流与光线，深色背景，未来感')" style="cursor:pointer">
-        </div>
-      </div>
-      <div class="fitem feed-empty" id="feedEmpty" style="display:none">
-        <div class="feed-empty-in">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m3 16 5-5 4 4 3-3 6 6"/></svg>
-          <div class="t">还没有图片</div>
-          <div class="s">输入提示词,选好张数,点「创建」就能生成第一组图。</div>
         </div>
       </div>
     </div>
@@ -88,30 +154,46 @@
 <script>
   const ta=document.getElementById('prompt'), cnt=document.getElementById('cnt'), btn=document.getElementById('createBtn');
   const feedList=document.querySelector('.feed-list');
-  let count=1;
+  let count=1, res='1K', ratio='1:1', mode='text2img';
 
-  // 出图张数选择
-  document.querySelectorAll('#countSeg .seg').forEach(s=>s.onclick=()=>{
-    document.querySelectorAll('#countSeg .seg').forEach(x=>x.classList.remove('on'));
-    s.classList.add('on'); count=parseInt(s.dataset.n,10); scheduleEstimate(); refreshBtn();
+  // ── 比例选择(8 档,glyph 用 CSS 长宽比近似)──
+  const RATIOS=[
+    {v:'auto',l:'自动',w:18,h:18},{v:'16:9',l:'16:9',w:20,h:11},{v:'9:16',l:'9:16',w:11,h:20},
+    {v:'1:1',l:'1:1',w:18,h:18},{v:'3:4',l:'3:4',w:14,h:18},{v:'4:3',l:'4:3',w:18,h:14},
+    {v:'3:2',l:'3:2',w:19,h:13},{v:'2:3',l:'2:3',w:13,h:19},
+  ];
+  const ratioRow=document.getElementById('ratioRow');
+  ratioRow.innerHTML=RATIOS.map(r=>`<div class="ratio-cell${r.v==='1:1'?' on':''}" data-ratio="${r.v}"><span class="glyph" style="width:${r.w}px;height:${r.h}px"></span><span class="lbl">${r.l}</span></div>`).join('');
+  ratioRow.querySelectorAll('.ratio-cell').forEach(c=>c.onclick=()=>{
+    ratioRow.querySelectorAll('.ratio-cell').forEach(x=>x.classList.remove('on')); c.classList.add('on');
+    ratio=c.dataset.ratio; scheduleEstimate();
   });
-  function cycleRes(){
-    const el=document.getElementById('resSel');
-    const next={'1K':'2K','2K':'4K','4K':'1K'}[el.dataset.res];
-    el.dataset.res=next; el.firstChild.textContent='分辨率 '+next+' '; scheduleEstimate();
-  }
+
+  // ── 解析度 / 输出张数 段选 ──
+  document.querySelectorAll('#resSeg .seg').forEach(s=>s.onclick=()=>{ document.querySelectorAll('#resSeg .seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); res=s.dataset.res; scheduleEstimate(); });
+  document.querySelectorAll('#countSeg .seg').forEach(s=>s.onclick=()=>{ document.querySelectorAll('#countSeg .seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); count=parseInt(s.dataset.n,10); scheduleEstimate(); });
+
+  // ── 二级 tab 切换 ──
+  document.querySelectorAll('#subTabs button').forEach(b=>b.onclick=()=>{
+    const m=b.dataset.mode;
+    if(m==='img2img'){ window.LJToast&&window.LJToast('图片转图片即将上线,敬请期待','err'); return; } // 未上线,不切
+    document.querySelectorAll('#subTabs button').forEach(x=>x.classList.remove('active')); b.classList.add('active');
+    mode=m;
+    document.getElementById('pane-template').style.display = m==='template'?'':'none';
+    document.getElementById('pane-prompt').style.display = '';   // text2img/template 都用提示词
+    refreshBtn();
+  });
 
   function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   function useSample(p){ ta.value=p; cnt.textContent=p.length; refreshBtn(); scheduleEstimate(); ta.focus(); window.LJToast&&window.LJToast('✓ 已套用示范提示词,可改后生成'); }
 
-  // 费用预估(防抖)
   let estTimer=null;
   function scheduleEstimate(){
     clearTimeout(estTimer);
     estTimer=setTimeout(async()=>{
       if(!ta.value.trim()){ document.getElementById('estLabel').textContent='预估 — 点'; document.getElementById('estGem').textContent='—'; return; }
       try{
-        const r=await LJ.post('/jobs/estimate',{type:'ai_image',count,resolution:document.getElementById('resSel').dataset.res});
+        const r=await LJ.post('/jobs/estimate',{type:'ai_image',count,resolution:res});
         document.getElementById('estLabel').textContent='预估 '+r.cost+' 点';
         document.getElementById('estGem').textContent=r.cost;
       }catch(e){}
@@ -124,17 +206,12 @@
   }
   ta.addEventListener('input',()=>{ cnt.textContent=ta.value.length; refreshBtn(); scheduleEstimate(); });
 
-  // feed 状态筛选
   document.querySelectorAll('.ftab').forEach(t=>t.onclick=function(){
     this.parentNode.querySelectorAll('.ftab').forEach(x=>x.classList.remove('active')); this.classList.add('active');
     const k=this.dataset.st;
-    document.querySelectorAll('.feed-list .fitem[id^=job-]').forEach(it=>{
-      const st=it.dataset.st||'';
-      it.style.display=(k==='all'||st===k)?'':'none';
-    });
+    document.querySelectorAll('.feed-list .fitem[id^=job-]').forEach(it=>{ it.style.display=(k==='all'||(it.dataset.st||'')===k)?'':'none'; });
   });
 
-  // 渲染/更新一个图片 job 卡片
   function renderCard(job){
     document.getElementById('sampleGallery').style.display='none';
     let card=document.getElementById('job-'+job.id);
@@ -146,7 +223,7 @@
         <div class="fvideo proc"><div class="proc-in"><div class="spinner"></div><div class="lbl">${job.progress?('进度 '+job.progress+'%'):'已进入生成队列'}</div><div class="proc-bar"><i style="width:${job.progress||8}%"></i></div></div></div>`;
     } else if(job.status==='done'){
       card.dataset.st='done';
-      const imgs=(job.outputUrls||[]).map((u,i)=>`<img src="${u}" onclick="window.open('${u}','_blank')" title="点击查看大图">`).join('');
+      const imgs=(job.outputUrls||[]).map(u=>`<img src="${u}" onclick="window.open('${u}','_blank')" title="点击查看大图">`).join('');
       card.innerHTML=`<div class="fmeta"><b>AI 图片</b><span class="ts">刚刚</span><span class="sp"></span><span class="st" style="color:var(--green)"><span class="led led-ok"></span>已完成</span></div>
         <div class="fbubble"><div class="tx">${esc(job.prompt||'')}</div></div>
         <div class="img-grid">${imgs||'<div style="color:var(--t4);padding:20px">已生成</div>'}</div>`;
@@ -158,15 +235,12 @@
     }
   }
 
-  async function track(id, prompt){
-    try{ await LJ.pollJob(id, (job)=>renderCard({...job, prompt})); }catch(e){}
-  }
+  async function track(id, prompt){ try{ await LJ.pollJob(id, (job)=>renderCard({...job, prompt})); }catch(e){} }
 
-  // 拉历史(只显示 ai_image 类型)
   async function loadHistory(){
     let jobs=[]; try{ jobs=await LJ.listJobs(); }catch(e){ return; }
     const mine=jobs.filter(j=>j.type==='ai_image');
-    if(!mine.length){ return; }
+    if(!mine.length) return;
     document.getElementById('sampleGallery').style.display='none';
     for(const j of [...mine].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))){
       try{ const d=await LJ.getJob(j.id); renderCard({...d, prompt:(d.input&&d.input.prompt)||''});
@@ -180,9 +254,9 @@
     const prompt=ta.value.trim(); if(!prompt) return;
     btn.disabled=true; const prev=btn.innerHTML; btn.textContent='提交中…';
     try{
-      const res=await LJ.createJob({ type:'ai_image', prompt, count, resolution:document.getElementById('resSel').dataset.res });
-      renderCard({ id:res.id, status:'queued', progress:0, prompt });
-      track(res.id, prompt);
+      const res2=await LJ.createJob({ type:'ai_image', prompt, count, resolution:res, ratio });
+      renderCard({ id:res2.id, status:'queued', progress:0, prompt });
+      track(res2.id, prompt);
       ta.value=''; cnt.textContent='0'; scheduleEstimate();
       window.LJToast&&window.LJToast('✓ 已提交生成,可在右侧查看进度');
     }catch(e){ window.LJToast&&window.LJToast('提交失败:'+e.message,'err'); }
