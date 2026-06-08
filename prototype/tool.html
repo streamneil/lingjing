@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>创作工具 · 灵镜</title>
+<link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
+<link rel="stylesheet" href="app.css">
+</head>
+<body data-crumb="创作工具">
+<script>
+  // ⚠️ 在 shell.js 之前同步设 data-page:shell.js 在文档底部加载,会读 body.dataset.page 决定
+  // 侧栏高亮。?tool=key 的 key 即 tools.js 工具 key,直接当 data-page。此脚本先于底部 shell.js 执行。
+  document.body.dataset.page = new URLSearchParams(location.search).get('tool') || '';
+</script>
+<div class="shell" id="shell-mount">
+ <div class="main-col">
+  <div class="studio" style="grid-template-columns:1fr">
+   <div class="feed">
+     <div class="tool-soon" id="soon">
+       <div class="soon-pill">即将上线</div>
+       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+       <h3 id="soon-title">工具即将上线</h3>
+       <p id="soon-desc">这个创作工具正在接入中,敬请期待。你现在可以先用「AI 虚拟人」生成数字人播报视频。</p>
+       <a href="create.html" class="btn btn-white" style="margin-top:22px;padding:12px 22px">去用 AI 虚拟人</a>
+     </div>
+   </div>
+ </div>
+ </div>
+</div>
+<script src="shell.js"></script>
+<script src="tools.js"></script>
+<script src="api.js"></script>
+<script>
+  // 填工具文案;无效 key → 回探索;已上线工具误入占位页 → 跳真正工作区(data-page 已在上方同步设好)。
+  (function(){
+    const key = document.body.dataset.page;
+    function apply(){
+      if(!window.LJTools){ setTimeout(apply,30); return; }
+      const t = key && LJTools.get(key);
+      if(!t){ location.replace('explore.html'); return; }
+      if(t.enabled && t.page){ location.replace(t.page); return; }
+      document.body.dataset.crumb = '创作工具 > ' + t.label;
+      document.getElementById('soon-title').textContent = t.label + ' · 即将上线';
+    }
+    apply();
+  })();
+  // 登录守卫(api.js 未登录会自动跳 login)
+  if(window.LJ) LJ.me().catch(()=>{});
+</script>
+</body>
+</html>

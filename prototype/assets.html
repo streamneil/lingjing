@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>我的资产 · 灵镜</title>
+<link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
+<link rel="stylesheet" href="app.css">
+</head>
+<!-- 我的资产:跨工具产物聚合,本轮占位(NOT in scope,留待单独设计)。 -->
+<body data-page="assets" data-crumb="我的资产">
+<div class="shell" id="shell-mount">
+ <div class="main-col">
+  <div class="studio" style="grid-template-columns:1fr">
+   <div class="feed">
+     <div class="tool-soon">
+       <div class="soon-pill">即将上线</div>
+       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>
+       <h3>我的资产 · 即将上线</h3>
+       <p>这里将聚合你在各创作工具里生成的影片、图片、音频,统一管理与复用。目前你的数字人作品在「AI 虚拟人」里查看。</p>
+       <a href="create.html" class="btn btn-white" style="margin-top:22px;padding:12px 22px">去 AI 虚拟人</a>
+     </div>
+   </div>
+ </div>
+ </div>
+</div>
+<script src="shell.js"></script>
+<script src="tools.js"></script>
+<script src="api.js"></script>
+<script>if(window.LJ) LJ.me().catch(()=>{});</script>
+</body>
+</html>
