@@ -51,6 +51,8 @@ export const config = {
     baseUrl: optional('DASHSCOPE_BASE_URL', 'https://dashscope.aliyuncs.com/api/v1'),
     // 数字人视频模型:音频驱动口型(wan2.2-s2v,吃 image_url + audio_url)。
     avatarModel: optional('BAICHUAN_AVATAR_MODEL', 'wan2.2-s2v'),
+    // AI 图片文生图模型(qwen-image,异步,output.results[] 多图数组)。
+    imageModel: optional('BAICHUAN_IMAGE_MODEL', 'qwen-image'),
     // TTS 模型:文案→音频(CosyVoice,WebSocket)。wan2.2-s2v 不做 TTS,需此前置步骤。
     // 默认 cosyvoice-v1:百炼新账号默认只有 v1 有免费额度(10000),v2/v3 需购买。
     // 注意:模型版本与音色名必须配套 —— v1 用 longjing 等,v2 用 longxiaochun_v2 等,跨版本混用会 418。

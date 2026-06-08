@@ -15,6 +15,8 @@ import type {
   VideoSubmitUrls,
   ProviderJobResult,
   ProviderJobStatus,
+  ImageGenInput,
+  ImageJobResult,
 } from './types.js';
 
 function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
@@ -117,7 +119,64 @@ export class BaichuanGateway implements CapabilityGateway {
     }
     return result;
   }
+
+  // ── AI 图片(qwen-image 文生图)──
+  // 查证(2026-06 官方):端点 POST /services/aigc/text2image/image-synthesis/(X-DashScope-Async: enable)
+  //   input: { prompt }  parameters: { n, size }  →  output.task_id
+  //   GET /tasks/:id 轮询;成功 output.results 是**数组**(多图),每元素 { url }。URL 24h 过期。
+  // 参考:https://help.aliyun.com/zh/model-studio/qwen-image-api
+  async submitImage(input: ImageGenInput): Promise<string> {
+    const model = config.baichuan.imageModel || 'qwen-image';
+    const n = Math.min(4, Math.max(1, Math.floor(input.count ?? 1)));
+    const { status, json } = await httpJson(
+      'POST',
+      '/services/aigc/text2image/image-synthesis/',
+      {
+        model,
+        input: { prompt: input.prompt },
+        parameters: { n, size: IMG_SIZE[input.resolution ?? '1K'] ?? IMG_SIZE['1K'] },
+      },
+      { 'X-DashScope-Async': 'enable' },
+    );
+    if (status !== 200) {
+      throw new Error(`百炼文生图提交失败 HTTP ${status}: ${JSON.stringify(json?.message ?? json)}`);
+    }
+    const taskId: string | undefined = json?.output?.task_id;
+    if (!taskId) {
+      throw new Error(`百炼文生图未返回 task_id: ${JSON.stringify(json?.output ?? json)}`);
+    }
+    return taskId;
+  }
+
+  async fetchImageStatus(providerTaskId: string): Promise<ImageJobResult> {
+    const { status, json } = await httpJson('GET', `/tasks/${providerTaskId}`);
+    if (status !== 200) {
+      return { status: 'failed', error: `查询图片任务失败 HTTP ${status}` };
+    }
+    const out = json?.output ?? {};
+    const normalized = normalizeStatus(out.task_status);
+    const result: ImageJobResult = { status: normalized };
+    if (typeof out.progress === 'number') result.progress = out.progress;
+    if (normalized === 'succeeded') {
+      // ⚠️ results 是数组(与视频 video_url 对象不同),逐元素取 url。
+      const arr = Array.isArray(out.results) ? out.results : [];
+      result.imageUrls = arr
+        .map((r: { url?: string }) => r?.url)
+        .filter((u: unknown): u is string => typeof u === 'string');
+    }
+    if (normalized === 'failed') {
+      result.error = out.message ?? out.code ?? '百炼文生图任务失败';
+    }
+    return result;
+  }
 }
+
+// 分辨率档 → qwen-image size 参数(占位映射,按控制台实际支持尺寸调整)。
+const IMG_SIZE: Record<string, string> = {
+  '1K': '1024*1024',
+  '2K': '1440*1440',
+  '4K': '2048*2048',
+};
 
 /**
  * 网关工厂 —— 厂商凭证/实现的切换点(护城河:一套代码两种交付)。

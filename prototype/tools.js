@@ -42,7 +42,7 @@
     {
       key: 'ai-image', label: 'AI 图片',
       icon: '<rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="9" cy="9" r="1.6"/><path d="m5 17 4-4 3 3 3-3 4 4"/>',
-      badge: { text: 'Nano Banana', kind: 'nano' }, enabled: false, outputKind: 'image', tier: 'next',
+      badge: { text: 'Nano Banana', kind: 'nano' }, enabled: true, outputKind: 'image', page: 'ai-image.html', tier: 'next',
     },
     {
       key: 'ai-image-edit', label: 'AI 图片编辑器',

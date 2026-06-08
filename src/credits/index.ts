@@ -20,10 +20,48 @@ const PRICE_PER_CHAR = 0.05; // 每字 0.05 积分(可配置;占位值)
 const RES_FACTOR: Record<string, number> = { '480P': 0.4, '720P': 0.6, '1080P': 1, '4K': 2 };
 const MIN_COST = 1;
 
-/** 生成前费用预估(积分),与 reserve / settle 用同一函数,保证一致(验收第4条)。 */
+/** 数字人视频计价(字数 × 单价 × 分辨率系数)。reserve / settle 用同一函数,保证一致(验收第4条)。 */
 export function estimateCost(scriptLength: number, resolution = '1080P'): number {
   const factor = RES_FACTOR[resolution] ?? 1;
   return Math.max(MIN_COST, Math.ceil(scriptLength * PRICE_PER_CHAR * factor));
+}
+
+// ── AI 图片计价:图数 × 单价 × 分辨率系数 ──
+const PRICE_PER_IMAGE = 4; // 每张图 4 积分基价(占位值,可配置)
+const IMG_RES_FACTOR: Record<string, number> = { '1K': 1, '2K': 1.5, '4K': 2.5 };
+
+/** 把请求图数 clamp 到 [1,4](qwen-image 上限),保证 reserve==settle 不被非法 n 破坏。 */
+export function clampImageCount(n: unknown): number {
+  const v = typeof n === 'number' && Number.isFinite(n) ? Math.floor(n) : 1;
+  return Math.min(4, Math.max(1, v));
+}
+
+/** AI 图片费用预估:图数 × 分辨率系数。n 先 clamp 到 [1,4]。 */
+export function estimateImageCost(count: number, resolution = '1K'): number {
+  const n = clampImageCount(count);
+  const factor = IMG_RES_FACTOR[resolution] ?? 1;
+  return Math.max(MIN_COST, Math.ceil(n * PRICE_PER_IMAGE * factor));
+}
+
+/**
+ * 按工具类型计价(多工具统一入口)。reserve / settle / estimate 全走这里,保证一致。
+ * 决策来源:/plan-ceo-review A2 —— 每工具一个计价分支,不拷贝计价逻辑。
+ */
+export function costFor(toolType: string, input: Record<string, unknown>): number {
+  switch (toolType) {
+    case 'video':
+      return estimateCost(
+        typeof input.script === 'string' ? input.script.length : 0,
+        typeof input.resolution === 'string' ? input.resolution : undefined,
+      );
+    case 'ai_image':
+      return estimateImageCost(
+        typeof input.count === 'number' ? input.count : 1,
+        typeof input.resolution === 'string' ? input.resolution : undefined,
+      );
+    default:
+      throw new Error(`未知工具类型,无法计价:${toolType}`);
+  }
 }
 
 function insert(
