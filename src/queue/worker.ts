@@ -10,14 +10,14 @@ import { config } from '../config.js';
 import { getGateway } from '../gateway/baichuan.js';
 import { synthesizeSpeech } from '../gateway/cosyvoice.js';
 import { getMediaPublisher, tenantDelivery } from '../gateway/media-publisher.js';
-import type { VideoGenInput, VideoSubmitUrls } from '../gateway/types.js';
+import type { VideoGenInput, VideoSubmitUrls, ImageGenInput } from '../gateway/types.js';
 import { storage } from '../storage/index.js';
 import { listPresets as listAvatarPresets, getAvatar } from '../avatars/index.js';
 import { isPreset as isPresetVoice, getVoice } from '../voices/index.js';
-import { moderateScript, moderateOutput } from '../pipeline/moderation.js';
+import { moderateScript, moderatePrompt, moderateOutput } from '../pipeline/moderation.js';
 import { applyAiLabel, probeAudioDuration, concatVideos } from '../pipeline/ai-label.js';
 import { segmentScript } from '../pipeline/segment.js';
-import { settle, release, estimateCost } from '../credits/index.js';
+import { settle, release, estimateCost, costFor } from '../credits/index.js';
 import { db } from '../db/index.js';
 
 /** 读租户的 AI 标识设置(默认开启 + "AI 合成")。 */
@@ -143,12 +143,15 @@ async function renderSegment(
   return Buffer.from(await resp.arrayBuffer());
 }
 
-/** 处理单个 job 的完整管线。抛错由调用方捕获并标 failed(失败隔离)。
+/** 处理一个数字人(AI 虚拟人)视频 job 的完整管线。抛错由调用方捕获并标 failed(失败隔离)。
  *
  * 长文案分段:wan2.2-s2v 单次驱动音频硬限 <20s(百炼官方)。超 20s 的文案按句切成
  * 多段(segment.ts),逐段 TTS→s2v 生成,再 ffmpeg 拼接成一条;单段则走快路径不拼接。
+ *
+ * 注:这是从原 processJob 原样抽出的视频路径(eng-review E1:先抽函数测试绿再加 type 分发)。
+ * processJob 现按 job.type 分发到这里或其它工具的 runner。
  */
-async function processJob(job: JobRow): Promise<void> {
+async function runVideoJob(job: JobRow): Promise<void> {
   const input = JSON.parse(job.input_json) as VideoGenInput;
 
   // 1. 生成前送审(文案级:长度 + 本地敏感词表)
@@ -200,6 +203,74 @@ async function processJob(job: JobRow): Promise<void> {
   // 成功结算:实扣按字数估算(与提交时 reserve 同一算法 → 差额0)
   const actualCost = estimateCost(input.script.length, input.resolution);
   settle(job.tenant_id, job.id, actualCost);
+}
+
+/** 处理一个 AI 图片(文生图,qwen-image)job。抛错由调用方捕获并标 failed(失败隔离)。
+ *
+ * 管线:提示词送审 → submitImage(task_id)→ 轮询 → 多图逐个拉进存储存 key → markDone(JSON key 数组)。
+ * 关键(外部声音 P1):output_url 存的是存储 key 不是 URL;百炼图 URL 24h 过期,必须 putObjectFromUrl 拉进来。
+ */
+async function runImageJob(job: JobRow): Promise<void> {
+  const input = JSON.parse(job.input_json) as ImageGenInput;
+
+  // 1. 提示词送审(复用 moderatePrompt:关键词表;图片无 2000 字视频限制)
+  const pre = await moderatePrompt(input.prompt);
+  if (!pre.allowed) throw new Error(`送审拒绝:${pre.reason}`);
+
+  // 2. 提交 + 轮询
+  const gateway = getGateway(job.tenant_id);
+  const providerTaskId = await gateway.submitImage(input);
+  setProviderTaskId(job.id, providerTaskId);
+
+  const deadline = Date.now() + config.baichuan.jobTimeoutMs;
+  let imageUrls: string[] = [];
+  let sawRunning = false;
+  for (;;) {
+    if (Date.now() > deadline) {
+      throw new Error(
+        sawRunning
+          ? `生成超时(>${config.baichuan.jobTimeoutMs}ms),已放弃`
+          : `排队超时:生成服务繁忙(免费档同时只跑 1 个任务),请稍后重试`,
+      );
+    }
+    const r = await gateway.fetchImageStatus(providerTaskId);
+    if (r.status === 'running') sawRunning = true;
+    if (typeof r.progress === 'number') updateProgress(job.id, Math.min(99, r.progress));
+    else updateProgress(job.id, r.status === 'running' ? 50 : 5);
+    if (r.status === 'succeeded') { imageUrls = r.imageUrls ?? []; break; }
+    if (r.status === 'failed') throw new Error(r.error ?? '厂商图片任务失败');
+    await sleep(config.baichuan.pollIntervalMs);
+  }
+  if (imageUrls.length === 0) throw new Error('厂商成功但未返回图片 URL');
+
+  // 3. 成品送审 hook(当前 passthrough,和视频一致;TODO 二期接真实图像审核)
+  const post = await moderateOutput('image');
+  if (!post.allowed) throw new Error(`成品送审拒绝:${post.reason}`);
+
+  // 4. 每张图拉进存储,存 key(百炼 URL 24h 过期 → 必须自有存储)
+  const keys: string[] = [];
+  for (let i = 0; i < imageUrls.length; i++) {
+    const key = `images/${job.tenant_id}/${job.id}-${i}.png`;
+    await storage.putObjectFromUrl(key, imageUrls[i]!);
+    keys.push(key);
+  }
+
+  markDone(job.id, JSON.stringify(keys), 'none', 'image');
+  // 成功结算:与提交时 reserve 同一计价(costFor 'ai_image')
+  settle(job.tenant_id, job.id, costFor('ai_image', input as unknown as Record<string, unknown>));
+}
+
+/** 按 job.type 分发到对应工具的 runner(eng-review E1)。
+ *  抛错由调用方捕获并标 failed(失败隔离)。未知 type → 抛错标失败(防御,不崩 worker)。 */
+async function processJob(job: JobRow): Promise<void> {
+  switch (job.type) {
+    case 'video':
+      return runVideoJob(job);
+    case 'ai_image':
+      return runImageJob(job);
+    default:
+      throw new Error(`未知任务类型:${job.type}`);
+  }
 }
 
 let running = false;

@@ -128,3 +128,28 @@ export const getSignedUrl = (key: string, expirySeconds?: number) =>
 export const getObject = (key: string) => backend.getObject(key);
 
 export const storage = { putObject, putObjectFromUrl, getSignedUrl, getObject, ensureBucket };
+
+/**
+ * 把 job.output_url 解析为存储 key 数组(纯函数,可单测)。
+ *
+ * output_url 历史是裸 key 字符串(单视频);多工具后存 JSON key 数组(多图)。
+ * 向后兼容:JSON.parse 成功且是数组 → 该数组;否则(旧裸字符串)当单 key。
+ */
+export function parseOutputKeys(outputUrl: string): string[] {
+  try {
+    const parsed = JSON.parse(outputUrl);
+    return Array.isArray(parsed) ? parsed.map(String) : [outputUrl];
+  } catch {
+    return [outputUrl]; // 旧裸 key 字符串
+  }
+}
+
+/**
+ * 把 job.output_url 解析为签名 URL 数组(多工具读路径统一入口)。
+ * 逐 key 签名;失败的元素跳过,保证不因一个坏 key 整体 500。
+ */
+export async function signOutputUrls(outputUrl: string): Promise<string[]> {
+  const keys = parseOutputKeys(outputUrl);
+  const signed = await Promise.all(keys.map((k) => getSignedUrl(k).catch(() => null)));
+  return signed.filter((u): u is string => u !== null);
+}

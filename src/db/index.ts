@@ -243,6 +243,10 @@ addColumnIfMissing('avatar', 'is_default', `is_default INTEGER NOT NULL DEFAULT 
 addColumnIfMissing('user', 'display_name', `display_name TEXT`);
 addColumnIfMissing('authorization', 'terms_version', `terms_version TEXT`);
 addColumnIfMissing('voice', 'provider_voice_id', `provider_voice_id TEXT`);
+// 多工具平台:job.output_kind 区分产物类型(video|image|audio),右画廊按此渲染。
+// output_url 语义随之改为 JSON 字符串(key 数组)——旧视频行是裸 key 字符串,读路径 JSON.parse
+// 失败时兜底当单 key(向后兼容,见 api/jobs.ts)。默认 'video' 让旧行保持视频语义。
+addColumnIfMissing('job', 'output_kind', `output_kind TEXT NOT NULL DEFAULT 'video'`);
 
 // 成员与权限升级:
 //  - tenant.max_creator_seats:创作席位上限(licensing 真相源,默认 10)。
@@ -283,7 +287,8 @@ export interface JobRow {
   progress: number;
   input_json: string;
   baichuan_task_id: string | null;
-  output_url: string | null;
+  output_url: string | null; // 存储 key;多工具后为 JSON key 数组(旧视频行是裸 key 字符串)
+  output_kind: string; // video | image | audio(右画廊渲染依据;旧行默认 video)
   ai_label: string | null;
   error: string | null;
   attempts: number;

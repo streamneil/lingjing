@@ -11,15 +11,25 @@ import type { VideoGenInput } from '../gateway/types.js';
 
 const now = () => Date.now();
 
-/** 入队一个视频生成任务,返回 jobId。 */
-export function enqueueVideo(input: VideoGenInput, tenantId: string = config.defaultTenantId): string {
+/** 入队一个生成任务(通用,按 type),返回 jobId。
+ *  多工具平台:type 决定 worker 走哪个 runner;input 是该工具的入参(JSON 序列化存)。 */
+export function enqueueJob(
+  type: string,
+  input: unknown,
+  tenantId: string = config.defaultTenantId,
+): string {
   const id = randomUUID();
   const t = now();
   db.prepare(
     `INSERT INTO job (id, tenant_id, type, status, input_json, created_at, updated_at)
-     VALUES (?, ?, 'video', 'queued', ?, ?, ?)`,
-  ).run(id, tenantId, JSON.stringify(input), t, t);
+     VALUES (?, ?, ?, 'queued', ?, ?, ?)`,
+  ).run(id, tenantId, type, JSON.stringify(input), t, t);
   return id;
+}
+
+/** 入队一个视频(AI 虚拟人)生成任务,返回 jobId。enqueueJob 的 video 便捷包装(向后兼容)。 */
+export function enqueueVideo(input: VideoGenInput, tenantId: string = config.defaultTenantId): string {
+  return enqueueJob('video', input, tenantId);
 }
 
 /**
@@ -87,10 +97,17 @@ export function updateProgress(id: string, progress: number): void {
   db.prepare(`UPDATE job SET progress=?, updated_at=? WHERE id=?`).run(progress, now(), id);
 }
 
-export function markDone(id: string, outputUrl: string, aiLabel: string): void {
+/** 标记完成。outputUrl 现存 JSON key 数组(单视频=1元素);outputKind 决定右画廊渲染方式。
+ *  默认 outputKind='video' 兼容现有视频 runner 调用点。 */
+export function markDone(
+  id: string,
+  outputUrl: string,
+  aiLabel: string,
+  outputKind: 'video' | 'image' | 'audio' = 'video',
+): void {
   db.prepare(
-    `UPDATE job SET status='done', progress=100, output_url=?, ai_label=?, updated_at=? WHERE id=?`,
-  ).run(outputUrl, aiLabel, now(), id);
+    `UPDATE job SET status='done', progress=100, output_url=?, output_kind=?, ai_label=?, updated_at=? WHERE id=?`,
+  ).run(outputUrl, outputKind, aiLabel, now(), id);
 }
 
 /** 标记失败。关键:只动这一个 job,不触碰其它 → 失败隔离的基础。 */
