@@ -14,7 +14,7 @@ import type { VideoGenInput, VideoSubmitUrls, ImageGenInput } from '../gateway/t
 import { storage } from '../storage/index.js';
 import { listPresets as listAvatarPresets, getAvatar } from '../avatars/index.js';
 import { isPreset as isPresetVoice, getVoice } from '../voices/index.js';
-import { moderateScript, moderatePrompt, moderateOutput } from '../pipeline/moderation.js';
+import { moderateScript, moderatePrompt, moderateImageInput, moderateOutput } from '../pipeline/moderation.js';
 import { applyAiLabel, probeAudioDuration, concatVideos } from '../pipeline/ai-label.js';
 import { segmentScript } from '../pipeline/segment.js';
 import { settle, release, estimateCost, costFor } from '../credits/index.js';
@@ -205,19 +205,32 @@ async function runVideoJob(job: JobRow): Promise<void> {
   settle(job.tenant_id, job.id, actualCost);
 }
 
-/** 处理一个 AI 图片(文生图,qwen-image)job。抛错由调用方捕获并标 failed(失败隔离)。
- *
- * 管线:提示词送审 → submitImage(task_id)→ 轮询 → 多图逐个拉进存储存 key → markDone(JSON key 数组)。
- * 关键(外部声音 P1):output_url 存的是存储 key 不是 URL;百炼图 URL 24h 过期,必须 putObjectFromUrl 拉进来。
- */
-async function runImageJob(job: JobRow): Promise<void> {
+/** 共享尾段:百炼图 URL → 拉进自有存储存 key → markDone(JSON key 数组,kind=image)→ settle。
+ *  文生图/图生图两路都用(DRY)。
+ *  ⚠️ output_url 存的是存储 key 不是 URL;百炼图 URL 24h 过期,必须 putObjectFromUrl 拉进来(外部声音 P1)。 */
+async function finalizeImageJob(job: JobRow, input: ImageGenInput, imageUrls: string[]): Promise<void> {
+  if (imageUrls.length === 0) throw new Error('厂商成功但未返回图片 URL');
+  // 成品送审 hook(当前 passthrough,和视频一致;TODO 二期接真实图像审核)
+  const post = await moderateOutput('image');
+  if (!post.allowed) throw new Error(`成品送审拒绝:${post.reason}`);
+  const keys: string[] = [];
+  for (let i = 0; i < imageUrls.length; i++) {
+    const key = `images/${job.tenant_id}/${job.id}-${i}.png`;
+    await storage.putObjectFromUrl(key, imageUrls[i]!);
+    keys.push(key);
+  }
+  markDone(job.id, JSON.stringify(keys), 'none', 'image');
+  settle(job.tenant_id, job.id, costFor('ai_image', input as unknown as Record<string, unknown>));
+}
+
+/** 文生图(text2img,qwen-image,异步轮询)。从原 runImageJob 原样抽出(eng-review E1:先抽测试绿再加 mode 分发)。
+ *  管线:提示词送审 → submitImage(task_id)→ 轮询 → finalize。 */
+async function runImageGenJob(job: JobRow): Promise<void> {
   const input = JSON.parse(job.input_json) as ImageGenInput;
 
-  // 1. 提示词送审(复用 moderatePrompt:关键词表;图片无 2000 字视频限制)
   const pre = await moderatePrompt(input.prompt);
   if (!pre.allowed) throw new Error(`送审拒绝:${pre.reason}`);
 
-  // 2. 提交 + 轮询
   const gateway = getGateway(job.tenant_id);
   const providerTaskId = await gateway.submitImage(input);
   setProviderTaskId(job.id, providerTaskId);
@@ -241,23 +254,62 @@ async function runImageJob(job: JobRow): Promise<void> {
     if (r.status === 'failed') throw new Error(r.error ?? '厂商图片任务失败');
     await sleep(config.baichuan.pollIntervalMs);
   }
-  if (imageUrls.length === 0) throw new Error('厂商成功但未返回图片 URL');
+  await finalizeImageJob(job, input, imageUrls);
+}
 
-  // 3. 成品送审 hook(当前 passthrough,和视频一致;TODO 二期接真实图像审核)
-  const post = await moderateOutput('image');
-  if (!post.allowed) throw new Error(`成品送审拒绝:${post.reason}`);
+/** 图生图(img2img,qwen-image-edit,同步)。抛错由调用方捕获并标 failed(失败隔离)。
+ *
+ * 管线:提示词送审 → 输入图 key 经 publish 转公网 URL → editImage(同步,AbortController 硬超时)→ finalize。
+ * ⚠️ 同步调无 poll 循环检 deadline(外部声音 P2);AbortController + setTimeout(jobTimeoutMs)是唯一防冻 worker 的保障。
+ */
+async function runImageEditJob(job: JobRow): Promise<void> {
+  const input = JSON.parse(job.input_json) as ImageGenInput;
 
-  // 4. 每张图拉进存储,存 key(百炼 URL 24h 过期 → 必须自有存储)
-  const keys: string[] = [];
-  for (let i = 0; i < imageUrls.length; i++) {
-    const key = `images/${job.tenant_id}/${job.id}-${i}.png`;
-    await storage.putObjectFromUrl(key, imageUrls[i]!);
-    keys.push(key);
+  const pre = await moderatePrompt(input.prompt);
+  if (!pre.allowed) throw new Error(`送审拒绝:${pre.reason}`);
+
+  const refs = input.imageRefs ?? [];
+  if (refs.length === 0) throw new Error('图生图缺少输入图');
+  // 输入图送审 hook(passthrough,TODO 二期;政企合规靠上传端点的 consent+proof 门票)
+  for (const k of refs) {
+    const v = await moderateImageInput(k);
+    if (!v.allowed) throw new Error(`输入图送审拒绝:${v.reason}`);
   }
+  // 输入图存储 key → 公网 URL(百炼要能下载;复用数字人同款发布策略)
+  const publisher = getMediaPublisher(tenantDelivery(job.tenant_id));
+  const imageUrls = await Promise.all(refs.map((k) => publisher.publish(k)));
 
-  markDone(job.id, JSON.stringify(keys), 'none', 'image');
-  // 成功结算:与提交时 reserve 同一计价(costFor 'ai_image')
-  settle(job.tenant_id, job.id, costFor('ai_image', input as unknown as Record<string, unknown>));
+  // 同步调:AbortController 硬超时(jobTimeoutMs)。超时→abort→fetch 抛 AbortError→冒泡标 failed+release。
+  const gateway = getGateway(job.tenant_id) as unknown as import('../gateway/types.js').SyncImageGateway;
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), config.baichuan.jobTimeoutMs);
+  let resultUrls: string[];
+  try {
+    updateProgress(job.id, 50);
+    resultUrls = await gateway.editImage(
+      { imageUrls, prompt: input.prompt, ratio: input.ratio, resolution: input.resolution },
+      ac.signal,
+    );
+  } catch (e) {
+    if (ac.signal.aborted) throw new Error(`生成超时(>${config.baichuan.jobTimeoutMs}ms),已放弃`);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+  await finalizeImageJob(job, input, resultUrls);
+}
+
+/** AI 图片 job 按 input.mode 分发(eng-review E1)。
+ *  text2img(异步轮询)/ img2img(同步)。未知/缺 mode 默认 text2img(兼容老 job)。 */
+async function runImageJob(job: JobRow): Promise<void> {
+  const input = JSON.parse(job.input_json) as ImageGenInput;
+  switch (input.mode) {
+    case 'img2img':
+      return runImageEditJob(job);
+    case 'text2img':
+    default:
+      return runImageGenJob(job);
+  }
 }
 
 /** 按 job.type 分发到对应工具的 runner(eng-review E1)。

@@ -37,10 +37,28 @@ export interface ProviderJobResult {
 // ── AI 图片(文生图,qwen-image)──
 // 异步任务:submit 返 task_id,poll 直到 SUCCEEDED;成品在 output.results[].url(数组,多图)。
 export interface ImageGenInput {
-  prompt: string; // 文生图提示词
-  count?: number; // 出图张数 1-4(worker 已 clamp)
+  mode?: 'text2img' | 'img2img'; // 子模式;缺省=text2img(兼容老 job)
+  prompt: string; // 提示词(文生图描述 / 图生图编辑指令)
+  count?: number; // 出图张数 1-4(worker 已 clamp);img2img 固定 1
   resolution?: string; // 1K | 2K | 4K(占位,按 qwen-image 实际尺寸参数映射)
   ratio?: string; // 比例:auto | 16:9 | 9:16 | 1:1 | 3:4 | 4:3 | 3:2 | 2:3(与 resolution 共同决定 size)
+  imageRefs?: string[]; // img2img:已上传输入图的存储 key(1-3 张);worker 经 publish 转公网 URL
+}
+
+// ── 图生图(image-to-image,qwen-image-edit)──
+// ⚠️ 同步模型:调用直接返回图数组,不轮询(与文生图/视频的异步 task 不同)。
+// 故独立于异步 CapabilityGateway,放 SyncImageGateway(外部声音 P2:不污染异步契约)。
+export interface ImageEditInput {
+  imageUrls: string[]; // 输入图公网 URL(1-3 张,worker 已 publish)
+  prompt: string; // 编辑指令
+  ratio?: string;
+  resolution?: string;
+}
+
+export interface SyncImageGateway {
+  /** 同步图生图(qwen-image-edit)。直返成品图 URL 数组(百炼侧,24h 过期 → worker 须拉进存储)。
+   *  传入 AbortSignal 做硬超时(外部声音 P2:同步调无 poll 循环检 deadline,挂连接会冻 worker)。 */
+  editImage(input: ImageEditInput, signal: AbortSignal): Promise<string[]>;
 }
 
 export interface ImageJobResult {

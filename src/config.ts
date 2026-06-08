@@ -53,6 +53,8 @@ export const config = {
     avatarModel: optional('BAICHUAN_AVATAR_MODEL', 'wan2.2-s2v'),
     // AI 图片文生图模型(qwen-image,异步,output.results[] 多图数组)。
     imageModel: optional('BAICHUAN_IMAGE_MODEL', 'qwen-image'),
+    // AI 图片图生图模型(qwen-image-edit,同步,output.choices[0].message.content[].image)。
+    imageEditModel: optional('BAICHUAN_IMAGE_EDIT_MODEL', 'qwen-image-edit'),
     // TTS 模型:文案→音频(CosyVoice,WebSocket)。wan2.2-s2v 不做 TTS,需此前置步骤。
     // 默认 cosyvoice-v1:百炼新账号默认只有 v1 有免费额度(10000),v2/v3 需购买。
     // 注意:模型版本与音色名必须配套 —— v1 用 longjing 等,v2 用 longxiaochun_v2 等,跨版本混用会 418。
