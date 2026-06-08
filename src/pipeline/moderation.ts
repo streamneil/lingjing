@@ -45,6 +45,14 @@ export async function moderatePrompt(prompt: string): Promise<ModerationVerdict>
   return { allowed: true };
 }
 
+/** 图生图:审上传的输入图(passthrough hook,TODO 二期接图像内容安全)。
+ *  ⚠️ 这是 passthrough,不做真实画面审核(诚实降级,和 moderateOutput 一致)。
+ *  政企含人输入图的合规靠上传端点的 consent+proof 授权门票(api/jobs.ts),不是这里。 */
+export async function moderateImageInput(_imageKey: string): Promise<ModerationVerdict> {
+  // TODO(二期,T-MODERATION-API): 接真实图像内容审核(违规画面检测)。
+  return { allowed: true };
+}
+
 /** 生成后:审成品(视频/图片)。当前放行(passthrough),留接口。
  *  ⚠️ 这是 passthrough hook,不做真实画面审核(从 Slice1 起就是)。
  *  二期接阿里云内容安全 Green(T-MODERATION-API)时只换本实现,worker 管线不动。 */

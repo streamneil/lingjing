@@ -4,6 +4,8 @@
 // 所有读写经 tenant-scoped 查询,杜绝跨租户串数据。
 
 import { Router, type Request, type Response } from 'express';
+import multer from 'multer';
+import { randomUUID } from 'node:crypto';
 import {
   enqueueJob,
   getJobForTenant,
@@ -11,15 +13,26 @@ import {
   retryJob,
   deleteJobForTenant,
 } from '../queue/index.js';
-import { signOutputUrls } from '../storage/index.js';
+import { signOutputUrls, putObject } from '../storage/index.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
-import { estimateCost, estimateImageCost, clampImageCount, reserve, balance } from '../credits/index.js';
+import {
+  estimateCost,
+  estimateImageCost,
+  estimateImageEditCost,
+  clampImageCount,
+  reserve,
+  balance,
+} from '../credits/index.js';
 import { audit } from '../audit/index.js';
 import { isUsableAvatar } from '../avatars/index.js';
 import { isUsableVoice } from '../voices/index.js';
+import { db } from '../db/index.js';
 import type { VideoGenInput, ImageGenInput } from '../gateway/types.js';
 
 export const jobsRouter = Router();
+
+// 图生图输入图上传:multer 内存缓冲,≤30MB,最多 3 张(qwen-image-edit 上限)。
+const imageUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024 } });
 
 // ── type 封闭 allowlist(eng-review E2 / 外部声音 P2)──
 // 只接受这里登记的 type;未知/`__proto__`/空 → 400。每个 type 有自己的 input 校验器 + 计价。
@@ -62,20 +75,39 @@ function buildVideoJob(body: Record<string, unknown>, tid: string): JobBuildResu
   };
 }
 
-/** 校验并构建 ai_image(AI 图片,文生图)job 入参 + 计价。 */
+/** 校验并构建 ai_image job 入参 + 计价。按 input.mode 分文生图 / 图生图。 */
 function buildImageJob(body: Record<string, unknown>): JobBuildResult {
-  const { prompt, count, resolution, ratio } = body as Partial<ImageGenInput>;
+  const { prompt, count, resolution, ratio, mode, imageRefs } = body as Partial<ImageGenInput>;
   if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0)
     return { ok: false, status: 400, error: '缺少 prompt(提示词)' };
+  const res = typeof resolution === 'string' ? resolution : undefined;
+
+  if (mode === 'img2img') {
+    // 图生图:输入图 key 必填 1-3 张(qwen-image-edit 上限);授权门票在上传端点已把关。
+    const refs = Array.isArray(imageRefs) ? imageRefs.filter((k) => typeof k === 'string') : [];
+    if (refs.length === 0) return { ok: false, status: 400, error: '图生图需上传至少 1 张输入图' };
+    if (refs.length > 3) return { ok: false, status: 400, error: '图生图最多 3 张输入图' };
+    const input: ImageGenInput = { mode: 'img2img', prompt, imageRefs: refs };
+    if (res) input.resolution = res;
+    if (typeof ratio === 'string') input.ratio = ratio;
+    return {
+      ok: true,
+      type: 'ai_image',
+      input: input as unknown as Record<string, unknown>,
+      cost: estimateImageEditCost(res),
+    };
+  }
+
+  // 文生图
   const n = clampImageCount(count); // [1,4],保证 reserve==settle
-  const input: ImageGenInput = { prompt, count: n };
-  if (typeof resolution === 'string') input.resolution = resolution;
+  const input: ImageGenInput = { mode: 'text2img', prompt, count: n };
+  if (res) input.resolution = res;
   if (typeof ratio === 'string') input.ratio = ratio;
   return {
     ok: true,
     type: 'ai_image',
     input: input as unknown as Record<string, unknown>,
-    cost: estimateImageCost(n, typeof resolution === 'string' ? resolution : undefined),
+    cost: estimateImageCost(n, res),
   };
 }
 
@@ -120,17 +152,71 @@ jobsRouter.post('/jobs', requireRole('admin', 'creator'), (req: Request, res: Re
   return res.status(202).json({ id, status: 'queued', cost });
 });
 
+// ── 图生图输入图上传 ──
+// 仅 admin/creator。授权门票(/plan-ceo-review B4 + 外部声音 P1):含人输入图编辑=深度合成真人,
+// 必须 consent + proof,与形象上传同等合规——绝不弱化护城河。
+// images[] 1-3 张,落 MinIO 存 key,每张写 authorization 行(subject_type='image-edit'),返回 key 数组。
+jobsRouter.post(
+  '/image-uploads',
+  requireRole('admin', 'creator'),
+  imageUpload.fields([
+    { name: 'images', maxCount: 3 },
+    { name: 'proof', maxCount: 1 },
+  ]),
+  async (req: Request, res: Response) => {
+    const files = req.files as Record<string, Express.Multer.File[]> | undefined;
+    const images = files?.images ?? [];
+    const proof = files?.proof?.[0];
+    const consent = req.body?.consent === 'true' || req.body?.consent === true;
+    const tid = req.user!.tenantId;
+
+    if (images.length === 0) return res.status(400).json({ error: '缺少图片(images)' });
+    if (images.length > 3) return res.status(400).json({ error: '最多 3 张输入图' });
+    for (const img of images) {
+      if (!img.mimetype.startsWith('image/'))
+        return res.status(400).json({ error: '仅支持图片文件' });
+    }
+    // 授权门票:含人输入图必须授权(同形象上传)
+    if (!consent) {
+      return res.status(400).json({ error: '必须勾选"已获图中人物授权"(政企合规)' });
+    }
+
+    try {
+      // 授权凭证(可选上传):落 MinIO
+      let proofKey: string | undefined;
+      if (proof) {
+        const pext = (proof.originalname.split('.').pop() || 'bin').toLowerCase();
+        proofKey = `authorizations/${tid}/${randomUUID()}.${pext}`;
+        await putObject(proofKey, proof.buffer, proof.mimetype);
+      }
+      const keys: string[] = [];
+      for (const img of images) {
+        const ext = (img.originalname.split('.').pop() || 'png').toLowerCase();
+        const key = `image-inputs/${tid}/${randomUUID()}.${ext}`;
+        await putObject(key, img.buffer, img.mimetype);
+        // 每张输入图写授权存证行(subject_type='image-edit',可举证同意的条款版本)
+        db.prepare(
+          `INSERT INTO authorization (id,tenant_id,subject_type,consent,proof_key,terms_version,created_by,created_at)
+           VALUES (?,?,?,?,?,?,?,?)`,
+        ).run(randomUUID(), tid, 'image-edit', 1, proofKey ?? null, 'v1', req.user!.id, Date.now());
+        keys.push(key);
+      }
+      audit(req, 'upload_image_input', keys[0]!);
+      return res.status(201).json({ imageRefs: keys });
+    } catch (e) {
+      return res.status(500).json({ error: e instanceof Error ? e.message : '上传失败' });
+    }
+  },
+);
+
 // 费用预估(生成前展示,验收第4条)。按 type 计价;默认 video。
 jobsRouter.post('/jobs/estimate', requireAuth, (req: Request, res: Response) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
   const type = typeof body.type === 'string' && body.type ? body.type : 'video';
   if (type === 'ai_image') {
-    return res.json({
-      cost: estimateImageCost(
-        clampImageCount(body.count),
-        typeof body.resolution === 'string' ? body.resolution : undefined,
-      ),
-    });
+    const res2 = typeof body.resolution === 'string' ? body.resolution : undefined;
+    if (body.mode === 'img2img') return res.json({ cost: estimateImageEditCost(res2) });
+    return res.json({ cost: estimateImageCost(clampImageCount(body.count), res2) });
   }
   if (typeof body.script !== 'string') return res.status(400).json({ error: '缺少 script' });
   return res.json({

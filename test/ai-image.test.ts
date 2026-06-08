@@ -7,7 +7,7 @@
 //   - signOutputUrls 多图 / 单视频向后兼容(裸字符串)
 //   - enqueueJob 写对 type;markDone 写对 output_kind
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 
 process.env.DB_FILE = ':memory:';
 
@@ -55,7 +55,18 @@ describe('AI 图片计价(costFor / estimateImageCost / clampImageCount)', () =>
     expect(() => costFor('__proto__', {})).toThrow();
     expect(() => costFor('nope', {})).toThrow();
   });
+
+  it("costFor('ai_image', mode=img2img) 走编辑价(固定 1 张,外部声音 P1 mode 感知)", async () => {
+    const { estimateImageEditCost } = await import('../src/credits/index.js');
+    expect(costFor('ai_image', { mode: 'img2img', resolution: '1K' })).toBe(estimateImageEditCost('1K'));
+    expect(costFor('ai_image', { mode: 'img2img', resolution: '2K' })).toBe(estimateImageEditCost('2K'));
+    // img2img 忽略 count(固定 1 张)→ 不受客户端传 count 影响,reserve==settle 不破
+    expect(costFor('ai_image', { mode: 'img2img', count: 4, resolution: '1K' })).toBe(
+      estimateImageEditCost('1K'),
+    );
+  });
 });
+
 
 describe('队列:enqueueJob type + markDone output_kind', () => {
   const T = 'tenant-img-test';
@@ -102,45 +113,5 @@ describe('imageSize(比例 + 分辨率 → W*H)', () => {
   });
 });
 
-describe('qwen-image adapter:fetchImageStatus 解析 results[] 数组(外部声音 P2)', () => {
-  // 关键:fetch spy 是进程级全局,vitest 并行跑多文件时若不还原会泄漏到别的测试(rbac 偶发 404)。
-  // afterEach 兜底还原,即使断言抛错也不留 spy。
-  afterEach(() => vi.restoreAllMocks());
-
-  it('SUCCEEDED → 从 output.results[].url 取多图(不是 video_url 对象)', async () => {
-    process.env.DASHSCOPE_API_KEY = 'sk-test';
-    const { BaichuanGateway } = await import('../src/gateway/baichuan.js');
-    const gw = new BaichuanGateway();
-    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          output: {
-            task_status: 'SUCCEEDED',
-            results: [{ url: 'https://dashscope/a.png' }, { url: 'https://dashscope/b.png' }],
-          },
-        }),
-        { status: 200 },
-      ),
-    );
-    const r = await gw.fetchImageStatus('task-1');
-    expect(r.status).toBe('succeeded');
-    expect(r.imageUrls).toEqual(['https://dashscope/a.png', 'https://dashscope/b.png']);
-    spy.mockRestore();
-  });
-
-  it('FAILED → status failed + error', async () => {
-    process.env.DASHSCOPE_API_KEY = 'sk-test';
-    const { BaichuanGateway } = await import('../src/gateway/baichuan.js');
-    const gw = new BaichuanGateway();
-    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ output: { task_status: 'FAILED', message: '内容违规' } }),
-        { status: 200 },
-      ),
-    );
-    const r = await gw.fetchImageStatus('task-2');
-    expect(r.status).toBe('failed');
-    expect(r.error).toContain('内容违规');
-    spy.mockRestore();
-  });
-});
+// 注:所有 spy globalThis.fetch 的 adapter 测试移到 test/baichuan-adapter.test.ts(独立文件,
+// 避免进程级 fetch spy 在 vitest 并行跑时泄漏到其它文件,见该文件头注释)。

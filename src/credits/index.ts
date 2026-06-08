@@ -36,11 +36,19 @@ export function clampImageCount(n: unknown): number {
   return Math.min(4, Math.max(1, v));
 }
 
-/** AI 图片费用预估:图数 × 分辨率系数。n 先 clamp 到 [1,4]。 */
+/** AI 文生图费用预估:图数 × 分辨率系数。n 先 clamp 到 [1,4]。 */
 export function estimateImageCost(count: number, resolution = '1K'): number {
   const n = clampImageCount(count);
   const factor = IMG_RES_FACTOR[resolution] ?? 1;
   return Math.max(MIN_COST, Math.ceil(n * PRICE_PER_IMAGE * factor));
+}
+
+// AI 图生图(编辑)计价:固定 1 张产出 × 编辑单价 × 分辨率系数。
+const PRICE_PER_EDIT = 6; // 图生图每次 6 积分基价(编辑比纯生成贵,占位可配)
+/** AI 图生图费用预估:固定 1 张 × 编辑单价 × 分辨率系数。 */
+export function estimateImageEditCost(resolution = '1K'): number {
+  const factor = IMG_RES_FACTOR[resolution] ?? 1;
+  return Math.max(MIN_COST, Math.ceil(PRICE_PER_EDIT * factor));
 }
 
 /**
@@ -54,11 +62,12 @@ export function costFor(toolType: string, input: Record<string, unknown>): numbe
         typeof input.script === 'string' ? input.script.length : 0,
         typeof input.resolution === 'string' ? input.resolution : undefined,
       );
-    case 'ai_image':
-      return estimateImageCost(
-        typeof input.count === 'number' ? input.count : 1,
-        typeof input.resolution === 'string' ? input.resolution : undefined,
-      );
+    case 'ai_image': {
+      // mode 感知(外部声音 P1):img2img 固定 1 张、走编辑价;text2img 按图数。
+      const resolution = typeof input.resolution === 'string' ? input.resolution : undefined;
+      if (input.mode === 'img2img') return estimateImageEditCost(resolution);
+      return estimateImageCost(typeof input.count === 'number' ? input.count : 1, resolution);
+    }
     default:
       throw new Error(`未知工具类型,无法计价:${toolType}`);
   }

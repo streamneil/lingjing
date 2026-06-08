@@ -17,6 +17,8 @@ import type {
   ProviderJobStatus,
   ImageGenInput,
   ImageJobResult,
+  SyncImageGateway,
+  ImageEditInput,
 } from './types.js';
 
 function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
@@ -32,11 +34,13 @@ async function httpJson(
   path: string,
   body?: unknown,
   extraHeaders: Record<string, string> = {},
+  signal?: AbortSignal, // 同步调用(图生图)传 AbortSignal 做硬超时;异步轮询路径不传
 ): Promise<{ status: number; json: any }> {
   const res = await fetch(`${config.baichuan.baseUrl}${path}`, {
     method,
     headers: authHeaders(extraHeaders),
     body: body ? JSON.stringify(body) : undefined,
+    signal,
   });
   const text = await res.text();
   let json: any;
@@ -65,7 +69,7 @@ function normalizeStatus(s: string | undefined): ProviderJobStatus {
   }
 }
 
-export class BaichuanGateway implements CapabilityGateway {
+export class BaichuanGateway implements CapabilityGateway, SyncImageGateway {
   async submitVideo(urls: VideoSubmitUrls): Promise<string> {
     const model = config.baichuan.avatarModel || 'wan2.2-s2v';
 
@@ -168,6 +172,43 @@ export class BaichuanGateway implements CapabilityGateway {
       result.error = out.message ?? out.code ?? '百炼文生图任务失败';
     }
     return result;
+  }
+
+  // ── 图生图(qwen-image-edit,同步)──
+  // 查证(2026-06 官方):端点 POST /services/aigc/multimodal-generation/generation(无 async 头,同步直返)。
+  //   input.messages[0].content = [{image:url}...,{text:prompt}]  parameters{n,size}
+  //   →  output.choices[0].message.content[].image(成品图 URL 数组,24h 过期)。
+  // signal 做硬超时(外部声音 P2):同步调无 poll 循环,挂连接会冻 worker。
+  // 参考:https://help.aliyun.com/zh/model-studio/qwen-image-edit-api
+  async editImage(input: ImageEditInput, signal: AbortSignal): Promise<string[]> {
+    const model = config.baichuan.imageEditModel || 'qwen-image-edit';
+    const content: Array<{ image: string } | { text: string }> = input.imageUrls.map((u) => ({
+      image: u,
+    }));
+    content.push({ text: input.prompt });
+    const { status, json } = await httpJson(
+      'POST',
+      '/services/aigc/multimodal-generation/generation',
+      {
+        model,
+        input: { messages: [{ role: 'user', content }] },
+        parameters: { n: 1, size: imageSize(input.ratio, input.resolution), watermark: false },
+      },
+      {}, // 同步,无 X-DashScope-Async 头
+      signal,
+    );
+    if (status !== 200) {
+      throw new Error(`百炼图生图失败 HTTP ${status}: ${JSON.stringify(json?.message ?? json)}`);
+    }
+    // 解析 output.choices[0].message.content[].image(外部声音核实:choices 非 results)
+    const parts = json?.output?.choices?.[0]?.message?.content;
+    const urls: string[] = Array.isArray(parts)
+      ? parts.map((p: { image?: string }) => p?.image).filter((u: unknown): u is string => typeof u === 'string')
+      : [];
+    if (urls.length === 0) {
+      throw new Error(`百炼图生图无成品(可能内容被拒):${JSON.stringify(json?.output ?? json).slice(0, 300)}`);
+    }
+    return urls;
   }
 }
 
