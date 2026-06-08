@@ -7,7 +7,7 @@
 //   - signOutputUrls 多图 / 单视频向后兼容(裸字符串)
 //   - enqueueJob 写对 type;markDone 写对 output_kind
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 process.env.DB_FILE = ':memory:';
 
@@ -83,7 +83,30 @@ describe('队列:enqueueJob type + markDone output_kind', () => {
   });
 });
 
+describe('imageSize(比例 + 分辨率 → W*H)', () => {
+  it('1:1 各分辨率边长正确', async () => {
+    const { imageSize } = await import('../src/gateway/baichuan.js');
+    expect(imageSize('1:1', '1K')).toBe('1024*1024');
+    expect(imageSize('1:1', '2K')).toBe('1440*1440');
+    expect(imageSize('1:1', '4K')).toBe('2048*2048');
+  });
+  it('横/竖比例:长边贴基数,短边按比例 + 8 像素对齐', async () => {
+    const { imageSize } = await import('../src/gateway/baichuan.js');
+    expect(imageSize('16:9', '1K')).toBe('1024*576'); // 长1024,短=1024*9/16=576
+    expect(imageSize('9:16', '1K')).toBe('576*1024'); // 竖,宽短
+  });
+  it('auto / 未知比例 → 1:1 兜底', async () => {
+    const { imageSize } = await import('../src/gateway/baichuan.js');
+    expect(imageSize('auto', '1K')).toBe('1024*1024');
+    expect(imageSize(undefined, undefined)).toBe('1024*1024');
+  });
+});
+
 describe('qwen-image adapter:fetchImageStatus 解析 results[] 数组(外部声音 P2)', () => {
+  // 关键:fetch spy 是进程级全局,vitest 并行跑多文件时若不还原会泄漏到别的测试(rbac 偶发 404)。
+  // afterEach 兜底还原,即使断言抛错也不留 spy。
+  afterEach(() => vi.restoreAllMocks());
+
   it('SUCCEEDED → 从 output.results[].url 取多图(不是 video_url 对象)', async () => {
     process.env.DASHSCOPE_API_KEY = 'sk-test';
     const { BaichuanGateway } = await import('../src/gateway/baichuan.js');

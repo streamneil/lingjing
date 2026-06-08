@@ -64,12 +64,13 @@ function buildVideoJob(body: Record<string, unknown>, tid: string): JobBuildResu
 
 /** 校验并构建 ai_image(AI 图片,文生图)job 入参 + 计价。 */
 function buildImageJob(body: Record<string, unknown>): JobBuildResult {
-  const { prompt, count, resolution } = body as Partial<ImageGenInput>;
+  const { prompt, count, resolution, ratio } = body as Partial<ImageGenInput>;
   if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0)
     return { ok: false, status: 400, error: '缺少 prompt(提示词)' };
   const n = clampImageCount(count); // [1,4],保证 reserve==settle
   const input: ImageGenInput = { prompt, count: n };
   if (typeof resolution === 'string') input.resolution = resolution;
+  if (typeof ratio === 'string') input.ratio = ratio;
   return {
     ok: true,
     type: 'ai_image',
