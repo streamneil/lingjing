@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>探索 · 灵镜</title>
+<link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
+<link rel="stylesheet" href="app.css">
+<style>
+  .explore{ display:flex; flex-direction:column; gap:26px; padding:26px 32px 56px; position:relative; z-index:1;
+    animation:rise .5s var(--ease-out) both; }
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+  .ex-hero{ border-radius:var(--r-lg); border:1px solid var(--line); padding:32px 34px;
+    background: radial-gradient(120% 130% at 100% 0%, rgba(77,141,255,.12) 0%, transparent 55%), var(--card);
+    box-shadow:var(--sh-card); }
+  .ex-hero .hi{ font-family:var(--f-en); font-size:13px; color:var(--t3); letter-spacing:.5px }
+  .ex-hero h1{ font-size:28px; font-weight:800; letter-spacing:-.6px; margin:8px 0 8px }
+  .ex-hero p{ color:var(--t2); font-size:14px; max-width:52ch; line-height:1.7 }
+
+  .ex-sec-h{ font-size:15px; font-weight:700; color:var(--t2); margin-bottom:-6px; display:flex; align-items:center; gap:9px }
+  .ex-sec-h .c{ font-family:var(--f-mono); font-size:11px; color:var(--t4) }
+
+  .tool-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px }
+  .tool-card{ position:relative; border:1px solid var(--line-soft); border-radius:var(--r-lg); background:var(--card);
+    padding:20px; cursor:pointer; transition:.25s var(--ease-out); box-shadow:var(--sh-card); display:flex; flex-direction:column; gap:11px; }
+  .tool-card:hover{ transform:translateY(-3px); border-color:var(--line-hi) }
+  .tool-card .ti{ width:40px; height:40px; border-radius:11px; background:var(--field); border:1px solid var(--line);
+    display:grid; place-items:center }
+  .tool-card .ti svg{ width:21px; height:21px; color:var(--t1) }
+  .tool-card h4{ font-size:15px; font-weight:600; color:var(--t1); display:flex; align-items:center; gap:7px }
+  .tool-card .tdesc{ font-size:12.5px; color:var(--t4); line-height:1.6 }
+  .tool-card .nbadge{ font-family:var(--f-en); font-size:9.5px; font-weight:700; color:var(--blue); background:var(--blue-bg); padding:1px 6px; border-radius:5px }
+  .tool-card .soon-corner{ position:absolute; top:14px; right:14px; font-family:var(--f-mono); font-size:8px; color:var(--t4);
+    border:1px solid var(--line); padding:2px 6px; border-radius:4px; letter-spacing:.04em }
+  .tool-card.is-soon{ opacity:.72 }
+  .tool-card.is-soon:hover{ opacity:.9 }
+</style>
+</head>
+<body data-page="explore" data-crumb="探索">
+<div class="shell" id="shell-mount">
+ <div class="main-col">
+  <div class="explore">
+    <div class="ex-hero">
+      <div class="hi">LINGJING · 灵镜</div>
+      <h1 id="ex-greet">融媒体内容,一站生成</h1>
+      <p>从数字人播报到配音、配图,灵镜把一条合规内容需要的创作工具放在同一处。选一个工具开始,或先看看「AI 虚拟人」能出什么。</p>
+    </div>
+
+    <div class="ex-sec-h">创作工具 <span class="c" id="ex-count"></span></div>
+    <div class="tool-grid" id="toolGrid">
+      <div style="color:var(--t4);padding:20px">加载工具中…</div>
+    </div>
+  </div>
+ </div>
+</div>
+<script src="shell.js"></script>
+<script src="tools.js"></script>
+<script src="api.js"></script>
+<script>
+  const DESC = {
+    'ai-avatar': '上传照片建数字人,输入文案生成口型自然的播报视频。',
+    'tts': '输入文字,用预置或克隆音色生成配音。',
+    'ai-image': '文字或参考图生成新闻配图、缩略图。',
+    'img2video': '让一张静态图动起来,生成短影片。',
+    'ref-video': '上传参考素材,生成同风格影片。',
+    'text2video': '一句话描述,生成影片。',
+    'ai-image-edit': '局部重绘、替换、扩图,精修图片。',
+    'ai-video-edit': '按描述编辑影片:移除、替换、新增元素。',
+    'ai-music': '描述风格,生成背景音乐或歌曲。',
+  };
+  function svg(inner){ return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`; }
+  function renderTools(){
+    if(!window.LJTools){ setTimeout(renderTools,30); return; }
+    const grid = document.getElementById('toolGrid');
+    const live = LJTools.list.filter(t=>t.enabled).length;
+    document.getElementById('ex-count').textContent = `${live} 个已上线 · ${LJTools.list.length} 个规划中`;
+    grid.innerHTML = LJTools.list.map(t=>{
+      const soon = !t.enabled;
+      const badge = t.badge ? `<span class="nbadge">${t.badge.text}</span>` : '';
+      const corner = soon ? `<span class="soon-corner">即将上线</span>` : '';
+      return `<div class="tool-card${soon?' is-soon':''}" onclick="location.href='${LJTools.href(t)}'">
+        ${corner}
+        <div class="ti">${svg(t.icon)}</div>
+        <h4>${t.label} ${badge}</h4>
+        <div class="tdesc">${DESC[t.key]||''}</div>
+      </div>`;
+    }).join('');
+  }
+  renderTools();
+  if(window.LJ) LJ.me().catch(()=>{});
+</script>
+</body>
+</html>

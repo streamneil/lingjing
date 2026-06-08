@@ -474,6 +474,24 @@ img { display: block; }
 .sb-item.active::before { content:''; position: absolute; left: -12px; top: 50%; transform: translateY(-50%); width: 3px; height: 17px; border-radius: 0 3px 3px 0; background: var(--t1); }
 .sb-item .badge-soon { margin-left: auto; font-family: var(--f-mono); font-size: 8px; color: var(--t4); border: 1px solid var(--line); padding: 1px 5px; border-radius: 4px; }
 
+/* —— 创作工具徽章/角标(tools.js 描述符驱动) —— */
+.sb-tool .nbadge { margin-left: auto; font-family: var(--f-en); font-size: 9.5px; font-weight: 700; color: var(--blue); background: var(--blue-bg); padding: 1px 6px; border-radius: 5px; }
+.sb-tool .nano { margin-left: auto; font-family: var(--f-en); font-size: 9px; font-weight: 600; color: var(--t3); border: 1px solid var(--line); padding: 1px 6px; border-radius: 5px; }
+.sb-tool .soon { margin-left: auto; font-family: var(--f-mono); font-size: 8px; color: var(--t4); border: 1px solid var(--line); padding: 1px 5px; border-radius: 4px; letter-spacing: .02em; }
+
+/* —— 工具内二级 tab(如 图片转影片 的 开始图片/图片间/参考图片)—— */
+.tool-subtabs { display: flex; gap: 4px; background: var(--field); border: 1px solid var(--line); border-radius: var(--r); padding: 4px; margin-bottom: 4px; }
+.tool-subtabs button { flex: 1; background: none; border: none; color: var(--t3); font-family: var(--f); font-size: 13px; padding: 8px; border-radius: 10px; cursor: pointer; transition: .15s; }
+.tool-subtabs button:hover { color: var(--t1); }
+.tool-subtabs button.active { background: var(--card-hi); color: var(--t1); }
+
+/* —— 未上线工具「即将上线」占位态(tool.html / 工作区右侧)—— */
+.tool-soon { display: grid; place-items: center; min-height: 60vh; text-align: center; padding: 40px; }
+.tool-soon svg { width: 44px; height: 44px; color: var(--t4); margin-bottom: 18px; }
+.tool-soon h3 { font-size: 19px; font-weight: 700; color: var(--t2); margin-bottom: 8px; }
+.tool-soon p { font-size: 13.5px; color: var(--t4); line-height: 1.7; max-width: 360px; }
+.tool-soon .soon-pill { margin-bottom: 20px; font-family: var(--f-mono); font-size: 11px; letter-spacing: .1em; color: var(--blue); border: 1px solid var(--blue); padding: 4px 12px; border-radius: 999px; text-transform: uppercase; }
+
 .sb-foot { padding: 14px; border-top: 1px solid var(--hairline); }
 .deploy-tag { display: flex; align-items: center; gap: 8px; padding: 9px 11px; border: 1px dashed var(--line-hi); border-radius: 10px; font-family: var(--f-mono); font-size: 10px; color: var(--t3); letter-spacing: .03em; }
 .deploy-tag .d { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
@@ -567,8 +585,21 @@ img { display: block; }
 
 @media (max-width: 1000px) {
   .shell { grid-template-columns: 64px 1fr; }
-  .sb-brand .nm, .sb-brand .cjk, .org-meta, .sb-group, .sb-item span, .sb-item .badge-soon, .deploy-tag span { display: none; }
-  .sb-item { justify-content: center; }
+  .sb-brand .nm, .sb-brand .cjk, .org-meta, .sb-group, .sb-item span,
+  .sb-item .badge-soon, .sb-tool .nbadge, .sb-tool .nano, .sb-tool .soon,
+  .deploy-tag span { display: none; }
+  /* 触点 ≥44px(D3 a11y):折叠态图标项放大到 44 高 */
+  .sb-item { justify-content: center; min-height: 44px; }
+
+  /* 折叠态 hover 飞出标签(D3):侧栏只剩图标,悬停在右侧浮出带文字的标签层。
+     用 ::after 渲染 data-label,不依赖 span(span 已隐藏)。 */
+  .sb-item[data-label]:hover::after {
+    content: attr(data-label);
+    position: absolute; left: calc(100% + 8px); top: 50%; transform: translateY(-50%);
+    background: var(--modal); border: 1px solid var(--line); border-radius: 9px;
+    padding: 7px 12px; font-size: 13px; font-weight: 500; color: var(--t1);
+    white-space: nowrap; box-shadow: var(--sh-pop); z-index: 50; pointer-events: none;
+  }
 }
 
 /* —— 创作台 Demo/案例 横向条 —— */

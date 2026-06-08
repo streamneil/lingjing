@@ -154,7 +154,7 @@
     btn.disabled=true; btn.textContent='登录中…';
     try{
       await LJ.login(document.getElementById('username').value.trim(),pw.value,captchaToken);
-      location.href='dashboard.html';
+      location.href='explore.html';
     }catch(ex){
       err.innerHTML='✕ '+(ex.message||'登录失败'); btn.textContent='登 录';
       // 登录失败:抖动 + 清空密码 + 重新聚焦;captchaToken 已被服务端消费,重置滑块重领。

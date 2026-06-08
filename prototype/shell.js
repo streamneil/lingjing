@@ -1,47 +1,54 @@
-// 共享左侧导航 — 各页 <body data-page="..."> 决定高亮
+// 共享左侧导航 — 各页 <body data-page="..."> 决定高亮(工具页用 tools.js 的 key 当 data-page)
 (function(){
-  // 确保 api.js 已加载(系统页只需引 shell.js 即自带登录态/登出)
+  // 确保依赖已加载(系统页只引 shell.js 即自带登录态/登出 + 工具注册表)
   if (!window.LJ && !document.querySelector('script[src="api.js"]')) {
-    const s = document.createElement('script');
-    s.src = 'api.js';
-    document.head.appendChild(s);
+    const s = document.createElement('script'); s.src = 'api.js'; document.head.appendChild(s);
+  }
+  if (!window.LJTools && !document.querySelector('script[src="tools.js"]')) {
+    const s = document.createElement('script'); s.src = 'tools.js'; document.head.appendChild(s);
   }
   const I = {
-    dashboard: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
-    studio: '<path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/>',
-    avatars: '<circle cx="12" cy="8" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/>',
-    voices: '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/>',
-    works: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>',
+    explore: '<circle cx="12" cy="12" r="9"/><path d="m15 9-3.5 1.5L10 14l3.5-1.5L15 9Z"/>',
+    assets: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/>',
+    more: '<circle cx="12" cy="12" r="9"/><circle cx="8" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="16" cy="12" r="1"/>',
     billing: '<path d="M3 3v18h18"/><path d="m7 14 3-4 4 3 4-6"/>',
     members: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/>',
     settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H1a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 2.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H7a1.6 1.6 0 0 0 1-1.5V1a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V7a1.6 1.6 0 0 0 1.5 1H23a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z"/>',
   };
-  const ic = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${I[p]}</svg>`;
-  const NAV = [
-    {p:'dashboard', t:'概览', h:'dashboard.html'},
-    {g:'创作'},
-    {p:'studio', t:'创作台', h:'create.html'},
-    {p:'avatars', t:'形象库', h:'avatars.html'},
-    {p:'voices', t:'音色库', h:'voices.html'},
-    {p:'works', t:'作品库', h:'works.html'},
-    {g:'经营管理'},
-    {p:'billing', t:'用量计费', h:'billing.html'},
-    {p:'members', t:'成员与权限', h:'members.html'},
-    {p:'settings', t:'系统设置', h:'settings.html'},
-  ];
+  const svg = inner => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+  const ic = p => svg(I[p]);
   const cur = document.body.dataset.page;
-  const items = NAV.map(n => n.g
-    ? `<div class="sb-group">${n.g}</div>`
-    // 创作台是"发起生成"入口,viewer 无权 → 标记以便前端兜底隐藏
-    : `<a class="sb-item ${n.p===cur?'active':''}" href="${n.h}"${n.p==='studio'?' data-requires-create':''}>${ic(n.p)}<span>${n.t}</span></a>`
-  ).join('');
+  // data-label:折叠态(≤1000px)hover 飞出标签用(span 此时被隐藏)。
+  const link = (p, label, href, extra) =>
+    `<a class="sb-item ${p===cur?'active':''}" href="${href}" data-label="${label}"${extra||''}>${ic(p)}<span>${label}</span></a>`;
+
+  // 创作工具组:从 tools.js 注册表渲染(唯一真源)。徽章/即将上线角标随描述符。
+  // 全部工具是"发起生成"入口,viewer 无权 → data-requires-create 兜底隐藏。
+  const tools = (window.LJTools ? LJTools.list : []);
+  const toolItems = tools.map(t => {
+    const on = t.key===cur ? ' active' : '';
+    let suffix = '';
+    if (t.badge) suffix = `<span class="${t.badge.kind==='nano'?'nano':'nbadge'}">${t.badge.text}</span>`;
+    else if (!t.enabled) suffix = `<span class="soon">即将上线</span>`;
+    return `<a class="sb-item sb-tool${on}" href="${LJTools.href(t)}" data-label="${t.label}" data-requires-create>${svg(t.icon)}<span>${t.label}</span>${suffix}</a>`;
+  }).join('');
+
+  const items =
+    link('explore','探索','explore.html') +
+    link('assets','我的资产','assets.html') +
+    `<div class="sb-group">创作工具</div>` +
+    toolItems +
+    `<div class="sb-group">经营管理</div>` +
+    link('billing','用量计费','billing.html') +
+    link('members','成员与权限','members.html') +
+    link('settings','系统设置','settings.html');
 
   const sb = `
   <aside class="sidebar">
-    <div class="sb-brand">
+    <a class="sb-brand" href="explore.html" title="灵镜 · 探索">
       <span class="logo-mark" id="lj-brand-mark"><svg viewBox="0 0 100 100" fill="none"><circle cx="37" cy="50" r="29" stroke="#0E0E0E" stroke-width="5"/><circle cx="63" cy="50" r="29" stroke="#0E0E0E" stroke-width="5"/><path d="M50 24.08 A29 29 0 0 1 50 75.92 A29 29 0 0 1 50 24.08 Z" fill="#0E0E0E"/></svg></span>
       <span class="nm">Lingjing</span><span class="cjk">灵镜</span>
-    </div>
+    </a>
     <nav class="sb-nav">${items}</nav>
     <div class="sb-foot"><div class="deploy-tag"><span class="d"></span><span>云端服务 · 运行中</span></div></div>
   </aside>`;
@@ -201,9 +208,11 @@
       // viewer 隐藏"创建/发起生成"入口(前端兜底,后端已有 403 硬拦)
       if (u.role === 'viewer') {
         document.querySelectorAll('[data-requires-create]').forEach(el => el.style.display='none');
-        // viewer 误入创作台(无权页)→ 引导回概览,而非停在点了报 403 的页
-        if (document.body.dataset.page === 'studio') {
-          window.LJToast('查看者无创作权限,已返回概览','err'); location.href = 'dashboard.html';
+        // viewer 误入任一创作工具页(无权)→ 引导回探索,而非停在点了报 403 的页。
+        // 工具页的 data-page 是 tools.js 的 key;用注册表判定当前页是否为工具页。
+        const onToolPage = window.LJTools && LJTools.get(document.body.dataset.page);
+        if (onToolPage) {
+          window.LJToast('查看者无创作权限,已返回探索','err'); location.href = 'explore.html';
         }
       }
     }).catch(()=>{ /* 未登录已被 api.js 跳转 */ });
