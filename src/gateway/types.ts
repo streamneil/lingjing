@@ -60,6 +60,7 @@ export interface ImageEditInput {
   model?: string; // 模型 key(registry,缺省 → 编辑默认)
   imageUrls: string[]; // 输入图公网 URL(1-3 张,worker 已 publish)
   prompt: string; // 编辑指令
+  count?: number; // 出图张数(同步编辑模型按 maxImages clamp;qwen-image-edit=1);editImage 传 n
   ratio?: string;
   resolution?: string;
   seed?: number; // 随机种子;空 = 随机

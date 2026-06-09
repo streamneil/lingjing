@@ -289,7 +289,7 @@ async function runImageEditJob(job: JobRow): Promise<void> {
   try {
     updateProgress(job.id, 50);
     resultUrls = await gateway.editImage(
-      { model: input.model, imageUrls, prompt: input.prompt, ratio: input.ratio, resolution: input.resolution },
+      { model: input.model, imageUrls, prompt: input.prompt, count: input.count, ratio: input.ratio, resolution: input.resolution, seed: input.seed },
       ac.signal,
     );
   } catch (e) {

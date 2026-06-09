@@ -286,7 +286,9 @@
     // 有 resolutions 模型:显 比例 + 尺寸(如 16:9 · 2688×1536);无则显 比例 · 清晰度档。
     let sizePart=res;
     if(m && m.resolutions && m.resolutions.length){ const hit=m.resolutions.find(r=>r.ratio===ratio); sizePart=hit?`${hit.width}×${hit.height}`:''; }
-    document.getElementById('setPillV').textContent=`${ratio==='auto'?'自动':ratio}${sizePart?' · '+sizePart:''}${mode==='img2img'?'':' · '+count+' 张'}`;
+    // 张数:模型支持多出图(maxImages>1)就显(图转图也显,如千问2.0 Pro / 万相2.7)。
+    const showCount = m && (m.maxImages||1) > 1;
+    document.getElementById('setPillV').textContent=`${ratio==='auto'?'自动':ratio}${sizePart?' · '+sizePart:''}${showCount?' · '+count+' 张':''}`;
   }
 
   // ── 比例选择 ──
@@ -476,11 +478,18 @@
   function renderCard(job){
     document.getElementById('sampleGallery').style.display='none';
     if(job.input) jobInputs[job.id]=job.input; // detail 带 input;list 带散字段
-    let card=document.getElementById('job-'+job.id);
+    let card=document.getElementById('job-'+job.id); const existed=!!card;
     if(!card){ card=document.createElement('div'); card.className='fitem'; card.id='job-'+job.id; feedList.insertBefore(card, feedList.firstChild); }
     const head=(color,led,txt)=>`<div class="fmeta"><b>AI 图片</b><span class="ts">刚刚</span><span class="sp"></span><span class="st" style="color:${color}"><span class="led ${led}"></span>${txt}</span></div>`;
     // 图按比例显示(item4):ratio→aspect-ratio
     const ar=(job.ratio&&job.ratio!=='auto')?job.ratio.replace(':','/'):'1/1';
+    // 生成中:卡已在 + 仍 running → 只更进度(不重建 innerHTML,否则输入图 <img> 每次轮询重载会闪烁)
+    if((job.status==='queued'||job.status==='running') && existed && card.dataset.st==='running'){
+      const lbl=card.querySelector('.proc-in .lbl'); const bar=card.querySelector('.proc-bar i');
+      if(lbl) lbl.textContent=job.progress?('进度 '+job.progress+'%'):'已进入生成队列';
+      if(bar) bar.style.width=(job.progress||8)+'%';
+      return;
+    }
     if(job.status==='queued'||job.status==='running'){
       card.dataset.st='running';
       card.innerHTML=head('var(--amber)','led-run',job.status==='queued'?'排队中':'生成中')+promptBubble(job.prompt)+inputThumbs(job)+metaChips(job)+

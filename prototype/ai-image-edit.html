@@ -155,10 +155,10 @@
     <input type="file" id="mainFile" accept="image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif,.jpg,.jpeg,.png,.webp,.bmp,.tiff,.gif" hidden>
     <input type="file" id="refFile" accept="image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif,.jpg,.jpeg,.png,.webp,.bmp,.tiff,.gif" multiple hidden>
 
-    <div class="consent-row">
-      <input type="checkbox" id="consentChk">
-      <label for="consentChk">我已获得图中人物的授权,确认此次编辑合法合规(政企合规存证)。</label>
-    </div>
+    <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--t3);cursor:pointer;margin-top:12px;line-height:1.5">
+      <input type="checkbox" id="consentChk" style="width:auto;margin:2px 0 0">
+      <span>我已获得图中人物的授权,并对编辑内容的合规性负责。</span>
+    </label>
 
     <div class="cfg-sp"></div>
     <!-- 配置栏:模型 / 设置(清晰度·张数)/ seed —— 与 AI 图片同款交互 -->
@@ -583,9 +583,16 @@
   function renderCard(job){
     document.getElementById('feedEmpty').style.display='none';
     if(job.input) jobInputs[job.id]=job.input;
-    let card=document.getElementById('job-'+job.id);
+    let card=document.getElementById('job-'+job.id); const existed=!!card;
     if(!card){ card=document.createElement('div'); card.className='fitem'; card.id='job-'+job.id; feedList.insertBefore(card, feedList.firstChild); }
     const head=(color,led,txt)=>`<div class="fmeta"><b>AI 图片编辑</b><span class="ts">刚刚</span><span class="sp"></span><span class="st" style="color:${color}"><span class="led ${led}"></span>${txt}</span></div>`;
+    // 生成中:卡已在 + 仍 running → 只更进度(不重建,输入图 <img> 不重载→不闪)
+    if((job.status==='queued'||job.status==='running') && existed && card.dataset.st==='running'){
+      const lbl=card.querySelector('.proc-in .lbl'); const bar=card.querySelector('.proc-bar i');
+      if(lbl) lbl.textContent=job.progress?('进度 '+job.progress+'%'):'已进入生成队列';
+      if(bar) bar.style.width=(job.progress||8)+'%';
+      return;
+    }
     if(job.status==='queued'||job.status==='running'){
       card.dataset.st='running';
       card.innerHTML=head('var(--amber)','led-run',job.status==='queued'?'排队中':'生成中')+promptBubble(job.prompt)+inputThumbs(job)+metaChips(job)+

@@ -195,10 +195,15 @@ describe('万相2.7 编辑 count-aware 计价(钱不塌:A_EDIT 按张,千问编�
     const c = costFor('ai_image', { model: 'wan2.7-image', mode: 'img2img', count: 99, resolution: '1K', priceTierSnapshot: 7, maxImagesSnapshot: 4 });
     expect(c).toBe(7 * 4); // clamp 到 4
   });
-  it('千问编辑(S)count=4 仍 = count=1(固定 1 张,签名默认 count=1 不回归)', () => {
+  it('qwen-image-edit(maxImages=1)count=4 仍 = count=1(clamp 到 1,不超扣)', () => {
     const one = costFor('ai_image', { model: 'qwen-image-edit', mode: 'img2img', count: 1, resolution: '1K', priceTierSnapshot: 6, maxImagesSnapshot: 1 });
     const four = costFor('ai_image', { model: 'qwen-image-edit', mode: 'img2img', count: 4, resolution: '1K', priceTierSnapshot: 6, maxImagesSnapshot: 1 });
-    expect(four).toBe(one); // 都 = 6
+    expect(four).toBe(one); // clamp(4,1)=1 → 都 = 6
+  });
+  it('同步编辑(千问2.0 Pro,maxImages>1)count=3 = 3×count=1(钱不塌:同步编辑也按张)', () => {
+    const one = costFor('ai_image', { model: 'qwen-image-2.0-pro', mode: 'img2img', count: 1, resolution: '1K', priceTierSnapshot: 8, maxImagesSnapshot: 6 });
+    const three = costFor('ai_image', { model: 'qwen-image-2.0-pro', mode: 'img2img', count: 3, resolution: '1K', priceTierSnapshot: 8, maxImagesSnapshot: 6 });
+    expect(three).toBe(one * 3); // 8×1×3 = 24 vs 8
   });
   it('estimateImageEditCost 默认 count=1(逐字节不变,老调用兼容)', async () => {
     const { estimateImageEditCost } = await import('../src/credits/index.js');

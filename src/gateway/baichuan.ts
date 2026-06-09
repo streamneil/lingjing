@@ -219,10 +219,12 @@ export class BaichuanGateway implements CapabilityGateway, SyncImageGateway {
       image: u,
     }));
     content.push({ text: input.prompt });
+    // 出图张数:按 model maxImages clamp(千问2.0 Pro=6 可多出;qwen-image-edit=1 固定 1)。
+    const n = Math.min(def.maxImages, Math.max(1, Math.floor(input.count ?? 1)));
     return callMultimodalSync(
       def.modelId,
       content,
-      { ...sizeParams(def, input.ratio, input.resolution, { width: (input as ImageGenInput).width, height: (input as ImageGenInput).height }), ...seedParam(input.seed) },
+      { n: String(n), ...sizeParams(def, input.ratio, input.resolution, { width: (input as ImageGenInput).width, height: (input as ImageGenInput).height }), ...seedParam(input.seed) },
       signal,
     );
   }
