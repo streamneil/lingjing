@@ -55,6 +55,15 @@ export interface ImageEditInput {
   resolution?: string;
 }
 
+// ── 文转语音(TTS,cosyvoice)──
+// synthesizeSpeech 已是独立函数(WebSocket→MP3 Buffer);worker tts 分支直接调,不加网关接口。
+export interface TtsGenInput {
+  text: string; // 待配音文本(超 cosyvoice 单次上限按句分段)
+  voiceRef: string; // 音色:预置音色名 或 克隆音色 id(经 voices 校验)
+  rate?: number; // 语速 0.5-2,默认 1
+  volume?: number; // 音量 0-100,默认 50
+}
+
 export interface SyncImageGateway {
   /** 同步图生图(qwen-image-edit)。直返成品图 URL 数组(百炼侧,24h 过期 → worker 须拉进存储)。
    *  传入 AbortSignal 做硬超时(外部声音 P2:同步调无 poll 循环检 deadline,挂连接会冻 worker)。 */

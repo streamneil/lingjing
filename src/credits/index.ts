@@ -51,6 +51,13 @@ export function estimateImageEditCost(resolution = '1K'): number {
   return Math.max(MIN_COST, Math.ceil(PRICE_PER_EDIT * factor));
 }
 
+// 文转语音(TTS)计价:按字数(无分辨率维度)。
+const TTS_PRICE_PER_CHAR = 0.02; // 每字 0.02 积分(配音比视频便宜,占位可配)
+/** TTS 费用预估:按字数。 */
+export function estimateTtsCost(textLength: number): number {
+  return Math.max(MIN_COST, Math.ceil(textLength * TTS_PRICE_PER_CHAR));
+}
+
 /**
  * 按工具类型计价(多工具统一入口)。reserve / settle / estimate 全走这里,保证一致。
  * 决策来源:/plan-ceo-review A2 —— 每工具一个计价分支,不拷贝计价逻辑。
@@ -68,6 +75,8 @@ export function costFor(toolType: string, input: Record<string, unknown>): numbe
       if (input.mode === 'img2img') return estimateImageEditCost(resolution);
       return estimateImageCost(typeof input.count === 'number' ? input.count : 1, resolution);
     }
+    case 'tts':
+      return estimateTtsCost(typeof input.text === 'string' ? input.text.length : 0);
     default:
       throw new Error(`未知工具类型,无法计价:${toolType}`);
   }

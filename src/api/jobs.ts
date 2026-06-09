@@ -19,6 +19,7 @@ import {
   estimateCost,
   estimateImageCost,
   estimateImageEditCost,
+  estimateTtsCost,
   clampImageCount,
   reserve,
   balance,
@@ -27,7 +28,7 @@ import { audit } from '../audit/index.js';
 import { isUsableAvatar } from '../avatars/index.js';
 import { isUsableVoice } from '../voices/index.js';
 import { db } from '../db/index.js';
-import type { VideoGenInput, ImageGenInput } from '../gateway/types.js';
+import type { VideoGenInput, ImageGenInput, TtsGenInput } from '../gateway/types.js';
 
 export const jobsRouter = Router();
 
@@ -111,11 +112,37 @@ function buildImageJob(body: Record<string, unknown>): JobBuildResult {
   };
 }
 
+/** 校验并构建 tts(文转语音)job 入参 + 计价。 */
+function buildTtsJob(body: Record<string, unknown>, tid: string): JobBuildResult {
+  const { text, voiceRef, rate, volume } = body as Partial<TtsGenInput>;
+  if (!text || typeof text !== 'string' || text.trim().length === 0)
+    return { ok: false, status: 400, error: '缺少 text(配音文本)' };
+  if (!voiceRef || typeof voiceRef !== 'string')
+    return { ok: false, status: 400, error: '缺少 voiceRef(音色)' };
+  if (!isUsableVoice(voiceRef, tid))
+    return { ok: false, status: 400, error: '音色不可用(不存在或非本机构)' };
+  if (rate !== undefined && (typeof rate !== 'number' || rate < 0.5 || rate > 2))
+    return { ok: false, status: 400, error: '语速需在 0.5–2 倍之间' };
+  if (volume !== undefined && (typeof volume !== 'number' || volume < 0 || volume > 100))
+    return { ok: false, status: 400, error: '音量需在 0–100 之间' };
+
+  const input: TtsGenInput = { text, voiceRef };
+  if (rate !== undefined) input.rate = rate;
+  if (volume !== undefined) input.volume = volume;
+  return {
+    ok: true,
+    type: 'tts',
+    input: input as unknown as Record<string, unknown>,
+    cost: estimateTtsCost(text.length),
+  };
+}
+
 // 封闭 allowlist:type → builder。Object.create(null) 防原型链污染(type='__proto__' 取不到)。
 const JOB_BUILDERS: Record<string, (body: Record<string, unknown>, tid: string) => JobBuildResult> =
   Object.assign(Object.create(null), {
     video: buildVideoJob,
     ai_image: (body: Record<string, unknown>) => buildImageJob(body),
+    tts: buildTtsJob,
   });
 
 // 提交生成 — 仅 admin/creator(viewer 不能发起生成,验收第8条)
@@ -218,6 +245,9 @@ jobsRouter.post('/jobs/estimate', requireAuth, (req: Request, res: Response) => 
     if (body.mode === 'img2img') return res.json({ cost: estimateImageEditCost(res2) });
     return res.json({ cost: estimateImageCost(clampImageCount(body.count), res2) });
   }
+  if (type === 'tts') {
+    return res.json({ cost: estimateTtsCost(typeof body.text === 'string' ? body.text.length : 0) });
+  }
   if (typeof body.script !== 'string') return res.status(400).json({ error: '缺少 script' });
   return res.json({
     cost: estimateCost(body.script.length, typeof body.resolution === 'string' ? body.resolution : undefined),
@@ -235,8 +265,8 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
       // 文案/提示词:供卡片标题。video 取 script,ai_image 取 prompt;解析失败给空串不崩。
       let script = '';
       try {
-        const inp = JSON.parse(j.input_json) as { script?: string; prompt?: string };
-        script = inp.script ?? inp.prompt ?? '';
+        const inp = JSON.parse(j.input_json) as { script?: string; prompt?: string; text?: string };
+        script = inp.script ?? inp.prompt ?? inp.text ?? '';
       } catch {
         /* 旧/坏数据忽略 */
       }

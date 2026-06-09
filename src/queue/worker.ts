@@ -10,13 +10,14 @@ import { config } from '../config.js';
 import { getGateway } from '../gateway/baichuan.js';
 import { synthesizeSpeech } from '../gateway/cosyvoice.js';
 import { getMediaPublisher, tenantDelivery } from '../gateway/media-publisher.js';
-import type { VideoGenInput, VideoSubmitUrls, ImageGenInput } from '../gateway/types.js';
+import type { VideoGenInput, VideoSubmitUrls, ImageGenInput, TtsGenInput } from '../gateway/types.js';
 import { storage } from '../storage/index.js';
 import { listPresets as listAvatarPresets, getAvatar } from '../avatars/index.js';
 import { isPreset as isPresetVoice, getVoice } from '../voices/index.js';
 import { moderateScript, moderatePrompt, moderateImageInput, moderateOutput } from '../pipeline/moderation.js';
 import { applyAiLabel, probeAudioDuration, concatVideos } from '../pipeline/ai-label.js';
 import { segmentScript } from '../pipeline/segment.js';
+import { concatAudio } from '../pipeline/concat-audio.js';
 import { settle, release, estimateCost, costFor } from '../credits/index.js';
 import { db } from '../db/index.js';
 
@@ -312,6 +313,51 @@ async function runImageJob(job: JobRow): Promise<void> {
   }
 }
 
+// 文转语音单段字数上限(cosyvoice 单次合成,远大于视频的 90 字/段——TTS 无 20s 视频约束)。
+const TTS_MAX_CHARS = 2000;
+
+/** 处理一个文转语音(TTS,cosyvoice)job。抛错由调用方捕获并标 failed(失败隔离)。
+ *
+ * 管线:文本送审 → 音色解析 → 分段(TTS 字数上限,非视频 90)→ 逐段 synthesizeSpeech → concatAudio
+ *   → putObject(buffer)存 key → output_kind=audio。
+ * ⚠️ synthesizeSpeech 是 WebSocket,自带 60s 内部超时(无 AbortSignal,外部声音 P1-A);job 级
+ *   deadline 每段前检查防多段累计跑超(外部声音 P1-B)。**不抄 renderSegment 的 15MB/20s s2v 守卫**。
+ */
+async function runTtsJob(job: JobRow): Promise<void> {
+  const input = JSON.parse(job.input_json) as TtsGenInput;
+
+  // 1. 文本送审(复用 moderatePrompt)
+  const pre = await moderatePrompt(input.text);
+  if (!pre.allowed) throw new Error(`送审拒绝:${pre.reason}`);
+
+  // 2. 音色解析(复用 resolveVoice:预置/克隆;克隆失败回退由 isUsableVoice 在 API 层已拦)
+  const { voice, model } = resolveVoice(input.voiceRef, job.tenant_id);
+
+  // 3. 分段(TTS 字数上限;多数单段)+ job 级 deadline(段间检查防累计超)
+  const segments = segmentScript(input.text, TTS_MAX_CHARS);
+  if (segments.length === 0) throw new Error('文本分段为空');
+  const deadline = Date.now() + config.baichuan.jobTimeoutMs;
+
+  const audioBufs: Buffer[] = [];
+  for (let i = 0; i < segments.length; i++) {
+    if (Date.now() > deadline) throw new Error(`生成超时(>${config.baichuan.jobTimeoutMs}ms),已放弃`);
+    updateProgress(job.id, Math.min(99, Math.floor((i / segments.length) * 100)));
+    const buf = await synthesizeSpeech({
+      text: segments[i]!, voice, model,
+      rate: input.rate ?? 1, volume: input.volume ?? 50,
+    });
+    audioBufs.push(buf);
+  }
+
+  // 4. 拼接(单段直返不调 ffmpeg)+ 落存储(synthesizeSpeech 返 Buffer → putObject,非 putObjectFromUrl)
+  const merged = await concatAudio(audioBufs);
+  const key = `audio/${job.tenant_id}/${job.id}.mp3`;
+  await storage.putObject(key, merged, 'audio/mpeg');
+
+  markDone(job.id, JSON.stringify([key]), 'none', 'audio');
+  settle(job.tenant_id, job.id, costFor('tts', input as unknown as Record<string, unknown>));
+}
+
 /** 按 job.type 分发到对应工具的 runner(eng-review E1)。
  *  抛错由调用方捕获并标 failed(失败隔离)。未知 type → 抛错标失败(防御,不崩 worker)。 */
 async function processJob(job: JobRow): Promise<void> {
@@ -320,6 +366,8 @@ async function processJob(job: JobRow): Promise<void> {
       return runVideoJob(job);
     case 'ai_image':
       return runImageJob(job);
+    case 'tts':
+      return runTtsJob(job);
     default:
       throw new Error(`未知任务类型:${job.type}`);
   }

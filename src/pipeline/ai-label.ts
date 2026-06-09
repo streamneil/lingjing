@@ -11,7 +11,8 @@ import { join } from 'node:path';
 
 /** ffmpeg 是否可用(容器/CI 里可能没装;没装则跳过标识并告警)。 */
 let ffmpegChecked: boolean | null = null;
-function ffmpegAvailable(): Promise<boolean> {
+// 导出供 concat-audio.ts 复用(ffmpeg 探测 + 调用,DRY)。
+export function ffmpegAvailable(): Promise<boolean> {
   if (ffmpegChecked !== null) return Promise.resolve(ffmpegChecked);
   return new Promise((resolve) => {
     const p = spawn('ffmpeg', ['-version']);
@@ -20,7 +21,7 @@ function ffmpegAvailable(): Promise<boolean> {
   });
 }
 
-function runFfmpeg(args: string[]): Promise<void> {
+export function runFfmpeg(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const p = spawn('ffmpeg', args);
     let stderr = '';

@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文字转语音 · 灵镜</title>
+<link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
+<link rel="stylesheet" href="app.css">
+<style>
+  .voice-pick { display:flex; align-items:center; gap:13px; padding:14px 16px; border:1px solid var(--line); border-radius:var(--r); background:var(--card); cursor:pointer; transition:.15s; }
+  .voice-pick:hover { border-color:var(--line-hi); }
+  .voice-pick .vi { width:42px; height:42px; border-radius:11px; background:var(--field); border:1px solid var(--line); display:grid; place-items:center; flex-shrink:0; }
+  .voice-pick .vi svg { width:20px; height:20px; color:var(--t2); }
+  .voice-pick h5 { font-size:14.5px; font-weight:600; color:var(--t1); }
+  .voice-pick p { font-size:12px; color:var(--t4); margin-top:2px; }
+  .voice-pick .ar svg { width:18px; height:18px; color:var(--t4); }
+
+  /* 音色选择 sheet(侧滑) */
+  .vsheet-ov { position:fixed; inset:0; background:rgba(0,0,0,.55); backdrop-filter:blur(3px); display:none; z-index:300; }
+  .vsheet-ov.on { display:block; }
+  .vsheet { position:fixed; top:0; right:0; bottom:0; width:420px; max-width:90vw; background:var(--bg-soft); border-left:1px solid var(--line); z-index:301; transform:translateX(100%); transition:.3s var(--ease-out); display:flex; flex-direction:column; }
+  .vsheet.on { transform:none; }
+  .vsheet-h { padding:20px 22px; border-bottom:1px solid var(--line-soft); display:flex; align-items:center; }
+  .vsheet-h h3 { font-size:17px; font-weight:700; }
+  .vsheet-h .x { margin-left:auto; cursor:pointer; color:var(--t3); }
+  .vsheet-body { flex:1; overflow-y:auto; padding:14px 18px; }
+  .vcard2 { display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:12px; cursor:pointer; transition:.15s; border:1px solid transparent; }
+  .vcard2:hover { background:var(--card); }
+  .vcard2.on { background:var(--card-hi); border-color:var(--line-hi); }
+  .vcard2 .vn { font-size:14px; font-weight:600; color:var(--t1); }
+  .vcard2 .vd { font-size:11.5px; color:var(--t4); margin-top:2px; }
+
+  .sld-row { display:flex; align-items:center; gap:12px; padding:11px 14px; background:var(--field); border:1px solid var(--line); border-radius:var(--r); }
+  .sld-row .lbl { font-size:13px; color:var(--t3); width:36px; }
+  .sld-row input[type=range] { flex:1; }
+  .sld-row .val { font-family:var(--f-mono); font-size:12.5px; color:var(--t2); width:42px; text-align:right; }
+  .cfg-label { font-size:12px; color:var(--t3); margin:14px 0 7px; }
+</style>
+</head>
+<body data-page="tts" data-crumb="创作工具 > 文字转语音">
+<div class="shell" id="shell-mount">
+ <div class="main-col">
+  <div class="studio">
+  <!-- 左:配置 -->
+  <div class="cfg">
+    <div class="cfg-h"><span class="dot"></span>文字转语音</div>
+
+    <div class="script">
+      <textarea id="text" maxlength="6000" placeholder="输入需要配音的文字…（≤6000 字）"></textarea>
+      <div class="f"><span class="h" id="estLabel">预估 — 点</span><span class="c"><b id="cnt">0</b> / 6000</span></div>
+    </div>
+
+    <div class="cfg-label">声音</div>
+    <div class="voice-pick" id="voicePick" onclick="openVoices()">
+      <div class="vi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg></div>
+      <div style="flex:1"><h5 id="voiceName">选择音色</h5><p id="voiceDesc">从音色库选择或克隆一个声音</p></div>
+      <div class="ar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></div>
+    </div>
+
+    <div class="cfg-label">语速</div>
+    <div class="sld-row"><span class="lbl">速度</span><input type="range" id="rate" min="0.5" max="2" step="0.1" value="1"><span class="val" id="rateVal">1.0×</span></div>
+    <div class="cfg-label">音量</div>
+    <div class="sld-row"><span class="lbl">音量</span><input type="range" id="volume" min="0" max="100" step="5" value="50"><span class="val" id="volVal">50</span></div>
+
+    <div class="cfg-sp"></div>
+    <div class="cbtn-wrap">
+      <button class="cbtn" id="createBtn">
+        <span id="cbtnLabel">创建</span> <span class="gem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg> <b id="estGem">—</b></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 右:作品流(音频) -->
+  <div class="feed">
+    <div class="feed-tabs">
+      <button class="ftab active" data-st="all">全部</button>
+      <button class="ftab" data-st="running">生成中</button>
+      <button class="ftab" data-st="done">已完成</button>
+      <button class="ftab" data-st="failed">失败</button>
+    </div>
+    <div class="feed-list">
+      <div class="fitem feed-empty" id="feedEmpty">
+        <div class="feed-empty-in">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>
+          <div class="t">还没有配音</div>
+          <div class="s">输入文字,选好音色,点「创建」就能生成第一条配音。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+ </div>
+</div>
+
+<!-- 音色选择 sheet -->
+<div class="vsheet-ov" id="vsheetOv" onclick="closeVoices()"></div>
+<div class="vsheet" id="vsheet">
+  <div class="vsheet-h"><h3>选择音色</h3><div class="x" onclick="closeVoices()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:22px;height:22px"><path d="M18 6 6 18M6 6l12 12"/></svg></div></div>
+  <div class="vsheet-body" id="vsheetBody"><div style="color:var(--t4);padding:20px">加载音色中…</div></div>
+</div>
+
+<script src="shell.js"></script>
+<script src="tools.js"></script>
+<script src="api.js"></script>
+<script>
+  const ta=document.getElementById('text'), cnt=document.getElementById('cnt'), btn=document.getElementById('createBtn');
+  const feedList=document.querySelector('.feed-list');
+  let selectedVoice=null; // {id,name,desc}
+
+  function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+  // 语速/音量
+  const rate=document.getElementById('rate'), vol=document.getElementById('volume');
+  rate.oninput=()=>document.getElementById('rateVal').textContent=parseFloat(rate.value).toFixed(1)+'×';
+  vol.oninput=()=>document.getElementById('volVal').textContent=vol.value;
+
+  // 音色 sheet
+  function openVoices(){ document.getElementById('vsheetOv').classList.add('on'); document.getElementById('vsheet').classList.add('on'); loadVoices(); }
+  function closeVoices(){ document.getElementById('vsheetOv').classList.remove('on'); document.getElementById('vsheet').classList.remove('on'); }
+  async function loadVoices(){
+    const body=document.getElementById('vsheetBody');
+    try{
+      const vc=await LJ.get('/voices');
+      const items=[...((vc.clones||[]).filter(v=>v.status==='ready')), ...(vc.presets||[])];
+      body.innerHTML=items.map(v=>{
+        const desc=v.kind==='clone' ? '克隆音色 · 本人声音' : `${v.gender||''} · ${v.desc||''}`;
+        const on=selectedVoice&&selectedVoice.id===v.id;
+        return `<div class="vcard2${on?' on':''}" onclick='pickVoice(${JSON.stringify({id:v.id,name:v.name,desc}).replace(/'/g,"&#39;")})'><div class="vn">${esc(v.name)}${v.kind==='preset'?' <span class="hot" style="font-size:9px">预置</span>':''}</div><div class="vd">${esc(desc)}</div></div>`;
+      }).join('') || '<div style="color:var(--t4);padding:20px">暂无音色</div>';
+      if(!selectedVoice && items[0]) pickVoice({id:items[0].id,name:items[0].name,desc:''}, true);
+    }catch(e){ body.innerHTML='<div style="color:var(--red);padding:20px">音色加载失败</div>'; }
+  }
+  window.pickVoice=(v, silent)=>{
+    selectedVoice=v;
+    document.getElementById('voiceName').textContent=v.name;
+    document.getElementById('voiceDesc').textContent=v.desc||'已选择';
+    if(!silent) closeVoices(); refreshBtn();
+    document.querySelectorAll('#vsheetBody .vcard2').forEach(c=>c.classList.toggle('on', c.textContent.includes(v.name)));
+  };
+  window.openVoices=openVoices; window.closeVoices=closeVoices;
+
+  // 预估
+  let estTimer=null;
+  function scheduleEstimate(){
+    clearTimeout(estTimer);
+    estTimer=setTimeout(async()=>{
+      if(!ta.value.trim()){ document.getElementById('estLabel').textContent='预估 — 点'; document.getElementById('estGem').textContent='—'; return; }
+      try{ const r=await LJ.post('/jobs/estimate',{type:'tts',text:ta.value}); document.getElementById('estLabel').textContent='预估 '+r.cost+' 点'; document.getElementById('estGem').textContent=r.cost; }catch(e){}
+    },350);
+  }
+  function refreshBtn(){
+    const hasText=ta.value.trim().length>0;
+    let ok=hasText, label='创建';
+    if(!selectedVoice){ ok=false; label='请选择音色'; }
+    else if(!hasText){ ok=false; label='请输入文字'; }
+    btn.classList.toggle('ready',ok); btn.disabled=!ok;
+    document.getElementById('cbtnLabel').textContent=label;
+  }
+  ta.addEventListener('input',()=>{ cnt.textContent=ta.value.length; refreshBtn(); scheduleEstimate(); });
+
+  document.querySelectorAll('.ftab').forEach(t=>t.onclick=function(){
+    this.parentNode.querySelectorAll('.ftab').forEach(x=>x.classList.remove('active')); this.classList.add('active');
+    const k=this.dataset.st;
+    document.querySelectorAll('.feed-list .fitem[id^=job-]').forEach(it=>{ it.style.display=(k==='all'||(it.dataset.st||'')===k)?'':'none'; });
+  });
+
+  function renderCard(job){
+    document.getElementById('feedEmpty').style.display='none';
+    let card=document.getElementById('job-'+job.id);
+    if(!card){ card=document.createElement('div'); card.className='fitem'; card.id='job-'+job.id; feedList.insertBefore(card, feedList.firstChild); }
+    if(job.status==='queued'||job.status==='running'){
+      card.dataset.st='running';
+      card.innerHTML=`<div class="fmeta"><b>文字转语音</b><span class="ts">刚刚</span><span class="sp"></span><span class="st" style="color:var(--amber)"><span class="led led-run"></span>${job.status==='queued'?'排队中':'生成中'}</span></div>
+        <div class="fbubble"><div class="tx">${esc(job.text||'')}</div></div>
+        <div class="fvideo proc"><div class="proc-in"><div class="spinner"></div><div class="lbl">${job.progress?('进度 '+job.progress+'%'):'已进入生成队列'}</div><div class="proc-bar"><i style="width:${job.progress||8}%"></i></div></div></div>`;
+    } else if(job.status==='done'){
+      card.dataset.st='done';
+      const url=(job.outputUrls||[])[0];
+      const player=url ? `<audio src="${url}" controls preload="metadata" style="width:100%;margin-top:6px"></audio>` : '<div style="color:var(--t4);padding:14px">已生成</div>';
+      card.innerHTML=`<div class="fmeta"><b>文字转语音</b><span class="ts">刚刚</span><span class="sp"></span><span class="st" style="color:var(--green)"><span class="led led-ok"></span>已完成</span></div>
+        <div class="fbubble"><div class="tx">${esc(job.text||'')}</div></div>${player}`;
+    } else {
+      card.dataset.st='failed';
+      card.innerHTML=`<div class="fmeta"><b>文字转语音</b><span class="ts">刚刚</span><span class="sp"></span><span class="st" style="color:var(--red)"><span class="led led-err"></span>生成失败</span></div>
+        <div class="fbubble"><div class="tx">${esc(job.text||'')}</div></div>
+        <div class="fvideo err"><div class="err-in"><div class="ei">!</div><div class="lbl">${esc(job.error||'生成失败,请重试')}</div></div></div>`;
+    }
+  }
+
+  async function track(id, text){ try{ await LJ.pollJob(id, (job)=>renderCard({...job, text})); }catch(e){} }
+  async function loadHistory(){
+    let jobs=[]; try{ jobs=await LJ.listJobs(); }catch(e){ return; }
+    const mine=jobs.filter(j=>j.type==='tts');
+    if(!mine.length) return;
+    document.getElementById('feedEmpty').style.display='none';
+    for(const j of [...mine].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))){
+      try{ const d=await LJ.getJob(j.id); renderCard({...d, text:(d.input&&d.input.text)||''});
+        if(d.status==='queued'||d.status==='running') track(d.id,(d.input&&d.input.text)||'');
+      }catch(e){}
+    }
+  }
+
+  btn.addEventListener('click', async ()=>{
+    if(btn.disabled) return;
+    const text=ta.value.trim(); if(!text||!selectedVoice) return;
+    btn.disabled=true; const prev=btn.innerHTML; btn.textContent='提交中…';
+    try{
+      const res=await LJ.createJob({ type:'tts', text, voiceRef:selectedVoice.id, rate:parseFloat(rate.value), volume:parseInt(vol.value,10) });
+      renderCard({ id:res.id, status:'queued', progress:0, text });
+      track(res.id, text);
+      ta.value=''; cnt.textContent='0'; scheduleEstimate();
+      window.LJToast&&window.LJToast('✓ 已提交生成,可在右侧查看进度');
+    }catch(e){ window.LJToast&&window.LJToast('提交失败:'+e.message,'err'); }
+    finally{ btn.innerHTML=prev; refreshBtn(); }
+  });
+
+  LJ.me().then(()=>loadHistory()).catch(()=>{});
+  refreshBtn();
+</script>
+</body>
+</html>
