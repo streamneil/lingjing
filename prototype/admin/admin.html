@@ -143,7 +143,10 @@
       <input id="mPrice" type="number" min="1" value="4">
       <label>张数上限</label>
       <input id="mMax" type="number" min="1" value="1">
-      <label style="display:flex;align-items:center;gap:8px;margin-top:10px"><input id="mEnabled" type="checkbox" checked style="width:auto"> 启用</label>
+      <label>分辨率列表(照百炼文档录 比例:宽*高,清晰度档自动算;留空=用系统默认)</label>
+      <div id="mResList" style="display:flex;flex-direction:column;gap:6px"></div>
+      <button type="button" onclick="addResRow()" style="margin-top:6px;font-size:12.5px;color:var(--blue);background:none;border:1px dashed var(--line-hi);border-radius:8px;padding:7px 12px;cursor:pointer;width:100%">+ 添加分辨率</button>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:12px"><input id="mEnabled" type="checkbox" checked style="width:auto"> 启用</label>
       <div class="mmsg" id="mMsg"></div>
       <div class="mbtns"><button class="cancel" onclick="closeOv('modelOv')">取消</button><button class="ok" id="mOk" onclick="submitModel()">保存</button></div>
     </div>
@@ -319,12 +322,34 @@
     if(over.length){ hint.style.display=''; hint.textContent='⚠ 所选「'+over.map(x=>MODE_CN[x]).join('/')+'」超出该 shape 模板的代码能力('+(cap.map(x=>MODE_CN[x]).join('/')||'无')+'),该模型实际可能不支持,生成时会报错。请确认模型确实支持。'; }
     else { hint.style.display='none'; }
   };
+  // ── 分辨率列表录入(行:比例下拉+宽+高+默认 radio+删)──
+  const RES_RATIOS=['16:9','9:16','1:1','4:3','3:4','3:2','2:3','21:9','9:21'];
+  function resRowHtml(r){
+    return `<div class="resrow" style="display:flex;gap:6px;align-items:center">
+      <select class="rr-ratio" style="flex:0 0 80px;padding:7px;background:var(--field,#121214);border:1px solid var(--line,#2a2a30);border-radius:7px;color:#fff;font-size:12.5px">${RES_RATIOS.map(x=>`<option ${r&&r.ratio===x?'selected':''}>${x}</option>`).join('')}</select>
+      <input class="rr-w" type="number" min="1" placeholder="宽" value="${r?r.width:''}" style="flex:1;min-width:0;padding:7px;background:var(--field,#121214);border:1px solid var(--line,#2a2a30);border-radius:7px;color:#fff;font-size:12.5px">
+      <span style="color:#888">×</span>
+      <input class="rr-h" type="number" min="1" placeholder="高" value="${r?r.height:''}" style="flex:1;min-width:0;padding:7px;background:var(--field,#121214);border:1px solid var(--line,#2a2a30);border-radius:7px;color:#fff;font-size:12.5px">
+      <label style="display:flex;align-items:center;gap:3px;font-size:11px;color:#888;width:auto"><input type="radio" name="rr-default" class="rr-def" ${r&&r.isDefault?'checked':''} style="width:auto"> 默认</label>
+      <span class="rr-del" onclick="this.closest('.resrow').remove()" style="cursor:pointer;color:#888;padding:0 4px;font-size:16px">×</span>
+    </div>`;
+  }
+  window.addResRow=(r)=>{ const d=document.createElement('div'); d.innerHTML=resRowHtml(r); document.getElementById('mResList').appendChild(d.firstElementChild); };
+  function setResRows(list){ document.getElementById('mResList').innerHTML=''; (list||[]).forEach(r=>addResRow(r)); }
+  function collectResRows(){
+    return [...document.querySelectorAll('#mResList .resrow')].map(row=>({
+      ratio:row.querySelector('.rr-ratio').value, width:Number(row.querySelector('.rr-w').value),
+      height:Number(row.querySelector('.rr-h').value), isDefault:row.querySelector('.rr-def').checked,
+    })).filter(r=>r.width>0&&r.height>0);
+  }
+
   function openModel(){
     editingKey=null; document.getElementById('mTitle').textContent='新增模型'; document.getElementById('mMsg').textContent='';
     document.getElementById('mKey').disabled=false; document.getElementById('mKey').value='';
     document.getElementById('mShape').disabled=false; fillShapeSel();
     document.getElementById('mLabel').value=''; document.getElementById('mModelId').value='';
     document.getElementById('mPrice').value='4'; document.getElementById('mMax').value='1'; document.getElementById('mEnabled').checked=true;
+    setResRows([]);
     // 默认按模板能力勾上(贴默认行为)
     const cap=tmplModesMap[document.getElementById('mShape').value]||['text2img'];
     document.getElementById('mModeT2I').checked=cap.includes('text2img'); document.getElementById('mModeI2I').checked=cap.includes('img2img');
@@ -339,6 +364,7 @@
     document.getElementById('mLabel').value=m.label; document.getElementById('mModelId').value=m.modelId;
     document.getElementById('mPrice').value=m.priceTier; document.getElementById('mMax').value=m.maxImages; document.getElementById('mEnabled').checked=m.enabled;
     document.getElementById('mModeT2I').checked=(m.modes||[]).includes('text2img'); document.getElementById('mModeI2I').checked=(m.modes||[]).includes('img2img');
+    setResRows(m.resolutions||[]);
     onShapeChange();
     document.getElementById('modelOv').classList.add('on');
   };
@@ -351,6 +377,7 @@
     const body={ label:document.getElementById('mLabel').value.trim(), modelId:document.getElementById('mModelId').value.trim(),
       priceTier:Number(document.getElementById('mPrice').value), maxImages:Number(document.getElementById('mMax').value),
       enabled:document.getElementById('mEnabled').checked, shapeTemplate:document.getElementById('mShape').value, modes,
+      resolutions:collectResRows(),
       sortOrder:editingKey?(modelsCache.find(m=>m.key===editingKey)?.sortOrder??0):modelsCache.length };
     try{
       if(editingKey){ await PA('PUT',`/api/image-models/${encodeURIComponent(editingKey)}`,body); }

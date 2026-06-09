@@ -39,6 +39,24 @@ export interface ImageModelDef {
   maxInputImages: number; // img2img 输入图上限(text2img 模型 0);v1 封顶 3(上传端点写死,P2-c)
   maxResolution: '1K' | '2K' | '4K'; // 最高分辨率档
   priceTier: number; // 每张计价(替代 PRICE_PER_IMAGE,非双乘 P2-a)
+  resolutions?: ResolutionEntry[]; // admin 录的分辨率列表(百炼官方推荐表);空 → 用 imageSize 算
+}
+
+// 分辨率条目(admin 照百炼文档录 比例:宽*高;tier 计价档由像素自动推,不存)。
+export interface ResolutionEntry {
+  ratio: string; // '16:9' / '1:1' ...
+  width: number;
+  height: number;
+  isDefault?: boolean;
+}
+
+// 像素总量 → 计价档(tier):≤1.3MP(~1280²)=1K、≤3MP(~2048²)=2K、>3MP=4K。
+// 让 admin 只录宽高,tier 自动算(钱不塌:计价仍按真实像素档)。
+export function tierFromPixels(width: number, height: number): '1K' | '2K' | '4K' {
+  const mp = (width * height) / 1_000_000;
+  if (mp <= 1.3) return '1K';
+  if (mp <= 3) return '2K';
+  return '4K';
 }
 
 // 精选 5 模型(全 S/A1,代码现成)。modelId 按用户给的百炼文档核实。
@@ -92,7 +110,7 @@ function mergeDef(key: string): ImageModelDef | undefined {
     if (!tmpl) return undefined; // 模板丢失(不该发生:模板是代码 key)
     // modes:管理员勾选的优先(用户选了「完全自由勾」);空 → 回落代码模板 modes。
     const ovModes = (ov.modes ?? '').split(',').map((s) => s.trim()).filter((s): s is ImageMode => s === 'text2img' || s === 'img2img');
-    return {
+    const def: ImageModelDef = {
       ...tmpl, // shape/sizeKind/maxResolution/maxInputImages(技术契约)
       key,
       label: ov.label,
@@ -101,8 +119,27 @@ function mergeDef(key: string): ImageModelDef | undefined {
       priceTier: ov.price_tier,
       modes: ovModes.length ? ovModes : tmpl.modes, // 管理员勾选优先
     };
+    const res = parseResolutions(ov.resolutions); // JSON 坏数据回落 undefined(P2-c)
+    if (res) def.resolutions = res;
+    return def;
   }
   return IMAGE_MODELS[key];
+}
+
+// 解析 resolutions JSON(热路径:worker/credits/下拉都过 mergeDef → 坏 JSON 绝不抛,P2-c)。
+function parseResolutions(raw: string | null): ResolutionEntry[] | undefined {
+  if (!raw) return undefined;
+  try {
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr) || arr.length === 0) return undefined;
+    const ok = arr.filter(
+      (r): r is ResolutionEntry =>
+        r && typeof r.ratio === 'string' && Number.isFinite(r.width) && Number.isFinite(r.height) && r.width > 0 && r.height > 0,
+    );
+    return ok.length ? ok : undefined;
+  } catch {
+    return undefined; // 坏 JSON → 回落代码默认
+  }
 }
 
 /** 模型是否启用(DB override 优先;无 override 视为启用)。 */
@@ -156,22 +193,40 @@ export function resolutionAllowed(def: ImageModelDef, resolution?: string): bool
   return want <= (RES_ORDER[def.maxResolution] ?? 2);
 }
 
+/** wh 模型查 def.resolutions 得 "W*H"(不再 imageSize 猜);snap 是 buildImageJob 写的快照,优先。 */
+function whSize(def: ImageModelDef, ratio?: string, resolution?: string, snap?: { width?: number; height?: number }): string {
+  // 1. 快照优先(P1-c:admin mid-flight 改不影响在飞 job)。
+  if (snap && Number.isFinite(snap.width) && Number.isFinite(snap.height)) return `${snap.width}*${snap.height}`;
+  // 2. 查 admin 录的分辨率表(官方推荐,不猜)。
+  if (def.resolutions?.length) {
+    const hit = def.resolutions.find((r) => r.ratio === (ratio ?? '1:1')) ?? def.resolutions.find((r) => r.isDefault) ?? def.resolutions[0];
+    if (hit) return `${hit.width}*${hit.height}`;
+  }
+  // 3. 回落 imageSize 算(老 job/未配模型兼容)。
+  return imageSize(ratio, resolution);
+}
+
 /**
  * 按 sizeKind 构建百炼 parameters 的 size 相关字段(P1-size)。
- *  - wh:      { size: "W*H" }(imageSize 映射)
- *  - keyword: { size: "1K"|"2K"|"4K" }(wan2.7 等)
+ *  - wh:      { size: "W*H" }(快照 → resolutions 表 → imageSize 回落)
+ *  - keyword: { size: "1K"|"2K"|"4K" }(wan2.7 等;现无活模型)
  *  - aspect_res(本轮缓):{ aspect_ratio, resolution }(可灵)
  */
-export function sizeParams(def: ImageModelDef, ratio?: string, resolution?: string): Record<string, string> {
+export function sizeParams(
+  def: ImageModelDef,
+  ratio?: string,
+  resolution?: string,
+  snap?: { width?: number; height?: number },
+): Record<string, string> {
   switch (def.sizeKind) {
     case 'wh':
-      return { size: imageSize(ratio, resolution) };
+      return { size: whSize(def, ratio, resolution, snap) };
     case 'keyword':
       return { size: (resolution ?? '2K').toUpperCase() };
     case 'aspect_res':
       // 缓:可灵接入时落地(aspect_ratio + resolution 小写档)。
       return { aspect_ratio: ratio ?? '1:1', resolution: (resolution ?? '1k').toLowerCase() };
     default:
-      return { size: imageSize(ratio, resolution) };
+      return { size: whSize(def, ratio, resolution, snap) };
   }
 }

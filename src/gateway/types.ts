@@ -47,6 +47,8 @@ export interface ImageGenInput {
   seed?: number; // 随机种子 [0,2147483647];空/未传 = 随机(gateway 不加该字段)
   priceTierSnapshot?: number; // 提交时快照(P3:admin 改价 mid-flight 不破 reserve==settle)
   maxImagesSnapshot?: number; // 同上,张数上限快照
+  width?: number; // 提交时从所选分辨率条快照的 W(P1-c:admin 改 resolutions mid-flight 不影响在飞 job)
+  height?: number;
 }
 
 // ── 图生图(image-to-image,qwen-image-edit)──

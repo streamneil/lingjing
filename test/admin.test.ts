@@ -243,3 +243,49 @@ describe('租户详情管理(A2)', () => {
     expect(r.status).toBe(401);
   });
 });
+
+describe('AI图片模型 — 分辨率列表 CRUD(POST/GET/PUT 往返,P2-d 不被清空)', () => {
+  const RES = [
+    { ratio: '1:1', width: 2048, height: 2048, isDefault: true },
+    { ratio: '16:9', width: 2688, height: 1536 },
+  ];
+  it('POST 录入 → GET 取回完整 resolutions', async () => {
+    const c = await padminLogin();
+    const r = await c.post('/admin/api/image-models', {
+      key: 'res-test', label: '分辨率测试', modelId: 'qwen-image', priceTier: 4, maxImages: 4,
+      enabled: true, shapeTemplate: 'qwen-image', modes: ['text2img'], sortOrder: 99, resolutions: RES,
+    });
+    expect(r.status).toBe(201);
+    const g = await c.get('/admin/api/image-models');
+    const m = g.body.models.find((x: any) => x.key === 'res-test');
+    expect(m.resolutions).toHaveLength(2);
+    expect(m.resolutions.find((x: any) => x.ratio === '1:1')).toMatchObject({ width: 2048, height: 2048, isDefault: true });
+  });
+  it('PUT upsert 往返保留 resolutions(P2-d:ON CONFLICT SET 含 resolutions,不被清)', async () => {
+    const c = await padminLogin();
+    // 用独立 key 自建(不依赖上条用例顺序)
+    await c.post('/admin/api/image-models', {
+      key: 'res-put', label: '分辨率PUT', modelId: 'qwen-image', priceTier: 4, maxImages: 4,
+      enabled: true, shapeTemplate: 'qwen-image', modes: ['text2img'], sortOrder: 99, resolutions: RES,
+    });
+    // PUT 带上 resolutions(前端 submitModel 总是带);验证 upsert 往返不丢
+    const r = await c.put('/admin/api/image-models/res-put', {
+      label: '改名了', modelId: 'qwen-image', priceTier: 4, maxImages: 4,
+      enabled: true, shapeTemplate: 'qwen-image', modes: ['text2img'], sortOrder: 99, resolutions: RES,
+    });
+    expect(r.status).toBe(200);
+    const g = await c.get('/admin/api/image-models');
+    const m = g.body.models.find((x: any) => x.key === 'res-put');
+    expect(m.label).toBe('改名了');
+    expect(m.resolutions).toHaveLength(2); // 没被 upsert 清空
+  });
+  it('重复比例 → 400(validModelBody 去重校验)', async () => {
+    const c = await padminLogin();
+    const r = await c.post('/admin/api/image-models', {
+      key: 'res-dup', label: 'dup', modelId: 'qwen-image', priceTier: 4, maxImages: 4,
+      enabled: true, shapeTemplate: 'qwen-image', modes: ['text2img'], sortOrder: 99,
+      resolutions: [{ ratio: '1:1', width: 1024, height: 1024 }, { ratio: '1:1', width: 2048, height: 2048 }],
+    });
+    expect(r.status).toBe(400);
+  });
+});

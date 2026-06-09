@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 process.env.DB_FILE = ':memory:';
 
 const { db } = await import('../src/db/index.js');
-const { getImageModel, listEnabledModels, isKnownModel, IMAGE_MODELS, DEFAULT_IMAGE_MODEL } = await import(
+const { getImageModel, listEnabledModels, isKnownModel, sizeParams, tierFromPixels, IMAGE_MODELS, DEFAULT_IMAGE_MODEL } = await import(
   '../src/gateway/image-models.js'
 );
 const { costFor } = await import('../src/credits/index.js');
@@ -16,9 +16,9 @@ const { costFor } = await import('../src/credits/index.js');
 function clearOv() { db.prepare('DELETE FROM image_model_override').run(); }
 function addOv(row: Record<string, unknown>) {
   db.prepare(
-    `INSERT OR REPLACE INTO image_model_override (key,label,model_id,enabled,price_tier,max_images,shape_template,modes,sort_order,created_at)
-     VALUES (@key,@label,@model_id,@enabled,@price_tier,@max_images,@shape_template,@modes,@sort_order,@created_at)`,
-  ).run({ enabled: 1, shape_template: null, modes: null, sort_order: 0, created_at: 0, ...row });
+    `INSERT OR REPLACE INTO image_model_override (key,label,model_id,enabled,price_tier,max_images,shape_template,modes,sort_order,resolutions,created_at)
+     VALUES (@key,@label,@model_id,@enabled,@price_tier,@max_images,@shape_template,@modes,@sort_order,@resolutions,@created_at)`,
+  ).run({ enabled: 1, shape_template: null, modes: null, sort_order: 0, resolutions: null, created_at: 0, ...row });
 }
 
 describe('getImageModel DB 合并', () => {
@@ -119,5 +119,82 @@ describe('costFor 快照优先(P3)', () => {
   it('无快照(老 job)→ 回落实时价', () => {
     const c = costFor('ai_image', { model: 'z-image', mode: 'text2img', count: 1, resolution: '1K' });
     expect(c).toBe(IMAGE_MODELS['z-image']!.priceTier); // 2
+  });
+});
+
+// ── 分辨率列表(admin 录百炼官方表;tier 由像素自动推,钱不塌)──
+describe('tierFromPixels(像素 → 计价档)', () => {
+  it('1.3MP / 3MP 阈值边界正确', () => {
+    expect(tierFromPixels(1024, 1024)).toBe('1K'); // 1.05MP ≤1.3
+    expect(tierFromPixels(1140, 1140)).toBe('1K'); // 1.2996MP 恰好 ≤1.3
+    expect(tierFromPixels(1280, 1280)).toBe('2K'); // 1.638MP >1.3 → 2K
+    expect(tierFromPixels(1700, 1700)).toBe('2K'); // 2.89MP ≤3
+    expect(tierFromPixels(1730, 1730)).toBe('2K'); // 2.9929MP 恰好 ≤3
+    expect(tierFromPixels(1740, 1740)).toBe('4K'); // 3.0276MP >3 → 4K
+  });
+  it('百炼官方典型尺寸落到正确档(护钱:qwen-2.0 大图必须 2K/4K 不塌成 1K)', () => {
+    expect(tierFromPixels(2048, 2048)).toBe('4K'); // 4.19MP >3 → 4K
+    expect(tierFromPixels(2688, 1536)).toBe('4K'); // qwen-2.0 16:9 4.13MP >3
+    expect(tierFromPixels(1328, 1328)).toBe('2K'); // qwen-max 1:1 1.76MP
+    expect(tierFromPixels(1664, 928)).toBe('2K'); // qwen-max 16:9 1.54MP
+    expect(tierFromPixels(928, 1664)).toBe('2K'); // 同上竖
+  });
+});
+
+describe('mergeDef 注入 resolutions + 坏 JSON 兜底(P2-c 热路径不崩)', () => {
+  beforeEach(clearOv);
+  it('合法 JSON → def.resolutions 注入', () => {
+    addOv({
+      key: 'qwen-image', label: 'x', model_id: 'qwen-image', price_tier: 4, max_images: 4, shape_template: 'qwen-image',
+      resolutions: JSON.stringify([{ ratio: '1:1', width: 2048, height: 2048, isDefault: true }, { ratio: '16:9', width: 2688, height: 1536 }]),
+    });
+    const d = getImageModel('qwen-image');
+    expect(d.resolutions).toHaveLength(2);
+    expect(d.resolutions!.find((r) => r.ratio === '1:1')!.width).toBe(2048);
+  });
+  it('坏 JSON → 回落代码默认(undefined),不抛', () => {
+    addOv({ key: 'qwen-image', label: 'x', model_id: 'qwen-image', price_tier: 4, max_images: 4, shape_template: 'qwen-image', resolutions: '{不是合法json' });
+    expect(() => getImageModel('qwen-image')).not.toThrow();
+    expect(getImageModel('qwen-image').resolutions).toBeUndefined();
+  });
+  it('空数组 / 非数组 → undefined(不留半截脏数据)', () => {
+    addOv({ key: 'qwen-image', label: 'x', model_id: 'qwen-image', price_tier: 4, max_images: 4, shape_template: 'qwen-image', resolutions: '[]' });
+    expect(getImageModel('qwen-image').resolutions).toBeUndefined();
+  });
+  it('过滤非法行(width/height 非正)→ 只留合法', () => {
+    addOv({
+      key: 'qwen-image', label: 'x', model_id: 'qwen-image', price_tier: 4, max_images: 4, shape_template: 'qwen-image',
+      resolutions: JSON.stringify([{ ratio: '1:1', width: 2048, height: 2048 }, { ratio: '16:9', width: 0, height: 1536 }]),
+    });
+    const d = getImageModel('qwen-image');
+    expect(d.resolutions).toHaveLength(1);
+    expect(d.resolutions?.[0]?.ratio).toBe('1:1');
+  });
+});
+
+describe('sizeParams 读 resolutions 表(快照优先 → 查表 → imageSize 回落)', () => {
+  beforeEach(clearOv);
+  function withRes() {
+    addOv({
+      key: 'qwen-image', label: 'x', model_id: 'qwen-image', price_tier: 4, max_images: 4, shape_template: 'qwen-image',
+      resolutions: JSON.stringify([{ ratio: '1:1', width: 2048, height: 2048, isDefault: true }, { ratio: '16:9', width: 2688, height: 1536 }]),
+    });
+    return getImageModel('qwen-image');
+  }
+  it('比例命中 → 用表里官方 W×H(不猜)', () => {
+    expect(sizeParams(withRes(), '16:9').size).toBe('2688*1536');
+    expect(sizeParams(withRes(), '1:1').size).toBe('2048*2048');
+  });
+  it('比例缺/未命中 → 默认行(isDefault),否则首行', () => {
+    expect(sizeParams(withRes(), undefined).size).toBe('2048*2048'); // ratio 缺 → '1:1' 命中默认
+    expect(sizeParams(withRes(), '21:9').size).toBe('2048*2048'); // 未命中 → isDefault 行
+  });
+  it('快照优先于表(在飞 job:admin 改表不影响)', () => {
+    expect(sizeParams(withRes(), '16:9', undefined, { width: 999, height: 888 }).size).toBe('999*888');
+  });
+  it('无 resolutions 表 → imageSize 回落(老 job/未配模型)', () => {
+    const d = getImageModel('z-image'); // 无 override
+    expect(d.resolutions).toBeUndefined();
+    expect(sizeParams(d, '1:1', '1K').size).toMatch(/^\d+\*\d+$/);
   });
 });

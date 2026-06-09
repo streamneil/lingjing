@@ -255,6 +255,7 @@ adminRouter.get('/api/image-models', requirePlatformAdmin, (_req: Request, res: 
       modes: ovModes.length ? ovModes : (tmpl?.modes ?? []), // 生效 modes(管理员可改)
       templateModes: tmpl?.modes ?? [], // 代码模板「能力上限」(供 UI 提示:勾超出的可能生成失败)
       sortOrder: ov?.sort_order ?? 0,
+      resolutions: parseAdminResolutions(ov?.resolutions), // admin 录的分辨率表(空数组=回落代码默认)
       // 技术契约(只读)
       shape: tmpl?.shape, sizeKind: tmpl?.sizeKind,
       maxResolution: tmpl?.maxResolution, maxInputImages: tmpl?.maxInputImages,
@@ -266,7 +267,13 @@ adminRouter.get('/api/image-models', requirePlatformAdmin, (_req: Request, res: 
   res.json({ models, shapeTemplates: SHAPE_TEMPLATES });
 });
 
-function validModelBody(b: Record<string, unknown>): { ok: true; v: { label: string; modelId: string; enabled: number; priceTier: number; maxImages: number; modes: string; sortOrder: number } } | { ok: false; error: string } {
+// 解析 resolutions JSON 供 admin 视图(坏数据→空数组)。
+function parseAdminResolutions(raw: string | null | undefined): { ratio: string; width: number; height: number; isDefault?: boolean }[] {
+  if (!raw) return [];
+  try { const a = JSON.parse(raw); return Array.isArray(a) ? a : []; } catch { return []; }
+}
+
+function validModelBody(b: Record<string, unknown>): { ok: true; v: { label: string; modelId: string; enabled: number; priceTier: number; maxImages: number; modes: string; sortOrder: number; resolutions: string | null } } | { ok: false; error: string } {
   const label = typeof b.label === 'string' ? b.label.trim() : '';
   const modelId = typeof b.modelId === 'string' ? b.modelId.trim() : '';
   if (!label) return { ok: false, error: '显示名不能为空' };
@@ -280,7 +287,28 @@ function validModelBody(b: Record<string, unknown>): { ok: true; v: { label: str
   const modesArr = Array.isArray(b.modes) ? b.modes.filter((m) => m === 'text2img' || m === 'img2img') : [];
   if (modesArr.length === 0) return { ok: false, error: '请至少勾选一个模式(文生图/图生图)' };
   const sortOrder = Number.isFinite(Number(b.sortOrder)) ? Math.trunc(Number(b.sortOrder)) : 0;
-  return { ok: true, v: { label, modelId, enabled, priceTier, maxImages, modes: modesArr.join(','), sortOrder } };
+  // resolutions:admin 录的分辨率表(可空)。每条 ratio/width/height 正整数;ratio 去重(P2-a)。
+  let resolutions: string | null = null;
+  if (Array.isArray(b.resolutions) && b.resolutions.length) {
+    const seen = new Set<string>();
+    const rows: { ratio: string; width: number; height: number; isDefault?: boolean }[] = [];
+    for (const r of b.resolutions as Record<string, unknown>[]) {
+      const ratio = typeof r?.ratio === 'string' ? r.ratio.trim() : '';
+      const width = Number(r?.width);
+      const height = Number(r?.height);
+      if (!ratio) return { ok: false, error: '分辨率比例不能为空' };
+      if (!Number.isInteger(width) || width <= 0 || !Number.isInteger(height) || height <= 0)
+        return { ok: false, error: `分辨率 ${ratio} 的宽高需为正整数` };
+      if (seen.has(ratio)) return { ok: false, error: `分辨率比例 ${ratio} 重复` };
+      seen.add(ratio);
+      rows.push({ ratio, width, height, isDefault: r?.isDefault === true });
+    }
+    // 至多一个默认;无默认则首条
+    if (rows.filter((x) => x.isDefault).length > 1) return { ok: false, error: '只能设一个默认分辨率' };
+    if (!rows.some((x) => x.isDefault) && rows[0]) rows[0].isDefault = true;
+    resolutions = JSON.stringify(rows);
+  }
+  return { ok: true, v: { label, modelId, enabled, priceTier, maxImages, modes: modesArr.join(','), sortOrder, resolutions } };
 }
 
 /** 新增模型(DB 新增 key,必须选一个代码 shape 模板,A5 防技术契约被破)。 */
@@ -295,9 +323,9 @@ adminRouter.post('/api/image-models', requirePlatformAdmin, (req: Request, res: 
   const v = validModelBody(b);
   if (!v.ok) return res.status(400).json({ error: v.error });
   db.prepare(
-    `INSERT INTO image_model_override (key,label,model_id,enabled,price_tier,max_images,shape_template,modes,sort_order,created_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?)`,
-  ).run(key, v.v.label, v.v.modelId, v.v.enabled, v.v.priceTier, v.v.maxImages, shapeTemplate, v.v.modes, v.v.sortOrder, Date.now());
+    `INSERT INTO image_model_override (key,label,model_id,enabled,price_tier,max_images,shape_template,modes,sort_order,resolutions,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(key, v.v.label, v.v.modelId, v.v.enabled, v.v.priceTier, v.v.maxImages, shapeTemplate, v.v.modes, v.v.sortOrder, v.v.resolutions, Date.now());
   writePlatformAudit(req.padmin!.id, 'image_model_create', PLATFORM_TENANT, key, padminIp(req));
   res.status(201).json({ ok: true });
 });
@@ -314,12 +342,12 @@ adminRouter.put('/api/image-models/:key', requirePlatformAdmin, (req: Request, r
   // 代码内置改 → upsert(shape_template=自身,技术契约取自身);DB 新增改 → 保留原 shape_template。
   const shapeTemplate: string | null = existing?.shape_template ?? (codeDef ? key : null);
   db.prepare(
-    `INSERT INTO image_model_override (key,label,model_id,enabled,price_tier,max_images,shape_template,modes,sort_order,created_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?)
+    `INSERT INTO image_model_override (key,label,model_id,enabled,price_tier,max_images,shape_template,modes,sort_order,resolutions,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)
      ON CONFLICT(key) DO UPDATE SET label=excluded.label, model_id=excluded.model_id,
        enabled=excluded.enabled, price_tier=excluded.price_tier, max_images=excluded.max_images,
-       modes=excluded.modes, sort_order=excluded.sort_order`,
-  ).run(key, v.v.label, v.v.modelId, v.v.enabled, v.v.priceTier, v.v.maxImages, shapeTemplate, v.v.modes, v.v.sortOrder, existing?.created_at ?? Date.now());
+       modes=excluded.modes, sort_order=excluded.sort_order, resolutions=excluded.resolutions`,
+  ).run(key, v.v.label, v.v.modelId, v.v.enabled, v.v.priceTier, v.v.maxImages, shapeTemplate, v.v.modes, v.v.sortOrder, v.v.resolutions, existing?.created_at ?? Date.now());
   writePlatformAudit(req.padmin!.id, 'image_model_update', PLATFORM_TENANT, key, padminIp(req));
   res.json({ ok: true });
 });

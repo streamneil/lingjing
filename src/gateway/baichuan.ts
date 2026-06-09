@@ -140,7 +140,7 @@ export class BaichuanGateway implements CapabilityGateway, SyncImageGateway {
       {
         model: def.modelId,
         input: { prompt: input.prompt },
-        parameters: { n, ...sizeParams(def, input.ratio, input.resolution), ...seedParam(input.seed) },
+        parameters: { n, ...sizeParams(def, input.ratio, input.resolution, { width: (input as ImageGenInput).width, height: (input as ImageGenInput).height }), ...seedParam(input.seed) },
       },
       { 'X-DashScope-Async': 'enable' },
     );
@@ -192,7 +192,7 @@ export class BaichuanGateway implements CapabilityGateway, SyncImageGateway {
     return callMultimodalSync(
       def.modelId,
       content,
-      { ...sizeParams(def, input.ratio, input.resolution), ...seedParam(input.seed) },
+      { ...sizeParams(def, input.ratio, input.resolution, { width: (input as ImageGenInput).width, height: (input as ImageGenInput).height }), ...seedParam(input.seed) },
       signal,
     );
   }
@@ -206,7 +206,7 @@ export class BaichuanGateway implements CapabilityGateway, SyncImageGateway {
     return callMultimodalSync(
       def.modelId,
       content,
-      { n: String(n), ...sizeParams(def, input.ratio, input.resolution), ...seedParam(input.seed) },
+      { n: String(n), ...sizeParams(def, input.ratio, input.resolution, { width: (input as ImageGenInput).width, height: (input as ImageGenInput).height }), ...seedParam(input.seed) },
       signal,
     );
   }

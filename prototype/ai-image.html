@@ -205,17 +205,25 @@
       <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg></div>`).join('')
       || '<div class="pop-opt"><span class="nm">该模式暂无可用模型</span></div>';
     modelOpts.querySelectorAll('.pop-opt[data-k]').forEach(el=>el.onclick=()=>{ model=el.dataset.k; renderModels(); closePops(); scheduleEstimate(); });
-    renderRes();   // 清晰度按所选模型 maxResolution(item5)
-    renderCount(); // 张数按所选模型 maxImages(修:固定模型只显 1 张,不给假选项)
+    renderRatios(); // 比例:有 resolutions 模型只显其录的比例(发官方 W×H)
+    renderRes();    // 清晰度:有 resolutions 模型隐藏(尺寸由比例决定);无则按 maxResolution 显档
+    renderCount();  // 张数按所选模型 maxImages
     syncPills();
   }
-  // ── 清晰度按模型支持动态渲染(item5)──
+  // ── 清晰度按模型支持动态渲染;有 resolutions 表的模型隐藏清晰度(尺寸=比例决定)──
   function renderRes(){
     const m=allModels.find(x=>x.key===model);
+    const resSeg=document.getElementById('resSeg');
+    const resLbl=resSeg.previousElementSibling;
+    if(m && m.resolutions && m.resolutions.length){
+      // 模型录了分辨率表:尺寸由所选比例那条决定,不显清晰度档(避免与表冲突)
+      resSeg.style.display='none'; if(resLbl&&resLbl.classList.contains('pop-label')) resLbl.style.display='none';
+      return;
+    }
+    resSeg.style.display=''; if(resLbl&&resLbl.classList.contains('pop-label')) resLbl.style.display='';
     const maxR=RES_ORDER[m?m.maxResolution:'2K']||2;
     const opts=['1K','2K','4K'].filter(r=>RES_ORDER[r]<=maxR);
-    if(!opts.includes(res)) res=opts[opts.length-1]; // 超上限回落最高档
-    const resSeg=document.getElementById('resSeg');
+    if(!opts.includes(res)) res=opts[opts.length-1];
     resSeg.innerHTML=opts.map(r=>`<div class="seg${r===res?' on':''}" data-res="${r}">${r}</div>`).join('');
     resSeg.querySelectorAll('.seg').forEach(s=>s.onclick=()=>{ resSeg.querySelectorAll('.seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); res=s.dataset.res; syncPills(); scheduleEstimate(); });
   }
@@ -252,21 +260,39 @@
   function syncPills(){
     const m=allModels.find(x=>x.key===model);
     document.getElementById('modelPillV').textContent=m?m.label:'模型';
-    document.getElementById('setPillV').textContent=`${ratio==='auto'?'自动':ratio} · ${res}${mode==='img2img'?'':' · '+count+' 张'}`;
+    // 有 resolutions 模型:显 比例 + 尺寸(如 16:9 · 2688×1536);无则显 比例 · 清晰度档。
+    let sizePart=res;
+    if(m && m.resolutions && m.resolutions.length){ const hit=m.resolutions.find(r=>r.ratio===ratio); sizePart=hit?`${hit.width}×${hit.height}`:''; }
+    document.getElementById('setPillV').textContent=`${ratio==='auto'?'自动':ratio}${sizePart?' · '+sizePart:''}${mode==='img2img'?'':' · '+count+' 张'}`;
   }
 
-  // ── 比例选择(8 档,glyph 用 CSS 长宽比近似)──
+  // ── 比例选择 ──
+  // 写死 8 档(无 resolutions 模型回落用);有 resolutions 的模型只显其录的比例(发对应官方 W×H)。
   const RATIOS=[
     {v:'auto',l:'自动',w:18,h:18},{v:'16:9',l:'16:9',w:20,h:11},{v:'9:16',l:'9:16',w:11,h:20},
     {v:'1:1',l:'1:1',w:18,h:18},{v:'3:4',l:'3:4',w:14,h:18},{v:'4:3',l:'4:3',w:18,h:14},
     {v:'3:2',l:'3:2',w:19,h:13},{v:'2:3',l:'2:3',w:13,h:19},
   ];
+  const RATIO_GLYPH={'auto':[18,18],'16:9':[20,11],'9:16':[11,20],'1:1':[18,18],'3:4':[14,18],'4:3':[18,14],'3:2':[19,13],'2:3':[13,19],'21:9':[20,9],'9:21':[9,20]};
   const ratioRow=document.getElementById('ratioRow');
-  ratioRow.innerHTML=RATIOS.map(r=>`<div class="ratio-cell${r.v==='1:1'?' on':''}" data-ratio="${r.v}"><span class="glyph" style="width:${r.w}px;height:${r.h}px"></span><span class="lbl">${r.l}</span></div>`).join('');
-  ratioRow.querySelectorAll('.ratio-cell').forEach(c=>c.onclick=()=>{
-    ratioRow.querySelectorAll('.ratio-cell').forEach(x=>x.classList.remove('on')); c.classList.add('on');
-    ratio=c.dataset.ratio; syncPills(); scheduleEstimate();
-  });
+  function renderRatios(){
+    const m=allModels.find(x=>x.key===model);
+    let cells;
+    if(m && m.resolutions && m.resolutions.length){
+      // 模型录了分辨率表:只显这些比例,选中默认那条
+      const def=m.resolutions.find(r=>r.isDefault)||m.resolutions[0];
+      if(!m.resolutions.find(r=>r.ratio===ratio)) ratio=def.ratio;
+      cells=m.resolutions.map(r=>{ const g=RATIO_GLYPH[r.ratio]||[18,18];
+        return {v:r.ratio,l:r.ratio,w:g[0],h:g[1]}; });
+    } else {
+      cells=RATIOS; if(!cells.find(r=>r.v===ratio)) ratio='1:1';
+    }
+    ratioRow.innerHTML=cells.map(r=>`<div class="ratio-cell${r.v===ratio?' on':''}" data-ratio="${r.v}"><span class="glyph" style="width:${r.w}px;height:${r.h}px"></span><span class="lbl">${r.l}</span></div>`).join('');
+    ratioRow.querySelectorAll('.ratio-cell').forEach(c=>c.onclick=()=>{
+      ratioRow.querySelectorAll('.ratio-cell').forEach(x=>x.classList.remove('on')); c.classList.add('on');
+      ratio=c.dataset.ratio; syncPills(); scheduleEstimate();
+    });
+  }
 
   // ── 清晰度/张数由 renderRes/renderCount 按模型动态绑定 ──
 
