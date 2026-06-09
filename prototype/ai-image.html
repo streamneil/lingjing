@@ -40,8 +40,9 @@
   .uploadbox .soon-tag { display:inline-block; margin-top:10px; font-family:var(--f-mono); font-size:10px; color:var(--blue); border:1px solid var(--blue); padding:3px 10px; border-radius:999px; }
 
   /* 比例选择 */
-  .ratio-row { display:flex; gap:5px; flex-wrap:nowrap; }
-  .ratio-cell { flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 2px; border:1px solid var(--line); border-radius:9px; background:var(--field); color:var(--t3); cursor:pointer; transition:.15s; }
+  .ratio-row { display:flex; gap:5px; flex-wrap:nowrap; align-items:stretch; }
+  /* 字形(高度随比例变)+ 标签整体居下对齐:格子等高 + 内容 flex-end 贴底 */
+  .ratio-cell { flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:4px; padding:8px 2px; border:1px solid var(--line); border-radius:9px; background:var(--field); color:var(--t3); cursor:pointer; transition:.15s; }
   .ratio-cell:hover { color:var(--t1); border-color:var(--line-hi); }
   .ratio-cell.on { background:var(--card-hi); color:var(--t1); border-color:var(--line-hi); }
   .ratio-cell .glyph { width:18px; height:18px; border:1.6px solid currentColor; border-radius:3px; }
@@ -49,7 +50,7 @@
 
   /* 解析度 / 输出 段选 */
   .seg-row { display:flex; gap:8px; }
-  .seg-row .seg { flex:1; text-align:center; padding:10px; border-radius:10px; background:var(--field); border:1px solid var(--line); color:var(--t3); font-size:13px; cursor:pointer; transition:.15s; }
+  .seg-row .seg { flex:1; display:flex; align-items:center; justify-content:center; text-align:center; min-height:42px; padding:10px; border-radius:10px; background:var(--field); border:1px solid var(--line); color:var(--t3); font-size:13px; cursor:pointer; transition:.15s; }
   .seg-row .seg:hover { color:var(--t1); }
   .seg-row .seg.on { background:var(--card-hi); color:var(--t1); border-color:var(--line-hi); }
 
