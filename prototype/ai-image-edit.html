@@ -611,7 +611,7 @@
     regenInFlight.add(id);
     if(btn){ btn.disabled=true; btn.dataset.t=btn.textContent; btn.textContent='提交中…'; }
     try{
-      const payload={ type:'ai_image', model:inp.model, mode:'img2img', prompt:inp.prompt,
+      const payload={ type:'ai_image', source:'ai-image-edit', model:inp.model, mode:'img2img', prompt:inp.prompt,
         imageRefs:inp.imageRefs, count:inp.count, resolution:inp.resolution, seed:inp.seed };
       if(inp.bboxList) payload.bboxList=inp.bboxList;
       const res2=await LJ.createJob(payload);
@@ -675,8 +675,8 @@
   async function track(id, prompt){ try{ await LJ.pollJob(id,(job)=>renderCard({...job, prompt, ...(jobInputs[id]?{modelLabel:findLabel(jobInputs[id].model),resolution:jobInputs[id].resolution,count:jobInputs[id].count}:{})})); }catch(e){} }
   async function loadHistory(){
     let jobs=[]; try{ jobs=await LJ.listJobs(); }catch(e){ return; }
-    // list 已带 model/mode/resolution/count/imageRefs/bboxList 等(免 N+1);只显图生图。
-    const mine=jobs.filter(j=>j.type==='ai_image' && j.mode==='img2img');
+    // 按来源页分流:编辑器显 source==='ai-image-edit';老 job 无 source → 回落按 mode(img2img 归这里)。
+    const mine=jobs.filter(j=>j.type==='ai_image' && (j.source==='ai-image-edit' || (!j.source && j.mode==='img2img')));
     if(!mine.length) return;
     document.getElementById('feedEmpty').style.display='none';
     for(const j of [...mine].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))){
@@ -693,7 +693,7 @@
     try{
       const imageRefs=await uploadInputImages();
       btn.textContent='提交中…';
-      const payload={ type:'ai_image', model, mode:'img2img', prompt, imageRefs, resolution:res, count, seed:seed||undefined };
+      const payload={ type:'ai_image', source:'ai-image-edit', model, mode:'img2img', prompt, imageRefs, resolution:res, count, seed:seed||undefined };
       const bb=buildBboxList(imageRefs.length); if(bb) payload.bboxList=bb;
       const res2=await LJ.createJob(payload);
       renderCard({ id:res2.id, status:'queued', progress:0, prompt });

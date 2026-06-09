@@ -506,7 +506,7 @@
     regenInFlight.add(id);
     if(btn){ btn.disabled=true; btn.dataset.t=btn.textContent; btn.textContent='提交中…'; }
     try{
-      const res2=await LJ.createJob({ type:'ai_image', model:inp.model, mode:inp.mode||'text2img', prompt:inp.prompt,
+      const res2=await LJ.createJob({ type:'ai_image', source:'ai-image', model:inp.model, mode:inp.mode||'text2img', prompt:inp.prompt,
         imageRefs:inp.imageRefs, count:inp.count, resolution:inp.resolution, ratio:inp.ratio, seed:inp.seed });
       renderCard({ id:res2.id, status:'queued', progress:0, prompt:inp.prompt, modelLabel:findLabel(inp.model), ratio:inp.ratio, resolution:inp.resolution });
       track(res2.id, inp.prompt);
@@ -565,8 +565,9 @@
 
   async function loadHistory(){
     let jobs=[]; try{ jobs=await LJ.listJobs(); }catch(e){ return; }
-    // 职责分:AI 图片记录只显文生图(text2img / 老 job 无 mode);图生图归 AI 图片编辑器,避免两页重复。
-    const mine=jobs.filter(j=>j.type==='ai_image' && j.mode!=='img2img');
+    // 按来源页分流(用户在哪页提交就归哪页,与生成模式无关):
+    // AI 图片显 source==='ai-image';老 job 无 source → 回落按 mode(text2img 归这里)。
+    const mine=jobs.filter(j=>j.type==='ai_image' && (j.source==='ai-image' || (!j.source && j.mode!=='img2img')));
     if(!mine.length) return;
     document.getElementById('sampleGallery').style.display='none';
     // list 已带 model/ratio/resolution/imageRefs 等(免 N+1);存 input 供重新生成。
@@ -599,24 +600,20 @@
       if(mode==='img2img'){
         btn.textContent='上传中…';
         const imageRefs=await uploadInputImages();
-        payload={ type:'ai_image', model, mode:'img2img', prompt, imageRefs, resolution:res, count, seed:seed||undefined };
+        payload={ type:'ai_image', source:'ai-image', model, mode:'img2img', prompt, imageRefs, resolution:res, count, seed:seed||undefined };
       } else {
-        payload={ type:'ai_image', model, mode:'text2img', prompt, count, resolution:res, ratio, seed:seed||undefined };
+        payload={ type:'ai_image', source:'ai-image', model, mode:'text2img', prompt, count, resolution:res, ratio, seed:seed||undefined };
       }
       btn.textContent='提交中…';
       const res2=await LJ.createJob(payload);
+      // 记录归本页(source='ai-image'),正常渲染到右侧记录流。
+      jobInputs[res2.id]={ model:payload.model, mode:payload.mode, source:'ai-image', prompt, imageRefs:payload.imageRefs, inputUrls:reuseUrls&&reuseUrls.length?reuseUrls.slice():undefined, count:payload.count, resolution:payload.resolution, ratio:payload.ratio, seed:payload.seed };
+      renderCard({ id:res2.id, status:'queued', progress:0, prompt, modelLabel:findLabel(model), ratio:(mode==='img2img'?undefined:ratio), resolution:res, count, inputUrls:(reuseUrls&&reuseUrls.length?reuseUrls.slice():undefined) });
+      track(res2.id, prompt);
       ta.value=''; cnt.textContent='0';
-      if(mode==='img2img'){
-        // 图生图记录归 AI 图片编辑器(职责分,不在本页记录流渲染,免与编辑器重复)
-        imgFiles=[]; clearReuse(); renderTiles(); document.getElementById('consentChk').checked=false;
-        window.LJToast&&window.LJToast('✓ 已提交图生图,可在「AI 图片编辑器」查看进度与记录');
-      } else {
-        jobInputs[res2.id]={ model:payload.model, mode:payload.mode, prompt, imageRefs:payload.imageRefs, count:payload.count, resolution:payload.resolution, ratio:payload.ratio, seed:payload.seed };
-        renderCard({ id:res2.id, status:'queued', progress:0, prompt, modelLabel:findLabel(model), ratio, resolution:res, count });
-        track(res2.id, prompt);
-        window.LJToast&&window.LJToast('✓ 已提交生成,可在右侧查看进度');
-      }
+      if(mode==='img2img'){ imgFiles=[]; clearReuse(); renderTiles(); document.getElementById('consentChk').checked=false; }
       scheduleEstimate();
+      window.LJToast&&window.LJToast('✓ 已提交生成,可在右侧查看进度');
     }catch(e){ window.LJToast&&window.LJToast('提交失败:'+e.message,'err'); }
     finally{ btn.innerHTML=prev; refreshBtn(); }
   });

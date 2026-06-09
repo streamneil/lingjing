@@ -121,6 +121,10 @@ function buildImageJob(body: Record<string, unknown>): JobBuildResult {
   if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0)
     return { ok: false, status: 400, error: '缺少 prompt(提示词)' };
   const res = typeof resolution === 'string' ? resolution : undefined;
+  // 来源页(记录归属):前端传 'ai-image' | 'ai-image-edit';未传/非法 → undefined(老 job)。
+  // 记录列表按来源页分流(用户在哪页提交就归哪页),与生成模式 mode 无关。
+  const rawSource = (body as { source?: unknown }).source;
+  const source = (rawSource === 'ai-image' || rawSource === 'ai-image-edit') ? rawSource : undefined;
 
   // seed 校验(A4):未传/空 ok(随机);传了必须是 [0,2147483647] 整数。
   let seedVal: number | undefined;
@@ -170,6 +174,7 @@ function buildImageJob(body: Record<string, unknown>): JobBuildResult {
       return { ok: false, status: 400, error: `该模型最多 ${def.maxInputImages} 张输入图` };
 
     const input: ImageGenInput = { model: def.key, mode: 'img2img', prompt, imageRefs: refs, ...snap };
+    if (source) input.source = source;
     if (effRes) input.resolution = effRes; // 计价档(自动推或用户传)
     if (typeof ratio === 'string') input.ratio = ratio;
     if (seedVal !== undefined) input.seed = seedVal;
@@ -200,6 +205,7 @@ function buildImageJob(body: Record<string, unknown>): JobBuildResult {
   // 文生图:clamp 按 model maxImages 并回写 input.count(reserve==settle)
   const n = clampImageCount(count, def.maxImages);
   const input: ImageGenInput = { model: def.key, mode: 'text2img', prompt, count: n, ...snap };
+  if (source) input.source = source;
   if (effRes) input.resolution = effRes;
   if (typeof ratio === 'string') input.ratio = ratio;
   if (seedVal !== undefined) input.seed = seedVal;
@@ -410,7 +416,7 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
       try {
         const inp = JSON.parse(j.input_json) as {
           script?: string; prompt?: string; text?: string;
-          model?: string; mode?: string; ratio?: string; resolution?: string; count?: number;
+          model?: string; mode?: string; source?: string; ratio?: string; resolution?: string; count?: number;
           imageRefs?: string[]; seed?: number; width?: number; height?: number; bboxList?: number[][][];
         };
         script = inp.script ?? inp.prompt ?? inp.text ?? '';
@@ -421,7 +427,7 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
           // 输入图签名 URL:供记录卡显示 + 重新提示回填(image-inputs key 同桶,复用 getSignedUrl)。
           const inputUrls = await signInputUrls(inp.imageRefs);
           meta = {
-            model: inp.model, modelLabel, mode: inp.mode,
+            model: inp.model, modelLabel, mode: inp.mode, source: inp.source, // source:记录归属页
             ratio: inp.ratio, resolution: inp.resolution, sizeLabel, count: inp.count,
             imageRefs: inp.imageRefs, inputUrls, seed: inp.seed, width: inp.width, height: inp.height, bboxList: inp.bboxList, // 重新生成回放用
           };
