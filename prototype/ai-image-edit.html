@@ -57,20 +57,22 @@
   /* ── 局部重绘 大对话框 ── */
   .mkov { position:fixed; inset:0; background:rgba(0,0,0,.82); backdrop-filter:blur(6px); z-index:620; display:none; align-items:center; justify-content:center; padding:24px; }
   .mkov.on { display:flex; }
-  .mksheet { background:#19191c; border:1px solid var(--line-hi); border-radius:18px; width:min(1040px,96vw); max-height:94vh; display:flex; flex-direction:column; overflow:hidden; }
-  .mkhead { display:flex; align-items:center; justify-content:space-between; padding:18px 22px; border-bottom:1px solid var(--line); }
+  .mksheet { background:#19191c; border:1px solid var(--line-hi); border-radius:18px; width:min(1040px,96vw); height:94vh; max-height:94vh; display:flex; flex-direction:column; overflow:hidden; }
+  .mkhead { flex:0 0 auto; display:flex; align-items:center; justify-content:space-between; padding:16px 22px; border-bottom:1px solid var(--line); }
   .mkhead h3 { font-size:17px; font-weight:700; margin:0; }
   .mkhead .x { width:34px; height:34px; border-radius:9px; display:grid; place-items:center; cursor:pointer; color:var(--t3); }
   .mkhead .x:hover { color:var(--t1); background:var(--field); }
-  .mkbody { flex:1; overflow:auto; padding:18px 22px; }
-  .mkhints { display:flex; flex-direction:column; gap:7px; margin-bottom:14px; }
+  /* 整框不滚:body 是 flex 列,只让画布区吃剩余高度等比缩放 */
+  .mkbody { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; padding:14px 22px; overflow:hidden; }
+  .mkhints { flex:0 0 auto; display:flex; flex-direction:column; gap:5px; margin-bottom:10px; }
   .mkhints .h { display:flex; align-items:center; gap:9px; font-size:12.5px; color:var(--t3); }
   .mkhints .h svg { width:16px; height:16px; color:var(--t4); }
-  .mkcanvas-wrap { display:grid; place-items:center; background:var(--field); border-radius:12px; padding:14px; }
-  .mkcanvas-wrap canvas { max-width:100%; max-height:50vh; border-radius:8px; cursor:crosshair; touch-action:none; display:block; }
+  /* 画布区:吃剩余空间,canvas 按可用宽高等比缩放(JS 算唯一 scale,不靠 CSS max-*) */
+  .mkcanvas-wrap { flex:1 1 auto; min-height:0; display:grid; place-items:center; background:var(--field); border-radius:12px; padding:10px; overflow:hidden; }
+  .mkcanvas-wrap canvas { border-radius:8px; cursor:crosshair; touch-action:none; display:block; }
   .mkcanvas-wrap canvas.pan { cursor:grab; }
   /* 对话框工具条 */
-  .mktoolbar { display:flex; align-items:center; gap:12px; margin-top:14px; }
+  .mktoolbar { flex:0 0 auto; display:flex; align-items:center; gap:12px; margin-top:12px; }
   .mktoolbar .clear { background:var(--field); border:1px solid var(--line); color:var(--t2); border-radius:10px; padding:9px 16px; font-size:13px; cursor:pointer; }
   .mktoolbar .clear:hover { color:var(--t1); }
   .mktools { display:flex; align-items:center; gap:4px; background:var(--field); border:1px solid var(--line); border-radius:11px; padding:4px; margin-left:auto; }
@@ -80,14 +82,15 @@
   .mktools button:disabled { opacity:.35; cursor:default; }
   .mktools button svg { width:18px; height:18px; }
   .mktools .sep { width:1px; height:22px; background:var(--line); margin:0 3px; }
-  .mkbrush { display:flex; align-items:center; gap:8px; font-size:11.5px; color:var(--t3); margin-top:12px; }
+  .mkbrush { flex:0 0 auto; display:flex; align-items:center; gap:8px; font-size:11.5px; color:var(--t3); margin-top:10px; }
   .mkbrush input { width:180px; }
-  /* 嵌「编辑图片」小卡 */
-  .mkeditcard { margin-top:16px; border:1px solid var(--line); border-radius:12px; background:var(--card); padding:14px; }
-  .mkeditcard .ttl { display:flex; align-items:center; gap:7px; font-size:13px; color:var(--t2); margin-bottom:10px; }
+  /* 嵌「编辑图片」小卡(紧凑,整框不滚) */
+  .mkeditcard { flex:0 0 auto; margin-top:12px; border:1px solid var(--line); border-radius:12px; background:var(--card); padding:12px; }
+  .mkeditcard .ttl { display:flex; align-items:center; gap:7px; font-size:13px; color:var(--t2); margin-bottom:9px; }
   .mkeditcard .ttl svg { width:16px; height:16px; color:var(--blue); }
-  #mkRefStrip { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
-  .mkeditcard textarea { width:100%; min-height:70px; background:none; border:none; resize:none; color:var(--t1); font-size:13.5px; line-height:1.55; outline:none; font-family:inherit; }
+  #mkRefStrip { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:9px; }
+  #mkRefStrip:empty { display:none; }
+  .mkeditcard textarea { width:100%; min-height:48px; max-height:80px; background:none; border:none; resize:none; color:var(--t1); font-size:13.5px; line-height:1.5; outline:none; font-family:inherit; }
   .mkeditcard textarea::placeholder { color:var(--t4); }
   .mkfoot { display:flex; align-items:center; justify-content:space-between; padding:14px 22px; border-top:1px solid var(--line); }
   .mkfoot .note { font-size:12px; color:var(--t4); }
@@ -321,23 +324,42 @@
     syncMkEditCard();
     const im=new Image();
     im.onload=()=>{
-      const maxW=Math.min(760, im.naturalWidth); mkScale=maxW/im.naturalWidth;
+      // canvas 内部分辨率 = 原图(涂抹坐标 = 原图像素,bbox 直接用);显示尺寸由 fitCanvas 等比算。
       mkCanvas.width=im.naturalWidth; mkCanvas.height=im.naturalHeight;
-      mkCanvas.style.width=(im.naturalWidth*mkScale)+'px'; mkCanvas.style.height=(im.naturalHeight*mkScale)+'px';
       mkCtx=mkCanvas.getContext('2d');
       mkBaseImg=im; redrawMk(); applyMkTool(); updateUndoRedo();
       document.getElementById('mkOv').classList.add('on');
+      // 显示后 .mkcanvas-wrap 才有真实高度,此时等比 fit(下一帧确保布局完成)
+      requestAnimationFrame(fitCanvas);
     };
     im.src=mainFile.dataUrl;
   }
   let mkBaseImg=null;
+  // 按 .mkcanvas-wrap 的可用宽高,取唯一 scale 等比缩放 canvas 显示尺寸(不变形、不滚动)
+  function fitCanvas(){
+    if(!mkBaseImg) return;
+    const wrap=document.querySelector('.mkcanvas-wrap'); if(!wrap) return;
+    const cs=getComputedStyle(wrap), padX=parseFloat(cs.paddingLeft)+parseFloat(cs.paddingRight), padY=parseFloat(cs.paddingTop)+parseFloat(cs.paddingBottom);
+    const availW=Math.max(40, wrap.clientWidth-padX), availH=Math.max(40, wrap.clientHeight-padY);
+    const scale=Math.min(availW/mkBaseImg.naturalWidth, availH/mkBaseImg.naturalHeight);
+    mkScale=scale; // 仅记录;坐标换算用实测 rect,不依赖它
+    mkCanvas.style.width=(mkBaseImg.naturalWidth*scale)+'px';
+    mkCanvas.style.height=(mkBaseImg.naturalHeight*scale)+'px';
+  }
+  window.addEventListener('resize',()=>{ if(document.getElementById('mkOv').classList.contains('on')) fitCanvas(); });
   function redrawMk(){
     if(!mkCtx||!mkBaseImg) return;
     mkCtx.clearRect(0,0,mkCanvas.width,mkCanvas.height); mkCtx.drawImage(mkBaseImg,0,0);
     mkCtx.fillStyle='rgba(122,90,248,.5)';
     mkStrokes.forEach(([x,y,r])=>{ mkCtx.beginPath(); mkCtx.arc(x,y,r,0,Math.PI*2); mkCtx.fill(); });
   }
-  function mkXY(e){ const r=mkCanvas.getBoundingClientRect(); const cx=(e.touches?e.touches[0].clientX:e.clientX)-r.left; const cy=(e.touches?e.touches[0].clientY:e.clientY)-r.top; return [cx/mkScale, cy/mkScale]; }
+  // 坐标换算:用 canvas 实测显示尺寸 ↔ 内部分辨率(getBoundingClientRect),光标与落点严格一致。
+  function mkXY(e){
+    const r=mkCanvas.getBoundingClientRect();
+    const cx=(e.touches?e.touches[0].clientX:e.clientX)-r.left;
+    const cy=(e.touches?e.touches[0].clientY:e.clientY)-r.top;
+    return [cx*(mkCanvas.width/r.width), cy*(mkCanvas.height/r.height)];
+  }
   mkCanvas.addEventListener('pointerdown',e=>{ if(mkTool==='pan')return; mkDrawing=true; mkUndoStack.push(mkStrokes.length); mkRedoStack=[]; mkPaint(mkXY(e)); });
   mkCanvas.addEventListener('pointermove',e=>{ if(!mkDrawing||mkTool==='pan')return; mkPaint(mkXY(e)); });
   window.addEventListener('pointerup',()=>{ if(mkDrawing){ mkDrawing=false; updateUndoRedo(); } });
