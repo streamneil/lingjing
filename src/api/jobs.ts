@@ -188,12 +188,10 @@ function buildImageJob(body: Record<string, unknown>): JobBuildResult {
       if (v.boxes.length) input.bboxList = v.boxes; // 全空则不传
     }
 
-    // A_EDIT 按 n 张计价 + 快照 count(reserve==settle);千问编辑固定 1 张。
-    let editCount = 1;
-    if (isAsyncEdit) {
-      editCount = clampImageCount(count, def.maxImages);
-      input.count = editCount;
-    }
+    // 多出图编辑(maxImages>1:万相2.7 A_EDIT、千问2.0 Pro 同步)按 n 张计价 + 快照 count
+    // (reserve==settle);qwen-image-edit maxImages=1 → clamp 自然固定 1 张,逻辑统一。
+    const editCount = clampImageCount(count, def.maxImages);
+    input.count = editCount; // 始终写 count,worker 据此传 n 给 editImage/submitImageEdit
     return {
       ok: true,
       type: 'ai_image',
@@ -364,8 +362,9 @@ jobsRouter.post('/jobs/estimate', requireAuth, (req: Request, res: Response) => 
       if (hit) res2 = tierFromPixels(hit.width, hit.height);
     }
     if (m === 'img2img') {
-      // A_EDIT(万相2.7)按 n 张计价(与 buildImageJob 一致);千问编辑固定 1 张。
-      const editCount = def.shape === 'A_EDIT' ? clampImageCount(body.count, def.maxImages) : 1;
+      // 编辑按 n 张计价(与 buildImageJob/costFor 一致):count clamp 到 maxImages
+      // (qwen-image-edit maxImages=1 → 固定 1)。
+      const editCount = clampImageCount(body.count, def.maxImages);
       return res.json({ cost: estimateImageEditCost(res2, def.priceTier, editCount) });
     }
     return res.json({

@@ -84,8 +84,9 @@ export function costFor(toolType: string, input: Record<string, unknown>): numbe
       const priceTier = typeof input.priceTierSnapshot === 'number' ? input.priceTierSnapshot : def.priceTier;
       const maxImages = typeof input.maxImagesSnapshot === 'number' ? input.maxImagesSnapshot : def.maxImages;
       if (mode === 'img2img') {
-        // A_EDIT(万相2.7)按 n 张计价;其余编辑(千问)固定 1 张。count 读快照,clamp 到 maxImages 保 reserve==settle。
-        const editCount = def.shape === 'A_EDIT' ? clampImageCount(input.count, maxImages) : 1;
+        // 编辑按 n 张计价:count clamp 到 maxImages(万相2.7 异步 + 千问2.0 Pro 同步都支持多出;
+        // qwen-image-edit maxImages=1 → 自然固定 1)。读快照保 reserve==settle。
+        const editCount = clampImageCount(input.count, maxImages);
         return estimateImageEditCost(resolution, priceTier, editCount);
       }
       return estimateImageCost(
