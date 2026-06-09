@@ -39,73 +39,16 @@
   .uploadbox svg { width:34px; height:34px; color:var(--t4); margin-bottom:10px; }
   .uploadbox .soon-tag { display:inline-block; margin-top:10px; font-family:var(--f-mono); font-size:10px; color:var(--blue); border:1px solid var(--blue); padding:3px 10px; border-radius:999px; }
 
-  /* ── 图转图编辑器交互(主图大卡 + 局部重绘 + 参考图,与 ai-image-edit 一致)── */
-  .mainimg-card { border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:14px; }
-  .mainimg-stage { position:relative; min-height:150px; max-height:min(260px,30vh); display:grid; place-items:center; background:var(--field); border-radius:12px; overflow:hidden; }
-  .mainimg-stage .pv-wrap { position:relative; display:inline-block; line-height:0; max-height:100%; }
-  .mainimg-stage img.preview { max-width:100%; max-height:min(240px,28vh); border-radius:8px; display:block; }
-  .mainimg-stage canvas.maskoverlay { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; border-radius:8px; }
-  .mainimg-stage .del { position:absolute; top:10px; right:10px; width:34px; height:34px; border-radius:9px; background:rgba(0,0,0,.5); border:1px solid var(--line-hi); display:grid; place-items:center; cursor:pointer; z-index:3; }
-  .mainimg-stage .del svg { width:17px; height:17px; color:var(--t2); }
-  .mainimg-empty { width:100%; padding:34px 16px; text-align:center; cursor:pointer; }
-  .mainimg-empty svg { width:34px; height:34px; color:var(--t3); }
-  .mainimg-empty .t { font-size:13.5px; color:var(--t2); margin-top:9px; }
-  .mainimg-empty .s { font-size:11px; color:var(--t4); margin-top:3px; }
-  .maintool-bar { display:flex; align-items:center; justify-content:space-between; margin-top:12px; }
-  .maintool-bar .lbl { display:flex; align-items:center; gap:7px; font-size:13px; color:var(--t2); }
-  .maintool-bar .lbl svg { width:18px; height:18px; color:var(--blue); }
-  .maintools { display:flex; gap:4px; background:var(--field); border:1px solid var(--line); border-radius:11px; padding:4px; }
-  .maintools button { width:42px; height:34px; border-radius:8px; background:none; border:none; display:grid; place-items:center; cursor:pointer; color:var(--t3); transition:.12s; }
-  .maintools button:hover { color:var(--t1); }
-  .maintools button svg { width:18px; height:18px; }
-  #refStrip { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
-  #refStrip:empty { display:none; }
-  .refchip { position:relative; width:70px; height:70px; border-radius:10px; overflow:hidden; border:1px solid var(--line); background:var(--field); }
-  .refchip img { width:100%; height:100%; object-fit:cover; display:block; }
-  .refchip .rmx { position:absolute; top:-6px; right:-6px; width:20px; height:20px; background:var(--red,#ff5b5b); border-radius:50%; display:grid; place-items:center; color:#fff; font-size:12px; line-height:1; cursor:pointer; border:2px solid var(--card); }
-  .refbtn { display:inline-flex; align-items:center; gap:7px; background:var(--field); border:1px solid var(--line); border-radius:10px; padding:8px 14px; font-size:12.5px; color:var(--t2); cursor:pointer; margin-top:10px; }
-  .refbtn:hover { color:var(--t1); border-color:var(--line-hi); }
-  .refbtn svg { width:16px; height:16px; }
-  /* 局部重绘 大对话框 */
-  .mkov { position:fixed; inset:0; background:rgba(0,0,0,.82); backdrop-filter:blur(6px); z-index:620; display:none; align-items:center; justify-content:center; padding:24px; }
-  .mkov.on { display:flex; }
-  .mksheet { background:#19191c; border:1px solid var(--line-hi); border-radius:18px; width:min(1040px,96vw); height:94vh; max-height:94vh; display:flex; flex-direction:column; overflow:hidden; }
-  .mkhead { flex:0 0 auto; display:flex; align-items:center; justify-content:space-between; padding:16px 22px; border-bottom:1px solid var(--line); }
-  .mkhead h3 { font-size:17px; font-weight:700; margin:0; }
-  .mkhead .x { width:34px; height:34px; border-radius:9px; display:grid; place-items:center; cursor:pointer; color:var(--t3); }
-  .mkhead .x:hover { color:var(--t1); background:var(--field); }
-  .mkbody { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; padding:14px 22px; overflow:hidden; }
-  .mkhints { flex:0 0 auto; display:flex; flex-direction:column; gap:5px; margin-bottom:10px; }
-  .mkhints .h { display:flex; align-items:center; gap:9px; font-size:12.5px; color:var(--t3); }
-  .mkhints .h svg { width:16px; height:16px; color:var(--t4); }
-  .mkcanvas-wrap { flex:1 1 auto; min-height:0; display:grid; place-items:center; background:var(--field); border-radius:12px; padding:10px; overflow:hidden; }
-  .mkcanvas-wrap canvas { border-radius:8px; cursor:crosshair; touch-action:none; display:block; }
-  .mkcanvas-wrap canvas.pan { cursor:grab; }
-  .mktoolbar { flex:0 0 auto; display:flex; align-items:center; gap:12px; margin-top:12px; }
-  .mktoolbar .clear { background:var(--field); border:1px solid var(--line); color:var(--t2); border-radius:10px; padding:9px 16px; font-size:13px; cursor:pointer; }
-  .mktoolbar .clear:hover { color:var(--t1); }
-  .mktools { display:flex; align-items:center; gap:4px; background:var(--field); border:1px solid var(--line); border-radius:11px; padding:4px; margin-left:auto; }
-  .mktools button { width:40px; height:36px; border-radius:8px; background:none; border:none; display:grid; place-items:center; cursor:pointer; color:var(--t3); transition:.12s; }
-  .mktools button:hover { color:var(--t1); }
-  .mktools button.on { background:var(--blue); color:#fff; }
-  .mktools button:disabled { opacity:.35; cursor:default; }
-  .mktools button svg { width:18px; height:18px; }
-  .mktools .sep { width:1px; height:22px; background:var(--line); margin:0 3px; }
-  .mkbrush { flex:0 0 auto; display:flex; align-items:center; gap:8px; font-size:11.5px; color:var(--t3); margin-top:10px; }
-  .mkbrush input { width:180px; }
-  .mkeditcard { flex:0 0 auto; margin-top:12px; border:1px solid var(--line); border-radius:12px; background:var(--card); padding:12px; }
-  .mkeditcard .ttl { display:flex; align-items:center; gap:7px; font-size:13px; color:var(--t2); margin-bottom:9px; }
-  .mkeditcard .ttl svg { width:16px; height:16px; color:var(--blue); }
-  #mkRefStrip { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:9px; }
-  #mkRefStrip:empty { display:none; }
-  .mkeditcard textarea { width:100%; min-height:48px; max-height:80px; background:none; border:none; resize:none; color:var(--t1); font-size:13.5px; line-height:1.5; outline:none; font-family:inherit; }
-  .mkeditcard textarea::placeholder { color:var(--t4); }
-  .mkfoot { display:flex; align-items:center; justify-content:space-between; padding:14px 22px; border-top:1px solid var(--line); }
-  .mkfoot .note { font-size:12px; color:var(--t4); }
-  .mkfoot .acts { display:flex; gap:10px; }
-  .mkfoot button { border-radius:10px; padding:9px 20px; font-size:13px; cursor:pointer; border:1px solid var(--line); }
-  .mkfoot .cancel { background:var(--field); color:var(--t2); }
-  .mkfoot .ok { background:var(--t1); color:#0A0A0B; font-weight:700; border-color:var(--t1); }
+  /* ── 图转图:多图并排网格(每格一图 + 末尾「+ 上传」格)── */
+  .img-tiles { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .img-tile { position:relative; aspect-ratio:1/1; border-radius:12px; overflow:hidden; border:1px solid var(--line); background:var(--field); }
+  .img-tile img { width:100%; height:100%; object-fit:cover; display:block; }
+  .img-tile .rmx { position:absolute; top:6px; right:6px; width:22px; height:22px; background:rgba(0,0,0,.6); border-radius:50%; display:grid; place-items:center; color:#fff; font-size:13px; line-height:1; cursor:pointer; }
+  .img-tile.add { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; border:1.5px dashed var(--line-hi); cursor:pointer; color:var(--t3); transition:.15s; }
+  .img-tile.add:hover { border-color:var(--blue); color:var(--t1); background:var(--card); }
+  .img-tile.add .plus { font-size:30px; font-weight:300; line-height:1; }
+  .img-tile.add .lbl { font-size:12.5px; }
+  .img-tile.add svg { width:18px; height:18px; opacity:.7; }
 
   /* 比例选择 */
   .ratio-row { display:flex; gap:5px; flex-wrap:nowrap; align-items:stretch; }
@@ -149,29 +92,12 @@
       <button data-mode="template">模板<span class="hot">热门</span></button>
     </div>
 
-    <!-- 图转图:主图大卡(可局部重绘)+ 参考图 + 授权(与 AI 图片编辑器一致)-->
+    <!-- 图转图:多图并排网格(每格一图 + 末尾「+ 上传」格)+ 授权 -->
     <div class="mode-pane" id="pane-img2img" style="display:none">
-      <div class="mainimg-card">
-        <div class="mainimg-stage" id="mainStage"></div>
-        <div class="maintool-bar" id="mainToolBar" style="display:none">
-          <div class="lbl">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5 4 4"/><path d="M13 7 8.7 2.7a2.4 2.4 0 0 0-3.4 0L2.7 5.3a2.4 2.4 0 0 0 0 3.4L7 13"/><path d="m8 14 8-8"/><path d="m2 22 5.5-1.5L21.6 6.4a2.1 2.1 0 0 0 0-3L18.6.4a2.1 2.1 0 0 0-3 0L1.5 14.5Z"/></svg>
-            局部重绘
-          </div>
-          <div class="maintools" id="mainTools">
-            <button type="button" data-tool="brush" title="画笔 — 打开局部重绘"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/></svg></button>
-            <button type="button" data-tool="eraser" title="橡皮 — 打开局部重绘"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg></button>
-            <button type="button" data-tool="pan" title="手形 — 打开局部重绘"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2"/><path d="M14 10V4a2 2 0 0 0-2-2 2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg></button>
-          </div>
-        </div>
-      </div>
-      <div id="refStrip"></div>
-      <div class="refbtn" id="refBtn" onclick="document.getElementById('refFile').click()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>
-        <span id="refBtnLbl">参考图片 (0/2)</span>
-      </div>
-      <input type="file" id="mainFile" accept="image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif,.jpg,.jpeg,.png,.webp,.bmp,.tiff,.gif" style="display:none">
-      <input type="file" id="refFile" accept="image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif,.jpg,.jpeg,.png,.webp,.bmp,.tiff,.gif" multiple style="display:none">
+      <div class="cfg-label">图片 <span id="imgTileHint" style="color:var(--t4)">(最多 3 张图片)</span></div>
+      <div class="img-tiles" id="imgTiles"></div>
+      <div style="font-size:11px;color:var(--t4);margin-top:8px;line-height:1.5">支持 JPG / PNG / WEBP / BMP / TIFF / GIF,单张 ≤ 10MB。暂不支持 HEIC(iPhone 实况照片,请在相册导出为 JPG 或截图后上传)。</div>
+      <input type="file" id="imgFile" accept="image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif,.jpg,.jpeg,.png,.webp,.bmp,.tiff,.gif" multiple style="display:none">
       <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--t3);cursor:pointer;margin-top:12px;line-height:1.5">
         <input type="checkbox" id="consentChk" style="width:auto;margin:2px 0 0">
         <span>我已获得图中人物的授权,并对编辑内容的合规性负责。</span>
@@ -256,54 +182,6 @@
     </div>
   </div>
  </div>
-</div>
-
-<!-- 局部重绘 大对话框(图转图) -->
-<div class="mkov" id="mkOv">
-  <div class="mksheet">
-    <div class="mkhead">
-      <h3>局部重绘</h3>
-      <div class="x" onclick="closeMask(false)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
-    </div>
-    <div class="mkbody">
-      <div class="mkhints">
-        <div class="h"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Cmd/Ctrl + 滚轮缩放;</div>
-        <div class="h"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>按住空格键使用手形工具;</div>
-        <div class="h"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/></svg>按 Cmd/Ctrl+Z 复原。</div>
-      </div>
-      <div class="mkcanvas-wrap"><canvas id="mkCanvas"></canvas></div>
-      <div class="mktoolbar">
-        <button type="button" class="clear" id="mkClear">全部清除</button>
-        <div class="mktools" id="mkTools">
-          <button type="button" data-tool="brush" class="on" title="画笔"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/></svg></button>
-          <button type="button" data-tool="eraser" title="橡皮"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg></button>
-          <button type="button" data-tool="pan" title="手形"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2"/><path d="M14 10V4a2 2 0 0 0-2-2 2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg></button>
-          <div class="sep"></div>
-          <button type="button" id="mkUndo" title="撤销" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/></svg></button>
-          <button type="button" id="mkRedo" title="重做" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h1"/></svg></button>
-        </div>
-      </div>
-      <div class="mkbrush">笔刷 <input type="range" id="mkBrush" min="10" max="80" value="34"></div>
-      <div class="mkeditcard">
-        <div class="ttl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5 4 4"/><path d="m8 14 8-8"/><path d="m2 22 5.5-1.5L21.6 6.4a2.1 2.1 0 0 0 0-3L18.6.4a2.1 2.1 0 0 0-3 0L1.5 14.5Z"/></svg>编辑图片</div>
-        <div id="mkRefStrip"></div>
-        <textarea id="mkPrompt" maxlength="2000" placeholder="描述您的编辑(新增、移除、替换)。"></textarea>
-        <div class="instr-foot">
-          <div class="refbtn" style="margin-top:0" onclick="document.getElementById('refFile').click()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>
-            <span id="mkRefBtnLbl">参考图片 (0/2)</span>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="mkfoot">
-      <div class="note">在图像上涂鸦以标记 AI 编辑区域</div>
-      <div class="acts">
-        <button type="button" class="cancel" onclick="closeMask(false)">取消</button>
-        <button type="button" class="ok" onclick="closeMask(true)">继续</button>
-      </div>
-    </div>
-  </div>
 </div>
 
 <!-- 大图查看器 -->
@@ -435,182 +313,58 @@
     document.getElementById('pane-img2img').style.display = m==='img2img'?'':'none';
     document.getElementById('pane-template').style.display = m==='template'?'':'none';
     document.getElementById('pane-prompt').style.display = '';   // 三模式都用提示词
-    ta.placeholder = m==='img2img' ? '描述您的编辑(新增、移除、替换)。在主图上用画笔标记区域,或上传参考图来指定更改部分。' : '详细描述您想要创建的图像…';
-    renderModels(); // 模型按 mode 过滤(img2img 只列编辑模型)+ 图转图刷主图/参考图
+    ta.placeholder = m==='img2img' ? '上传参考图片并描述您希望如何使用它们来生成或编辑。' : '详细描述您想要创建的图像…';
+    renderModels(); // 模型按 mode 过滤(img2img 只列编辑模型)+ 图转图刷网格
     refreshBtn();
   });
 
   function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
-  // ── 图转图编辑器交互:主图(唯一可涂抹)+ 参考图 + 局部重绘大对话框(与 ai-image-edit 一致)──
+  // ── 图转图:多图并排网格(每格一图 + 末尾「+ 上传」格;无主图/参考图之分、无局部重绘)──
   const OK_TYPES=['image/jpeg','image/png','image/webp','image/bmp','image/tiff','image/gif'];
   const MAX_BYTES=10*1024*1024;
   function isHeic(f){ return /heic|heif/i.test(f.type) || /\.heic$|\.heif$/i.test(f.name||''); }
-  function validFile(f){
-    if(isHeic(f)){ window.LJToast&&window.LJToast('暂不支持 HEIC,请在相册导出为 JPG 或截图后上传','err'); return false; }
-    const okType=OK_TYPES.includes(f.type) || (!f.type && /\.(jpe?g|png|webp|bmp|tiff?|gif)$/i.test(f.name||''));
-    if(!okType){ window.LJToast&&window.LJToast('不支持的格式,请用 JPG/PNG/WEBP','err'); return false; }
-    if(f.size>MAX_BYTES){ window.LJToast&&window.LJToast('图片超过 10MB,请压缩后上传','err'); return false; }
-    return true;
-  }
-  function readDataUrl(f){ return new Promise((ok,no)=>{ const fr=new FileReader(); fr.onload=()=>ok(fr.result); fr.onerror=no; fr.readAsDataURL(f); }); }
-  function i2iModel(){ return allModels.find(x=>x.key===model); }
-  function i2iSupportsBbox(){ const m=i2iModel(); return !!(m&&m.supportsBbox); }
-  function i2iMaxInput(){ const m=i2iModel(); return m?m.maxInputImages:3; }
-  function maxRefs(){ return Math.max(0, i2iMaxInput()-1); } // 主图占 1 张
-
-  // 主图
-  let mainFile=null; // { file, dataUrl, natW, natH, bbox, strokes }
-  let baseImg=null;
-  const mainStage=document.getElementById('mainStage');
-  async function setMainImage(file){
-    if(!validFile(file)) return;
-    const dataUrl=await readDataUrl(file);
-    const im=new Image();
-    im.onload=()=>{ mainFile={ file, dataUrl, natW:im.naturalWidth, natH:im.naturalHeight, bbox:null, strokes:[] }; baseImg=im; renderMain(); refreshBtn(); scheduleEstimate(); };
-    im.src=dataUrl;
-  }
-  function renderMain(){
-    const bar=document.getElementById('mainToolBar');
-    if(!mainFile){
-      mainStage.innerHTML=`<div class="mainimg-empty" onclick="document.getElementById('mainFile').click()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>
-        <div class="t">点击或拖放主图以上传</div>
-        <div class="s">支持 JPG / PNG / WEBP / BMP / TIFF / GIF,≤ 10MB(暂不支持 HEIC)</div></div>`;
-      bar.style.display='none'; return;
-    }
-    mainStage.innerHTML=`<div class="pv-wrap"><div class="del" id="mainDel" title="删除主图"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></div><img class="preview" src="${mainFile.dataUrl}"><canvas class="maskoverlay" id="mainOverlay"></canvas></div>`;
-    document.getElementById('mainDel').onclick=()=>{ mainFile=null; baseImg=null; renderMain(); refreshBtn(); scheduleEstimate(); };
-    drawMainOverlay();
-    bar.style.display=i2iSupportsBbox()?'':'none'; // 仅支持 bbox 的模型显入口(千问编辑整图)
-  }
-  function drawMainOverlay(){
-    const cv=document.getElementById('mainOverlay'); if(!cv||!mainFile) return;
-    cv.width=mainFile.natW; cv.height=mainFile.natH;
-    const x=cv.getContext('2d'); x.clearRect(0,0,cv.width,cv.height);
-    x.fillStyle='rgba(122,90,248,.42)';
-    (mainFile.strokes||[]).forEach(([px,py,r])=>{ x.beginPath(); x.arc(px,py,r,0,Math.PI*2); x.fill(); });
-  }
-  document.getElementById('mainTools').querySelectorAll('button[data-tool]').forEach(b=>b.onclick=()=>openMask(b.dataset.tool));
-  document.getElementById('mainFile').onchange=(e)=>{ if(e.target.files[0]) setMainImage(e.target.files[0]); e.target.value=''; };
-  mainStage.addEventListener('dragover',e=>{e.preventDefault();}); mainStage.addEventListener('drop',e=>{e.preventDefault(); if(e.dataTransfer.files[0]) setMainImage(e.dataTransfer.files[0]);});
-
-  // 参考图(imageRefs[1..],不涂抹)
-  let refFiles=[]; // [{file, dataUrl}]
-  const refFileInput=document.getElementById('refFile');
-  async function addRefs(list){
+  function i2iMaxInput(){ const m=allModels.find(x=>x.key===model); return m?m.maxInputImages:3; }
+  let imgFiles=[]; // 待上传的 File(平等多图,顺序即 imageRefs 顺序)
+  const imgPreviewUrls=new WeakMap();
+  const imgFileInput=document.getElementById('imgFile'), imgTiles=document.getElementById('imgTiles');
+  function addFiles(list){
+    let added=false; const cap=i2iMaxInput();
     for(const f of list){
-      if(refFiles.length>=maxRefs()){ window.LJToast&&window.LJToast('该模型最多 '+maxRefs()+' 张参考图','err'); break; }
-      if(!validFile(f)) continue;
-      const dataUrl=await readDataUrl(f); refFiles.push({ file:f, dataUrl });
+      if(isHeic(f)){ window.LJToast&&window.LJToast('暂不支持 HEIC,请在相册导出为 JPG 或截图后上传','err'); continue; }
+      const okType=OK_TYPES.includes(f.type) || (!f.type && /\.(jpe?g|png|webp|bmp|tiff?|gif)$/i.test(f.name||''));
+      if(!okType){ window.LJToast&&window.LJToast('不支持的格式:'+(f.type||f.name||'未知')+',请用 JPG/PNG/WEBP','err'); continue; }
+      if(f.size>MAX_BYTES){ window.LJToast&&window.LJToast('图片超过 10MB('+(f.size/1048576).toFixed(1)+'MB),请压缩后上传','err'); continue; }
+      if(imgFiles.length>=cap){ window.LJToast&&window.LJToast('最多 '+cap+' 张','err'); break; }
+      imgFiles.push(f); added=true;
+      const fr=new FileReader();
+      fr.onload=()=>{ imgPreviewUrls.set(f, fr.result); renderTiles(); };
+      fr.onerror=()=>{ window.LJToast&&window.LJToast('图片读取失败','err'); };
+      fr.readAsDataURL(f);
     }
-    renderRefs(); syncMkEditCard(); refreshBtn(); scheduleEstimate();
+    if(added){ renderTiles(); refreshBtn(); scheduleEstimate(); }
   }
-  refFileInput.onchange=()=>{ addRefs(refFileInput.files); refFileInput.value=''; };
-  function refChipHtml(r,i){ return `<div class="refchip"><img src="${r.dataUrl}"><div class="rmx" data-rm="${i}">×</div></div>`; }
-  function removeRef(i){ refFiles.splice(i,1); renderRefs(); syncMkEditCard(); refreshBtn(); scheduleEstimate(); }
-  function renderRefs(){
-    const strip=document.getElementById('refStrip');
-    strip.innerHTML=refFiles.map(refChipHtml).join('');
-    strip.querySelectorAll('[data-rm]').forEach(el=>el.onclick=()=>removeRef(Number(el.dataset.rm)));
-    document.getElementById('refBtnLbl').textContent=`参考图片 (${refFiles.length}/${maxRefs()})`;
+  imgFileInput.onchange=()=>{ addFiles(imgFileInput.files); imgFileInput.value=''; };
+  function renderTiles(){
+    const cap=i2iMaxInput();
+    const tiles=imgFiles.map((f,i)=>{
+      const url=imgPreviewUrls.get(f)||'';
+      const img=url?`<img src="${url}">`:'<div style="width:100%;height:100%;display:grid;place-items:center;color:var(--t4);font-size:11px">读取中</div>';
+      return `<div class="img-tile">${img}<div class="rmx" data-rm="${i}">×</div></div>`;
+    });
+    if(imgFiles.length<cap){
+      tiles.push(`<div class="img-tile add" id="addTile"><span class="plus">+</span><span class="lbl">点击 / 拖放</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z"/></svg></div>`);
+    }
+    imgTiles.innerHTML=tiles.join('');
+    imgTiles.querySelectorAll('[data-rm]').forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); removeImg(Number(el.dataset.rm)); });
+    const at=document.getElementById('addTile'); if(at){ at.onclick=()=>imgFileInput.click();
+      at.ondragover=e=>{e.preventDefault();at.style.borderColor='var(--blue)';}; at.ondragleave=()=>at.style.borderColor='';
+      at.ondrop=e=>{e.preventDefault();at.style.borderColor=''; addFiles(e.dataTransfer.files);}; }
+    const hint=document.getElementById('imgTileHint'); if(hint) hint.textContent=`(最多 ${cap} 张图片)`;
   }
+  window.removeImg=(i)=>{ imgFiles.splice(i,1); renderTiles(); refreshBtn(); scheduleEstimate(); };
+  function onI2iModelChange(){ if(imgFiles.length>i2iMaxInput()) imgFiles=imgFiles.slice(0,i2iMaxInput()); renderTiles(); }
 
-  // ── 局部重绘大对话框 ──
-  let mkTool='brush', mkBrushSz=34, mkDrawing=false, mkScale=1, mkCtx=null, mkBaseImg=null;
-  let mkStrokes=[], mkUndoStack=[], mkRedoStack=[];
-  const mkCanvas=document.getElementById('mkCanvas');
-  function openMask(primeTool){
-    if(!mainFile || !i2iSupportsBbox()) return;
-    mkTool=primeTool||'brush'; mkStrokes=(mainFile.strokes||[]).slice(); mkUndoStack=[]; mkRedoStack=[];
-    syncMkEditCard();
-    const im=new Image();
-    im.onload=()=>{
-      mkCanvas.width=im.naturalWidth; mkCanvas.height=im.naturalHeight;
-      mkCtx=mkCanvas.getContext('2d'); mkBaseImg=im; redrawMk(); applyMkTool(); updateUndoRedo();
-      document.getElementById('mkOv').classList.add('on');
-      requestAnimationFrame(fitCanvas);
-    };
-    im.src=mainFile.dataUrl;
-  }
-  function fitCanvas(){
-    if(!mkBaseImg) return;
-    const wrap=document.querySelector('.mkcanvas-wrap'); if(!wrap) return;
-    const cs=getComputedStyle(wrap), padX=parseFloat(cs.paddingLeft)+parseFloat(cs.paddingRight), padY=parseFloat(cs.paddingTop)+parseFloat(cs.paddingBottom);
-    const availW=Math.max(40, wrap.clientWidth-padX), availH=Math.max(40, wrap.clientHeight-padY);
-    const scale=Math.min(availW/mkBaseImg.naturalWidth, availH/mkBaseImg.naturalHeight);
-    mkScale=scale;
-    mkCanvas.style.width=(mkBaseImg.naturalWidth*scale)+'px'; mkCanvas.style.height=(mkBaseImg.naturalHeight*scale)+'px';
-  }
-  window.addEventListener('resize',()=>{ if(document.getElementById('mkOv').classList.contains('on')) fitCanvas(); });
-  function redrawMk(){
-    if(!mkCtx||!mkBaseImg) return;
-    mkCtx.clearRect(0,0,mkCanvas.width,mkCanvas.height); mkCtx.drawImage(mkBaseImg,0,0);
-    mkCtx.fillStyle='rgba(122,90,248,.5)';
-    mkStrokes.forEach(([x,y,r])=>{ mkCtx.beginPath(); mkCtx.arc(x,y,r,0,Math.PI*2); mkCtx.fill(); });
-  }
-  function mkXY(e){ const r=mkCanvas.getBoundingClientRect(); const cx=(e.touches?e.touches[0].clientX:e.clientX)-r.left; const cy=(e.touches?e.touches[0].clientY:e.clientY)-r.top; return [cx*(mkCanvas.width/r.width), cy*(mkCanvas.height/r.height)]; }
-  mkCanvas.addEventListener('pointerdown',e=>{ if(mkTool==='pan')return; mkDrawing=true; mkUndoStack.push(mkStrokes.length); mkRedoStack=[]; mkPaint(mkXY(e)); });
-  mkCanvas.addEventListener('pointermove',e=>{ if(!mkDrawing||mkTool==='pan')return; mkPaint(mkXY(e)); });
-  window.addEventListener('pointerup',()=>{ if(mkDrawing){ mkDrawing=false; updateUndoRedo(); } });
-  function mkPaint([x,y]){
-    if(mkTool==='eraser'){ mkStrokes=mkStrokes.filter(([sx,sy])=>Math.hypot(sx-x,sy-y)>mkBrushSz); redrawMk(); }
-    else { mkStrokes.push([x,y,mkBrushSz]); mkCtx.fillStyle='rgba(122,90,248,.5)'; mkCtx.beginPath(); mkCtx.arc(x,y,mkBrushSz,0,Math.PI*2); mkCtx.fill(); }
-  }
-  function applyMkTool(){ document.querySelectorAll('#mkTools button[data-tool]').forEach(b=>b.classList.toggle('on', b.dataset.tool===mkTool)); mkCanvas.classList.toggle('pan', mkTool==='pan'); }
-  document.getElementById('mkTools').querySelectorAll('button[data-tool]').forEach(b=>b.onclick=()=>{ mkTool=b.dataset.tool; applyMkTool(); });
-  document.getElementById('mkBrush').oninput=(e)=>{ mkBrushSz=Number(e.target.value); };
-  document.getElementById('mkClear').onclick=()=>{ mkUndoStack.push(mkStrokes.length); mkStrokes=[]; mkRedoStack=[]; redrawMk(); updateUndoRedo(); };
-  document.getElementById('mkUndo').onclick=()=>{ if(!mkUndoStack.length)return; mkRedoStack.push(mkStrokes.slice()); const cut=mkUndoStack.pop(); mkStrokes=mkStrokes.slice(0,cut); redrawMk(); updateUndoRedo(); };
-  document.getElementById('mkRedo').onclick=()=>{ if(!mkRedoStack.length)return; mkUndoStack.push(mkStrokes.length); mkStrokes=mkRedoStack.pop(); redrawMk(); updateUndoRedo(); };
-  function updateUndoRedo(){ document.getElementById('mkUndo').disabled=!mkUndoStack.length; document.getElementById('mkRedo').disabled=!mkRedoStack.length; }
-  document.addEventListener('keydown',e=>{
-    if(!document.getElementById('mkOv').classList.contains('on'))return;
-    if(e.code==='Space'){ e.preventDefault(); if(mkTool!=='pan'){ mkCanvas.dataset.prev=mkTool; mkTool='pan'; applyMkTool(); } }
-    if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z'){ e.preventDefault(); document.getElementById('mkUndo').click(); }
-  });
-  document.addEventListener('keyup',e=>{ if(e.code==='Space'&&mkCanvas.dataset.prev){ mkTool=mkCanvas.dataset.prev; delete mkCanvas.dataset.prev; applyMkTool(); } });
-  function closeMask(commit){
-    if(commit && mainFile){ mainFile.strokes=mkStrokes.slice(); mainFile.bbox=strokesToBoxes(mkStrokes, mainFile.natW, mainFile.natH); drawMainOverlay(); scheduleEstimate(); }
-    document.getElementById('mkOv').classList.remove('on');
-  }
-  window.closeMask=closeMask;
-  function strokesToBoxes(pts, W, H){
-    if(!pts.length) return null;
-    const rects=pts.map(([x,y,r])=>[x-r,y-r,x+r,y+r]);
-    const xs=pts.map(p=>p[0]).sort((a,b)=>a-b);
-    let splitX=null;
-    for(let i=1;i<xs.length;i++){ if(xs[i]-xs[i-1] > W*0.22){ splitX=(xs[i]+xs[i-1])/2; break; } }
-    function bound(list){ const x1=Math.max(0,Math.floor(Math.min(...list.map(r=>r[0])))); const y1=Math.max(0,Math.floor(Math.min(...list.map(r=>r[1])))); const x2=Math.min(W,Math.ceil(Math.max(...list.map(r=>r[2])))); const y2=Math.min(H,Math.ceil(Math.max(...list.map(r=>r[3])))); return [x1,y1,x2,y2]; }
-    let boxes;
-    if(splitX!=null){ const left=rects.filter((_,i)=>pts[i][0]<splitX), right=rects.filter((_,i)=>pts[i][0]>=splitX); boxes=[bound(left),bound(right)].filter(b=>b[2]>b[0]&&b[3]>b[1]); }
-    else { boxes=[bound(rects)]; }
-    return boxes.slice(0,2);
-  }
-  // 对话框嵌「编辑图片」卡 ↔ 主面板提示词/参考图 双向同步
-  function syncMkEditCard(){
-    const strip=document.getElementById('mkRefStrip');
-    strip.innerHTML=refFiles.map(refChipHtml).join('');
-    strip.querySelectorAll('[data-rm]').forEach(el=>el.onclick=()=>removeRef(Number(el.dataset.rm)));
-    document.getElementById('mkRefBtnLbl').textContent=`参考图片 (${refFiles.length}/${maxRefs()})`;
-    document.getElementById('mkPrompt').value=ta.value;
-  }
-  const mkPromptEl=document.getElementById('mkPrompt');
-  mkPromptEl.addEventListener('input',()=>{ ta.value=mkPromptEl.value; cnt.textContent=ta.value.length; refreshBtn(); scheduleEstimate(); });
-
-  // 提交顺序:主图在前(imageRefs[0]),参考图随后;bboxList 对齐(主图框 + 参考图都 [])
-  function orderedI2iFiles(){ const arr=[]; if(mainFile) arr.push(mainFile.file); refFiles.forEach(r=>arr.push(r.file)); return arr; }
-  function buildBboxList(refsLen){
-    if(!i2iSupportsBbox() || !mainFile || !mainFile.bbox || !mainFile.bbox.length) return undefined;
-    const arr=[mainFile.bbox]; for(let i=1;i<refsLen;i++) arr.push([]);
-    return arr;
-  }
-  // 模型变化:参考图超额裁剪、不支持 bbox 清涂抹、刷新上限
-  function onI2iModelChange(){
-    if(refFiles.length>maxRefs()) refFiles=refFiles.slice(0,maxRefs());
-    if(!i2iSupportsBbox() && mainFile){ mainFile.bbox=null; mainFile.strokes=[]; }
-    renderMain(); renderRefs(); syncMkEditCard();
-  }
   function useSample(p){ ta.value=p; cnt.textContent=p.length; refreshBtn(); scheduleEstimate(); ta.focus(); window.LJToast&&window.LJToast('✓ 已套用示范提示词,可改后生成'); }
 
   let estTimer=null;
@@ -630,10 +384,7 @@
     let ok=hasPrompt, label='创建';
     if(!hasPrompt){ ok=false; label='请输入提示词'; }
     if(mode==='img2img'){
-      // 万相2.7(supportsBbox)允许 0 图纯生成;千问编辑需主图。主图或参考图任一即算有图。
-      const needImg = !i2iSupportsBbox();
-      const hasImg = !!mainFile || refFiles.length>0;
-      if(needImg && !hasImg){ ok=false; label='请上传主图'; }
+      if(imgFiles.length===0){ ok=false; label='请上传图片'; }
       else if(!document.getElementById('consentChk').checked){ ok=false; label='请勾选授权确认'; }
       else if(!hasPrompt){ ok=false; label='请输入编辑指令'; }
     }
@@ -641,7 +392,7 @@
     document.getElementById('cbtnLabel').textContent=label;
   }
   document.getElementById('consentChk').onchange=refreshBtn;
-  ta.addEventListener('input',()=>{ cnt.textContent=ta.value.length; var mp=document.getElementById('mkPrompt'); if(mp) mp.value=ta.value; refreshBtn(); scheduleEstimate(); });
+  ta.addEventListener('input',()=>{ cnt.textContent=ta.value.length; refreshBtn(); scheduleEstimate(); });
 
   document.querySelectorAll('.ftab').forEach(t=>t.onclick=function(){
     this.parentNode.querySelectorAll('.ftab').forEach(x=>x.classList.remove('active')); this.classList.add('active');
@@ -730,11 +481,11 @@
     }
   }
 
-  // 图转图:multipart 上传输入图(主图在前 + 参考图),拿 imageRefs
+  // 图转图:multipart 上传多图(顺序即 imageRefs 顺序),拿 imageRefs
   async function uploadInputImages(){
-    const files=orderedI2iFiles(); if(!files.length) return [];
+    if(!imgFiles.length) return [];
     const fd=new FormData();
-    files.forEach(f=>fd.append('images', f));
+    imgFiles.forEach(f=>fd.append('images', f));
     fd.append('consent','true');
     const r=await fetch('/api/image-uploads',{method:'POST',body:fd,credentials:'same-origin'});
     if(!r.ok){ const j=await r.json().catch(()=>({})); throw new Error(j.error||('上传失败 '+r.status)); }
@@ -751,17 +502,16 @@
         btn.textContent='上传中…';
         const imageRefs=await uploadInputImages();
         payload={ type:'ai_image', model, mode:'img2img', prompt, imageRefs, resolution:res, count, seed:seed||undefined };
-        const bb=buildBboxList(imageRefs.length); if(bb) payload.bboxList=bb;
       } else {
         payload={ type:'ai_image', model, mode:'text2img', prompt, count, resolution:res, ratio, seed:seed||undefined };
       }
       btn.textContent='提交中…';
       const res2=await LJ.createJob(payload);
-      jobInputs[res2.id]={ model:payload.model, mode:payload.mode, prompt, imageRefs:payload.imageRefs, count:payload.count, resolution:payload.resolution, ratio:payload.ratio, seed:payload.seed, bboxList:payload.bboxList };
+      jobInputs[res2.id]={ model:payload.model, mode:payload.mode, prompt, imageRefs:payload.imageRefs, count:payload.count, resolution:payload.resolution, ratio:payload.ratio, seed:payload.seed };
       renderCard({ id:res2.id, status:'queued', progress:0, prompt, modelLabel:findLabel(model), ratio:(mode==='img2img'?undefined:ratio), resolution:res, count });
       track(res2.id, prompt);
       ta.value=''; cnt.textContent='0';
-      if(mode==='img2img'){ mainFile=null; baseImg=null; refFiles=[]; if(mkPromptEl) mkPromptEl.value=''; renderMain(); renderRefs(); syncMkEditCard(); document.getElementById('consentChk').checked=false; }
+      if(mode==='img2img'){ imgFiles=[]; renderTiles(); document.getElementById('consentChk').checked=false; }
       scheduleEstimate();
       window.LJToast&&window.LJToast('✓ 已提交生成,可在右侧查看进度');
     }catch(e){ window.LJToast&&window.LJToast('提交失败:'+e.message,'err'); }
