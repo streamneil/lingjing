@@ -49,6 +49,18 @@
   .consent-row input { margin-top:2px; }
   .consent-row label { font-size:12px; color:var(--t3); line-height:1.5; }
 
+  /* 生成记录(与 ai-image.html 一致)──── */
+  .img-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; }
+  .img-grid img { width:100%; border-radius:12px; display:block; background:var(--field); object-fit:cover; }
+  .card-meta { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 2px; }
+  .card-meta .chip { font-size:11px; color:var(--t3); background:var(--field); border:1px solid var(--line); border-radius:7px; padding:2px 8px; }
+  .card-acts { display:flex; gap:8px; margin-top:10px; }
+  .card-acts button { display:inline-flex; align-items:center; gap:5px; font-size:12.5px; color:var(--t2); background:var(--field); border:1px solid var(--line); border-radius:9px; padding:7px 13px; cursor:pointer; transition:.15s; }
+  .card-acts button:hover { border-color:var(--line-hi); color:var(--t1); }
+  .card-acts button svg { width:14px; height:14px; }
+  .tx.clamp { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+  .tx-toggle { font-size:12px; color:var(--blue); cursor:pointer; margin-top:4px; display:inline-block; }
+
   .lightbox { position:fixed; inset:0; background:rgba(0,0,0,.88); backdrop-filter:blur(4px); z-index:500; display:none; align-items:center; justify-content:center; padding:40px; cursor:zoom-out; }
   .lightbox.on { display:flex; }
   .lightbox img { max-width:92vw; max-height:88vh; border-radius:12px; cursor:default; }
@@ -524,33 +536,82 @@
     return arr;
   }
 
+  // ── 生成记录(与 ai-image.html 一致:气泡收展 + 元信息 chips + 重新生成/下载)──
+  const jobInputs={}; // id → 原始 input(重新生成回放)
+  function findLabel(k){ const m=allModels.find(x=>x.key===k); return m?m.label:undefined; }
+  function promptBubble(p){
+    const t=esc(p||''); const long=(p||'').length>80;
+    return `<div class="fbubble"><div class="tx${long?' clamp':''}">${t}</div>${long?'<span class="tx-toggle" onclick="this.previousElementSibling.classList.toggle(\'clamp\');this.textContent=this.previousElementSibling.classList.contains(\'clamp\')?\'展开\':\'收起\'">展开</span>':''}</div>`;
+  }
+  // 元信息 chips:模型 · 清晰度 · 张数(编辑走 keyword size,无比例维度)
+  function metaChips(job){
+    const c=[]; if(job.modelLabel) c.push(job.modelLabel);
+    if(job.resolution) c.push(job.resolution);
+    if(job.count && job.count>1) c.push(job.count+' 张');
+    return c.length?`<div class="card-meta">${c.map(x=>`<span class="chip">${esc(x)}</span>`).join('')}</div>`:'';
+  }
+  function cardActs(job,ok){
+    const re=`<button onclick="regenJob('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>重新生成</button>`;
+    const dl=ok&&(job.outputUrls||[]).length?`<button onclick="downloadImgs('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg>下载</button>`:'';
+    return `<div class="card-acts">${re}${dl}</div>`;
+  }
+
   function renderCard(job){
     document.getElementById('feedEmpty').style.display='none';
+    if(job.input) jobInputs[job.id]=job.input;
     let card=document.getElementById('job-'+job.id);
     if(!card){ card=document.createElement('div'); card.className='fitem'; card.id='job-'+job.id; feedList.insertBefore(card, feedList.firstChild); }
-    const head=`<div class="fmeta"><b>AI 图片编辑</b><span class="ts">刚刚</span><span class="sp"></span>`;
+    const head=(color,led,txt)=>`<div class="fmeta"><b>AI 图片编辑</b><span class="ts">刚刚</span><span class="sp"></span><span class="st" style="color:${color}"><span class="led ${led}"></span>${txt}</span></div>`;
     if(job.status==='queued'||job.status==='running'){
       card.dataset.st='running';
-      card.innerHTML=head+`<span class="st" style="color:var(--amber)"><span class="led led-run"></span>${job.status==='queued'?'排队中':'生成中'}</span></div><div class="fbubble"><div class="tx">${esc(job.prompt||'')}</div></div><div class="fvideo proc"><div class="proc-in"><div class="spinner"></div><div class="lbl">${job.progress?('进度 '+job.progress+'%'):'已进入生成队列'}</div><div class="proc-bar"><i style="width:${job.progress||8}%"></i></div></div></div>`;
+      card.innerHTML=head('var(--amber)','led-run',job.status==='queued'?'排队中':'生成中')+promptBubble(job.prompt)+metaChips(job)+
+        `<div class="fvideo proc"><div class="proc-in"><div class="spinner"></div><div class="lbl">${job.progress?('进度 '+job.progress+'%'):'已进入生成队列'}</div><div class="proc-bar"><i style="width:${job.progress||8}%"></i></div></div></div>`;
     } else if(job.status==='done'){
       card.dataset.st='done';
-      const imgs=(job.outputUrls||[]).map(u=>`<img src="${u}" style="width:100%;border-radius:9px;cursor:zoom-in" loading="lazy" onclick="openLightbox('${u}')">`).join('');
-      card.innerHTML=head+`<span class="st" style="color:var(--green)"><span class="led led-ok"></span>已完成</span></div><div class="fbubble"><div class="tx">${esc(job.prompt||'')}</div></div><div class="img-grid">${imgs||'<div style="color:var(--t4);padding:14px">已生成</div>'}</div>`;
+      const imgs=(job.outputUrls||[]).map(u=>`<img src="${u}" style="cursor:zoom-in" loading="lazy" onclick="openLightbox('${u}')" title="点击查看大图">`).join('');
+      card.innerHTML=head('var(--green)','led-ok','已完成')+promptBubble(job.prompt)+metaChips(job)+
+        `<div class="img-grid">${imgs||'<div style="color:var(--t4);padding:20px">已生成</div>'}</div>`+cardActs(job,true);
     } else {
       card.dataset.st='failed';
-      card.innerHTML=head+`<span class="st" style="color:var(--red)"><span class="led led-err"></span>生成失败</span></div><div class="fbubble"><div class="tx">${esc(job.prompt||'')}</div></div><div class="fvideo err"><div class="err-in"><div class="ei">!</div><div class="lbl">${esc(job.error||'生成失败,请重试')}</div></div></div>`;
+      card.innerHTML=head('var(--red)','led-err','生成失败')+promptBubble(job.prompt)+metaChips(job)+
+        `<div class="fvideo err"><div class="err-in"><div class="ei">!</div><div class="lbl">${esc(job.error||'生成失败,请重试')}</div></div></div>`+cardActs(job,false);
     }
   }
-  async function track(id, prompt){ try{ await LJ.pollJob(id,(job)=>renderCard({...job,prompt})); }catch(e){} }
+
+  // 重新生成(同 input 再提交;复用原 imageRefs+授权,不重新 consent)
+  window.regenJob=async(id)=>{
+    const inp=jobInputs[id]; if(!inp){ window.LJToast&&window.LJToast('原参数丢失,无法重新生成','err'); return; }
+    try{
+      const payload={ type:'ai_image', model:inp.model, mode:'img2img', prompt:inp.prompt,
+        imageRefs:inp.imageRefs, count:inp.count, resolution:inp.resolution, seed:inp.seed };
+      if(inp.bboxList) payload.bboxList=inp.bboxList;
+      const res2=await LJ.createJob(payload);
+      renderCard({ id:res2.id, status:'queued', progress:0, prompt:inp.prompt, modelLabel:findLabel(inp.model), resolution:inp.resolution, count:inp.count });
+      track(res2.id, inp.prompt);
+      window.LJToast&&window.LJToast('✓ 已重新提交生成');
+    }catch(e){ window.LJToast&&window.LJToast('重新生成失败:'+e.message,'err'); }
+  };
+  // 下载(跨域签名 URL:fetch blob → 同源 objectURL 下载)
+  window.downloadImgs=async(id)=>{
+    const card=document.getElementById('job-'+id); const imgs=card?[...card.querySelectorAll('.img-grid img')]:[];
+    for(let i=0;i<imgs.length;i++){
+      try{ const r=await fetch(imgs[i].src); const b=await r.blob(); const u=URL.createObjectURL(b);
+        const a=document.createElement('a'); a.href=u; a.download=`lingjing-${id}-${i+1}.png`; a.click(); URL.revokeObjectURL(u);
+      }catch(e){ window.open(imgs[i].src,'_blank'); }
+    }
+  };
+
+  async function track(id, prompt){ try{ await LJ.pollJob(id,(job)=>renderCard({...job, prompt, ...(jobInputs[id]?{modelLabel:findLabel(jobInputs[id].model),resolution:jobInputs[id].resolution,count:jobInputs[id].count}:{})})); }catch(e){} }
   async function loadHistory(){
     let jobs=[]; try{ jobs=await LJ.listJobs(); }catch(e){ return; }
-    const mine=jobs.filter(j=>j.type==='ai_image');
+    // list 已带 model/mode/resolution/count/imageRefs/bboxList 等(免 N+1);只显图生图。
+    const mine=jobs.filter(j=>j.type==='ai_image' && j.mode==='img2img');
     if(!mine.length) return;
     document.getElementById('feedEmpty').style.display='none';
     for(const j of [...mine].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))){
-      try{ const d=await LJ.getJob(j.id); const pr=(d.input&&d.input.prompt)||''; if((d.input&&d.input.mode)!=='img2img') continue; renderCard({...d,prompt:pr});
-        if(d.status==='queued'||d.status==='running') track(d.id,pr);
-      }catch(e){}
+      jobInputs[j.id]={ model:j.model, mode:j.mode, prompt:j.script, imageRefs:j.imageRefs, count:j.count, resolution:j.resolution, seed:j.seed, bboxList:j.bboxList };
+      renderCard({...j, prompt:j.script, modelLabel:findLabel(j.model)});
+      if(j.status==='queued'||j.status==='running') track(j.id, j.script);
     }
   }
 
