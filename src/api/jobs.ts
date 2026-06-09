@@ -20,6 +20,7 @@ import {
   estimateImageCost,
   estimateImageEditCost,
   estimateTtsCost,
+  estimateVideoCost,
   clampImageCount,
   reserve,
   balance,
@@ -28,8 +29,9 @@ import { audit } from '../audit/index.js';
 import { isUsableAvatar } from '../avatars/index.js';
 import { isUsableVoice } from '../voices/index.js';
 import { db } from '../db/index.js';
-import type { VideoGenInput, ImageGenInput, TtsGenInput } from '../gateway/types.js';
+import type { VideoGenInput, ImageGenInput, TtsGenInput, VideoGenT2VInput } from '../gateway/types.js';
 import { getImageModel, resolutionAllowed, isKnownModel, listEnabledModels, DEFAULT_IMAGE_MODEL, tierFromPixels } from '../gateway/image-models.js';
+import { getVideoModel, isKnownVideoModel, listVideoModels, klingModeToResolution } from '../gateway/video-models.js';
 
 export const jobsRouter = Router();
 
@@ -240,11 +242,98 @@ function buildTtsJob(body: Record<string, unknown>, tid: string): JobBuildResult
   };
 }
 
+/** 文生视频参数派生(eng-review N2:build 与 /jobs/estimate 共用同一份规则,保 reserve==settle)。
+ *  从原始 body 派生出计价/快照所需的 {duration, resolution档, audio, priceTier}。
+ *  - duration:clamp 到 model durationRange。
+ *  - resolution 档:可灵由 mode 翻译(std→720P、pro→1080P,R3);V_DASH 用 body.resolution。
+ *  - audio:仅 supportsAudio 模型生效(R6);其余恒 false。 */
+function deriveVideoT2VParams(def: ReturnType<typeof getVideoModel>, body: Record<string, unknown>): {
+  duration: number; resolution: string; audio: boolean; priceTier: number;
+} {
+  const [dmin, dmax] = def.durationRange;
+  const rawDur = typeof body.duration === 'number' && Number.isFinite(body.duration)
+    ? Math.floor(body.duration) : def.defaultDuration;
+  const duration = Math.min(dmax, Math.max(dmin, rawDur));
+  const resolution = def.shape === 'V_KLING'
+    ? klingModeToResolution(typeof body.mode === 'string' ? body.mode : undefined)
+    : (typeof body.resolution === 'string' ? body.resolution : '720P');
+  const audio = def.supportsAudio ? !!body.audio : false;
+  return { duration, resolution, audio, priceTier: def.priceTier };
+}
+
+/** 校验并构建 video_t2v(文生视频)job 入参 + 计价。三模型(registry)+ shape 感知校验。 */
+function buildVideoT2VJob(body: Record<string, unknown>): JobBuildResult {
+  const modelKey = typeof body.model === 'string' ? body.model : undefined;
+  if (modelKey && !isKnownVideoModel(modelKey))
+    return { ok: false, status: 400, error: '未知视频模型' };
+  const def = getVideoModel(modelKey);
+
+  const prompt = typeof body.prompt === 'string' ? body.prompt : '';
+  if (!prompt.trim()) return { ok: false, status: 400, error: '缺少 prompt(视频描述)' };
+  if (prompt.length > def.maxPromptChars)
+    return { ok: false, status: 400, error: `提示词超过 ${def.maxPromptChars} 字上限`, extra: { length: prompt.length } };
+
+  // 比例校验(在模型允许集)
+  const ratio = typeof body.ratio === 'string' ? body.ratio : def.ratios[0]!;
+  if (!def.ratios.includes(ratio)) return { ok: false, status: 400, error: '该模型不支持所选比例' };
+
+  // shape 相关校验
+  if (def.shape === 'V_KLING') {
+    const mode = typeof body.mode === 'string' ? body.mode : 'std';
+    if (mode !== 'std' && mode !== 'pro') return { ok: false, status: 400, error: 'mode 仅支持 std / pro' };
+  } else {
+    const resolution = typeof body.resolution === 'string' ? body.resolution : '720P';
+    if (!def.resolutions.includes(resolution as '720P' | '1080P'))
+      return { ok: false, status: 400, error: '该模型不支持所选分辨率' };
+  }
+  // audio 仅 supportsAudio 模型可开(R5:happyhorse/wan2.7 开音频 → 400,不静默吞)
+  if (body.audio === true && !def.supportsAudio)
+    return { ok: false, status: 400, error: '该模型不支持有声视频' };
+  // duration 范围校验(超界 400,不静默 clamp 让用户以为生效)
+  if (body.duration !== undefined) {
+    const d = body.duration;
+    const [dmin, dmax] = def.durationRange;
+    if (typeof d !== 'number' || !Number.isInteger(d) || d < dmin || d > dmax)
+      return { ok: false, status: 400, error: `时长需为 ${dmin}–${dmax} 秒之间的整数` };
+  }
+  if (body.seed !== undefined && (typeof body.seed !== 'number' || body.seed < 0 || body.seed > 2147483647))
+    return { ok: false, status: 400, error: 'seed 需在 0–2147483647 之间' };
+
+  const { duration, resolution, audio, priceTier } = deriveVideoT2VParams(def, body);
+
+  const input: VideoGenT2VInput = { model: def.key, prompt, ratio };
+  if (def.shape === 'V_KLING') {
+    input.mode = (typeof body.mode === 'string' && body.mode === 'pro') ? 'pro' : 'std';
+    if (audio) input.audio = true;
+  } else {
+    input.resolution = resolution;
+    if (def.supportsNegative && typeof body.negativePrompt === 'string' && body.negativePrompt.trim())
+      input.negativePrompt = body.negativePrompt;
+    if (def.supportsPromptExtend && typeof body.promptExtend === 'boolean')
+      input.promptExtend = body.promptExtend;
+  }
+  input.duration = duration;
+  if (typeof body.seed === 'number') input.seed = body.seed;
+  // 快照(reserve==settle):duration/res档/audio/priceTier 提交时定死。
+  input.durationSnapshot = duration;
+  input.resSnapshot = resolution;
+  input.audioSnapshot = audio;
+  input.priceTierSnapshot = priceTier;
+
+  return {
+    ok: true,
+    type: 'video_t2v',
+    input: input as unknown as Record<string, unknown>,
+    cost: estimateVideoCost(duration, priceTier, resolution, audio),
+  };
+}
+
 // 封闭 allowlist:type → builder。Object.create(null) 防原型链污染(type='__proto__' 取不到)。
 const JOB_BUILDERS: Record<string, (body: Record<string, unknown>, tid: string) => JobBuildResult> =
   Object.assign(Object.create(null), {
     video: buildVideoJob,
     ai_image: (body: Record<string, unknown>) => buildImageJob(body),
+    video_t2v: (body: Record<string, unknown>) => buildVideoT2VJob(body),
     tts: buildTtsJob,
   });
 
@@ -371,6 +460,14 @@ jobsRouter.post('/jobs/estimate', requireAuth, (req: Request, res: Response) => 
       cost: estimateImageCost(clampImageCount(body.count, def.maxImages), res2, def.priceTier, def.maxImages),
     });
   }
+  if (type === 'video_t2v') {
+    // eng-review N1/N2:与 buildVideoT2VJob 逐字节一致(同 deriveVideoT2VParams + 同 audio 校验)。
+    const def = getVideoModel(typeof body.model === 'string' ? body.model : undefined);
+    if (body.audio === true && !def.supportsAudio)
+      return res.status(400).json({ error: '该模型不支持有声视频' });
+    const { duration, resolution, audio, priceTier } = deriveVideoT2VParams(def, body);
+    return res.json({ cost: estimateVideoCost(duration, priceTier, resolution, audio) });
+  }
   if (type === 'tts') {
     return res.json({ cost: estimateTtsCost(typeof body.text === 'string' ? body.text.length : 0) });
   }
@@ -400,6 +497,24 @@ jobsRouter.get('/image-models', requireAuth, (_req: Request, res: Response) => {
   res.json({ models, default: def });
 });
 
+// 文生视频模型清单 — 前端下拉单一真相源(只吐 UI 能力字段,不漏 modelId/priceTier)。
+jobsRouter.get('/video-models', requireAuth, (_req: Request, res: Response) => {
+  const models = listVideoModels().map((d) => ({
+    key: d.key,
+    label: d.label,
+    shape: d.shape, // 前端据此显 mode(V_KLING)或 resolution 段控(V_DASH)
+    resolutions: d.resolutions,
+    ratios: d.ratios,
+    durationRange: d.durationRange,
+    defaultDuration: d.defaultDuration,
+    maxPromptChars: d.maxPromptChars,
+    supportsAudio: d.supportsAudio, // 前端据此显/隐有声开关(仅可灵)
+    supportsNegative: d.supportsNegative, // wan2.7
+    supportsPromptExtend: d.supportsPromptExtend, // wan2.7
+  }));
+  res.json({ models, default: getVideoModel().key });
+});
+
 // 作品列表 — 任何登录角色(含 viewer)可读本租户作品
 jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
   const rows = listJobsForTenant(req.user!.tenantId);
@@ -417,6 +532,7 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
           script?: string; prompt?: string; text?: string;
           model?: string; mode?: string; source?: string; ratio?: string; resolution?: string; count?: number;
           imageRefs?: string[]; seed?: number; width?: number; height?: number; bboxList?: number[][][];
+          duration?: number; audio?: boolean; negativePrompt?: string; promptExtend?: boolean;
         };
         script = inp.script ?? inp.prompt ?? inp.text ?? '';
         if (j.type === 'ai_image') {
@@ -429,6 +545,15 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
             model: inp.model, modelLabel, mode: inp.mode, source: inp.source, // source:记录归属页
             ratio: inp.ratio, resolution: inp.resolution, sizeLabel, count: inp.count,
             imageRefs: inp.imageRefs, inputUrls, seed: inp.seed, width: inp.width, height: inp.height, bboxList: inp.bboxList, // 重新生成回放用
+          };
+        } else if (j.type === 'video_t2v') {
+          // 文生视频卡片:显模型/分辨率/时长/比例;回放 mode/audio/negative/promptExtend(重新生成/重新提示)。
+          const vdef = getVideoModel(inp.model);
+          const sizeLabel = inp.resolution || (vdef.shape === 'V_KLING' ? klingModeToResolution(inp.mode) : '720P');
+          meta = {
+            model: inp.model, modelLabel: vdef.label, mode: inp.mode,
+            ratio: inp.ratio, resolution: inp.resolution, sizeLabel, duration: inp.duration,
+            audio: inp.audio, negativePrompt: inp.negativePrompt, promptExtend: inp.promptExtend, seed: inp.seed,
           };
         }
       } catch {

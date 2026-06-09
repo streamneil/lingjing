@@ -37,7 +37,7 @@
     {
       key: 'text2video', label: '文字转影片',
       icon: '<path d="M5 6h14M9 6v12M7 18h4"/><path d="m16 11 4-2v8l-4-2"/>',
-      enabled: false, outputKind: 'video', tier: 'later',
+      enabled: true, outputKind: 'video', page: 'text2video.html', tier: 'live',
     },
     {
       key: 'ai-image', label: 'AI 图片',

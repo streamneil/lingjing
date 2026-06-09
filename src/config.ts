@@ -68,6 +68,9 @@ export const config = {
     pollIntervalMs: Number(optional('POLL_INTERVAL_MS', '3000')),
     // worker 任务超时上限(防永久 running 的静默失败,见 eng-review failure mode)
     jobTimeoutMs: Number(optional('POLL_TIMEOUT_MS', '600000')),
+    // 文生视频专用超时(eng-review A1):t2v 单条 1-5 分 + 免费档并发=1 排队共享 deadline,
+    // 复用 s2v 的 10 分易误杀 → 独立 15 分,留排队+生成双重余量。
+    videoT2vTimeoutMs: Number(optional('VIDEO_T2V_TIMEOUT_MS', '900000')),
   },
 
   // ── MinIO（S3 兼容，托管/私有化同构）──

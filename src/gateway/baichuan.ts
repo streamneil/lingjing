@@ -11,6 +11,7 @@
 
 import { config } from '../config.js';
 import { getImageModel, sizeParams } from './image-models.js';
+import { getVideoModel } from './video-models.js';
 import type {
   CapabilityGateway,
   VideoSubmitUrls,
@@ -20,6 +21,7 @@ import type {
   ImageJobResult,
   SyncImageGateway,
   ImageEditInput,
+  VideoGenT2VInput,
 } from './types.js';
 
 function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
@@ -184,6 +186,54 @@ export class BaichuanGateway implements CapabilityGateway, SyncImageGateway {
     const taskId: string | undefined = json?.output?.task_id;
     if (!taskId) {
       throw new Error(`万相2.7 编辑未返回 task_id: ${JSON.stringify(json?.output ?? json)}`);
+    }
+    return taskId;
+  }
+
+  /** 提交文生视频(HappyHorse/万相2.7/可灵)。按 shape 组体,统一端点 + 异步头,取 output.task_id。
+   *
+   *  请求体形(spec review R3 + 文档核实):
+   *    V_DASH(happyhorse/wan2.7):
+   *      input: { prompt[, negative_prompt] }
+   *      parameters: { resolution, ratio, duration, watermark:false[, prompt_extend][, seed] }
+   *    V_KLING(可灵,modelId 带 kling/ 前缀):
+   *      input: { prompt }
+   *      parameters: { mode, aspect_ratio, duration, audio, watermark:false }
+   *
+   *  ⚠️ 成品轮询走 fetchJobStatus(三家与 s2v 同 /tasks/{id} + 顶层 output.video_url)。
+   *     T2 硬验证门:实测三家真实回包字段 + 状态字面量 + 可灵 watermark_video_url(取非水印 video_url)。 */
+  async submitVideoT2V(input: VideoGenT2VInput): Promise<string> {
+    const def = getVideoModel(input.model);
+    const duration = input.durationSnapshot ?? input.duration ?? def.defaultDuration;
+    const parameters: Record<string, unknown> = { duration, watermark: false };
+    const reqInput: Record<string, unknown> = { prompt: input.prompt };
+
+    if (def.shape === 'V_KLING') {
+      // 可灵:mode(std/pro)+ aspect_ratio + audio。无 resolution 字段(R3:档由 mode 决定)。
+      parameters.mode = input.mode ?? 'std';
+      parameters.aspect_ratio = input.ratio ?? '16:9';
+      parameters.audio = def.supportsAudio ? !!input.audio : false;
+    } else {
+      // V_DASH:resolution(720P/1080P)+ ratio。
+      parameters.resolution = input.resolution ?? '720P';
+      parameters.ratio = input.ratio ?? '16:9';
+      if (def.supportsPromptExtend) parameters.prompt_extend = input.promptExtend ?? true;
+      if (def.supportsNegative && input.negativePrompt) reqInput.negative_prompt = input.negativePrompt;
+    }
+    if (typeof input.seed === 'number') parameters.seed = input.seed;
+
+    const { status, json } = await httpJson(
+      'POST',
+      '/services/aigc/video-generation/video-synthesis',
+      { model: def.modelId, input: reqInput, parameters },
+      { 'X-DashScope-Async': 'enable' },
+    );
+    if (status !== 200) {
+      throw new Error(`文生视频提交失败 HTTP ${status}: ${JSON.stringify(json?.message ?? json)}`);
+    }
+    const taskId: string | undefined = json?.output?.task_id;
+    if (!taskId) {
+      throw new Error(`文生视频未返回 task_id: ${JSON.stringify(json?.output ?? json)}`);
     }
     return taskId;
   }

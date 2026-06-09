@@ -10,7 +10,7 @@ import { config } from '../config.js';
 import { getGateway } from '../gateway/baichuan.js';
 import { synthesizeSpeech } from '../gateway/cosyvoice.js';
 import { getMediaPublisher, tenantDelivery } from '../gateway/media-publisher.js';
-import type { VideoGenInput, VideoSubmitUrls, ImageGenInput, TtsGenInput } from '../gateway/types.js';
+import type { VideoGenInput, VideoSubmitUrls, ImageGenInput, TtsGenInput, VideoGenT2VInput, ProviderJobStatus } from '../gateway/types.js';
 import { storage } from '../storage/index.js';
 import { listPresets as listAvatarPresets, getAvatar } from '../avatars/index.js';
 import { isPreset as isPresetVoice, getVoice } from '../voices/index.js';
@@ -45,6 +45,55 @@ import {
 } from './index.js';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** 厂商任务轮询循环关心的最小字段(各 fetch 返回的具体类型须结构兼容它)。 */
+interface PollShape {
+  status: ProviderJobStatus;
+  progress?: number;
+  error?: string;
+}
+
+/**
+ * 通用异步任务轮询(eng-review CQ1:唯一一份循环,renderSegment / runImageGenJob /
+ * runVideoT2VJob 三处共用,消除 3 份拷贝)。泛型 T 让调用方拿回完整结果取自己的字段
+ * (s2v 取 videoUrl、图片取 imageUrls、t2v 取 videoUrl)。
+ *
+ *   ┌─ 轮询循环 ─────────────────────────────────────────────┐
+ *   │  超 deadline → 抛超时(sawRunning 区分「排队/生成」文案)   │
+ *   │  fetchFn() → status                                     │
+ *   │    running  → sawRunning=true; onProgress(progress??50)  │
+ *   │    其它     → onProgress(progress??5)                    │
+ *   │    succeeded→ return result(调用方取自己的字段)          │
+ *   │    failed   → 抛 error                                   │
+ *   │  sleep(pollIntervalMs) → 下一轮                          │
+ *   └─────────────────────────────────────────────────────────┘
+ *
+ * @param fetchFn 拉一次厂商状态;@param onProgress 进度回调(0-100);
+ * @param deadline 整 job 共享的超时上限(epoch ms,调用方按工具类型传不同上限)。
+ */
+export async function pollUntilDone<T extends PollShape>(
+  fetchFn: () => Promise<T>,
+  onProgress: (pct: number) => void,
+  deadline: number,
+): Promise<T> {
+  let sawRunning = false;
+  for (;;) {
+    if (Date.now() > deadline) {
+      throw new Error(
+        sawRunning
+          ? '生成超时,已放弃'
+          : '排队超时:生成服务繁忙(免费档同时只跑 1 个任务),请稍后重试或减少并发',
+      );
+    }
+    const r = await fetchFn();
+    if (r.status === 'running') sawRunning = true;
+    if (typeof r.progress === 'number') onProgress(r.progress);
+    else onProgress(r.status === 'running' ? 50 : 5);
+    if (r.status === 'succeeded') return r;
+    if (r.status === 'failed') throw new Error(r.error ?? '厂商任务失败');
+    await sleep(config.baichuan.pollIntervalMs);
+  }
+}
 
 /** 把 avatarRef 解析为公网可访问的脸图 URL(预置=外链;自定义=经发布策略转公网 URL)。 */
 async function resolveImageUrl(avatarRef: string, tenantId: string): Promise<string> {
@@ -116,27 +165,10 @@ async function renderSegment(
   const providerTaskId = await gateway.submitVideo(urls);
   setProviderTaskId(job.id, providerTaskId);
 
-  // 3. 轮询直到完成 / 失败 / 超时(超时上限为整 job 共享,防永久 running)
-  let videoUrl: string | undefined;
-  let sawRunning = false;
-  for (;;) {
-    if (Date.now() > deadline) {
-      throw new Error(
-        sawRunning
-          ? `生成超时(>${config.baichuan.jobTimeoutMs}ms),已放弃`
-          : `排队超时:生成服务繁忙(免费档同时只跑 1 个任务),请稍后重试或减少并发`,
-      );
-    }
-    const r = await gateway.fetchJobStatus(providerTaskId);
-    if (r.status === 'running') sawRunning = true;
-    // 段内进度细分(0-100)再由 onProgress 映射到整 job 的该段区间。
-    if (typeof r.progress === 'number') onProgress(r.progress);
-    else if (r.status === 'running') onProgress(50);
-    else onProgress(5);
-    if (r.status === 'succeeded') { videoUrl = r.videoUrl; break; }
-    if (r.status === 'failed') throw new Error(r.error ?? '厂商任务失败');
-    await sleep(config.baichuan.pollIntervalMs);
-  }
+  // 3. 轮询直到完成 / 失败 / 超时(超时上限为整 job 共享,防永久 running)。
+  //    eng-review CQ1:走共享 pollUntilDone(段内进度由 onProgress 映射到整 job 的该段区间)。
+  const done = await pollUntilDone(() => gateway.fetchJobStatus(providerTaskId), onProgress, deadline);
+  const videoUrl = done.videoUrl;
   if (!videoUrl) throw new Error('厂商成功但未返回成品 URL');
 
   // 4. 段成品抓为 Buffer(拼接前不落最终库)
@@ -207,6 +239,61 @@ async function runVideoJob(job: JobRow): Promise<void> {
   settle(job.tenant_id, job.id, actualCost);
 }
 
+/** 处理一个文生视频(text2video)job。与数字人 s2v 不同形状:纯文生视频,无 TTS、无图、无分段。
+ *
+ *   prompt 送审 → submitVideoT2V(task_id) → 轮询(独立 15 分超时,eng A1)→ 取归一 r.videoUrl(R2)
+ *     → fetch Buffer → moderateOutput → applyAiLabel(同 s2v 合规尾段,eng A2)→ 落 MinIO → markDone → settle。
+ *
+ * 抛错由调用方捕获并标 failed(失败隔离)。 */
+async function runVideoT2VJob(job: JobRow): Promise<void> {
+  const input = JSON.parse(job.input_json) as VideoGenT2VInput;
+
+  // 1. 生成前送审(提示词级)
+  const pre = await moderatePrompt(input.prompt);
+  if (!pre.allowed) throw new Error(`送审拒绝:${pre.reason}`);
+
+  // 2. 网关提交(按 shape 组体,返回 task_id)
+  const gateway = getGateway(job.tenant_id);
+  const providerTaskId = await gateway.submitVideoT2V(input);
+  setProviderTaskId(job.id, providerTaskId);
+
+  // 3. 轮询(t2v 专用更长超时:1-5 分生成 + 免费档并发=1 排队,eng A1)。取归一 r.videoUrl(R2)。
+  const deadline = Date.now() + config.baichuan.videoT2vTimeoutMs;
+  const done = await pollUntilDone(
+    () => gateway.fetchJobStatus(providerTaskId),
+    (pct) => updateProgress(job.id, Math.min(99, pct)),
+    deadline,
+  );
+  const videoUrl = done.videoUrl;
+  if (!videoUrl) throw new Error('厂商成功但未返回成品 URL');
+
+  // 4. 抓成品 MP4 为 Buffer
+  const resp = await fetch(videoUrl);
+  if (!resp.ok) throw new Error(`抓取成品失败 ${resp.status}`);
+  const buf = Buffer.from(await resp.arrayBuffer());
+
+  // 5. 成品送审
+  const post = await moderateOutput('video');
+  if (!post.allowed) throw new Error(`成品送审拒绝:${post.reason}`);
+
+  // 6. (按租户合规开关)ffmpeg 打 AI 标识 → 落 MinIO(同 s2v 合规尾段,eng A2)
+  const objectKey = `videos/${job.tenant_id}/${job.id}.mp4`;
+  const labelCfg = getAiLabelConfig(job.tenant_id);
+  let aiLabel: string;
+  if (labelCfg.enabled) {
+    const { buffer, applied } = await applyAiLabel(buf, { text: labelCfg.text });
+    await storage.putObject(objectKey, buffer, 'video/mp4');
+    aiLabel = applied ? 'postprocess' : 'none';
+  } else {
+    await storage.putObject(objectKey, buf, 'video/mp4');
+    aiLabel = 'disabled';
+  }
+
+  markDone(job.id, objectKey, aiLabel);
+  // 成功结算:读快照计价(与提交 reserve 同一 costFor → 差额0,reserve==settle)
+  settle(job.tenant_id, job.id, costFor('video_t2v', input as unknown as Record<string, unknown>));
+}
+
 /** 共享尾段:百炼图 URL → 拉进自有存储存 key → markDone(JSON key 数组,kind=image)→ settle。
  *  文生图/图生图两路都用(DRY)。
  *  ⚠️ output_url 存的是存储 key 不是 URL;百炼图 URL 24h 过期,必须 putObjectFromUrl 拉进来(外部声音 P1)。 */
@@ -237,26 +324,14 @@ async function runImageGenJob(job: JobRow): Promise<void> {
   const providerTaskId = await gateway.submitImage(input);
   setProviderTaskId(job.id, providerTaskId);
 
+  // eng-review CQ1:走共享 pollUntilDone(进度封顶 99,留成功后置 100 的余地)。
   const deadline = Date.now() + config.baichuan.jobTimeoutMs;
-  let imageUrls: string[] = [];
-  let sawRunning = false;
-  for (;;) {
-    if (Date.now() > deadline) {
-      throw new Error(
-        sawRunning
-          ? `生成超时(>${config.baichuan.jobTimeoutMs}ms),已放弃`
-          : `排队超时:生成服务繁忙(免费档同时只跑 1 个任务),请稍后重试`,
-      );
-    }
-    const r = await gateway.fetchImageStatus(providerTaskId);
-    if (r.status === 'running') sawRunning = true;
-    if (typeof r.progress === 'number') updateProgress(job.id, Math.min(99, r.progress));
-    else updateProgress(job.id, r.status === 'running' ? 50 : 5);
-    if (r.status === 'succeeded') { imageUrls = r.imageUrls ?? []; break; }
-    if (r.status === 'failed') throw new Error(r.error ?? '厂商图片任务失败');
-    await sleep(config.baichuan.pollIntervalMs);
-  }
-  await finalizeImageJob(job, input, imageUrls);
+  const done = await pollUntilDone(
+    () => gateway.fetchImageStatus(providerTaskId),
+    (pct) => updateProgress(job.id, Math.min(99, pct)),
+    deadline,
+  );
+  await finalizeImageJob(job, input, done.imageUrls ?? []);
 }
 
 /** 图生图(img2img,qwen-image-edit,同步)。抛错由调用方捕获并标 failed(失败隔离)。
@@ -347,28 +422,16 @@ async function runImageEditAsyncJob(job: JobRow): Promise<void> {
   const providerTaskId = await gateway.submitImageEdit(input);
   setProviderTaskId(job.id, providerTaskId);
 
+  // eng-review CQ1:走共享 pollUntilDone(进度封顶 99)。
   const deadline = Date.now() + config.baichuan.jobTimeoutMs;
-  let imageUrls: string[] = [];
-  let sawRunning = false;
-  for (;;) {
-    if (Date.now() > deadline) {
-      throw new Error(
-        sawRunning
-          ? `生成超时(>${config.baichuan.jobTimeoutMs}ms),已放弃`
-          : `排队超时:生成服务繁忙(免费档同时只跑 1 个任务),请稍后重试`,
-      );
-    }
-    const r = await gateway.fetchImageStatus(providerTaskId);
-    if (r.status === 'running') sawRunning = true;
-    if (typeof r.progress === 'number') updateProgress(job.id, Math.min(99, r.progress));
-    else updateProgress(job.id, r.status === 'running' ? 50 : 5);
-    if (r.status === 'succeeded') { imageUrls = r.imageUrls ?? []; break; }
-    if (r.status === 'failed') throw new Error(r.error ?? '厂商图片任务失败');
-    await sleep(config.baichuan.pollIntervalMs);
-  }
+  const done = await pollUntilDone(
+    () => gateway.fetchImageStatus(providerTaskId),
+    (pct) => updateProgress(job.id, Math.min(99, pct)),
+    deadline,
+  );
   // finalize 用原始快照 input(含 count/bboxList),settle 读快照保 reserve==settle;
   // 但 imageRefs 已被改成公网 URL——costFor 不读 imageRefs,无碍。
-  await finalizeImageJob(job, input, imageUrls);
+  await finalizeImageJob(job, input, done.imageUrls ?? []);
 }
 
 /** AI 图片 job 按 (model.shape, mode) 分发(eng 外部声音 P1-b:一个模型不同 shape/mode 请求体不同)。
@@ -438,6 +501,8 @@ async function processJob(job: JobRow): Promise<void> {
   switch (job.type) {
     case 'video':
       return runVideoJob(job);
+    case 'video_t2v':
+      return runVideoT2VJob(job);
     case 'ai_image':
       return runImageJob(job);
     case 'tts':
