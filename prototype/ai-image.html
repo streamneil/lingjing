@@ -18,6 +18,13 @@
   .card-acts button svg { width:14px; height:14px; }
   .tx.clamp { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
   .tx-toggle { font-size:12px; color:var(--blue); cursor:pointer; margin-top:4px; display:inline-block; }
+  /* 大图查看器(点击图片放大,可关闭)*/
+  .lightbox { position:fixed; inset:0; background:rgba(0,0,0,.88); backdrop-filter:blur(4px); z-index:500; display:none; align-items:center; justify-content:center; padding:40px; cursor:zoom-out; }
+  .lightbox.on { display:flex; animation:fade .2s var(--ease-out); }
+  .lightbox img { max-width:92vw; max-height:88vh; border-radius:12px; box-shadow:0 30px 80px -20px rgba(0,0,0,.8); cursor:default; }
+  .lightbox .lb-x { position:absolute; top:22px; right:26px; width:42px; height:42px; border-radius:50%; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.18); display:grid; place-items:center; cursor:pointer; transition:.15s; }
+  .lightbox .lb-x:hover { background:rgba(255,255,255,.22); }
+  .lightbox .lb-x svg { width:22px; height:22px; color:#fff; }
 
   /* 二级 tab(图片转图片/文字转图片/模板)*/
   .sub-tabs { display:flex; gap:4px; background:var(--field); border:1px solid var(--line); border-radius:var(--r); padding:4px; margin-bottom:14px; }
@@ -122,7 +129,7 @@
           <div class="pop-label">清晰度</div>
           <div class="seg-row" id="resSeg"></div>
           <div class="pop-label">输出张数</div>
-          <div class="seg-row" id="countSeg"><div class="seg on" data-n="1">1</div><div class="seg" data-n="2">2</div><div class="seg" data-n="3">3</div><div class="seg" data-n="4">4</div></div>
+          <div class="seg-row" id="countSeg"></div>
         </div>
       </div>
       <div class="pop-anchor">
@@ -168,6 +175,12 @@
  </div>
 </div>
 
+<!-- 大图查看器 -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <div class="lb-x" onclick="closeLightbox()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
+  <img id="lightboxImg" src="" alt="" onclick="event.stopPropagation()">
+</div>
+
 <script src="shell.js"></script>
 <script src="tools.js"></script>
 <script src="api.js"></script>
@@ -191,7 +204,8 @@
       <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg></div>`).join('')
       || '<div class="pop-opt"><span class="nm">该模式暂无可用模型</span></div>';
     modelOpts.querySelectorAll('.pop-opt[data-k]').forEach(el=>el.onclick=()=>{ model=el.dataset.k; renderModels(); closePops(); scheduleEstimate(); });
-    renderRes(); // 清晰度按所选模型 maxResolution(item5)
+    renderRes();   // 清晰度按所选模型 maxResolution(item5)
+    renderCount(); // 张数按所选模型 maxImages(修:固定模型只显 1 张,不给假选项)
     syncPills();
   }
   // ── 清晰度按模型支持动态渲染(item5)──
@@ -204,6 +218,19 @@
     resSeg.innerHTML=opts.map(r=>`<div class="seg${r===res?' on':''}" data-res="${r}">${r}</div>`).join('');
     resSeg.querySelectorAll('.seg').forEach(s=>s.onclick=()=>{ resSeg.querySelectorAll('.seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); res=s.dataset.res; syncPills(); scheduleEstimate(); });
   }
+  // ── 输出张数按模型 maxImages 动态(修「选多张仍出 1 张」:固定 1 张的模型不给 2/3/4 假选项)──
+  function renderCount(){
+    const m=allModels.find(x=>x.key===model);
+    const maxN=Math.min(4, (m&&m.maxImages)||1); // UI 上限 4(qwen-2.0 支持 6,但 UI 给 1-4 够用)
+    const opts=[]; for(let i=1;i<=maxN;i++) opts.push(i);
+    if(count>maxN) count=maxN;
+    const countSeg=document.getElementById('countSeg');
+    countSeg.innerHTML=opts.map(n=>`<div class="seg${n===count?' on':''}" data-n="${n}">${n}</div>`).join('');
+    countSeg.querySelectorAll('.seg').forEach(s=>s.onclick=()=>{ countSeg.querySelectorAll('.seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); count=parseInt(s.dataset.n,10); syncPills(); scheduleEstimate(); });
+    // 单张模型把「输出张数」标签也隐去(无意义)
+    const lbl=countSeg.previousElementSibling; if(lbl&&lbl.classList.contains('pop-label')) lbl.style.display=maxN<=1?'none':'';
+    countSeg.style.display=maxN<=1?'none':'';
+  }
 
   // ── popover 开关 ──
   function togglePop(which){
@@ -213,6 +240,10 @@
   }
   function closePops(){ document.querySelectorAll('.pop.show').forEach(p=>p.classList.remove('show')); document.querySelectorAll('.cpill.open').forEach(p=>p.classList.remove('open')); document.getElementById('popOv').classList.remove('show'); }
   window.togglePop=togglePop; window.closePops=closePops;
+  // ── 大图查看器(点击图片放大,点空白/X/Esc 关闭)──
+  window.openLightbox=(url)=>{ document.getElementById('lightboxImg').src=url; document.getElementById('lightbox').classList.add('on'); };
+  window.closeLightbox=()=>{ document.getElementById('lightbox').classList.remove('on'); document.getElementById('lightboxImg').src=''; };
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeLightbox(); });
   document.addEventListener('keydown',e=>{ if(e.key==='Escape') closePops(); });
   document.getElementById('seedInput').addEventListener('input',e=>{ seed=e.target.value.replace(/[^0-9]/g,''); e.target.value=seed; });
 
@@ -236,8 +267,7 @@
     ratio=c.dataset.ratio; syncPills(); scheduleEstimate();
   });
 
-  // ── 输出张数 段选(清晰度由 renderRes 动态绑定,item5)──
-  document.querySelectorAll('#countSeg .seg').forEach(s=>s.onclick=()=>{ document.querySelectorAll('#countSeg .seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); count=parseInt(s.dataset.n,10); syncPills(); scheduleEstimate(); });
+  // ── 清晰度/张数由 renderRes/renderCount 按模型动态绑定 ──
 
   // ── 二级 tab 切换 ──
   document.querySelectorAll('#subTabs button').forEach(b=>b.onclick=()=>{
@@ -341,7 +371,7 @@
         `<div class="fvideo proc"><div class="proc-in"><div class="spinner"></div><div class="lbl">${job.progress?('进度 '+job.progress+'%'):'已进入生成队列'}</div><div class="proc-bar"><i style="width:${job.progress||8}%"></i></div></div></div>`;
     } else if(job.status==='done'){
       card.dataset.st='done';
-      const imgs=(job.outputUrls||[]).map(u=>`<img src="${u}" style="aspect-ratio:${ar}" onclick="window.open('${u}','_blank')" title="点击查看大图">`).join('');
+      const imgs=(job.outputUrls||[]).map(u=>`<img src="${u}" style="aspect-ratio:${ar};cursor:zoom-in" onclick="openLightbox('${u}')" title="点击查看大图">`).join('');
       card.innerHTML=head('var(--green)','led-ok','已完成')+promptBubble(job.prompt)+metaChips(job)+
         `<div class="img-grid">${imgs||'<div style="color:var(--t4);padding:20px">已生成</div>'}</div>`+cardActs(job,true);
     } else {
