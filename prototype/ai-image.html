@@ -565,7 +565,8 @@
 
   async function loadHistory(){
     let jobs=[]; try{ jobs=await LJ.listJobs(); }catch(e){ return; }
-    const mine=jobs.filter(j=>j.type==='ai_image');
+    // 职责分:AI 图片记录只显文生图(text2img / 老 job 无 mode);图生图归 AI 图片编辑器,避免两页重复。
+    const mine=jobs.filter(j=>j.type==='ai_image' && j.mode!=='img2img');
     if(!mine.length) return;
     document.getElementById('sampleGallery').style.display='none';
     // list 已带 model/ratio/resolution/imageRefs 等(免 N+1);存 input 供重新生成。
@@ -604,13 +605,18 @@
       }
       btn.textContent='提交中…';
       const res2=await LJ.createJob(payload);
-      jobInputs[res2.id]={ model:payload.model, mode:payload.mode, prompt, imageRefs:payload.imageRefs, count:payload.count, resolution:payload.resolution, ratio:payload.ratio, seed:payload.seed };
-      renderCard({ id:res2.id, status:'queued', progress:0, prompt, modelLabel:findLabel(model), ratio:(mode==='img2img'?undefined:ratio), resolution:res, count });
-      track(res2.id, prompt);
       ta.value=''; cnt.textContent='0';
-      if(mode==='img2img'){ imgFiles=[]; clearReuse(); renderTiles(); document.getElementById('consentChk').checked=false; }
+      if(mode==='img2img'){
+        // 图生图记录归 AI 图片编辑器(职责分,不在本页记录流渲染,免与编辑器重复)
+        imgFiles=[]; clearReuse(); renderTiles(); document.getElementById('consentChk').checked=false;
+        window.LJToast&&window.LJToast('✓ 已提交图生图,可在「AI 图片编辑器」查看进度与记录');
+      } else {
+        jobInputs[res2.id]={ model:payload.model, mode:payload.mode, prompt, imageRefs:payload.imageRefs, count:payload.count, resolution:payload.resolution, ratio:payload.ratio, seed:payload.seed };
+        renderCard({ id:res2.id, status:'queued', progress:0, prompt, modelLabel:findLabel(model), ratio, resolution:res, count });
+        track(res2.id, prompt);
+        window.LJToast&&window.LJToast('✓ 已提交生成,可在右侧查看进度');
+      }
       scheduleEstimate();
-      window.LJToast&&window.LJToast('✓ 已提交生成,可在右侧查看进度');
     }catch(e){ window.LJToast&&window.LJToast('提交失败:'+e.message,'err'); }
     finally{ btn.innerHTML=prev; refreshBtn(); }
   });
