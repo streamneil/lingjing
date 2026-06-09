@@ -67,7 +67,7 @@
     {
       key: 'tts', label: '文字转语音',
       icon: '<path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/>',
-      enabled: false, outputKind: 'audio', tier: 'next',
+      enabled: true, outputKind: 'audio', page: 'tts.html', tier: 'next',
     },
   ];
 
