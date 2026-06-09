@@ -90,13 +90,16 @@ function mergeDef(key: string): ImageModelDef | undefined {
     // 技术字段从代码模板取(A2 + A5:新增模型用 shape_template 指向代码模板)。
     const tmpl = IMAGE_MODELS[ov.shape_template ?? key];
     if (!tmpl) return undefined; // 模板丢失(不该发生:模板是代码 key)
+    // modes:管理员勾选的优先(用户选了「完全自由勾」);空 → 回落代码模板 modes。
+    const ovModes = (ov.modes ?? '').split(',').map((s) => s.trim()).filter((s): s is ImageMode => s === 'text2img' || s === 'img2img');
     return {
-      ...tmpl, // shape/sizeKind/modes/maxResolution/maxInputImages(技术契约)
+      ...tmpl, // shape/sizeKind/maxResolution/maxInputImages(技术契约)
       key,
       label: ov.label,
       modelId: ov.model_id,
       maxImages: ov.max_images,
       priceTier: ov.price_tier,
+      modes: ovModes.length ? ovModes : tmpl.modes, // 管理员勾选优先
     };
   }
   return IMAGE_MODELS[key];
@@ -130,13 +133,19 @@ export function isKnownModel(key: string): boolean {
   return !!IMAGE_MODELS[key] || !!overrideRow(key);
 }
 
-/** 用户端可选模型(只列 enabled;DB override 优先)。admin 管理视图另走 admin.ts。 */
+/** 用户端可选模型(只列 enabled;DB override 优先;按 sort_order 排序)。admin 管理视图另走 admin.ts。 */
 export function listEnabledModels(): ImageModelDef[] {
   // 代码 key + DB 新增 key 的并集,过滤 enabled。
   const codeKeys = Object.keys(IMAGE_MODELS);
-  const dbKeys = (db.prepare('SELECT key FROM image_model_override').all() as { key: string }[]).map((r) => r.key);
-  const keys = Array.from(new Set([...codeKeys, ...dbKeys]));
-  return keys.filter(isEnabled).map((k) => mergeDef(k)).filter((d): d is ImageModelDef => !!d);
+  const ovRows = db.prepare('SELECT key, sort_order FROM image_model_override').all() as { key: string; sort_order: number }[];
+  const sortByKey = new Map(ovRows.map((r) => [r.key, r.sort_order]));
+  const keys = Array.from(new Set([...codeKeys, ...ovRows.map((r) => r.key)]));
+  const codeOrder = new Map(codeKeys.map((k, i) => [k, i])); // 代码内置默认顺序(无 override 时)
+  return keys
+    .filter(isEnabled)
+    .sort((a, b) => (sortByKey.get(a) ?? codeOrder.get(a) ?? 999) - (sortByKey.get(b) ?? codeOrder.get(b) ?? 999))
+    .map((k) => mergeDef(k))
+    .filter((d): d is ImageModelDef => !!d);
 }
 
 /** 分辨率档位排序,用于 maxResolution 上限校验。 */

@@ -109,13 +109,13 @@
     </div>
 
     <div class="ph" style="margin-top:34px">
-      <div><h1>AI 图片模型</h1><p>管理显示名 / 模型名(modelId)/ 启用 / 价格 / 张数。技术契约(同步异步/尺寸形状)由代码定义,后台改不到。</p></div>
+      <div><h1>AI 图片模型</h1><p>管理显示名 / 模型名 / 支持模式(文生图·图生图)/ 启用 / 价格 / 张数 / 排序。同步异步等底层契约由代码定义。</p></div>
       <button class="btn-new" onclick="openModel()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>新增模型</button>
     </div>
     <div class="tbl">
       <table>
-        <thead><tr><th>显示名</th><th>模型名(modelId)</th><th>形状</th><th>最高清晰度</th><th>价/张</th><th>张数</th><th>启用</th><th style="text-align:right">操作</th></tr></thead>
-        <tbody id="modelRows"><tr><td colspan="8" class="empty">加载中…</td></tr></tbody>
+        <thead><tr><th>显示名</th><th>模型名(modelId)</th><th>模式</th><th>最高清晰度</th><th>价/张</th><th>张数</th><th>启用</th><th>排序</th><th style="text-align:right">操作</th></tr></thead>
+        <tbody id="modelRows"><tr><td colspan="9" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -124,15 +124,21 @@
   <div class="ov" id="modelOv">
     <div class="modal">
       <h3 id="mTitle">新增模型</h3>
-      <p class="mdesc">技术契约(同步异步/尺寸形状/支持模式/最高清晰度)由所选「shape 模板」从代码取,不可手改 —— 防止配错导致整个模型不工作。</p>
+      <p class="mdesc">同步异步/尺寸形状由所选「shape 模板」从代码取。支持模式(文生图/图生图)可自由勾选。</p>
       <label>key(唯一标识,新增后不可改)</label>
       <input id="mKey" placeholder="如 my-model">
       <label>显示名</label>
       <input id="mLabel" placeholder="如 专业版">
       <label>模型名(百炼 modelId)</label>
       <input id="mModelId" placeholder="如 qwen-image-2.0-pro">
-      <label>shape 模板(取技术契约)</label>
-      <select id="mShape"></select>
+      <label>shape 模板(取同步异步/尺寸技术契约)</label>
+      <select id="mShape" onchange="onShapeChange()"></select>
+      <label>支持模式(可多选)</label>
+      <div style="display:flex;gap:16px;margin:2px 0">
+        <label style="display:flex;align-items:center;gap:6px;width:auto;font-weight:400"><input id="mModeT2I" type="checkbox" style="width:auto"> 文生图</label>
+        <label style="display:flex;align-items:center;gap:6px;width:auto;font-weight:400"><input id="mModeI2I" type="checkbox" style="width:auto"> 图生图</label>
+      </div>
+      <div id="mModeHint" style="font-size:11px;color:#d08770;line-height:1.5;display:none"></div>
       <label>价/张</label>
       <input id="mPrice" type="number" min="1" value="4">
       <label>张数上限</label>
@@ -267,36 +273,62 @@
   }
 
   // ── AI 图片模型管理 ──
-  let shapeTemplates=[], editingKey=null;
+  let shapeTemplates=[], editingKey=null, modelsCache=[], tmplModesMap={};
+  const MODE_CN={text2img:'文生图',img2img:'图生图'};
   async function loadModels(){
     const rows=document.getElementById('modelRows');
     try{
       const { models, shapeTemplates:st }=await PA('GET','/api/image-models');
-      shapeTemplates=st||[];
-      if(!models.length){ rows.innerHTML='<tr><td colspan="8" class="empty">无模型</td></tr>'; return; }
-      rows.innerHTML=models.map(m=>`
+      shapeTemplates=st||[]; modelsCache=models;
+      tmplModesMap={}; models.forEach(m=>{ tmplModesMap[m.shapeTemplate]=m.templateModes; });
+      if(!models.length){ rows.innerHTML='<tr><td colspan="9" class="empty">无模型</td></tr>'; return; }
+      rows.innerHTML=models.map((m,i)=>`
         <tr>
           <td><div class="tn">${esc(m.label)}</div><div class="tid">${esc(m.key)}${m.isCode?'':' · 自定义'}</div></td>
           <td style="font-family:var(--f-mono);font-size:12px">${esc(m.modelId)}</td>
-          <td>${esc(m.shape||'-')}</td>
+          <td>${(m.modes||[]).map(x=>MODE_CN[x]||x).join(' / ')||'-'}</td>
           <td>${esc(m.maxResolution||'-')}</td>
           <td>${m.priceTier}</td>
           <td>${m.maxImages}</td>
           <td><span class="bdg ${m.enabled?'bdg-host':'bdg-priv'}">${m.enabled?'启用':'停用'}</span></td>
+          <td><div class="acts" style="gap:4px">
+            <button class="act" ${i===0?'disabled style="opacity:.35"':''} onclick='moveModel(${i},-1)'>↑</button>
+            <button class="act" ${i===models.length-1?'disabled style="opacity:.35"':''} onclick='moveModel(${i},1)'>↓</button>
+          </div></td>
           <td><div class="acts">
             <button class="act" onclick='editModel(${JSON.stringify(m)})'>编辑</button>
             ${m.isCode&&!m.hasOverride?'':`<button class="act" onclick='delModel(${JSON.stringify(m.key)},${JSON.stringify(!!m.isCode)})'>${m.isCode?'还原':'删除'}</button>`}
           </div></td>
         </tr>`).join('');
-    }catch(e){ rows.innerHTML='<tr><td colspan="8" class="empty">加载失败</td></tr>'; }
+    }catch(e){ rows.innerHTML='<tr><td colspan="9" class="empty">加载失败</td></tr>'; }
   }
-  function fillShapeSel(){ document.getElementById('mShape').innerHTML=shapeTemplates.map(s=>`<option value="${s}">${esc(s)}</option>`).join(''); }
+  // 上移/下移 → 重排序提交(用户端下拉/admin 列表都按此排)
+  window.moveModel=async(i,dir)=>{
+    const j=i+dir; if(j<0||j>=modelsCache.length) return;
+    const keys=modelsCache.map(m=>m.key); const t=keys[i]; keys[i]=keys[j]; keys[j]=t;
+    try{ await PA('POST','/api/image-models/reorder',{keys}); await loadModels(); }
+    catch(e){ toast(e.message||'排序失败','err'); }
+  };
+  function fillShapeSel(){ document.getElementById('mShape').innerHTML=shapeTemplates.map(s=>`<option value="${s}">${esc(s)}${tmplModesMap[s]?' ('+tmplModesMap[s].map(x=>MODE_CN[x]).join('/')+')':''}</option>`).join(''); }
+  // 勾选模式超出代码模板能力时 → 灰字提示(不挡,告知:可能生成失败)
+  window.onShapeChange=()=>{
+    const tmpl=document.getElementById('mShape').value; const cap=tmplModesMap[tmpl]||[];
+    const chosen=[]; if(document.getElementById('mModeT2I').checked) chosen.push('text2img'); if(document.getElementById('mModeI2I').checked) chosen.push('img2img');
+    const over=chosen.filter(x=>!cap.includes(x));
+    const hint=document.getElementById('mModeHint');
+    if(over.length){ hint.style.display=''; hint.textContent='⚠ 所选「'+over.map(x=>MODE_CN[x]).join('/')+'」超出该 shape 模板的代码能力('+(cap.map(x=>MODE_CN[x]).join('/')||'无')+'),该模型实际可能不支持,生成时会报错。请确认模型确实支持。'; }
+    else { hint.style.display='none'; }
+  };
   function openModel(){
     editingKey=null; document.getElementById('mTitle').textContent='新增模型'; document.getElementById('mMsg').textContent='';
     document.getElementById('mKey').disabled=false; document.getElementById('mKey').value='';
     document.getElementById('mShape').disabled=false; fillShapeSel();
     document.getElementById('mLabel').value=''; document.getElementById('mModelId').value='';
     document.getElementById('mPrice').value='4'; document.getElementById('mMax').value='1'; document.getElementById('mEnabled').checked=true;
+    // 默认按模板能力勾上(贴默认行为)
+    const cap=tmplModesMap[document.getElementById('mShape').value]||['text2img'];
+    document.getElementById('mModeT2I').checked=cap.includes('text2img'); document.getElementById('mModeI2I').checked=cap.includes('img2img');
+    onShapeChange();
     document.getElementById('modelOv').classList.add('on');
   }
   window.editModel=(m)=>{
@@ -306,14 +338,20 @@
     document.getElementById('mShape').value=m.shapeTemplate||m.key; document.getElementById('mShape').disabled=true; // 编辑不改技术模板
     document.getElementById('mLabel').value=m.label; document.getElementById('mModelId').value=m.modelId;
     document.getElementById('mPrice').value=m.priceTier; document.getElementById('mMax').value=m.maxImages; document.getElementById('mEnabled').checked=m.enabled;
+    document.getElementById('mModeT2I').checked=(m.modes||[]).includes('text2img'); document.getElementById('mModeI2I').checked=(m.modes||[]).includes('img2img');
+    onShapeChange();
     document.getElementById('modelOv').classList.add('on');
   };
   window.openModel=openModel;
+  // 勾选变化时刷新能力提示
+  ['mModeT2I','mModeI2I'].forEach(id=>document.getElementById(id).addEventListener('change',onShapeChange));
   async function submitModel(){
     const key=document.getElementById('mKey').value.trim();
+    const modes=[]; if(document.getElementById('mModeT2I').checked) modes.push('text2img'); if(document.getElementById('mModeI2I').checked) modes.push('img2img');
     const body={ label:document.getElementById('mLabel').value.trim(), modelId:document.getElementById('mModelId').value.trim(),
       priceTier:Number(document.getElementById('mPrice').value), maxImages:Number(document.getElementById('mMax').value),
-      enabled:document.getElementById('mEnabled').checked, shapeTemplate:document.getElementById('mShape').value };
+      enabled:document.getElementById('mEnabled').checked, shapeTemplate:document.getElementById('mShape').value, modes,
+      sortOrder:editingKey?(modelsCache.find(m=>m.key===editingKey)?.sortOrder??0):modelsCache.length };
     try{
       if(editingKey){ await PA('PUT',`/api/image-models/${encodeURIComponent(editingKey)}`,body); }
       else { await PA('POST','/api/image-models',{ ...body, key }); }

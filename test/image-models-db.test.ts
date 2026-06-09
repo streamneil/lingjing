@@ -16,9 +16,9 @@ const { costFor } = await import('../src/credits/index.js');
 function clearOv() { db.prepare('DELETE FROM image_model_override').run(); }
 function addOv(row: Record<string, unknown>) {
   db.prepare(
-    `INSERT OR REPLACE INTO image_model_override (key,label,model_id,enabled,price_tier,max_images,shape_template,created_at)
-     VALUES (@key,@label,@model_id,@enabled,@price_tier,@max_images,@shape_template,@created_at)`,
-  ).run({ enabled: 1, shape_template: null, created_at: 0, ...row });
+    `INSERT OR REPLACE INTO image_model_override (key,label,model_id,enabled,price_tier,max_images,shape_template,modes,sort_order,created_at)
+     VALUES (@key,@label,@model_id,@enabled,@price_tier,@max_images,@shape_template,@modes,@sort_order,@created_at)`,
+  ).run({ enabled: 1, shape_template: null, modes: null, sort_order: 0, created_at: 0, ...row });
 }
 
 describe('getImageModel DB 合并', () => {
@@ -65,6 +65,31 @@ describe('默认兜底(P1-default:禁用默认 → 跳 enabled)', () => {
   it('显式取 disabled 模型仍允许(在飞/老 job 兼容)', () => {
     addOv({ key: 'z-image', label: 'x', model_id: 'x', price_tier: 2, max_images: 1, enabled: 0, shape_template: 'z-image' });
     expect(getImageModel('z-image').key).toBe('z-image'); // 显式取到
+  });
+});
+
+describe('modes 管理员可选(DB modes 覆盖代码模板)', () => {
+  beforeEach(clearOv);
+
+  it('DB modes 设了 → 用 DB 的(管理员勾选优先)', () => {
+    // qwen-image 代码模板 modes=[text2img];管理员勾上 img2img(自由勾)
+    addOv({ key: 'qwen-image', label: 'x', model_id: 'qwen-image', price_tier: 4, max_images: 4, shape_template: 'qwen-image', modes: 'text2img,img2img' });
+    expect(getImageModel('qwen-image').modes).toEqual(['text2img', 'img2img']);
+  });
+
+  it('DB modes 为空 → 回落代码模板 modes', () => {
+    addOv({ key: 'qwen-image', label: 'x', model_id: 'qwen-image', price_tier: 4, max_images: 4, shape_template: 'qwen-image', modes: null });
+    expect(getImageModel('qwen-image').modes).toEqual(IMAGE_MODELS['qwen-image']!.modes);
+  });
+});
+
+describe('sort_order 排序(listEnabledModels)', () => {
+  beforeEach(clearOv);
+  it('按 sort_order 升序;有 override 的优先于代码默认序', () => {
+    addOv({ key: 'z-image', label: 'z', model_id: 'z', price_tier: 2, max_images: 1, shape_template: 'z-image', sort_order: 0 });
+    addOv({ key: 'qwen-image', label: 'q', model_id: 'q', price_tier: 4, max_images: 4, shape_template: 'qwen-image', sort_order: 1 });
+    const keys = listEnabledModels().map((d) => d.key);
+    expect(keys.indexOf('z-image')).toBeLessThan(keys.indexOf('qwen-image')); // z(0) 在 qwen(1) 前
   });
 });
 

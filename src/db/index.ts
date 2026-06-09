@@ -294,6 +294,9 @@ db.exec(`
     created_at INTEGER NOT NULL
   )
 `);
+// modes:管理员勾选的模式(CSV "text2img,img2img");空=回落代码模板 modes。sort_order:展示排序(小在前)。
+addColumnIfMissing('image_model_override', 'modes', `modes TEXT`);
+addColumnIfMissing('image_model_override', 'sort_order', `sort_order INTEGER NOT NULL DEFAULT 0`);
 
 export interface ImageModelOverrideRow {
   key: string;
@@ -303,6 +306,8 @@ export interface ImageModelOverrideRow {
   price_tier: number;
   max_images: number;
   shape_template: string | null;
+  modes: string | null; // CSV;null/空 = 用代码模板 modes
+  sort_order: number;
   created_at: number;
 }
 
