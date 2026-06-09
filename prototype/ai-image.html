@@ -12,6 +12,10 @@
   /* item4:卡片元信息 + 动作 + 长词收展 */
   .card-meta { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 2px; }
   .card-meta .chip { font-size:11px; color:var(--t3); background:var(--field); border:1px solid var(--line); border-radius:7px; padding:2px 8px; }
+  /* 记录卡输入图缩略(图生图:显示这次用的输入图)*/
+  .in-thumbs { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin:6px 0 2px; }
+  .in-thumbs .lbl { font-size:11px; color:var(--t4); margin-right:2px; }
+  .in-thumbs img { width:46px; height:46px; object-fit:cover; border-radius:7px; border:1px solid var(--line); cursor:zoom-in; }
   .card-acts { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
   .card-acts button { display:inline-flex; align-items:center; gap:5px; font-size:12.5px; color:var(--t2); background:var(--field); border:1px solid var(--line); border-radius:9px; padding:7px 13px; cursor:pointer; transition:.15s; }
   .card-acts button:hover { border-color:var(--line-hi); color:var(--t1); }
@@ -340,6 +344,7 @@
   const imgFileInput=document.getElementById('imgFile'), imgTiles=document.getElementById('imgTiles');
   function addFiles(list){
     let added=false; const cap=i2iMaxInput();
+    clearReuse(); // 用户开始本地上传 → 放弃复用原 job 输入图
     for(const f of list){
       if(isHeic(f)){ window.LJToast&&window.LJToast('暂不支持 HEIC,请在相册导出为 JPG 或截图后上传','err'); continue; }
       const okType=OK_TYPES.includes(f.type) || (!f.type && /\.(jpe?g|png|webp|bmp|tiff?|gif)$/i.test(f.name||''));
@@ -355,9 +360,23 @@
     if(added){ renderTiles(); refreshBtn(); scheduleEstimate(); }
   }
   imgFileInput.onchange=()=>{ addFiles(imgFileInput.files); imgFileInput.value=''; };
+  // 重新提示复用:沿用原 job 的 imageRefs(服务端 key,免重传;OSS 跨域 fetch 不到 File 故走复用)。
+  // reuseRefs/reuseUrls 同时存在 → 网格显原图缩略;一旦用户新增/删图则清空复用,转为本地上传。
+  let reuseRefs=null, reuseUrls=null;
+  function clearReuse(){ reuseRefs=null; reuseUrls=null; }
   function renderTiles(){
     const cap=i2iMaxInput();
     const hint=document.getElementById('imgTileHint'); if(hint) hint.textContent=`(最多 ${cap} 张图片)`;
+    // 复用态:显原 job 输入图(只读缩略,× 可清),+ 上传格切到本地上传。
+    if(reuseRefs && reuseRefs.length && imgFiles.length===0){
+      imgTiles.classList.remove('empty');
+      const tiles=(reuseUrls||[]).map((u,i)=>`<div class="img-tile"><img src="${u}"><div class="rmx" data-rmreuse="1">×</div></div>`);
+      if(reuseRefs.length<cap) tiles.push(`<div class="img-tile add" id="addTile"><span class="plus">+</span><span class="lbl">点击 / 拖放</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z"/></svg></div>`);
+      imgTiles.innerHTML=tiles.join('');
+      imgTiles.querySelectorAll('[data-rmreuse]').forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); clearReuse(); renderTiles(); refreshBtn(); scheduleEstimate(); });
+      const at0=document.getElementById('addTile'); if(at0){ at0.onclick=()=>imgFileInput.click(); at0.ondrop=e=>{e.preventDefault(); addFiles(e.dataTransfer.files);}; at0.ondragover=e=>e.preventDefault(); }
+      return;
+    }
     if(imgFiles.length===0){
       // 空态:大上传区(图标 + 提示 + 选择资产),与 GPT Image 风格一致
       imgTiles.classList.add('empty');
@@ -410,7 +429,7 @@
     let ok=hasPrompt, label='创建';
     if(!hasPrompt){ ok=false; label='请输入提示词'; }
     if(mode==='img2img'){
-      if(imgFiles.length===0){ ok=false; label='请上传图片'; }
+      if(imgFiles.length===0 && !(reuseRefs&&reuseRefs.length)){ ok=false; label='请上传图片'; }
       else if(!document.getElementById('consentChk').checked){ ok=false; label='请勾选授权确认'; }
       else if(!hasPrompt){ ok=false; label='请输入编辑指令'; }
     }
@@ -427,6 +446,12 @@
   });
 
   const jobInputs={}; // id → 原始 input(重新生成回放,item4)
+
+  // 输入图缩略(图生图记录卡:显示这次用的输入图)。job.inputUrls 由后端签名。
+  function inputThumbs(job){
+    const us=job.inputUrls||[]; if(!us.length) return '';
+    return `<div class="in-thumbs"><span class="lbl">输入图</span>${us.map(u=>`<img src="${u}" onclick="openLightbox('${u}')" title="点击查看大图">`).join('')}</div>`;
+  }
 
   // 提示词气泡:长词默认收起 + 展开/收起(item4)
   function promptBubble(p){
@@ -458,16 +483,16 @@
     const ar=(job.ratio&&job.ratio!=='auto')?job.ratio.replace(':','/'):'1/1';
     if(job.status==='queued'||job.status==='running'){
       card.dataset.st='running';
-      card.innerHTML=head('var(--amber)','led-run',job.status==='queued'?'排队中':'生成中')+promptBubble(job.prompt)+metaChips(job)+
+      card.innerHTML=head('var(--amber)','led-run',job.status==='queued'?'排队中':'生成中')+promptBubble(job.prompt)+inputThumbs(job)+metaChips(job)+
         `<div class="fvideo proc"><div class="proc-in"><div class="spinner"></div><div class="lbl">${job.progress?('进度 '+job.progress+'%'):'已进入生成队列'}</div><div class="proc-bar"><i style="width:${job.progress||8}%"></i></div></div></div>`;
     } else if(job.status==='done'){
       card.dataset.st='done';
       const imgs=(job.outputUrls||[]).map(u=>`<img src="${u}" style="aspect-ratio:${ar};cursor:zoom-in" onclick="openLightbox('${u}')" title="点击查看大图">`).join('');
-      card.innerHTML=head('var(--green)','led-ok','已完成')+promptBubble(job.prompt)+metaChips(job)+
+      card.innerHTML=head('var(--green)','led-ok','已完成')+promptBubble(job.prompt)+inputThumbs(job)+metaChips(job)+
         `<div class="img-grid">${imgs||'<div style="color:var(--t4);padding:20px">已生成</div>'}</div>`+cardActs(job,true);
     } else {
       card.dataset.st='failed';
-      card.innerHTML=head('var(--red)','led-err','生成失败')+promptBubble(job.prompt)+metaChips(job)+
+      card.innerHTML=head('var(--red)','led-err','生成失败')+promptBubble(job.prompt)+inputThumbs(job)+metaChips(job)+
         `<div class="fvideo err"><div class="err-in"><div class="ei">!</div><div class="lbl">${esc(job.error||'生成失败,请重试')}</div></div></div>`+cardActs(job,false);
     }
   }
@@ -502,13 +527,19 @@
     if(typeof inp.count==='number') count=inp.count;
     seed = inp.seed!=null ? String(inp.seed) : '';
     const si=document.getElementById('seedInput'); if(si) si.value=seed;
-    renderModels(); // 重渲比例/清晰度/张数下拉 + pill,按回填值
+    // 图转图:先设复用(显缩略 + 提交沿用 refs,免重传),再 renderModels(其内 renderTiles 会读复用态)
+    if(tabMode==='img2img' && (inp.imageRefs||[]).length){ reuseRefs=(inp.imageRefs||[]).slice(); reuseUrls=(inp.inputUrls||[]).slice(); }
+    else { clearReuse(); }
+    renderModels(); // 重渲比例/清晰度/张数下拉 + pill + 图转图网格(读复用态)
     ta.value=inp.prompt||''; cnt.textContent=ta.value.length;
     refreshBtn(); scheduleEstimate(); ta.focus();
-    // 图转图:输入图是服务端 key,无法自动重挂为本地 File,提示用户重传
-    if(tabMode==='img2img' && (inp.imageRefs||[]).length){ window.LJToast&&window.LJToast('已回填提示词与参数;图转图请重新上传图片',''); }
-    else { window.LJToast&&window.LJToast('✓ 已回填提示词与参数,可改后创建'); }
+    window.LJToast&&window.LJToast('✓ 已回填提示词与参数,可改后创建');
   };
+  // 复用原 job 输入图:OSS 跨域 fetch 不到 File,改用「复用 imageRefs」——
+  // 网格显原图缩略,提交直接沿用 refs(免重传);用户若新增/删图则转本地上传。
+  function refillImages(urls, refs){
+    imgFiles=[]; reuseRefs=(refs||[]).slice(); reuseUrls=(urls||[]).slice(); renderTiles();
+  }
   // 删除:确认后调 DELETE /jobs/:id(后端租户隔离、生成中不可删),移除卡片。
   window.delJob=async(id)=>{
     if(!(await window.LJConfirm({title:'删除作品',body:'确认删除这条生成记录吗?删除后不可恢复。',confirmText:'删除',danger:true}))) return;
@@ -539,14 +570,16 @@
     document.getElementById('sampleGallery').style.display='none';
     // list 已带 model/ratio/resolution/imageRefs 等(免 N+1);存 input 供重新生成。
     for(const j of [...mine].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))){
-      jobInputs[j.id]={ model:j.model, mode:j.mode, prompt:j.script, imageRefs:j.imageRefs, count:j.count, resolution:j.resolution, ratio:j.ratio, seed:j.seed };
+      jobInputs[j.id]={ model:j.model, mode:j.mode, prompt:j.script, imageRefs:j.imageRefs, inputUrls:j.inputUrls, count:j.count, resolution:j.resolution, ratio:j.ratio, seed:j.seed };
       renderCard({...j, prompt:j.script});
       if(j.status==='queued'||j.status==='running') track(j.id, j.script);
     }
   }
 
-  // 图转图:multipart 上传多图(顺序即 imageRefs 顺序),拿 imageRefs
+  // 图转图:multipart 上传多图(顺序即 imageRefs 顺序),拿 imageRefs。
+  // 复用态(重新提示未改图)→ 直接沿用原 refs,免重传。
   async function uploadInputImages(){
+    if(reuseRefs && reuseRefs.length && !imgFiles.length) return reuseRefs.slice();
     if(!imgFiles.length) return [];
     const fd=new FormData();
     imgFiles.forEach(f=>fd.append('images', f));
@@ -575,7 +608,7 @@
       renderCard({ id:res2.id, status:'queued', progress:0, prompt, modelLabel:findLabel(model), ratio:(mode==='img2img'?undefined:ratio), resolution:res, count });
       track(res2.id, prompt);
       ta.value=''; cnt.textContent='0';
-      if(mode==='img2img'){ imgFiles=[]; renderTiles(); document.getElementById('consentChk').checked=false; }
+      if(mode==='img2img'){ imgFiles=[]; clearReuse(); renderTiles(); document.getElementById('consentChk').checked=false; }
       scheduleEstimate();
       window.LJToast&&window.LJToast('✓ 已提交生成,可在右侧查看进度');
     }catch(e){ window.LJToast&&window.LJToast('提交失败:'+e.message,'err'); }

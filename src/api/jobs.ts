@@ -13,7 +13,7 @@ import {
   retryJob,
   deleteJobForTenant,
 } from '../queue/index.js';
-import { signOutputUrls, putObject } from '../storage/index.js';
+import { signOutputUrls, getSignedUrl, putObject } from '../storage/index.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import {
   estimateCost,
@@ -35,6 +35,13 @@ export const jobsRouter = Router();
 
 // 图生图输入图上传:multer 内存缓冲,≤30MB,最多 5 张(万相2.7 上限;千问编辑 3 张按 model maxInputImages 在 buildImageJob 校验)。
 const imageUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024 } });
+
+// 输入图存储 key → 签名 URL(供记录卡显示 + 重新提示回填)。逐 key 签名,坏 key 跳过不整体 500。
+async function signInputUrls(refs?: string[]): Promise<string[]> {
+  if (!Array.isArray(refs) || !refs.length) return [];
+  const signed = await Promise.all(refs.map((k) => getSignedUrl(k).catch(() => null)));
+  return signed.filter((u): u is string => u !== null);
+}
 
 // ── type 封闭 allowlist(eng-review E2 / 外部声音 P2)──
 // 只接受这里登记的 type;未知/`__proto__`/空 → 400。每个 type 有自己的 input 校验器 + 计价。
@@ -411,10 +418,12 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
           const modelLabel = inp.model ? getImageModel(inp.model, inp.mode === 'img2img' ? 'img2img' : 'text2img').label : undefined;
           // 卡片显示尺寸:有快照 W×H 显「2688×1536」,否则回落 resolution 档(老 job,P2-b)
           const sizeLabel = inp.width && inp.height ? `${inp.width}×${inp.height}` : (inp.resolution || undefined);
+          // 输入图签名 URL:供记录卡显示 + 重新提示回填(image-inputs key 同桶,复用 getSignedUrl)。
+          const inputUrls = await signInputUrls(inp.imageRefs);
           meta = {
             model: inp.model, modelLabel, mode: inp.mode,
             ratio: inp.ratio, resolution: inp.resolution, sizeLabel, count: inp.count,
-            imageRefs: inp.imageRefs, seed: inp.seed, width: inp.width, height: inp.height, bboxList: inp.bboxList, // 重新生成回放用
+            imageRefs: inp.imageRefs, inputUrls, seed: inp.seed, width: inp.width, height: inp.height, bboxList: inp.bboxList, // 重新生成回放用
           };
         }
       } catch {
@@ -454,6 +463,10 @@ jobsRouter.get('/jobs/:id', requireAuth, async (req: Request, res: Response) => 
     createdAt: job.created_at,
     input: JSON.parse(job.input_json), // 供"重新编辑"回填原入参(T5)
   };
+
+  // 输入图签名 URL(图生图记录卡显示 + 重新提示回填)。
+  const inp = payload.input as { imageRefs?: string[] } | undefined;
+  if (inp?.imageRefs?.length) payload.inputUrls = await signInputUrls(inp.imageRefs);
 
   if (job.status === 'done' && job.output_url) {
     const outputUrls = await signOutputUrls(job.output_url);
