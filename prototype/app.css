@@ -281,7 +281,13 @@ img { display: block; }
 
 /* 向上浮层 popover(深色,贴 pill;点外关) */
 .pop-anchor { position: relative; }
-.pop { position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); background: var(--card); border: 1px solid var(--line-hi); border-radius: 13px; padding: 13px; box-shadow: 0 14px 36px -10px rgba(0,0,0,.7); z-index: 60; display: none; animation: popup .18s var(--ease-out); }
+.pop { position: absolute; left: 0; right: auto; bottom: calc(100% + 8px); min-width: 340px; max-width: 92vw; background: var(--card); border: 1px solid var(--line-hi); border-radius: 13px; padding: 14px; box-shadow: 0 14px 36px -10px rgba(0,0,0,.7); z-index: 60; display: none; animation: popup .18s var(--ease-out); }
+/* 模型 popover:够宽,不受 pill 宽度限制 */
+#pop-model { min-width: 320px; }
+/* 设置 popover:靠右锚定 + 更宽,容 8 个比例 cell 一行 */
+#pop-set { left: auto; right: 0; min-width: 420px; }
+/* seed popover:窄(只一个输入框),靠右,覆盖通用 min-width */
+#pop-seed { left: auto; right: 0; min-width: 0; }
 .pop.show { display: block; }
 @keyframes popup { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .pop .pop-label { font-size: 11px; color: var(--t3); margin: 0 0 7px; }
