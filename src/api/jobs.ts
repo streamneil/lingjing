@@ -29,7 +29,7 @@ import { isUsableAvatar } from '../avatars/index.js';
 import { isUsableVoice } from '../voices/index.js';
 import { db } from '../db/index.js';
 import type { VideoGenInput, ImageGenInput, TtsGenInput } from '../gateway/types.js';
-import { getImageModel, resolutionAllowed, isKnownModel, listEnabledModels, DEFAULT_IMAGE_MODEL } from '../gateway/image-models.js';
+import { getImageModel, resolutionAllowed, isKnownModel, listEnabledModels, DEFAULT_IMAGE_MODEL, tierFromPixels } from '../gateway/image-models.js';
 
 export const jobsRouter = Router();
 
@@ -105,12 +105,26 @@ function buildImageJob(body: Record<string, unknown>): JobBuildResult {
   // 2. model × mode 兼容
   if (!def.modes.includes(effMode))
     return { ok: false, status: 400, error: `该模型不支持${effMode === 'img2img' ? '图生图' : '文生图'}` };
-  // 3. 分辨率上限(4K 不支持 → 400,非 clamp:P2-4k 防按 4K 价扣却出 ≤2K)
-  if (!resolutionAllowed(def, res))
-    return { ok: false, status: 400, error: `该模型最高支持 ${def.maxResolution}` };
 
-  // P3:提交时快照 priceTier/maxImages 进 input,worker settle 读快照 → admin 改价 mid-flight 不破 reserve==settle。
-  const snap = { priceTierSnapshot: def.priceTier, maxImagesSnapshot: def.maxImages };
+  // 3. 分辨率:有 resolutions 表 → 按所选 ratio 查表得 W×H + 自动推 tier(钱不塌,P1-a/c);
+  //    无表 → 回落旧逻辑(res + resolutionAllowed 4K 守卫,P1-b)。
+  let effRes = res; // 计价档(tier);有表则覆盖为自动推的
+  let sizeSnap: { width?: number; height?: number } = {};
+  if (def.resolutions?.length) {
+    const wantRatio = typeof ratio === 'string' ? ratio : (def.resolutions.find((r) => r.isDefault)?.ratio ?? def.resolutions[0]!.ratio);
+    const hit = def.resolutions.find((r) => r.ratio === wantRatio);
+    if (!hit) return { ok: false, status: 400, error: `该模型不支持比例 ${wantRatio}` }; // P2-a:不信前端
+    sizeSnap = { width: hit.width, height: hit.height };
+    effRes = tierFromPixels(hit.width, hit.height); // 计价档从像素自动推
+  } else {
+    // 无表:旧 4K 守卫(P1-b 保留)
+    if (!resolutionAllowed(def, res))
+      return { ok: false, status: 400, error: `该模型最高支持 ${def.maxResolution}` };
+  }
+
+  // 提交时快照(P3 + P1-c):priceTier/maxImages + 所选分辨率 W×H,worker settle/生成读快照,
+  // admin mid-flight 改价/改分辨率不破 reserve==settle、不改在飞 job 尺寸。
+  const snap = { priceTierSnapshot: def.priceTier, maxImagesSnapshot: def.maxImages, ...sizeSnap };
 
   if (effMode === 'img2img') {
     const refs = Array.isArray(imageRefs) ? imageRefs.filter((k) => typeof k === 'string') : [];
@@ -118,28 +132,28 @@ function buildImageJob(body: Record<string, unknown>): JobBuildResult {
     if (refs.length > def.maxInputImages)
       return { ok: false, status: 400, error: `该模型最多 ${def.maxInputImages} 张输入图` };
     const input: ImageGenInput = { model: def.key, mode: 'img2img', prompt, imageRefs: refs, ...snap };
-    if (res) input.resolution = res;
+    if (effRes) input.resolution = effRes; // 计价档(自动推或用户传)
     if (typeof ratio === 'string') input.ratio = ratio;
     if (seedVal !== undefined) input.seed = seedVal;
     return {
       ok: true,
       type: 'ai_image',
       input: input as unknown as Record<string, unknown>,
-      cost: estimateImageEditCost(res, def.priceTier),
+      cost: estimateImageEditCost(effRes, def.priceTier),
     };
   }
 
   // 文生图:clamp 按 model maxImages 并回写 input.count(reserve==settle)
   const n = clampImageCount(count, def.maxImages);
   const input: ImageGenInput = { model: def.key, mode: 'text2img', prompt, count: n, ...snap };
-  if (res) input.resolution = res;
+  if (effRes) input.resolution = effRes;
   if (typeof ratio === 'string') input.ratio = ratio;
   if (seedVal !== undefined) input.seed = seedVal;
   return {
     ok: true,
     type: 'ai_image',
     input: input as unknown as Record<string, unknown>,
-    cost: estimateImageCost(n, res, def.priceTier, def.maxImages),
+    cost: estimateImageCost(n, effRes, def.priceTier, def.maxImages),
   };
 }
 
@@ -279,9 +293,16 @@ jobsRouter.post('/jobs/estimate', requireAuth, (req: Request, res: Response) => 
   const body = (req.body ?? {}) as Record<string, unknown>;
   const type = typeof body.type === 'string' && body.type ? body.type : 'video';
   if (type === 'ai_image') {
-    const res2 = typeof body.resolution === 'string' ? body.resolution : undefined;
     const m = body.mode === 'img2img' ? 'img2img' : 'text2img';
     const def = getImageModel(typeof body.model === 'string' ? body.model : undefined, m);
+    // 有 resolutions 表 → 按所选 ratio 查表自动推 tier(与 buildImageJob 一致,计价不塌 P1-a/P3-a);
+    // 无表 → 用 body.resolution。
+    let res2 = typeof body.resolution === 'string' ? body.resolution : undefined;
+    if (def.resolutions?.length) {
+      const wantRatio = typeof body.ratio === 'string' ? body.ratio : (def.resolutions.find((r) => r.isDefault)?.ratio ?? def.resolutions[0]!.ratio);
+      const hit = def.resolutions.find((r) => r.ratio === wantRatio);
+      if (hit) res2 = tierFromPixels(hit.width, hit.height);
+    }
     if (m === 'img2img') return res.json({ cost: estimateImageEditCost(res2, def.priceTier) });
     return res.json({
       cost: estimateImageCost(clampImageCount(body.count, def.maxImages), res2, def.priceTier, def.maxImages),
@@ -308,6 +329,8 @@ jobsRouter.get('/image-models', requireAuth, (_req: Request, res: Response) => {
     maxImages: d.maxImages,
     maxInputImages: d.maxInputImages,
     maxResolution: d.maxResolution,
+    // admin 录的分辨率表(前端比例下拉用;只吐 ratio/w/h/默认,不漏 priceTier/modelId)
+    resolutions: (d.resolutions ?? []).map((r) => ({ ratio: r.ratio, width: r.width, height: r.height, isDefault: !!r.isDefault })),
   }));
   const def = enabled.find((d) => d.key === DEFAULT_IMAGE_MODEL)?.key ?? enabled[0]?.key ?? DEFAULT_IMAGE_MODEL;
   res.json({ models, default: def });
@@ -329,15 +352,17 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
         const inp = JSON.parse(j.input_json) as {
           script?: string; prompt?: string; text?: string;
           model?: string; mode?: string; ratio?: string; resolution?: string; count?: number;
-          imageRefs?: string[]; seed?: number;
+          imageRefs?: string[]; seed?: number; width?: number; height?: number;
         };
         script = inp.script ?? inp.prompt ?? inp.text ?? '';
         if (j.type === 'ai_image') {
           const modelLabel = inp.model ? getImageModel(inp.model, inp.mode === 'img2img' ? 'img2img' : 'text2img').label : undefined;
+          // 卡片显示尺寸:有快照 W×H 显「2688×1536」,否则回落 resolution 档(老 job,P2-b)
+          const sizeLabel = inp.width && inp.height ? `${inp.width}×${inp.height}` : (inp.resolution || undefined);
           meta = {
             model: inp.model, modelLabel, mode: inp.mode,
-            ratio: inp.ratio, resolution: inp.resolution, count: inp.count,
-            imageRefs: inp.imageRefs, seed: inp.seed, // 重新生成回放用
+            ratio: inp.ratio, resolution: inp.resolution, sizeLabel, count: inp.count,
+            imageRefs: inp.imageRefs, seed: inp.seed, width: inp.width, height: inp.height, // 重新生成回放用
           };
         }
       } catch {

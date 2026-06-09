@@ -297,6 +297,9 @@ db.exec(`
 // modes:管理员勾选的模式(CSV "text2img,img2img");空=回落代码模板 modes。sort_order:展示排序(小在前)。
 addColumnIfMissing('image_model_override', 'modes', `modes TEXT`);
 addColumnIfMissing('image_model_override', 'sort_order', `sort_order INTEGER NOT NULL DEFAULT 0`);
+// resolutions:admin 录的分辨率列表 JSON([{ratio,width,height,isDefault}],照百炼官方推荐表)。
+//   空/null = 回落代码默认(imageSize 算法)。tier(计价档)由 width*height 自动推,不入表。
+addColumnIfMissing('image_model_override', 'resolutions', `resolutions TEXT`);
 
 export interface ImageModelOverrideRow {
   key: string;
@@ -308,6 +311,7 @@ export interface ImageModelOverrideRow {
   shape_template: string | null;
   modes: string | null; // CSV;null/空 = 用代码模板 modes
   sort_order: number;
+  resolutions: string | null; // JSON [{ratio,width,height,isDefault}];null/空 = 回落代码默认
   created_at: number;
 }
 
