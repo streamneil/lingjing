@@ -12,7 +12,7 @@
   /* item4:卡片元信息 + 动作 + 长词收展 */
   .card-meta { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 2px; }
   .card-meta .chip { font-size:11px; color:var(--t3); background:var(--field); border:1px solid var(--line); border-radius:7px; padding:2px 8px; }
-  .card-acts { display:flex; gap:8px; margin-top:10px; }
+  .card-acts { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
   .card-acts button { display:inline-flex; align-items:center; gap:5px; font-size:12.5px; color:var(--t2); background:var(--field); border:1px solid var(--line); border-radius:9px; padding:7px 13px; cursor:pointer; transition:.15s; }
   .card-acts button:hover { border-color:var(--line-hi); color:var(--t1); }
   .card-acts button svg { width:14px; height:14px; }
@@ -439,11 +439,13 @@
     if(job.ratio) c.push(job.ratio==='auto'?'自动比例':job.ratio); if(job.resolution) c.push(job.resolution);
     return c.length?`<div class="card-meta">${c.map(x=>`<span class="chip">${esc(x)}</span>`).join('')}</div>`:'';
   }
-  // 动作按钮(重新生成 + 下载;成功/失败都有重新生成,item4)
+  // 动作按钮:重新生成 / 重新提示 / 下载 / 删除(成功/失败都给重新生成+重新提示+删除)
   function cardActs(job,ok){
-    const re=`<button onclick="regenJob('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>重新生成</button>`;
+    const re=`<button data-act="regen" onclick="regenJob('${job.id}',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>重新生成</button>`;
+    const rp=`<button onclick="repromptJob('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19 7-7 3 3-7 7-3-3z"/><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="m2 2 7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>重新提示</button>`;
     const dl=ok&&(job.outputUrls||[]).length?`<button onclick="downloadImgs('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg>下载</button>`:'';
-    return `<div class="card-acts">${re}${dl}</div>`;
+    const del=`<button onclick="delJob('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除</button>`;
+    return `<div class="card-acts">${re}${rp}${dl}${del}</div>`;
   }
 
   function renderCard(job){
@@ -471,8 +473,13 @@
   }
 
   // 重新生成(同 input 再提交;img2img 复用原 imageRefs+授权,不重新 consent,P2-regen-consent)
-  window.regenJob=async(id)=>{
+  // 防重复点击:in-flight 锁(同 id 请求未回前再点忽略)+ 按钮置灰。
+  const regenInFlight=new Set();
+  window.regenJob=async(id,btn)=>{
+    if(regenInFlight.has(id)) return; // 已在提交中,忽略连点
     const inp=jobInputs[id]; if(!inp){ window.LJToast&&window.LJToast('原参数丢失,无法重新生成','err'); return; }
+    regenInFlight.add(id);
+    if(btn){ btn.disabled=true; btn.dataset.t=btn.textContent; btn.textContent='提交中…'; }
     try{
       const res2=await LJ.createJob({ type:'ai_image', model:inp.model, mode:inp.mode||'text2img', prompt:inp.prompt,
         imageRefs:inp.imageRefs, count:inp.count, resolution:inp.resolution, ratio:inp.ratio, seed:inp.seed });
@@ -480,6 +487,37 @@
       track(res2.id, inp.prompt);
       window.LJToast&&window.LJToast('✓ 已重新提交生成');
     }catch(e){ window.LJToast&&window.LJToast('重新生成失败:'+e.message,'err'); }
+    finally{ regenInFlight.delete(id); if(btn){ btn.disabled=false; if(btn.dataset.t){ btn.textContent=btn.dataset.t; delete btn.dataset.t; } } }
+  };
+  // 重新提示:把该条提示词 + 参数回填到左侧输入区,不自动提交(用户改后再创建)。
+  window.repromptJob=(id)=>{
+    const inp=jobInputs[id]; if(!inp){ window.LJToast&&window.LJToast('原参数丢失','err'); return; }
+    // 切到对应模式(img2img/text2img),触发 pane 切换 + 模型过滤
+    const tabMode=inp.mode==='img2img'?'img2img':'text2img';
+    const tabBtn=document.querySelector(`#subTabs button[data-mode="${tabMode}"]`); if(tabBtn) tabBtn.click();
+    // 回填:模型 / 比例 / 清晰度 / 张数 / seed / 提示词
+    if(inp.model && allModels.find(m=>m.key===inp.model)) model=inp.model;
+    if(inp.ratio) ratio=inp.ratio;
+    if(inp.resolution) res=inp.resolution;
+    if(typeof inp.count==='number') count=inp.count;
+    seed = inp.seed!=null ? String(inp.seed) : '';
+    const si=document.getElementById('seedInput'); if(si) si.value=seed;
+    renderModels(); // 重渲比例/清晰度/张数下拉 + pill,按回填值
+    ta.value=inp.prompt||''; cnt.textContent=ta.value.length;
+    refreshBtn(); scheduleEstimate(); ta.focus();
+    // 图转图:输入图是服务端 key,无法自动重挂为本地 File,提示用户重传
+    if(tabMode==='img2img' && (inp.imageRefs||[]).length){ window.LJToast&&window.LJToast('已回填提示词与参数;图转图请重新上传图片',''); }
+    else { window.LJToast&&window.LJToast('✓ 已回填提示词与参数,可改后创建'); }
+  };
+  // 删除:确认后调 DELETE /jobs/:id(后端租户隔离、生成中不可删),移除卡片。
+  window.delJob=async(id)=>{
+    if(!(await window.LJConfirm({title:'删除作品',body:'确认删除这条生成记录吗?删除后不可恢复。',confirmText:'删除',danger:true}))) return;
+    try{
+      await LJ.del('/jobs/'+id);
+      const card=document.getElementById('job-'+id); if(card) card.remove();
+      delete jobInputs[id];
+      window.LJToast&&window.LJToast('✓ 已删除');
+    }catch(e){ window.LJToast&&window.LJToast('删除失败:'+(e.message||'生成中不可删'),'err'); }
   };
   function findLabel(k){ const m=allModels.find(x=>x.key===k); return m?m.label:undefined; }
   // 下载(P1-download:跨域签名 URL,a[download] 无效 → fetch blob → 同源 objectURL 下载)
