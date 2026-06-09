@@ -12,6 +12,7 @@
 import { randomUUID } from 'node:crypto';
 import { db, type LedgerKind, type LedgerRow } from '../db/index.js';
 import { getImageModel } from '../gateway/image-models.js';
+import { getVideoModel, klingModeToResolution } from '../gateway/video-models.js';
 
 const now = () => Date.now();
 
@@ -57,6 +58,22 @@ export function estimateImageEditCost(resolution = '1K', priceTier = PRICE_PER_E
   return Math.max(MIN_COST, Math.ceil(n * priceTier * factor));
 }
 
+// ── 文生视频(text2video)计价:秒 × 分辨率档 × 模型 tier,audio 加价 ──
+// VIDEO_RES_FACTOR:1080P 真实成本约 720P 的 2×(同图片 480P<720P 必分档教训)。
+const VIDEO_RES_FACTOR: Record<string, number> = { '720P': 1, '1080P': 2 };
+// AUDIO_FACTOR:可灵有声视频加价(占位 1.3,上线前须填真实厂商有声加价)。
+const AUDIO_FACTOR = 1.3;
+/** 文生视频费用预估:ceil(duration × priceTier × resFactor)[× audioFactor]。
+ *  duration/res/audio 由 buildVideoT2VJob 快照,costFor 读快照 → reserve==settle。
+ *  可灵 mode 已在 build 时翻译成 resolution 档(R3),此函数不感知 std/pro。 */
+export function estimateVideoCost(duration: number, priceTier: number, resolution = '720P', audio = false): number {
+  const dur = Math.max(1, Math.floor(duration));
+  const resFactor = VIDEO_RES_FACTOR[resolution] ?? 1;
+  let cost = dur * priceTier * resFactor;
+  if (audio) cost *= AUDIO_FACTOR;
+  return Math.max(MIN_COST, Math.ceil(cost));
+}
+
 // 文转语音(TTS)计价:按字数(无分辨率维度)。
 const TTS_PRICE_PER_CHAR = 0.02; // 每字 0.02 积分(配音比视频便宜,占位可配)
 /** TTS 费用预估:按字数。 */
@@ -95,6 +112,26 @@ export function costFor(toolType: string, input: Record<string, unknown>): numbe
         priceTier,
         maxImages,
       );
+    }
+    case 'video_t2v': {
+      // 文生视频:读快照计价(reserve==settle)。无快照(老 job)回落实时派生(同 build 规则)。
+      const def = getVideoModel(typeof input.model === 'string' ? input.model : undefined);
+      const priceTier = typeof input.priceTierSnapshot === 'number' ? input.priceTierSnapshot : def.priceTier;
+      const duration = typeof input.durationSnapshot === 'number'
+        ? input.durationSnapshot
+        : (typeof input.duration === 'number' ? input.duration : def.defaultDuration);
+      // res 档:快照优先;无则派生(可灵 mode→档,V_DASH 用 resolution)。
+      let resolution = typeof input.resSnapshot === 'string' ? input.resSnapshot : undefined;
+      if (!resolution) {
+        resolution = def.shape === 'V_KLING'
+          ? klingModeToResolution(typeof input.mode === 'string' ? input.mode : undefined)
+          : (typeof input.resolution === 'string' ? input.resolution : '720P');
+      }
+      // audio:快照优先;无则派生(仅可灵生效,R6)。
+      const audio = typeof input.audioSnapshot === 'boolean'
+        ? input.audioSnapshot
+        : (def.supportsAudio ? !!input.audio : false);
+      return estimateVideoCost(duration, priceTier, resolution, audio);
     }
     case 'tts':
       return estimateTtsCost(typeof input.text === 'string' ? input.text.length : 0);

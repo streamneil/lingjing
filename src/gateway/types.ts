@@ -66,6 +66,27 @@ export interface ImageEditInput {
   seed?: number; // 随机种子;空 = 随机
 }
 
+// ── 文生视频(text2video:HappyHorse / 万相2.7 / 可灵)──
+// 异步任务:submitVideoT2V 返 task_id,轮询 /tasks/{id} 直到 SUCCEEDED;成品在 output.video_url。
+// 与数字人 s2v(图+音频驱动口型)是不同形状 —— 纯文生视频,无 TTS、无图、无分段。
+export interface VideoGenT2VInput {
+  model?: string; // 模型 key(registry,缺省 → DEFAULT_VIDEO_MODEL)
+  prompt: string; // 文本提示词(逐模型 maxPromptChars 校验)
+  resolution?: string; // 720P | 1080P(V_DASH 直传;V_KLING 由 mode 映射,不直传)
+  ratio?: string; // 宽高比(16:9 / 9:16 / 1:1 ...)
+  duration?: number; // 时长(秒,clamp 到 model durationRange)
+  mode?: 'std' | 'pro'; // 仅 V_KLING:生成模式(std=720P、pro=1080P)
+  audio?: boolean; // 仅 V_KLING:有声视频(计价加价;V_DASH 恒 false,R6)
+  negativePrompt?: string; // 仅 wan2.7:反向提示词
+  promptExtend?: boolean; // 仅 wan2.7:prompt 智能改写
+  seed?: number; // 随机种子 [0,2147483647];空 = 随机
+  // ── 提交时快照(钱路 reserve==settle:admin/前端 mid-flight 改不破)──
+  durationSnapshot?: number; // clamp 后的时长
+  resSnapshot?: string; // 计价用分辨率档(可灵由 mode 翻译写入,R3)
+  audioSnapshot?: boolean; // 计价用 audio(V_DASH 恒 false)
+  priceTierSnapshot?: number; // 提交时模型每秒计价基数
+}
+
 // ── 文转语音(TTS,cosyvoice)──
 // synthesizeSpeech 已是独立函数(WebSocket→MP3 Buffer);worker tts 分支直接调,不加网关接口。
 export interface TtsGenInput {
@@ -114,6 +135,10 @@ export interface CapabilityGateway {
 
   /** 提交万相2.7 含图编辑(A_EDIT,异步多模态体 + bbox_list),返回厂商侧 task_id。 */
   submitImageEdit(input: ImageGenInput): Promise<string>;
+
+  /** 提交文生视频(HappyHorse/万相2.7/可灵,异步),按 shape 组体,返回厂商侧 task_id。
+   *  成品轮询走 fetchJobStatus(三家与 s2v 同 /tasks/{id} + output.video_url 顶层字段)。 */
+  submitVideoT2V(input: VideoGenT2VInput): Promise<string>;
 
   /** 获取图片任务状态(成品在 results[] 或 choices[].message.content[].image,双解析)。 */
   fetchImageStatus(providerTaskId: string): Promise<ImageJobResult>;

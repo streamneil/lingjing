@@ -230,3 +230,61 @@ describe('fetchImageStatus 双解析(万相2.7 编辑回包是 choices-content)'
     expect(r.imageUrls).toEqual(['https://wan/a.png', 'https://wan/b.png']);
   });
 });
+
+describe('submitVideoT2V 体形(按 shape 组体)', () => {
+  function spyCapture() {
+    let body: Record<string, unknown> = {}; let url = '';
+    vi.spyOn(globalThis, 'fetch').mockImplementation((u, opts) => {
+      url = String(u); body = JSON.parse((opts as RequestInit).body as string);
+      return Promise.resolve(new Response(JSON.stringify({ output: { task_id: 't-1', task_status: 'PENDING' } }), { status: 200 }));
+    });
+    return () => ({ body, url });
+  }
+
+  it('V_DASH(wan2.7):resolution+ratio+duration、含 negative_prompt/prompt_extend、统一端点、无 mode', async () => {
+    const gw = new BaichuanGateway();
+    const get = spyCapture();
+    const taskId = await gw.submitVideoT2V({
+      model: 'wan2.7-t2v', prompt: '一只猫', resolution: '1080P', ratio: '9:16',
+      duration: 8, negativePrompt: '花朵', promptExtend: false, seed: 123,
+    });
+    expect(taskId).toBe('t-1');
+    const { body, url } = get();
+    expect(url).toContain('/services/aigc/video-generation/video-synthesis');
+    expect(body.model).toBe('wan2.7-t2v');
+    expect((body.input as any).prompt).toBe('一只猫');
+    expect((body.input as any).negative_prompt).toBe('花朵');
+    const p = body.parameters as Record<string, unknown>;
+    expect(p.resolution).toBe('1080P');
+    expect(p.ratio).toBe('9:16');
+    expect(p.duration).toBe(8);
+    expect(p.prompt_extend).toBe(false);
+    expect(p.watermark).toBe(false);
+    expect(p.seed).toBe(123);
+    expect(p.mode).toBeUndefined();
+  });
+
+  it('V_KLING(可灵):mode+aspect_ratio+audio、modelId 带 kling/ 前缀、无 resolution', async () => {
+    const gw = new BaichuanGateway();
+    const get = spyCapture();
+    await gw.submitVideoT2V({ model: 'kling-v3-t2v', prompt: '小猫奔跑', mode: 'pro', ratio: '1:1', duration: 5, audio: true });
+    const { body } = get();
+    expect(body.model).toBe('kling/kling-v3-video-generation');
+    const p = body.parameters as Record<string, unknown>;
+    expect(p.mode).toBe('pro');
+    expect(p.aspect_ratio).toBe('1:1');
+    expect(p.audio).toBe(true);
+    expect(p.resolution).toBeUndefined();
+  });
+
+  it('happyhorse:无 negative/prompt_extend/audio(模型不支持)', async () => {
+    const gw = new BaichuanGateway();
+    const get = spyCapture();
+    await gw.submitVideoT2V({ model: 'happyhorse-1.0-t2v', prompt: '微型城市', resolution: '720P', ratio: '16:9', duration: 5 });
+    const { body } = get();
+    expect((body.input as any).negative_prompt).toBeUndefined();
+    const p = body.parameters as Record<string, unknown>;
+    expect(p.prompt_extend).toBeUndefined();
+    expect(p.audio).toBeUndefined();
+  });
+});
