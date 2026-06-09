@@ -24,20 +24,24 @@
 
   // 创作工具组:从 tools.js 注册表渲染(唯一真源)。徽章/即将上线角标随描述符。
   // 全部工具是"发起生成"入口,viewer 无权 → data-requires-create 兜底隐藏。
-  const tools = (window.LJTools ? LJTools.list : []);
-  const toolItems = tools.map(t => {
-    const on = t.key===cur ? ' active' : '';
-    let suffix = '';
-    if (t.badge) suffix = `<span class="${t.badge.kind==='nano'?'nano':'nbadge'}">${t.badge.text}</span>`;
-    else if (!t.enabled) suffix = `<span class="soon">即将上线</span>`;
-    return `<a class="sb-item sb-tool${on}" href="${LJTools.href(t)}" data-label="${t.label}" data-requires-create>${svg(t.icon)}<span>${t.label}</span>${suffix}</a>`;
-  }).join('');
+  // ⚠️ shell.js 在 tools.js 之前注入(异步),首渲时 LJTools 可能未就绪 →
+  //    先渲占位容器 #sb-tools,挂载后由 fillTools() 轮询 LJTools 就绪再填(否则创作工具组为空)。
+  function buildToolItems(){
+    const tools = (window.LJTools ? LJTools.list : []);
+    return tools.map(t => {
+      const on = t.key===cur ? ' active' : '';
+      let suffix = '';
+      if (t.badge) suffix = `<span class="${t.badge.kind==='nano'?'nano':'nbadge'}">${t.badge.text}</span>`;
+      else if (!t.enabled) suffix = `<span class="soon">即将上线</span>`;
+      return `<a class="sb-item sb-tool${on}" href="${LJTools.href(t)}" data-label="${t.label}" data-requires-create>${svg(t.icon)}<span>${t.label}</span>${suffix}</a>`;
+    }).join('');
+  }
 
   const items =
     link('explore','探索','explore.html') +
     link('assets','我的资产','assets.html') +
     `<div class="sb-group">创作工具</div>` +
-    toolItems +
+    `<div id="sb-tools">${buildToolItems()}</div>` +
     `<div class="sb-group">经营管理</div>` +
     link('billing','用量计费','billing.html') +
     link('members','成员与权限','members.html') +
@@ -54,6 +58,17 @@
   </aside>`;
 
   document.getElementById('shell-mount').insertAdjacentHTML('afterbegin', sb);
+
+  // 创作工具组延迟填充:tools.js 异步注入,就绪后再渲(首渲为空时兜底)。
+  function fillTools(){
+    if (!window.LJTools) { setTimeout(fillTools, 30); return; }
+    const host = document.getElementById('sb-tools');
+    if (!host) return;
+    if (!host.children.length) host.innerHTML = buildToolItems(); // 首渲已填则不重复
+    // 若用户已知是 viewer(bindAuth 已跑),补隐藏新填的创作入口
+    if (window.__ljRole === 'viewer') host.querySelectorAll('[data-requires-create]').forEach(el => el.style.display='none');
+  }
+  fillTools();
 
   // 顶栏(面包屑 + 点数 + 账号)— 页面用 data-crumb 提供路径
   const crumb = (document.body.dataset.crumb || '').split('>').map((s,i,a)=>
@@ -132,6 +147,7 @@
   function bindAuth(){
     if (!window.LJ) { setTimeout(bindAuth, 30); return; }
     LJ.me().then(u => {
+      window.__ljRole = u.role; // 供 fillTools 在 bindAuth 后补隐藏 viewer 创作入口
       const acc = document.getElementById('lj-account');
       const menu = document.getElementById('lj-menu');
       const display = u.displayName || u.username;
