@@ -88,3 +88,42 @@ describe('图生图 editImage 同步解析 + AbortController 超时(E2 命脉)',
     ).rejects.toThrow();
   });
 });
+
+describe('同步文生图 generateImageSync(S+text2img,eng 外部声音 P1-a/P3-b)', () => {
+  it('纯文本 content(无输入图)→ choices[].image 数组', async () => {
+    const gw = new BaichuanGateway();
+    let sentBody: Record<string, unknown> = {};
+    vi.spyOn(globalThis, 'fetch').mockImplementation((_url, opts) => {
+      sentBody = JSON.parse((opts as RequestInit).body as string);
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ output: { choices: [{ message: { content: [{ image: 'https://gen/a.png' }] } }] } }),
+          { status: 200 },
+        ),
+      );
+    });
+    const urls = await gw.generateImageSync(
+      { model: 'qwen-image-2.0-pro', prompt: '一只猫', ratio: '1:1', resolution: '2K' },
+      new AbortController().signal,
+    );
+    expect(urls).toEqual(['https://gen/a.png']);
+    // P3-b:content 是 [{text}](非空,不触空 content 抛错);无 image 部分
+    const content = ((sentBody.input as Record<string, unknown>).messages as Array<Record<string, unknown>>)[0]!
+      .content as Array<Record<string, unknown>>;
+    expect(content).toEqual([{ text: '一只猫' }]);
+  });
+
+  it('命脉:已 abort 的 signal → 抛错(不冻 worker)', async () => {
+    const gw = new BaichuanGateway();
+    vi.spyOn(globalThis, 'fetch').mockImplementation((_url, opts) => {
+      const sig = (opts as RequestInit | undefined)?.signal;
+      if (sig?.aborted) return Promise.reject(new DOMException('aborted', 'AbortError'));
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+    const ac = new AbortController();
+    ac.abort();
+    await expect(
+      gw.generateImageSync({ model: 'qwen-image-2.0-pro', prompt: 'x' }, ac.signal),
+    ).rejects.toThrow();
+  });
+});

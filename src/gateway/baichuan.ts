@@ -10,6 +10,7 @@
 // 参考:https://help.aliyun.com/zh/model-studio/wan-s2v-api
 
 import { config } from '../config.js';
+import { getImageModel, sizeParams } from './image-models.js';
 import type {
   CapabilityGateway,
   VideoSubmitUrls,
@@ -130,15 +131,16 @@ export class BaichuanGateway implements CapabilityGateway, SyncImageGateway {
   //   GET /tasks/:id 轮询;成功 output.results 是**数组**(多图),每元素 { url }。URL 24h 过期。
   // 参考:https://help.aliyun.com/zh/model-studio/qwen-image-api
   async submitImage(input: ImageGenInput): Promise<string> {
-    const model = config.baichuan.imageModel || 'qwen-image';
-    const n = Math.min(4, Math.max(1, Math.floor(input.count ?? 1)));
+    // model 从 registry(P1-c:删 config.imageModel 读,registry 是唯一真相源)。
+    const def = getImageModel(input.model);
+    const n = Math.min(def.maxImages, Math.max(1, Math.floor(input.count ?? 1)));
     const { status, json } = await httpJson(
       'POST',
       '/services/aigc/text2image/image-synthesis/',
       {
-        model,
+        model: def.modelId,
         input: { prompt: input.prompt },
-        parameters: { n, size: imageSize(input.ratio, input.resolution) },
+        parameters: { n, ...sizeParams(def, input.ratio, input.resolution) },
       },
       { 'X-DashScope-Async': 'enable' },
     );
@@ -181,35 +183,63 @@ export class BaichuanGateway implements CapabilityGateway, SyncImageGateway {
   // signal 做硬超时(外部声音 P2):同步调无 poll 循环,挂连接会冻 worker。
   // 参考:https://help.aliyun.com/zh/model-studio/qwen-image-edit-api
   async editImage(input: ImageEditInput, signal: AbortSignal): Promise<string[]> {
-    const model = config.baichuan.imageEditModel || 'qwen-image-edit';
+    // model 从 registry(P1-c:删 config.imageEditModel 读)。img2img 缺省走编辑默认。
+    const def = getImageModel(input.model, 'img2img');
     const content: Array<{ image: string } | { text: string }> = input.imageUrls.map((u) => ({
       image: u,
     }));
     content.push({ text: input.prompt });
-    const { status, json } = await httpJson(
-      'POST',
-      '/services/aigc/multimodal-generation/generation',
-      {
-        model,
-        input: { messages: [{ role: 'user', content }] },
-        parameters: { n: 1, size: imageSize(input.ratio, input.resolution), watermark: false },
-      },
-      {}, // 同步,无 X-DashScope-Async 头
+    return callMultimodalSync(def.modelId, content, sizeParams(def, input.ratio, input.resolution), signal);
+  }
+
+  // 同步文生图(S 形状,纯文本 content,无输入图)。eng 外部声音 P1-a:
+  // editImage 必填 imageUrls,S 模型 text2img 需独立方法;content=[{text}](非空,不触 P3-b 空 content 抛错)。
+  async generateImageSync(input: ImageGenInput, signal: AbortSignal): Promise<string[]> {
+    const def = getImageModel(input.model);
+    const content: Array<{ text: string }> = [{ text: input.prompt }];
+    const n = Math.min(def.maxImages, Math.max(1, Math.floor(input.count ?? 1)));
+    return callMultimodalSync(
+      def.modelId,
+      content,
+      { n: String(n), ...sizeParams(def, input.ratio, input.resolution) },
       signal,
     );
-    if (status !== 200) {
-      throw new Error(`百炼图生图失败 HTTP ${status}: ${JSON.stringify(json?.message ?? json)}`);
-    }
-    // 解析 output.choices[0].message.content[].image(外部声音核实:choices 非 results)
-    const parts = json?.output?.choices?.[0]?.message?.content;
-    const urls: string[] = Array.isArray(parts)
-      ? parts.map((p: { image?: string }) => p?.image).filter((u: unknown): u is string => typeof u === 'string')
-      : [];
-    if (urls.length === 0) {
-      throw new Error(`百炼图生图无成品(可能内容被拒):${JSON.stringify(json?.output ?? json).slice(0, 300)}`);
-    }
-    return urls;
   }
+}
+
+// S 形状共用:同步 multimodal-generation/generation 调用 + 解析 choices[].content[].image。
+// 外部声音核实:choices 非 results;同步无 poll,AbortController 是唯一防冻 worker 保障。
+async function callMultimodalSync(
+  modelId: string,
+  content: Array<Record<string, string>>,
+  extraParams: Record<string, string>,
+  signal: AbortSignal,
+): Promise<string[]> {
+  const params: Record<string, unknown> = { watermark: false, ...extraParams };
+  if (params.n !== undefined) params.n = Number(params.n);
+  else params.n = 1;
+  const { status, json } = await httpJson(
+    'POST',
+    '/services/aigc/multimodal-generation/generation',
+    {
+      model: modelId,
+      input: { messages: [{ role: 'user', content }] },
+      parameters: params,
+    },
+    {}, // 同步,无 X-DashScope-Async 头
+    signal,
+  );
+  if (status !== 200) {
+    throw new Error(`百炼图像(同步)失败 HTTP ${status}: ${JSON.stringify(json?.message ?? json)}`);
+  }
+  const parts = json?.output?.choices?.[0]?.message?.content;
+  const urls: string[] = Array.isArray(parts)
+    ? parts.map((p: { image?: string }) => p?.image).filter((u: unknown): u is string => typeof u === 'string')
+    : [];
+  if (urls.length === 0) {
+    throw new Error(`百炼图像无成品(可能内容被拒):${JSON.stringify(json?.output ?? json).slice(0, 300)}`);
+  }
+  return urls;
 }
 
 // (比例 + 分辨率)→ qwen-image size 参数(W*H)。

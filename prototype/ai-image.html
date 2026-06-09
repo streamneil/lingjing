@@ -97,6 +97,10 @@
       </div>
     </div>
 
+    <!-- 模型 -->
+    <div class="cfg-label">模型</div>
+    <select id="modelSel" style="width:100%;padding:10px 12px;background:var(--field);border:1px solid var(--line);border-radius:var(--r);color:var(--t1);font-size:13.5px;margin-bottom:4px"></select>
+
     <!-- 比例 -->
     <div class="cfg-label">比例</div>
     <div class="ratio-row" id="ratioRow"></div>
@@ -159,7 +163,21 @@
 <script>
   const ta=document.getElementById('prompt'), cnt=document.getElementById('cnt'), btn=document.getElementById('createBtn');
   const feedList=document.querySelector('.feed-list');
-  let count=1, res='1K', ratio='1:1', mode='text2img';
+  let count=1, res='1K', ratio='1:1', mode='text2img', model='', allModels=[];
+
+  // ── 模型下拉(单一真相源:GET /image-models)。按当前 mode 过滤 ──
+  const modelSel=document.getElementById('modelSel');
+  async function loadModels(){
+    try{ const r=await LJ.get('/image-models'); allModels=r.models||[]; renderModels(); }
+    catch(e){ modelSel.innerHTML='<option>模型加载失败</option>'; }
+  }
+  function renderModels(){
+    const usable=allModels.filter(m=>m.modes.includes(mode==='img2img'?'img2img':'text2img'));
+    modelSel.innerHTML=usable.map(m=>`<option value="${m.key}">${esc(m.label)}${m.maxResolution==='4K'?' · 4K':''}</option>`).join('');
+    if(usable.length){ if(!usable.find(m=>m.key===model)) model=usable[0].key; modelSel.value=model; }
+    scheduleEstimate();
+  }
+  modelSel.onchange=()=>{ model=modelSel.value; scheduleEstimate(); };
 
   // ── 比例选择(8 档,glyph 用 CSS 长宽比近似)──
   const RATIOS=[
@@ -187,6 +205,7 @@
     document.getElementById('pane-template').style.display = m==='template'?'':'none';
     document.getElementById('pane-prompt').style.display = '';   // 三模式都用提示词
     ta.placeholder = m==='img2img' ? '描述如何编辑这些图…(如:图 A 的人穿图 B 的衣服)' : '详细描述您想要创建的图像…';
+    renderModels(); // 模型按 mode 过滤(img2img 只列编辑模型)
     refreshBtn();
   });
 
@@ -218,7 +237,7 @@
     estTimer=setTimeout(async()=>{
       if(!ta.value.trim()){ document.getElementById('estLabel').textContent='预估 — 点'; document.getElementById('estGem').textContent='—'; return; }
       try{
-        const r=await LJ.post('/jobs/estimate',{type:'ai_image',count,resolution:res});
+        const r=await LJ.post('/jobs/estimate',{type:'ai_image',model,mode,count,resolution:res});
         document.getElementById('estLabel').textContent='预估 '+r.cost+' 点';
         document.getElementById('estGem').textContent=r.cost;
       }catch(e){}
@@ -301,9 +320,9 @@
       if(mode==='img2img'){
         btn.textContent='上传中…';
         const imageRefs=await uploadInputImages();
-        payload={ type:'ai_image', mode:'img2img', prompt, imageRefs, resolution:res, ratio };
+        payload={ type:'ai_image', model, mode:'img2img', prompt, imageRefs, resolution:res, ratio };
       } else {
-        payload={ type:'ai_image', mode:'text2img', prompt, count, resolution:res, ratio };
+        payload={ type:'ai_image', model, mode:'text2img', prompt, count, resolution:res, ratio };
       }
       btn.textContent='提交中…';
       const res2=await LJ.createJob(payload);
@@ -317,7 +336,7 @@
     finally{ btn.innerHTML=prev; refreshBtn(); }
   });
 
-  LJ.me().then(()=>loadHistory()).catch(()=>{});
+  LJ.me().then(()=>{ loadModels(); loadHistory(); }).catch(()=>{});
   refreshBtn();
 </script>
 </body>

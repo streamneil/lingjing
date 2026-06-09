@@ -29,6 +29,7 @@ import { isUsableAvatar } from '../avatars/index.js';
 import { isUsableVoice } from '../voices/index.js';
 import { db } from '../db/index.js';
 import type { VideoGenInput, ImageGenInput, TtsGenInput } from '../gateway/types.js';
+import { IMAGE_MODELS, getImageModel, resolutionAllowed } from '../gateway/image-models.js';
 
 export const jobsRouter = Router();
 
@@ -76,39 +77,55 @@ function buildVideoJob(body: Record<string, unknown>, tid: string): JobBuildResu
   };
 }
 
-/** 校验并构建 ai_image job 入参 + 计价。按 input.mode 分文生图 / 图生图。 */
+/** 校验并构建 ai_image job 入参 + 计价。多模型(registry)+ (model,mode) 校验。
+ *
+ * 顺序(eng 外部声音 P1-d,保 reserve==settle):
+ *   resolve model(默认兜底)→ 校验 mode/4K/张数 → clamp(maxImages)→ 写 input.count+model → cost(读 priceTier)。
+ */
 function buildImageJob(body: Record<string, unknown>): JobBuildResult {
-  const { prompt, count, resolution, ratio, mode, imageRefs } = body as Partial<ImageGenInput>;
+  const { model, prompt, count, resolution, ratio, mode, imageRefs } = body as Partial<ImageGenInput>;
   if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0)
     return { ok: false, status: 400, error: '缺少 prompt(提示词)' };
   const res = typeof resolution === 'string' ? resolution : undefined;
 
-  if (mode === 'img2img') {
-    // 图生图:输入图 key 必填 1-3 张(qwen-image-edit 上限);授权门票在上传端点已把关。
+  // 1. resolve model:显式传的必须在白名单;缺省按 mode 走默认(C5b 老 job/前端未传兼容)。
+  if (model !== undefined && (typeof model !== 'string' || !IMAGE_MODELS[model]))
+    return { ok: false, status: 400, error: '模型不可用' };
+  const effMode: 'text2img' | 'img2img' = mode === 'img2img' ? 'img2img' : 'text2img';
+  const def = getImageModel(model, effMode);
+  // 2. model × mode 兼容
+  if (!def.modes.includes(effMode))
+    return { ok: false, status: 400, error: `该模型不支持${effMode === 'img2img' ? '图生图' : '文生图'}` };
+  // 3. 分辨率上限(4K 不支持 → 400,非 clamp:P2-4k 防按 4K 价扣却出 ≤2K)
+  if (!resolutionAllowed(def, res))
+    return { ok: false, status: 400, error: `该模型最高支持 ${def.maxResolution}` };
+
+  if (effMode === 'img2img') {
     const refs = Array.isArray(imageRefs) ? imageRefs.filter((k) => typeof k === 'string') : [];
     if (refs.length === 0) return { ok: false, status: 400, error: '图生图需上传至少 1 张输入图' };
-    if (refs.length > 3) return { ok: false, status: 400, error: '图生图最多 3 张输入图' };
-    const input: ImageGenInput = { mode: 'img2img', prompt, imageRefs: refs };
+    if (refs.length > def.maxInputImages)
+      return { ok: false, status: 400, error: `该模型最多 ${def.maxInputImages} 张输入图` };
+    const input: ImageGenInput = { model: def.key, mode: 'img2img', prompt, imageRefs: refs };
     if (res) input.resolution = res;
     if (typeof ratio === 'string') input.ratio = ratio;
     return {
       ok: true,
       type: 'ai_image',
       input: input as unknown as Record<string, unknown>,
-      cost: estimateImageEditCost(res),
+      cost: estimateImageEditCost(res, def.priceTier),
     };
   }
 
-  // 文生图
-  const n = clampImageCount(count); // [1,4],保证 reserve==settle
-  const input: ImageGenInput = { mode: 'text2img', prompt, count: n };
+  // 文生图:clamp 按 model maxImages 并回写 input.count(reserve==settle)
+  const n = clampImageCount(count, def.maxImages);
+  const input: ImageGenInput = { model: def.key, mode: 'text2img', prompt, count: n };
   if (res) input.resolution = res;
   if (typeof ratio === 'string') input.ratio = ratio;
   return {
     ok: true,
     type: 'ai_image',
     input: input as unknown as Record<string, unknown>,
-    cost: estimateImageCost(n, res),
+    cost: estimateImageCost(n, res, def.priceTier, def.maxImages),
   };
 }
 
@@ -242,8 +259,12 @@ jobsRouter.post('/jobs/estimate', requireAuth, (req: Request, res: Response) => 
   const type = typeof body.type === 'string' && body.type ? body.type : 'video';
   if (type === 'ai_image') {
     const res2 = typeof body.resolution === 'string' ? body.resolution : undefined;
-    if (body.mode === 'img2img') return res.json({ cost: estimateImageEditCost(res2) });
-    return res.json({ cost: estimateImageCost(clampImageCount(body.count), res2) });
+    const m = body.mode === 'img2img' ? 'img2img' : 'text2img';
+    const def = getImageModel(typeof body.model === 'string' ? body.model : undefined, m);
+    if (m === 'img2img') return res.json({ cost: estimateImageEditCost(res2, def.priceTier) });
+    return res.json({
+      cost: estimateImageCost(clampImageCount(body.count, def.maxImages), res2, def.priceTier, def.maxImages),
+    });
   }
   if (type === 'tts') {
     return res.json({ cost: estimateTtsCost(typeof body.text === 'string' ? body.text.length : 0) });
@@ -252,6 +273,20 @@ jobsRouter.post('/jobs/estimate', requireAuth, (req: Request, res: Response) => 
   return res.json({
     cost: estimateCost(body.script.length, typeof body.resolution === 'string' ? body.resolution : undefined),
   });
+});
+
+// 图像模型清单 — 前端下拉的单一真相源(P2-b:requireAuth,同级路由一致)。
+// 吐 registry 的 UI 相关字段(不泄漏内部 modelId/priceTier 计费细节)。
+jobsRouter.get('/image-models', requireAuth, (_req: Request, res: Response) => {
+  const models = Object.values(IMAGE_MODELS).map((d) => ({
+    key: d.key,
+    label: d.label,
+    modes: d.modes,
+    maxImages: d.maxImages,
+    maxInputImages: d.maxInputImages,
+    maxResolution: d.maxResolution,
+  }));
+  res.json({ models, default: 'qwen-image' });
 });
 
 // 作品列表 — 任何登录角色(含 viewer)可读本租户作品
