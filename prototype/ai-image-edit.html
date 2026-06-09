@@ -9,10 +9,10 @@
 <style>
   /* ── 主图大卡:预览 + 3 个入口按钮(点开局部重绘大对话框)── */
   .mainimg-card { border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:14px; }
-  /* 预览区限高(随屏幕),让左栏紧凑、一屏能看到底部「创建」按钮 */
-  .mainimg-stage { position:relative; min-height:150px; max-height:min(260px,30vh); display:grid; place-items:center; background:var(--field); border-radius:12px; overflow:hidden; }
-  .mainimg-stage .pv-wrap { position:relative; display:inline-block; line-height:0; max-height:100%; }
-  .mainimg-stage img.preview { max-width:100%; max-height:min(240px,28vh); border-radius:8px; display:block; }
+  /* 预览区固定高(空态/传图后不变高);图片在框内等比自适应,不撑高 */
+  .mainimg-stage { position:relative; height:min(260px,30vh); display:grid; place-items:center; background:var(--field); border-radius:12px; overflow:hidden; }
+  .mainimg-stage .pv-wrap { position:relative; display:inline-block; line-height:0; max-width:100%; max-height:100%; }
+  .mainimg-stage img.preview { max-width:100%; max-height:min(232px,calc(30vh - 28px)); border-radius:8px; display:block; }
   /* 主图上叠加涂抹层(只读回显,真正涂抹在对话框) */
   .mainimg-stage canvas.maskoverlay { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; border-radius:8px; }
   .mainimg-stage .del { position:absolute; top:10px; right:10px; width:34px; height:34px; border-radius:9px; background:rgba(0,0,0,.5); border:1px solid var(--line-hi); display:grid; place-items:center; cursor:pointer; z-index:3; }
