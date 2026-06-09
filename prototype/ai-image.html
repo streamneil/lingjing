@@ -43,6 +43,7 @@
   /* 外卡:与 AI 图片编辑器上传卡背景一致(var(--card) + 边框 + 内距) */
   .img-tiles-card { border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:14px; }
   .img-tiles { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .img-tiles.empty { display:block; } /* 空态:大上传区占满整宽 */
   .img-tile { position:relative; aspect-ratio:1/1; border-radius:12px; overflow:hidden; border:1px solid var(--line); background:var(--field); }
   .img-tile img { width:100%; height:100%; object-fit:cover; display:block; }
   .img-tile .rmx { position:absolute; top:6px; right:6px; width:22px; height:22px; background:rgba(0,0,0,.6); border-radius:50%; display:grid; place-items:center; color:#fff; font-size:13px; line-height:1; cursor:pointer; }
@@ -51,6 +52,13 @@
   .img-tile.add .plus { font-size:30px; font-weight:300; line-height:1; }
   .img-tile.add .lbl { font-size:12.5px; }
   .img-tile.add svg { width:18px; height:18px; opacity:.7; }
+  /* 空态:大上传区(0 张时)— 居中大图标 + 提示 + 选择资产按钮 */
+  .img-drop { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; min-height:170px; border:1.5px dashed var(--line-hi); border-radius:12px; background:var(--field); cursor:pointer; color:var(--t3); transition:.15s; padding:24px 16px; text-align:center; }
+  .img-drop:hover { border-color:var(--blue); background:var(--card-hi); }
+  .img-drop .di svg { width:38px; height:38px; color:var(--t3); }
+  .img-drop .dt { font-size:14px; color:var(--t2); }
+  .img-drop .da { display:inline-flex; align-items:center; gap:6px; font-size:12.5px; color:var(--t3); background:var(--card); border:1px solid var(--line); border-radius:9px; padding:8px 14px; }
+  .img-drop .da svg { width:15px; height:15px; }
 
   /* 比例选择 */
   .ratio-row { display:flex; gap:5px; flex-wrap:nowrap; align-items:stretch; }
@@ -349,6 +357,23 @@
   imgFileInput.onchange=()=>{ addFiles(imgFileInput.files); imgFileInput.value=''; };
   function renderTiles(){
     const cap=i2iMaxInput();
+    const hint=document.getElementById('imgTileHint'); if(hint) hint.textContent=`(最多 ${cap} 张图片)`;
+    if(imgFiles.length===0){
+      // 空态:大上传区(图标 + 提示 + 选择资产),与 GPT Image 风格一致
+      imgTiles.classList.add('empty');
+      imgTiles.innerHTML=`<div class="img-drop" id="imgDrop">
+        <div class="di"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/><path d="M17 14v4M15 16h4"/></svg></div>
+        <div class="dt">点击或拖放图片以上传</div>
+        <div class="da"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z"/></svg>选择资产</div>
+      </div>`;
+      const dz=document.getElementById('imgDrop');
+      dz.onclick=()=>imgFileInput.click();
+      dz.ondragover=e=>{e.preventDefault();dz.style.borderColor='var(--blue)';}; dz.ondragleave=()=>dz.style.borderColor='';
+      dz.ondrop=e=>{e.preventDefault();dz.style.borderColor=''; addFiles(e.dataTransfer.files);};
+      return;
+    }
+    // 有图:多图并排网格 + 末尾「+ 上传」格(未到上限才显)
+    imgTiles.classList.remove('empty');
     const tiles=imgFiles.map((f,i)=>{
       const url=imgPreviewUrls.get(f)||'';
       const img=url?`<img src="${url}">`:'<div style="width:100%;height:100%;display:grid;place-items:center;color:var(--t4);font-size:11px">读取中</div>';
@@ -362,7 +387,6 @@
     const at=document.getElementById('addTile'); if(at){ at.onclick=()=>imgFileInput.click();
       at.ondragover=e=>{e.preventDefault();at.style.borderColor='var(--blue)';}; at.ondragleave=()=>at.style.borderColor='';
       at.ondrop=e=>{e.preventDefault();at.style.borderColor=''; addFiles(e.dataTransfer.files);}; }
-    const hint=document.getElementById('imgTileHint'); if(hint) hint.textContent=`(最多 ${cap} 张图片)`;
   }
   window.removeImg=(i)=>{ imgFiles.splice(i,1); renderTiles(); refreshBtn(); scheduleEstimate(); };
   function onI2iModelChange(){ if(imgFiles.length>i2iMaxInput()) imgFiles=imgFiles.slice(0,i2iMaxInput()); renderTiles(); }
