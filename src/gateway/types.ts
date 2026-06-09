@@ -39,6 +39,7 @@ export interface ProviderJobResult {
 export interface ImageGenInput {
   model?: string; // 模型 key(registry,缺省 → DEFAULT_IMAGE_MODEL,兼容老 job 无此字段)
   mode?: 'text2img' | 'img2img'; // 子模式;缺省=text2img(兼容老 job)
+  source?: 'ai-image' | 'ai-image-edit'; // 来源页(记录归属;前端发起页,与 mode 无关)
   prompt: string; // 提示词(文生图描述 / 图生图编辑指令)
   count?: number; // 出图张数(worker 已按 model maxImages clamp);img2img 固定 1
   resolution?: string; // 1K | 2K | 4K(按 model sizeKind 映射)
