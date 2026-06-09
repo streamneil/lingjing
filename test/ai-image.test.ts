@@ -117,12 +117,13 @@ describe('imageSize(比例 + 分辨率 → W*H)', () => {
 const { IMAGE_MODELS, getImageModel, sizeParams, resolutionAllowed, DEFAULT_IMAGE_MODEL } = await import(
   '../src/gateway/image-models.js'
 );
+const { validateBboxList } = await import('../src/api/jobs.js');
 
 describe('图像模型 registry 自洽性(E1 命脉)', () => {
   it('每个 model 配置自洽,无矛盾', () => {
     for (const [key, def] of Object.entries(IMAGE_MODELS)) {
       expect(def.key).toBe(key); // key 与 map 键一致
-      expect(['S', 'A1', 'A2']).toContain(def.shape);
+      expect(['S', 'A1', 'A2', 'A_EDIT']).toContain(def.shape);
       expect(['wh', 'keyword', 'aspect_res']).toContain(def.sizeKind);
       expect(def.modes.length).toBeGreaterThan(0);
       expect(def.maxImages).toBeGreaterThanOrEqual(1);
@@ -133,8 +134,12 @@ describe('图像模型 registry 自洽性(E1 命脉)', () => {
       else expect(def.maxInputImages).toBe(0);
       // v1:A2(可灵)缓,不应有 A2 模型上线
       expect(def.shape).not.toBe('A2');
-      // 输入图上限 v1 封顶 3(上传端点写死,P2-c)
-      expect(def.maxInputImages).toBeLessThanOrEqual(3);
+      // 输入图上限:千问编辑 3,万相2.7(A_EDIT)5(上传端点 maxCount=5)
+      expect(def.maxInputImages).toBeLessThanOrEqual(5);
+      // supportsBbox 仅 A_EDIT(万相2.7):shape 与能力一致,不应在非 A_EDIT 上出现
+      if (def.supportsBbox) expect(def.shape).toBe('A_EDIT');
+      // A_EDIT 必须支持 img2img(含图编辑)
+      if (def.shape === 'A_EDIT') expect(def.modes).toContain('img2img');
     }
   });
 });
@@ -177,6 +182,70 @@ describe('costFor model-aware(priceTier 替代基价 + maxImages clamp,外部声
   });
   it('无 model 字段 → 默认计价(老 job 兼容,不抛错)', () => {
     expect(() => costFor('ai_image', { mode: 'text2img', count: 1 })).not.toThrow();
+  });
+});
+
+describe('万相2.7 编辑 count-aware 计价(钱不塌:A_EDIT 按张,千问编辑固定1)', () => {
+  it('A_EDIT 编辑 count=4 = 4×count=1(按张计价,reserve==settle)', () => {
+    const one = costFor('ai_image', { model: 'wan2.7-image', mode: 'img2img', count: 1, resolution: '1K', priceTierSnapshot: 7, maxImagesSnapshot: 4 });
+    const four = costFor('ai_image', { model: 'wan2.7-image', mode: 'img2img', count: 4, resolution: '1K', priceTierSnapshot: 7, maxImagesSnapshot: 4 });
+    expect(four).toBe(one * 4); // 7×1×4 = 28 vs 7
+  });
+  it('A_EDIT count 超 maxImages 被 clamp(防超扣)', () => {
+    const c = costFor('ai_image', { model: 'wan2.7-image', mode: 'img2img', count: 99, resolution: '1K', priceTierSnapshot: 7, maxImagesSnapshot: 4 });
+    expect(c).toBe(7 * 4); // clamp 到 4
+  });
+  it('千问编辑(S)count=4 仍 = count=1(固定 1 张,签名默认 count=1 不回归)', () => {
+    const one = costFor('ai_image', { model: 'qwen-image-edit', mode: 'img2img', count: 1, resolution: '1K', priceTierSnapshot: 6, maxImagesSnapshot: 1 });
+    const four = costFor('ai_image', { model: 'qwen-image-edit', mode: 'img2img', count: 4, resolution: '1K', priceTierSnapshot: 6, maxImagesSnapshot: 1 });
+    expect(four).toBe(one); // 都 = 6
+  });
+  it('estimateImageEditCost 默认 count=1(逐字节不变,老调用兼容)', async () => {
+    const { estimateImageEditCost } = await import('../src/credits/index.js');
+    expect(estimateImageEditCost('2K', 6)).toBe(estimateImageEditCost('2K', 6, 1));
+    expect(estimateImageEditCost('1K', 7, 4)).toBe(28); // 7×1×4
+  });
+});
+
+describe('万相2.7 registry(A_EDIT 异步含图编辑 + bbox)', () => {
+  it('wan2.7-image: shape A_EDIT、supportsBbox、img2img、maxInputImages 5', () => {
+    const d = getImageModel('wan2.7-image');
+    expect(d.shape).toBe('A_EDIT');
+    expect(d.supportsBbox).toBe(true);
+    expect(d.modes).toContain('img2img');
+    expect(d.maxInputImages).toBe(5);
+    expect(d.sizeKind).toBe('keyword'); // size 走 {size:"2K"}
+  });
+  it('sizeParams 对 keyword 模型发 {size:"2K"}(编辑封顶 2K)', () => {
+    expect(sizeParams(getImageModel('wan2.7-image'), '1:1', '2k').size).toBe('2K');
+  });
+});
+
+describe('validateBboxList(不信前端:对齐 + 框数 + 整数边界)', () => {
+  it('合法:长度=图数,每图 ≤2 框,整数 0≤x1<x2', () => {
+    const v = validateBboxList([[[10, 10, 50, 50]], []], 2);
+    expect(v.ok).toBe(true);
+    if (v.ok) expect(v.boxes).toEqual([[[10, 10, 50, 50]], []]);
+  });
+  it('全空框 → boxes=[](调用方据此不传 bbox_list)', () => {
+    const v = validateBboxList([[], []], 2);
+    expect(v.ok).toBe(true);
+    if (v.ok) expect(v.boxes).toEqual([]);
+  });
+  it('长度不符图数 → 拒', () => {
+    expect(validateBboxList([[[0, 0, 1, 1]]], 2).ok).toBe(false);
+  });
+  it('单图超 2 框 → 拒', () => {
+    expect(validateBboxList([[[0, 0, 1, 1], [2, 2, 3, 3], [4, 4, 5, 5]]], 1).ok).toBe(false);
+  });
+  it('x2<=x1 / 非整数 / 负坐标 → 拒', () => {
+    expect(validateBboxList([[[50, 0, 10, 50]]], 1).ok).toBe(false); // x2<x1
+    expect(validateBboxList([[[0, 0, 10.5, 10]]], 1).ok).toBe(false); // 非整数
+    expect(validateBboxList([[[-1, 0, 10, 10]]], 1).ok).toBe(false); // 负
+  });
+  it('非数组 / 框非 4 元 → 拒', () => {
+    expect(validateBboxList('x', 1).ok).toBe(false);
+    expect(validateBboxList([[[0, 0, 10]]], 1).ok).toBe(false);
   });
 });
 

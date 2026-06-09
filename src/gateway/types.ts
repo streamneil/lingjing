@@ -43,7 +43,8 @@ export interface ImageGenInput {
   count?: number; // 出图张数(worker 已按 model maxImages clamp);img2img 固定 1
   resolution?: string; // 1K | 2K | 4K(按 model sizeKind 映射)
   ratio?: string; // 比例:auto | 16:9 | 9:16 | 1:1 | 3:4 | 4:3 | 3:2 | 2:3(与 resolution 共同决定 size)
-  imageRefs?: string[]; // img2img:已上传输入图的存储 key(1-3 张);worker 经 publish 转公网 URL
+  imageRefs?: string[]; // img2img:已上传输入图的存储 key(1-3 张;万相2.7 编辑 0-5 张);worker 经 publish 转公网 URL
+  bboxList?: number[][][]; // 局部重绘框选(仅万相2.7 A_EDIT):外=每张输入图,中=≤2 框,内=[x1,y1,x2,y2] 原图像素;空框图传 []
   seed?: number; // 随机种子 [0,2147483647];空/未传 = 随机(gateway 不加该字段)
   priceTierSnapshot?: number; // 提交时快照(P3:admin 改价 mid-flight 不破 reserve==settle)
   maxImagesSnapshot?: number; // 同上,张数上限快照
@@ -109,6 +110,9 @@ export interface CapabilityGateway {
   /** 提交文生图(qwen-image),返回厂商侧 task_id(异步)。 */
   submitImage(input: ImageGenInput): Promise<string>;
 
-  /** 获取图片任务状态(成品在 results[] 数组,与视频路径分开解析)。 */
+  /** 提交万相2.7 含图编辑(A_EDIT,异步多模态体 + bbox_list),返回厂商侧 task_id。 */
+  submitImageEdit(input: ImageGenInput): Promise<string>;
+
+  /** 获取图片任务状态(成品在 results[] 或 choices[].message.content[].image,双解析)。 */
   fetchImageStatus(providerTaskId: string): Promise<ImageJobResult>;
 }

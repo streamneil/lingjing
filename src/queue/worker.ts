@@ -325,16 +325,65 @@ async function runImageGenSyncJob(job: JobRow): Promise<void> {
   await finalizeImageJob(job, input, resultUrls);
 }
 
-/** AI 图片 job 按 (model.shape, mode) 分发(eng 外部声音 P1-b:一个 S 模型 text2img/img2img 请求体不同)。
- *  - img2img        → runImageEditJob(S,含图 content,同步)
+/** 万相2.7 异步含图编辑(A_EDIT)。= 异步轮询模板(runImageGenJob)+ 编辑前导(送审/发布输入图)。
+ *  与 runImageEditJob(同步)不同:走 submitImageEdit(task_id)+ 轮询;允许 0 张输入图(纯生成 / bbox 编辑)。
+ *  管线:提示词送审 → 各输入图送审 → publish 转公网 URL(写回 input.imageRefs)→ submitImageEdit → 轮询 → finalize。 */
+async function runImageEditAsyncJob(job: JobRow): Promise<void> {
+  const input = JSON.parse(job.input_json) as ImageGenInput;
+
+  const pre = await moderatePrompt(input.prompt);
+  if (!pre.allowed) throw new Error(`送审拒绝:${pre.reason}`);
+
+  const refs = input.imageRefs ?? [];
+  for (const k of refs) {
+    const v = await moderateImageInput(k);
+    if (!v.allowed) throw new Error(`输入图送审拒绝:${v.reason}`);
+  }
+  // 输入图存储 key → 公网 URL(百炼要能下载)。写回 input,submitImageEdit 读 imageRefs。
+  const publisher = getMediaPublisher(tenantDelivery(job.tenant_id));
+  input.imageRefs = await Promise.all(refs.map((k) => publisher.publish(k)));
+
+  const gateway = getGateway(job.tenant_id);
+  const providerTaskId = await gateway.submitImageEdit(input);
+  setProviderTaskId(job.id, providerTaskId);
+
+  const deadline = Date.now() + config.baichuan.jobTimeoutMs;
+  let imageUrls: string[] = [];
+  let sawRunning = false;
+  for (;;) {
+    if (Date.now() > deadline) {
+      throw new Error(
+        sawRunning
+          ? `生成超时(>${config.baichuan.jobTimeoutMs}ms),已放弃`
+          : `排队超时:生成服务繁忙(免费档同时只跑 1 个任务),请稍后重试`,
+      );
+    }
+    const r = await gateway.fetchImageStatus(providerTaskId);
+    if (r.status === 'running') sawRunning = true;
+    if (typeof r.progress === 'number') updateProgress(job.id, Math.min(99, r.progress));
+    else updateProgress(job.id, r.status === 'running' ? 50 : 5);
+    if (r.status === 'succeeded') { imageUrls = r.imageUrls ?? []; break; }
+    if (r.status === 'failed') throw new Error(r.error ?? '厂商图片任务失败');
+    await sleep(config.baichuan.pollIntervalMs);
+  }
+  // finalize 用原始快照 input(含 count/bboxList),settle 读快照保 reserve==settle;
+  // 但 imageRefs 已被改成公网 URL——costFor 不读 imageRefs,无碍。
+  await finalizeImageJob(job, input, imageUrls);
+}
+
+/** AI 图片 job 按 (model.shape, mode) 分发(eng 外部声音 P1-b:一个模型不同 shape/mode 请求体不同)。
+ *  - shape A_EDIT   → runImageEditAsyncJob(异步含图编辑,万相2.7;不论 mode)
+ *  - img2img        → runImageEditJob(S 千问编辑,含图 content,同步)
  *  - text2img + S   → runImageGenSyncJob(纯文本 content,同步直返)
  *  - text2img + A1  → runImageGenJob(异步轮询,results[].url)
+ *  A_EDIT 先于 img2img 特判:只有万相2.7 带 A_EDIT,故千问编辑(S+img2img)不回归。
  *  未知/缺 model → 默认(qwen-image,A1);未知/缺 mode → text2img(兼容老 job)。 */
 async function runImageJob(job: JobRow): Promise<void> {
   const input = JSON.parse(job.input_json) as ImageGenInput;
+  const def = getImageModel(input.model, input.mode === 'img2img' ? 'img2img' : 'text2img');
+  if (def.shape === 'A_EDIT') return runImageEditAsyncJob(job);
   if (input.mode === 'img2img') return runImageEditJob(job);
   // text2img:按 model shape 选同步/异步
-  const def = getImageModel(input.model, 'text2img');
   return def.shape === 'S' ? runImageGenSyncJob(job) : runImageGenJob(job);
 }
 

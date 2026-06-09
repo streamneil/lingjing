@@ -33,7 +33,7 @@ import { getImageModel, resolutionAllowed, isKnownModel, listEnabledModels, DEFA
 
 export const jobsRouter = Router();
 
-// 图生图输入图上传:multer 内存缓冲,≤30MB,最多 3 张(qwen-image-edit 上限)。
+// 图生图输入图上传:multer 内存缓冲,≤30MB,最多 5 张(万相2.7 上限;千问编辑 3 张按 model maxInputImages 在 buildImageJob 校验)。
 const imageUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024 } });
 
 // ── type 封闭 allowlist(eng-review E2 / 外部声音 P2)──
@@ -75,6 +75,33 @@ function buildVideoJob(body: Record<string, unknown>, tid: string): JobBuildResu
     input: input as unknown as Record<string, unknown>,
     cost: estimateCost(script.length, resolution),
   };
+}
+
+/** 校验 bbox_list(局部重绘框选):长度须 = 输入图数;每图 ≤2 框;每框 [x1,y1,x2,y2] 整数且 0≤x1<x2、0≤y1<y2。
+ *  空框图保留 []（保持与图对齐,绝不丢弃 → 否则厂商 reserve 后才报错卡积分,P3-bbox)。
+ *  返回 boxes:全空(每图都 [])时返回 []，调用方据此决定不传 bbox_list。 */
+export function validateBboxList(raw: unknown, refCount: number): { ok: true; boxes: number[][][] } | { ok: false; error: string } {
+  if (!Array.isArray(raw)) return { ok: false, error: 'bbox 格式错误(应为数组)' };
+  if (raw.length !== refCount) return { ok: false, error: `bbox 数量(${raw.length})须与输入图数(${refCount})一致` };
+  const boxes: number[][][] = [];
+  let anyBox = false;
+  for (const perImg of raw) {
+    if (!Array.isArray(perImg)) return { ok: false, error: 'bbox 每图应为框数组' };
+    if (perImg.length > 2) return { ok: false, error: '每张图最多 2 个框选区域' };
+    const rects: number[][] = [];
+    for (const rect of perImg) {
+      if (!Array.isArray(rect) || rect.length !== 4) return { ok: false, error: 'bbox 每框须为 [x1,y1,x2,y2]' };
+      const [x1, y1, x2, y2] = rect.map((n) => Number(n));
+      if (![x1, y1, x2, y2].every((n) => Number.isInteger(n)))
+        return { ok: false, error: 'bbox 坐标须为整数' };
+      if (!(x1! >= 0 && y1! >= 0 && x2! > x1! && y2! > y1!))
+        return { ok: false, error: 'bbox 坐标须满足 0≤x1<x2、0≤y1<y2' };
+      rects.push([x1!, y1!, x2!, y2!]);
+      anyBox = true;
+    }
+    boxes.push(rects);
+  }
+  return { ok: true, boxes: anyBox ? boxes : [] };
 }
 
 /** 校验并构建 ai_image job 入参 + 计价。多模型(registry)+ (model,mode) 校验。
@@ -127,19 +154,39 @@ function buildImageJob(body: Record<string, unknown>): JobBuildResult {
   const snap = { priceTierSnapshot: def.priceTier, maxImagesSnapshot: def.maxImages, ...sizeSnap };
 
   if (effMode === 'img2img') {
+    const isAsyncEdit = def.shape === 'A_EDIT'; // 万相2.7:异步、可 0 图、可 bbox、可多出图
     const refs = Array.isArray(imageRefs) ? imageRefs.filter((k) => typeof k === 'string') : [];
-    if (refs.length === 0) return { ok: false, status: 400, error: '图生图需上传至少 1 张输入图' };
+    // 千问编辑必须 ≥1 张;万相2.7 允许 0 张(纯生成 / 文本编辑)。
+    if (!isAsyncEdit && refs.length === 0)
+      return { ok: false, status: 400, error: '图生图需上传至少 1 张输入图' };
     if (refs.length > def.maxInputImages)
       return { ok: false, status: 400, error: `该模型最多 ${def.maxInputImages} 张输入图` };
+
     const input: ImageGenInput = { model: def.key, mode: 'img2img', prompt, imageRefs: refs, ...snap };
     if (effRes) input.resolution = effRes; // 计价档(自动推或用户传)
     if (typeof ratio === 'string') input.ratio = ratio;
     if (seedVal !== undefined) input.seed = seedVal;
+
+    // bbox_list 局部重绘:仅 supportsBbox 模型(万相2.7);校验对齐 + 框数 + 整数边界(不信前端,P2-a)。
+    const rawBbox = (body as { bboxList?: unknown }).bboxList;
+    if (rawBbox !== undefined && rawBbox !== null) {
+      if (!def.supportsBbox) return { ok: false, status: 400, error: '该模型不支持局部重绘(bbox)' };
+      const v = validateBboxList(rawBbox, refs.length);
+      if (!v.ok) return { ok: false, status: 400, error: v.error };
+      if (v.boxes.length) input.bboxList = v.boxes; // 全空则不传
+    }
+
+    // A_EDIT 按 n 张计价 + 快照 count(reserve==settle);千问编辑固定 1 张。
+    let editCount = 1;
+    if (isAsyncEdit) {
+      editCount = clampImageCount(count, def.maxImages);
+      input.count = editCount;
+    }
     return {
       ok: true,
       type: 'ai_image',
       input: input as unknown as Record<string, unknown>,
-      cost: estimateImageEditCost(effRes, def.priceTier),
+      cost: estimateImageEditCost(effRes, def.priceTier, editCount),
     };
   }
 
@@ -232,7 +279,7 @@ jobsRouter.post(
   '/image-uploads',
   requireRole('admin', 'creator'),
   imageUpload.fields([
-    { name: 'images', maxCount: 3 },
+    { name: 'images', maxCount: 5 },
     { name: 'proof', maxCount: 1 },
   ]),
   async (req: Request, res: Response) => {
@@ -243,7 +290,7 @@ jobsRouter.post(
     const tid = req.user!.tenantId;
 
     if (images.length === 0) return res.status(400).json({ error: '缺少图片(images)' });
-    if (images.length > 3) return res.status(400).json({ error: '最多 3 张输入图' });
+    if (images.length > 5) return res.status(400).json({ error: '最多 5 张输入图' });
     // 防御纵深:前端已拦 HEIC/非支持格式/超 10MB,但客户端可绕过 → 后端再校验一遍。
     // 百炼图生图支持(qwen-image-edit 文档):JPEG/PNG/WEBP/BMP/TIFF/GIF;不含 HEIC。
     const OK_IMG = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/bmp', 'image/tiff', 'image/gif']);
@@ -303,7 +350,11 @@ jobsRouter.post('/jobs/estimate', requireAuth, (req: Request, res: Response) => 
       const hit = def.resolutions.find((r) => r.ratio === wantRatio);
       if (hit) res2 = tierFromPixels(hit.width, hit.height);
     }
-    if (m === 'img2img') return res.json({ cost: estimateImageEditCost(res2, def.priceTier) });
+    if (m === 'img2img') {
+      // A_EDIT(万相2.7)按 n 张计价(与 buildImageJob 一致);千问编辑固定 1 张。
+      const editCount = def.shape === 'A_EDIT' ? clampImageCount(body.count, def.maxImages) : 1;
+      return res.json({ cost: estimateImageEditCost(res2, def.priceTier, editCount) });
+    }
     return res.json({
       cost: estimateImageCost(clampImageCount(body.count, def.maxImages), res2, def.priceTier, def.maxImages),
     });
@@ -329,6 +380,7 @@ jobsRouter.get('/image-models', requireAuth, (_req: Request, res: Response) => {
     maxImages: d.maxImages,
     maxInputImages: d.maxInputImages,
     maxResolution: d.maxResolution,
+    supportsBbox: !!d.supportsBbox, // 前端据此显示/隐藏局部重绘画笔(仅万相2.7)
     // admin 录的分辨率表(前端比例下拉用;只吐 ratio/w/h/默认,不漏 priceTier/modelId)
     resolutions: (d.resolutions ?? []).map((r) => ({ ratio: r.ratio, width: r.width, height: r.height, isDefault: !!r.isDefault })),
   }));
@@ -352,7 +404,7 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
         const inp = JSON.parse(j.input_json) as {
           script?: string; prompt?: string; text?: string;
           model?: string; mode?: string; ratio?: string; resolution?: string; count?: number;
-          imageRefs?: string[]; seed?: number; width?: number; height?: number;
+          imageRefs?: string[]; seed?: number; width?: number; height?: number; bboxList?: number[][][];
         };
         script = inp.script ?? inp.prompt ?? inp.text ?? '';
         if (j.type === 'ai_image') {
@@ -362,7 +414,7 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
           meta = {
             model: inp.model, modelLabel, mode: inp.mode,
             ratio: inp.ratio, resolution: inp.resolution, sizeLabel, count: inp.count,
-            imageRefs: inp.imageRefs, seed: inp.seed, width: inp.width, height: inp.height, // 重新生成回放用
+            imageRefs: inp.imageRefs, seed: inp.seed, width: inp.width, height: inp.height, bboxList: inp.bboxList, // 重新生成回放用
           };
         }
       } catch {

@@ -47,12 +47,14 @@ export function estimateImageCost(count: number, resolution = '1K', priceTier = 
   return Math.max(MIN_COST, Math.ceil(n * priceTier * factor));
 }
 
-// AI 图生图(编辑)计价:固定 1 张产出 × 编辑单价 × 分辨率系数。
+// AI 图生图(编辑)计价:张数 × 编辑单价 × 分辨率系数。
 const PRICE_PER_EDIT = 6; // 图生图每次 6 积分基价(无 model 时的回落默认)
-/** AI 图生图费用预估:固定 1 张 × 单价 × 分辨率系数。priceTier 替代 PRICE_PER_EDIT(P2-a)。 */
-export function estimateImageEditCost(resolution = '1K', priceTier = PRICE_PER_EDIT): number {
+/** AI 图生图费用预估:count 张 × 单价 × 分辨率系数。priceTier 替代 PRICE_PER_EDIT(P2-a)。
+ *  count 默认 1:千问编辑固定出 1 张,所有旧调用/测试逐字节不变;万相2.7(A_EDIT)按 n 张计价。 */
+export function estimateImageEditCost(resolution = '1K', priceTier = PRICE_PER_EDIT, count = 1): number {
   const factor = IMG_RES_FACTOR[resolution] ?? 1;
-  return Math.max(MIN_COST, Math.ceil(priceTier * factor));
+  const n = Math.max(1, Math.floor(count));
+  return Math.max(MIN_COST, Math.ceil(n * priceTier * factor));
 }
 
 // 文转语音(TTS)计价:按字数(无分辨率维度)。
@@ -81,7 +83,11 @@ export function costFor(toolType: string, input: Record<string, unknown>): numbe
       // P3:优先读提交时快照(admin 改价 mid-flight 不破 reserve==settle);无快照(老 job)回落实时。
       const priceTier = typeof input.priceTierSnapshot === 'number' ? input.priceTierSnapshot : def.priceTier;
       const maxImages = typeof input.maxImagesSnapshot === 'number' ? input.maxImagesSnapshot : def.maxImages;
-      if (mode === 'img2img') return estimateImageEditCost(resolution, priceTier);
+      if (mode === 'img2img') {
+        // A_EDIT(万相2.7)按 n 张计价;其余编辑(千问)固定 1 张。count 读快照,clamp 到 maxImages 保 reserve==settle。
+        const editCount = def.shape === 'A_EDIT' ? clampImageCount(input.count, maxImages) : 1;
+        return estimateImageEditCost(resolution, priceTier, editCount);
+      }
       return estimateImageCost(
         typeof input.count === 'number' ? input.count : 1,
         resolution,

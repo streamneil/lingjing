@@ -164,3 +164,69 @@ describe('seed 透传(A4)', () => {
     expect(((get().parameters as Record<string, unknown>).seed)).toBe(7);
   });
 });
+
+describe('万相2.7 异步编辑 submitImageEdit(A_EDIT,含图体 + bbox_list)', () => {
+  function spyCapture() {
+    let body: Record<string, unknown> = {}; let url = '';
+    vi.spyOn(globalThis, 'fetch').mockImplementation((u, opts) => {
+      url = String(u); body = JSON.parse((opts as RequestInit).body as string);
+      return Promise.resolve(new Response(JSON.stringify({ output: { task_id: 'wan-task-1' } }), { status: 200 }));
+    });
+    return () => ({ body, url });
+  }
+
+  it('提交体:image-generation 端点 + messages 含图体 + n + size:"2K" + 返回 task_id', async () => {
+    const gw = new BaichuanGateway();
+    const get = spyCapture();
+    const taskId = await gw.submitImageEdit({
+      model: 'wan2.7-image', mode: 'img2img', prompt: '换背景',
+      imageRefs: ['https://in/1.png', 'https://in/2.png'], count: 2, resolution: '2K',
+    });
+    expect(taskId).toBe('wan-task-1');
+    const { body, url } = get();
+    expect(url).toContain('/services/aigc/image-generation/generation');
+    const content = ((body.input as any).messages[0].content) as Array<Record<string, unknown>>;
+    expect(content).toEqual([{ image: 'https://in/1.png' }, { image: 'https://in/2.png' }, { text: '换背景' }]);
+    const params = body.parameters as Record<string, unknown>;
+    expect(params.n).toBe(2);
+    expect(params.size).toBe('2K'); // keyword
+  });
+
+  it('bbox_list 透传(对齐输入图;空框图 [] 保留)', async () => {
+    const gw = new BaichuanGateway();
+    const get = spyCapture();
+    await gw.submitImageEdit({
+      model: 'wan2.7-image', mode: 'img2img', prompt: 'x',
+      imageRefs: ['https://in/1.png', 'https://in/2.png'],
+      bboxList: [[[10, 10, 50, 50]], []],
+    });
+    expect((get().body.parameters as Record<string, unknown>).bbox_list).toEqual([[[10, 10, 50, 50]], []]);
+  });
+
+  it('无 bbox → 不带 bbox_list 字段', async () => {
+    const gw = new BaichuanGateway();
+    const get = spyCapture();
+    await gw.submitImageEdit({ model: 'wan2.7-image', mode: 'img2img', prompt: 'x', imageRefs: ['https://in/1.png'] });
+    expect((get().body.parameters as Record<string, unknown>).bbox_list).toBeUndefined();
+  });
+});
+
+describe('fetchImageStatus 双解析(万相2.7 编辑回包是 choices-content)', () => {
+  it('无 results[] → 解 choices[].message.content[].image 多图', async () => {
+    const gw = new BaichuanGateway();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          output: {
+            task_status: 'SUCCEEDED',
+            choices: [{ message: { content: [{ image: 'https://wan/a.png' }, { image: 'https://wan/b.png' }] } }],
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+    const r = await gw.fetchImageStatus('wan-task-1');
+    expect(r.status).toBe('succeeded');
+    expect(r.imageUrls).toEqual(['https://wan/a.png', 'https://wan/b.png']);
+  });
+});
