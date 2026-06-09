@@ -9,14 +9,15 @@
 <style>
   /* ── 主图大卡:预览 + 3 个入口按钮(点开局部重绘大对话框)── */
   .mainimg-card { border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:14px; }
-  .mainimg-stage { position:relative; min-height:220px; display:grid; place-items:center; background:var(--field); border-radius:12px; overflow:hidden; }
-  .mainimg-stage .pv-wrap { position:relative; display:inline-block; line-height:0; }
-  .mainimg-stage img.preview { max-width:100%; max-height:340px; border-radius:8px; display:block; }
+  /* 预览区限高(随屏幕),让左栏紧凑、一屏能看到底部「创建」按钮 */
+  .mainimg-stage { position:relative; min-height:150px; max-height:min(260px,30vh); display:grid; place-items:center; background:var(--field); border-radius:12px; overflow:hidden; }
+  .mainimg-stage .pv-wrap { position:relative; display:inline-block; line-height:0; max-height:100%; }
+  .mainimg-stage img.preview { max-width:100%; max-height:min(240px,28vh); border-radius:8px; display:block; }
   /* 主图上叠加涂抹层(只读回显,真正涂抹在对话框) */
   .mainimg-stage canvas.maskoverlay { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; border-radius:8px; }
   .mainimg-stage .del { position:absolute; top:10px; right:10px; width:34px; height:34px; border-radius:9px; background:rgba(0,0,0,.5); border:1px solid var(--line-hi); display:grid; place-items:center; cursor:pointer; z-index:3; }
   .mainimg-stage .del svg { width:17px; height:17px; color:var(--t2); }
-  .mainimg-empty { width:100%; padding:48px 16px; text-align:center; cursor:pointer; }
+  .mainimg-empty { width:100%; padding:34px 16px; text-align:center; cursor:pointer; }
   .mainimg-empty svg { width:34px; height:34px; color:var(--t3); }
   .mainimg-empty .t { font-size:13.5px; color:var(--t2); margin-top:9px; }
   .mainimg-empty .s { font-size:11px; color:var(--t4); margin-top:3px; }
@@ -36,7 +37,7 @@
   .refchip { position:relative; width:70px; height:70px; border-radius:10px; overflow:hidden; border:1px solid var(--line); background:var(--field); }
   .refchip img { width:100%; height:100%; object-fit:cover; display:block; }
   .refchip .rmx { position:absolute; top:-6px; right:-6px; width:20px; height:20px; background:var(--red,#ff5b5b); border-radius:50%; display:grid; place-items:center; color:#fff; font-size:12px; line-height:1; cursor:pointer; border:2px solid var(--card); }
-  .instr-card textarea { width:100%; min-height:130px; background:none; border:none; resize:none; color:var(--t1); font-size:14px; line-height:1.6; outline:none; font-family:inherit; }
+  .instr-card textarea { width:100%; min-height:96px; background:none; border:none; resize:none; color:var(--t1); font-size:14px; line-height:1.6; outline:none; font-family:inherit; }
   .instr-card textarea::placeholder { color:var(--t4); }
   .instr-foot { display:flex; align-items:center; justify-content:space-between; margin-top:8px; }
   .refbtn { display:inline-flex; align-items:center; gap:7px; background:var(--field); border:1px solid var(--line); border-radius:10px; padding:8px 14px; font-size:12.5px; color:var(--t2); cursor:pointer; }
