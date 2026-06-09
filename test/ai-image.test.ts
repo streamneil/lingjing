@@ -113,5 +113,72 @@ describe('imageSize(比例 + 分辨率 → W*H)', () => {
   });
 });
 
+// ── 多模型 registry(/plan-eng-review E1/E3 + 外部声音核实)──
+const { IMAGE_MODELS, getImageModel, sizeParams, resolutionAllowed, DEFAULT_IMAGE_MODEL } = await import(
+  '../src/gateway/image-models.js'
+);
+
+describe('图像模型 registry 自洽性(E1 命脉)', () => {
+  it('每个 model 配置自洽,无矛盾', () => {
+    for (const [key, def] of Object.entries(IMAGE_MODELS)) {
+      expect(def.key).toBe(key); // key 与 map 键一致
+      expect(['S', 'A1', 'A2']).toContain(def.shape);
+      expect(['wh', 'keyword', 'aspect_res']).toContain(def.sizeKind);
+      expect(def.modes.length).toBeGreaterThan(0);
+      expect(def.maxImages).toBeGreaterThanOrEqual(1);
+      expect(['1K', '2K', '4K']).toContain(def.maxResolution);
+      expect(def.priceTier).toBeGreaterThan(0);
+      // img2img 模型必须能收输入图;纯 text2img 模型 maxInputImages=0
+      if (def.modes.includes('img2img')) expect(def.maxInputImages).toBeGreaterThanOrEqual(1);
+      else expect(def.maxInputImages).toBe(0);
+      // v1:A2(可灵)缓,不应有 A2 模型上线
+      expect(def.shape).not.toBe('A2');
+      // 输入图上限 v1 封顶 3(上传端点写死,P2-c)
+      expect(def.maxInputImages).toBeLessThanOrEqual(3);
+    }
+  });
+});
+
+describe('getImageModel 默认兜底(C5b 老 job 兼容)', () => {
+  it('已知 key 取到;未知/缺省 → 默认', () => {
+    expect(getImageModel('z-image').modelId).toBe('z-image-turbo');
+    expect(getImageModel(undefined).key).toBe(DEFAULT_IMAGE_MODEL);
+    expect(getImageModel('不存在的model').key).toBe(DEFAULT_IMAGE_MODEL);
+  });
+});
+
+describe('sizeParams 按 sizeKind(E3 / 外部声音 P1-size)', () => {
+  it('wh → {size:"W*H"}', () => {
+    const p = sizeParams(getImageModel('qwen-image'), '1:1', '1K');
+    expect(p.size).toMatch(/^\d+\*\d+$/); // W*H
+  });
+  it('keyword → {size:"2K"}(假想 keyword 模型)', () => {
+    const fake = { ...getImageModel('qwen-image'), sizeKind: 'keyword' as const };
+    expect(sizeParams(fake, '1:1', '2k').size).toBe('2K');
+  });
+});
+
+describe('resolutionAllowed(4K 不支持 → false,P2-4k)', () => {
+  it('非 4K 模型拒 4K;4K 模型放行', () => {
+    expect(resolutionAllowed(getImageModel('z-image'), '4K')).toBe(false); // maxRes 2K
+    expect(resolutionAllowed(getImageModel('qwen-image-2.0-pro'), '4K')).toBe(true);
+    expect(resolutionAllowed(getImageModel('z-image'), '2K')).toBe(true);
+  });
+});
+
+describe('costFor model-aware(priceTier 替代基价 + maxImages clamp,外部声音 P1/P2)', () => {
+  it('clampImageCount(4, z-image maxImages=1) → 1(防超扣)', () => {
+    expect(clampImageCount(4, getImageModel('z-image').maxImages)).toBe(1);
+  });
+  it('不同 model priceTier 计价不同', () => {
+    const cheap = costFor('ai_image', { model: 'z-image', mode: 'text2img', count: 1, resolution: '1K' });
+    const pro = costFor('ai_image', { model: 'qwen-image-2.0-pro', mode: 'text2img', count: 1, resolution: '1K' });
+    expect(pro).toBeGreaterThan(cheap); // priceTier 8 vs 2
+  });
+  it('无 model 字段 → 默认计价(老 job 兼容,不抛错)', () => {
+    expect(() => costFor('ai_image', { mode: 'text2img', count: 1 })).not.toThrow();
+  });
+});
+
 // 注:所有 spy globalThis.fetch 的 adapter 测试移到 test/baichuan-adapter.test.ts(独立文件,
 // 避免进程级 fetch spy 在 vitest 并行跑时泄漏到其它文件,见该文件头注释)。

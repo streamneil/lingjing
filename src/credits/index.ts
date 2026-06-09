@@ -11,6 +11,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { db, type LedgerKind, type LedgerRow } from '../db/index.js';
+import { getImageModel } from '../gateway/image-models.js';
 
 const now = () => Date.now();
 
@@ -30,25 +31,28 @@ export function estimateCost(scriptLength: number, resolution = '1080P'): number
 const PRICE_PER_IMAGE = 4; // 每张图 4 积分基价(占位值,可配置)
 const IMG_RES_FACTOR: Record<string, number> = { '1K': 1, '2K': 1.5, '4K': 2.5 };
 
-/** 把请求图数 clamp 到 [1,4](qwen-image 上限),保证 reserve==settle 不被非法 n 破坏。 */
-export function clampImageCount(n: unknown): number {
+/** 把请求图数 clamp 到 [1, maxImages](默认 4)。model-aware(外部声音 P1):
+ *  z-image 固定1、qwen-2.0 6;选超额张数会预扣多返少 → reserve≠settle 超扣。
+ *  maxImages 缺省 4 保旧调用(无 model 字段的老 job/测试)兼容(C5b)。 */
+export function clampImageCount(n: unknown, maxImages = 4): number {
   const v = typeof n === 'number' && Number.isFinite(n) ? Math.floor(n) : 1;
-  return Math.min(4, Math.max(1, v));
+  return Math.min(maxImages, Math.max(1, v));
 }
 
-/** AI 文生图费用预估:图数 × 分辨率系数。n 先 clamp 到 [1,4]。 */
-export function estimateImageCost(count: number, resolution = '1K'): number {
-  const n = clampImageCount(count);
+/** AI 文生图费用预估:图数 × 单价 × 分辨率系数。priceTier 缺省回落 PRICE_PER_IMAGE(无 model 兼容)。
+ *  外部声音 P2-a:priceTier **替代** PRICE_PER_IMAGE(非双乘)。 */
+export function estimateImageCost(count: number, resolution = '1K', priceTier = PRICE_PER_IMAGE, maxImages = 4): number {
+  const n = clampImageCount(count, maxImages);
   const factor = IMG_RES_FACTOR[resolution] ?? 1;
-  return Math.max(MIN_COST, Math.ceil(n * PRICE_PER_IMAGE * factor));
+  return Math.max(MIN_COST, Math.ceil(n * priceTier * factor));
 }
 
 // AI 图生图(编辑)计价:固定 1 张产出 × 编辑单价 × 分辨率系数。
-const PRICE_PER_EDIT = 6; // 图生图每次 6 积分基价(编辑比纯生成贵,占位可配)
-/** AI 图生图费用预估:固定 1 张 × 编辑单价 × 分辨率系数。 */
-export function estimateImageEditCost(resolution = '1K'): number {
+const PRICE_PER_EDIT = 6; // 图生图每次 6 积分基价(无 model 时的回落默认)
+/** AI 图生图费用预估:固定 1 张 × 单价 × 分辨率系数。priceTier 替代 PRICE_PER_EDIT(P2-a)。 */
+export function estimateImageEditCost(resolution = '1K', priceTier = PRICE_PER_EDIT): number {
   const factor = IMG_RES_FACTOR[resolution] ?? 1;
-  return Math.max(MIN_COST, Math.ceil(PRICE_PER_EDIT * factor));
+  return Math.max(MIN_COST, Math.ceil(priceTier * factor));
 }
 
 // 文转语音(TTS)计价:按字数(无分辨率维度)。
@@ -70,10 +74,17 @@ export function costFor(toolType: string, input: Record<string, unknown>): numbe
         typeof input.resolution === 'string' ? input.resolution : undefined,
       );
     case 'ai_image': {
-      // mode 感知(外部声音 P1):img2img 固定 1 张、走编辑价;text2img 按图数。
+      // mode 感知 + model-aware(外部声音 P1/P2):priceTier 替代基价,maxImages 限张数。
       const resolution = typeof input.resolution === 'string' ? input.resolution : undefined;
-      if (input.mode === 'img2img') return estimateImageEditCost(resolution);
-      return estimateImageCost(typeof input.count === 'number' ? input.count : 1, resolution);
+      const mode = input.mode === 'img2img' ? 'img2img' : 'text2img';
+      const def = getImageModel(typeof input.model === 'string' ? input.model : undefined, mode);
+      if (mode === 'img2img') return estimateImageEditCost(resolution, def.priceTier);
+      return estimateImageCost(
+        typeof input.count === 'number' ? input.count : 1,
+        resolution,
+        def.priceTier,
+        def.maxImages,
+      );
     }
     case 'tts':
       return estimateTtsCost(typeof input.text === 'string' ? input.text.length : 0);

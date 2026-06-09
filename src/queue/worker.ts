@@ -18,6 +18,7 @@ import { moderateScript, moderatePrompt, moderateImageInput, moderateOutput } fr
 import { applyAiLabel, probeAudioDuration, concatVideos } from '../pipeline/ai-label.js';
 import { segmentScript } from '../pipeline/segment.js';
 import { concatAudio } from '../pipeline/concat-audio.js';
+import { getImageModel } from '../gateway/image-models.js';
 import { settle, release, estimateCost, costFor } from '../credits/index.js';
 import { db } from '../db/index.js';
 
@@ -288,7 +289,7 @@ async function runImageEditJob(job: JobRow): Promise<void> {
   try {
     updateProgress(job.id, 50);
     resultUrls = await gateway.editImage(
-      { imageUrls, prompt: input.prompt, ratio: input.ratio, resolution: input.resolution },
+      { model: input.model, imageUrls, prompt: input.prompt, ratio: input.ratio, resolution: input.resolution },
       ac.signal,
     );
   } catch (e) {
@@ -300,17 +301,41 @@ async function runImageEditJob(job: JobRow): Promise<void> {
   await finalizeImageJob(job, input, resultUrls);
 }
 
-/** AI 图片 job 按 input.mode 分发(eng-review E1)。
- *  text2img(异步轮询)/ img2img(同步)。未知/缺 mode 默认 text2img(兼容老 job)。 */
+/** 同步文生图(S 形状 text2img,eng 外部声音 P1-a)。提示词送审 → generateImageSync(纯文本,
+ *  AbortController 硬超时,同 runImageEditJob 防冻 worker)→ finalize。无输入图、无轮询。 */
+async function runImageGenSyncJob(job: JobRow): Promise<void> {
+  const input = JSON.parse(job.input_json) as ImageGenInput;
+
+  const pre = await moderatePrompt(input.prompt);
+  if (!pre.allowed) throw new Error(`送审拒绝:${pre.reason}`);
+
+  const gateway = getGateway(job.tenant_id) as unknown as import('../gateway/types.js').SyncImageGateway;
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), config.baichuan.jobTimeoutMs);
+  let resultUrls: string[];
+  try {
+    updateProgress(job.id, 50);
+    resultUrls = await gateway.generateImageSync(input, ac.signal);
+  } catch (e) {
+    if (ac.signal.aborted) throw new Error(`生成超时(>${config.baichuan.jobTimeoutMs}ms),已放弃`);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+  await finalizeImageJob(job, input, resultUrls);
+}
+
+/** AI 图片 job 按 (model.shape, mode) 分发(eng 外部声音 P1-b:一个 S 模型 text2img/img2img 请求体不同)。
+ *  - img2img        → runImageEditJob(S,含图 content,同步)
+ *  - text2img + S   → runImageGenSyncJob(纯文本 content,同步直返)
+ *  - text2img + A1  → runImageGenJob(异步轮询,results[].url)
+ *  未知/缺 model → 默认(qwen-image,A1);未知/缺 mode → text2img(兼容老 job)。 */
 async function runImageJob(job: JobRow): Promise<void> {
   const input = JSON.parse(job.input_json) as ImageGenInput;
-  switch (input.mode) {
-    case 'img2img':
-      return runImageEditJob(job);
-    case 'text2img':
-    default:
-      return runImageGenJob(job);
-  }
+  if (input.mode === 'img2img') return runImageEditJob(job);
+  // text2img:按 model shape 选同步/异步
+  const def = getImageModel(input.model, 'text2img');
+  return def.shape === 'S' ? runImageGenSyncJob(job) : runImageGenJob(job);
 }
 
 // 文转语音单段字数上限(cosyvoice 单次合成,远大于视频的 90 字/段——TTS 无 20s 视频约束)。

@@ -47,7 +47,7 @@
     {
       key: 'ai-image-edit', label: 'AI 图片编辑器',
       icon: '<rect x="4" y="4" width="13" height="13" rx="2"/><path d="m5 15 3-3 2 2"/><path d="M14 18.5 19 13.5l2.5 2.5-5 5H14v-2.5Z"/>',
-      enabled: false, outputKind: 'image', tier: 'later',
+      enabled: true, outputKind: 'image', page: 'ai-image-edit.html', tier: 'next',
     },
     {
       key: 'ai-video-edit', label: 'AI 影片编辑器',
