@@ -43,20 +43,27 @@
 
     <div class="cfg-label">编辑指令</div>
     <div class="script">
-      <textarea id="prompt" maxlength="800" placeholder="描述如何编辑这些图…(如:把图中文字改成「灵镜」,换深蓝色背景)"></textarea>
-      <div class="f"><span class="h" id="estLabel">预估 — 点</span><span class="c"><b id="cnt">0</b> / 800</span></div>
-    </div>
-
-    <div class="cfg-label">模型</div>
-    <select id="modelSel"></select>
-
-    <div class="cfg-label">解析度</div>
-    <div class="seg-row" id="resSeg">
-      <div class="seg on" data-res="1K">1K</div>
-      <div class="seg" data-res="2K">2K</div>
+      <textarea id="prompt" maxlength="2000" placeholder="描述如何编辑这些图…(如:把图中文字改成「灵镜」,换深蓝色背景)"></textarea>
+      <div class="f"><span class="h" id="estLabel">预估 — 点</span><span class="c"><b id="cnt">0</b> / 2000</span></div>
     </div>
 
     <div class="cfg-sp"></div>
+    <!-- 紧凑配置栏:模型 pill + 解析度 pill -->
+    <div class="cfgbar">
+      <div class="pop-anchor" style="flex:1.4">
+        <div class="cpill" id="modelPill" onclick="togglePop('model')"><span class="v" id="modelPillV">模型</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+        <div class="pop" id="pop-model"><div class="pop-label">模型</div><div id="modelOpts"></div></div>
+      </div>
+      <div class="pop-anchor" style="flex:1">
+        <div class="cpill" id="setPill" onclick="togglePop('set')"><span class="v" id="setPillV">1K</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+        <div class="pop" id="pop-set">
+          <div class="pop-label">解析度</div>
+          <div class="seg-row" id="resSeg"><div class="seg on" data-res="1K">1K</div><div class="seg" data-res="2K">2K</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="pop-ov" id="popOv" onclick="closePops()"></div>
+
     <div class="cbtn-wrap">
       <button class="cbtn" id="createBtn">
         <span id="cbtnLabel">创建</span> <span class="gem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg> <b id="estGem">—</b></span>
@@ -94,18 +101,29 @@
   let res='1K', model='', allModels=[];
   function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
-  // 模型下拉:只列支持 img2img 的模型(GET /image-models 单一真相源)
-  const modelSel=document.getElementById('modelSel');
+  // 模型下拉:只列支持 img2img 的模型(GET /image-models,自绘深色 popover)
+  const modelOpts=document.getElementById('modelOpts');
   async function loadModels(){
     try{ const r=await LJ.get('/image-models'); allModels=(r.models||[]).filter(m=>m.modes.includes('img2img')); }
-    catch(e){ modelSel.innerHTML='<option>模型加载失败</option>'; return; }
-    modelSel.innerHTML=allModels.map(m=>`<option value="${m.key}">${esc(m.label)}</option>`).join('');
-    if(allModels.length){ model=allModels[0].key; modelSel.value=model; }
-    scheduleEstimate();
+    catch(e){ modelOpts.innerHTML='<div class="pop-opt"><span class="nm">模型加载失败</span></div>'; return; }
+    if(allModels.length && !allModels.find(m=>m.key===model)) model=allModels[0].key;
+    modelOpts.innerHTML=allModels.map(m=>`<div class="pop-opt${m.key===model?' on':''}" data-k="${m.key}"><span class="nm">${esc(m.label)}</span><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg></div>`).join('') || '<div class="pop-opt"><span class="nm">暂无可用模型</span></div>';
+    modelOpts.querySelectorAll('.pop-opt[data-k]').forEach(el=>el.onclick=()=>{ model=el.dataset.k; loadModels(); syncPills(); closePops(); scheduleEstimate(); });
+    syncPills();
   }
-  modelSel.onchange=()=>{ model=modelSel.value; scheduleEstimate(); };
 
-  document.querySelectorAll('#resSeg .seg').forEach(s=>s.onclick=()=>{ document.querySelectorAll('#resSeg .seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); res=s.dataset.res; scheduleEstimate(); });
+  // popover 开关 + pill 文案
+  function togglePop(which){
+    const id=which==='model'?'pop-model':'pop-set'; const el=document.getElementById(id);
+    const isOpen=el.classList.contains('show'); closePops();
+    if(!isOpen){ el.classList.add('show'); document.getElementById('popOv').classList.add('show'); (which==='model'?document.getElementById('modelPill'):document.getElementById('setPill')).classList.add('open'); }
+  }
+  function closePops(){ document.querySelectorAll('.pop.show').forEach(p=>p.classList.remove('show')); document.querySelectorAll('.cpill.open').forEach(p=>p.classList.remove('open')); document.getElementById('popOv').classList.remove('show'); }
+  window.togglePop=togglePop; window.closePops=closePops;
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape') closePops(); });
+  function syncPills(){ const m=allModels.find(x=>x.key===model); document.getElementById('modelPillV').textContent=m?m.label:'模型'; document.getElementById('setPillV').textContent=res; }
+
+  document.querySelectorAll('#resSeg .seg').forEach(s=>s.onclick=()=>{ document.querySelectorAll('#resSeg .seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); res=s.dataset.res; syncPills(); scheduleEstimate(); });
 
   // 上传(最多 3 张)
   let imgFiles=[];
