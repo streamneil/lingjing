@@ -277,6 +277,35 @@ try {
   console.warn('[迁移] user.username 存在跨租户重名,未能建全局唯一索引;请清理重名后重启。');
 }
 
+// AI 图片模型 admin 覆盖层(CEO A2:代码拥有技术契约,DB 只覆盖展示/运营字段)。
+//   key            对应代码 IMAGE_MODELS 的 key,或管理员新增的 key
+//   shape_template 新增模型时指向一个代码定义的技术模板 key(取 shape/sizeKind/modes/maxResolution)
+//   label/model_id/enabled/price_tier/max_images  管理员可改的展示/运营字段
+// 技术契约(shape/sizeKind/...)永不入表 —— 改不到 = 改不坏(防呆 by construction)。
+db.exec(`
+  CREATE TABLE IF NOT EXISTS image_model_override (
+    key TEXT PRIMARY KEY,
+    label TEXT NOT NULL,
+    model_id TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    price_tier INTEGER NOT NULL,
+    max_images INTEGER NOT NULL,
+    shape_template TEXT,
+    created_at INTEGER NOT NULL
+  )
+`);
+
+export interface ImageModelOverrideRow {
+  key: string;
+  label: string;
+  model_id: string;
+  enabled: number;
+  price_tier: number;
+  max_images: number;
+  shape_template: string | null;
+  created_at: number;
+}
+
 export type JobStatus = 'queued' | 'running' | 'done' | 'failed';
 
 export interface JobRow {

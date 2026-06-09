@@ -22,6 +22,7 @@
 //     └ A1 + text2img → submitImage → 轮询
 
 import { imageSize } from './baichuan.js';
+import { db, type ImageModelOverrideRow } from '../db/index.js';
 
 export type ImageShape = 'S' | 'A1' | 'A2'; // S=同步多模态 A1=异步文生图 A2=异步图生成(缓)
 export type SizeKind = 'wh' | 'keyword' | 'aspect_res'; // size 参数形状(aspect_res 本轮缓)
@@ -74,12 +75,68 @@ export const IMAGE_MODELS: Record<string, ImageModelDef> = {
 export const DEFAULT_IMAGE_MODEL = 'qwen-image';
 export const DEFAULT_IMAGE_EDIT_MODEL = 'qwen-image-edit';
 
-/** 取模型定义;未知/缺省 → 按 mode 选默认(C5b 老 job 兼容)。
- *  mode 仅在 key 缺省时用于选 text2img/img2img 默认;显式 key 优先。 */
+// ── DB 覆盖层(CEO A2:代码拥有技术契约,DB 只覆盖展示/运营字段)──
+// 惰性 prepare(P1-lazy:绝不在模块顶 prepare,否则 image-models 早于 db CREATE TABLE 加载会 no-such-table)。
+let _ovStmt: import('better-sqlite3').Statement | null = null;
+function overrideRow(key: string): ImageModelOverrideRow | undefined {
+  _ovStmt ??= db.prepare('SELECT * FROM image_model_override WHERE key = ?');
+  return _ovStmt.get(key) as ImageModelOverrideRow | undefined;
+}
+
+/** 合并:技术契约从代码(按 shape_template ?? key),展示/运营字段从 DB override(若有)。 */
+function mergeDef(key: string): ImageModelDef | undefined {
+  const ov = overrideRow(key);
+  if (ov) {
+    // 技术字段从代码模板取(A2 + A5:新增模型用 shape_template 指向代码模板)。
+    const tmpl = IMAGE_MODELS[ov.shape_template ?? key];
+    if (!tmpl) return undefined; // 模板丢失(不该发生:模板是代码 key)
+    return {
+      ...tmpl, // shape/sizeKind/modes/maxResolution/maxInputImages(技术契约)
+      key,
+      label: ov.label,
+      modelId: ov.model_id,
+      maxImages: ov.max_images,
+      priceTier: ov.price_tier,
+    };
+  }
+  return IMAGE_MODELS[key];
+}
+
+/** 模型是否启用(DB override 优先;无 override 视为启用)。 */
+function isEnabled(key: string): boolean {
+  const ov = overrideRow(key);
+  return ov ? ov.enabled === 1 : !!IMAGE_MODELS[key];
+}
+
+/** 取模型定义(代码 + DB override 合并);未知/缺省 → 按 mode 选默认。
+ *  外部声音 P1-default:默认模型若被 admin 禁用,跳到首个 enabled,再不行用纯代码常量
+ *  (in-flight/老 job 显式取 disabled 仍允许 —— 只有「默认兜底」必须 enabled)。 */
 export function getImageModel(key?: string, mode?: ImageMode): ImageModelDef {
-  if (key && IMAGE_MODELS[key]) return IMAGE_MODELS[key]!;
-  const fallback = mode === 'img2img' ? DEFAULT_IMAGE_EDIT_MODEL : DEFAULT_IMAGE_MODEL;
-  return IMAGE_MODELS[fallback]!;
+  if (key) {
+    const m = mergeDef(key);
+    if (m) return m; // 显式 key:允许 disabled(在飞/老 job 兼容)
+  }
+  // 缺省兜底:先试 mode 默认,禁用则跳首个 enabled,再不行纯代码常量。
+  const prefer = mode === 'img2img' ? DEFAULT_IMAGE_EDIT_MODEL : DEFAULT_IMAGE_MODEL;
+  if (isEnabled(prefer)) return mergeDef(prefer) ?? IMAGE_MODELS[prefer]!;
+  const firstEnabled = Object.keys(IMAGE_MODELS).find(
+    (k) => isEnabled(k) && IMAGE_MODELS[k]!.modes.includes(mode === 'img2img' ? 'img2img' : 'text2img'),
+  );
+  return firstEnabled ? mergeDef(firstEnabled)! : IMAGE_MODELS[prefer]!; // 全禁用 → 纯代码默认(不让系统瘫)
+}
+
+/** 该 key 是否已知模型(代码内置 或 DB 新增)。buildImageJob 白名单校验用。 */
+export function isKnownModel(key: string): boolean {
+  return !!IMAGE_MODELS[key] || !!overrideRow(key);
+}
+
+/** 用户端可选模型(只列 enabled;DB override 优先)。admin 管理视图另走 admin.ts。 */
+export function listEnabledModels(): ImageModelDef[] {
+  // 代码 key + DB 新增 key 的并集,过滤 enabled。
+  const codeKeys = Object.keys(IMAGE_MODELS);
+  const dbKeys = (db.prepare('SELECT key FROM image_model_override').all() as { key: string }[]).map((r) => r.key);
+  const keys = Array.from(new Set([...codeKeys, ...dbKeys]));
+  return keys.filter(isEnabled).map((k) => mergeDef(k)).filter((d): d is ImageModelDef => !!d);
 }
 
 /** 分辨率档位排序,用于 maxResolution 上限校验。 */

@@ -44,6 +44,9 @@ export interface ImageGenInput {
   resolution?: string; // 1K | 2K | 4K(按 model sizeKind 映射)
   ratio?: string; // 比例:auto | 16:9 | 9:16 | 1:1 | 3:4 | 4:3 | 3:2 | 2:3(与 resolution 共同决定 size)
   imageRefs?: string[]; // img2img:已上传输入图的存储 key(1-3 张);worker 经 publish 转公网 URL
+  seed?: number; // 随机种子 [0,2147483647];空/未传 = 随机(gateway 不加该字段)
+  priceTierSnapshot?: number; // 提交时快照(P3:admin 改价 mid-flight 不破 reserve==settle)
+  maxImagesSnapshot?: number; // 同上,张数上限快照
 }
 
 // ── 图生图(image-to-image,qwen-image-edit)──
@@ -55,6 +58,7 @@ export interface ImageEditInput {
   prompt: string; // 编辑指令
   ratio?: string;
   resolution?: string;
+  seed?: number; // 随机种子;空 = 随机
 }
 
 // ── 文转语音(TTS,cosyvoice)──

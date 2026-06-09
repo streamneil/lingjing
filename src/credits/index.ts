@@ -78,12 +78,15 @@ export function costFor(toolType: string, input: Record<string, unknown>): numbe
       const resolution = typeof input.resolution === 'string' ? input.resolution : undefined;
       const mode = input.mode === 'img2img' ? 'img2img' : 'text2img';
       const def = getImageModel(typeof input.model === 'string' ? input.model : undefined, mode);
-      if (mode === 'img2img') return estimateImageEditCost(resolution, def.priceTier);
+      // P3:优先读提交时快照(admin 改价 mid-flight 不破 reserve==settle);无快照(老 job)回落实时。
+      const priceTier = typeof input.priceTierSnapshot === 'number' ? input.priceTierSnapshot : def.priceTier;
+      const maxImages = typeof input.maxImagesSnapshot === 'number' ? input.maxImagesSnapshot : def.maxImages;
+      if (mode === 'img2img') return estimateImageEditCost(resolution, priceTier);
       return estimateImageCost(
         typeof input.count === 'number' ? input.count : 1,
         resolution,
-        def.priceTier,
-        def.maxImages,
+        priceTier,
+        maxImages,
       );
     }
     case 'tts':
