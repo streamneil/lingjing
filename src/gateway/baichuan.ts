@@ -154,6 +154,40 @@ export class BaichuanGateway implements CapabilityGateway, SyncImageGateway {
     return taskId;
   }
 
+  // ── 万相2.7 异步含图编辑(A_EDIT)──
+  // 查证(2026-06 官方):端点 POST /services/aigc/image-generation/generation(X-DashScope-Async: enable)
+  //   input.messages[0].content = [{image:url}...,{text:prompt}]  parameters: { size, n, watermark, bbox_list? }
+  //   →  output.task_id;GET /tasks/:id 轮询;成功 output.choices[0].message.content[].image(数组,多图)。
+  //   bbox_list 仅万相2.7 支持(局部重绘框选);长度须 = 输入图数,空框图传 []。
+  // 参考:https://help.aliyun.com/zh/model-studio/wan-image-edit
+  async submitImageEdit(input: ImageGenInput): Promise<string> {
+    const def = getImageModel(input.model, 'img2img');
+    const n = Math.min(def.maxImages, Math.max(1, Math.floor(input.count ?? 1)));
+    const content: Array<{ image: string } | { text: string }> = (input.imageRefs ?? []).map((u) => ({ image: u }));
+    content.push({ text: input.prompt });
+    const params: Record<string, unknown> = {
+      n,
+      watermark: false,
+      ...sizeParams(def, input.ratio, input.resolution, { width: input.width, height: input.height }),
+      ...seedParam(input.seed),
+    };
+    if (def.supportsBbox && Array.isArray(input.bboxList) && input.bboxList.length) params.bbox_list = input.bboxList;
+    const { status, json } = await httpJson(
+      'POST',
+      '/services/aigc/image-generation/generation',
+      { model: def.modelId, input: { messages: [{ role: 'user', content }] }, parameters: params },
+      { 'X-DashScope-Async': 'enable' },
+    );
+    if (status !== 200) {
+      throw new Error(`万相2.7 编辑提交失败 HTTP ${status}: ${JSON.stringify(json?.message ?? json)}`);
+    }
+    const taskId: string | undefined = json?.output?.task_id;
+    if (!taskId) {
+      throw new Error(`万相2.7 编辑未返回 task_id: ${JSON.stringify(json?.output ?? json)}`);
+    }
+    return taskId;
+  }
+
   async fetchImageStatus(providerTaskId: string): Promise<ImageJobResult> {
     const { status, json } = await httpJson('GET', `/tasks/${providerTaskId}`);
     if (status !== 200) {
@@ -164,14 +198,10 @@ export class BaichuanGateway implements CapabilityGateway, SyncImageGateway {
     const result: ImageJobResult = { status: normalized };
     if (typeof out.progress === 'number') result.progress = out.progress;
     if (normalized === 'succeeded') {
-      // ⚠️ results 是数组(与视频 video_url 对象不同),逐元素取 url。
-      const arr = Array.isArray(out.results) ? out.results : [];
-      result.imageUrls = arr
-        .map((r: { url?: string }) => r?.url)
-        .filter((u: unknown): u is string => typeof u === 'string');
+      result.imageUrls = parseImageUrls(out);
     }
     if (normalized === 'failed') {
-      result.error = out.message ?? out.code ?? '百炼文生图任务失败';
+      result.error = out.message ?? out.code ?? '百炼图片任务失败';
     }
     return result;
   }
@@ -260,6 +290,28 @@ const RATIO_WH: Record<string, [number, number]> = {
   '3:2': [3, 2],
   '2:3': [2, 3],
 };
+// 成品图 URL 双解析:文生图异步回 output.results[].url;万相2.7 含图编辑回
+// output.choices[0].message.content[].image(多模态体)。两种都取,过滤非字符串。
+function parseImageUrls(out: any): string[] {
+  // 1) results[].url(qwen-image / wan2.2 文生图异步)
+  if (Array.isArray(out?.results)) {
+    return out.results
+      .map((r: { url?: string }) => r?.url)
+      .filter((u: unknown): u is string => typeof u === 'string');
+  }
+  // 2) choices[].message.content[].image(万相2.7 异步编辑多模态回包)
+  const urls: string[] = [];
+  const choices = Array.isArray(out?.choices) ? out.choices : [];
+  for (const c of choices) {
+    const content = c?.message?.content;
+    if (!Array.isArray(content)) continue;
+    for (const item of content) {
+      if (item && typeof item.image === 'string') urls.push(item.image);
+    }
+  }
+  return urls;
+}
+
 // seed 透传(A4):有效整数 → { seed:n };空/未传/非法 → {}(不加字段 = 随机)。
 function seedParam(seed?: number): Record<string, number> {
   if (typeof seed === 'number' && Number.isInteger(seed) && seed >= 0 && seed <= 2147483647) {

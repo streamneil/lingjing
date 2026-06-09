@@ -24,7 +24,7 @@
 import { imageSize } from './baichuan.js';
 import { db, type ImageModelOverrideRow } from '../db/index.js';
 
-export type ImageShape = 'S' | 'A1' | 'A2'; // S=同步多模态 A1=异步文生图 A2=异步图生成(缓)
+export type ImageShape = 'S' | 'A1' | 'A2' | 'A_EDIT'; // S=同步多模态 A1=异步文生图 A2=异步图生成(缓) A_EDIT=异步含图编辑(万相2.7)
 export type SizeKind = 'wh' | 'keyword' | 'aspect_res'; // size 参数形状(aspect_res 本轮缓)
 export type ImageMode = 'text2img' | 'img2img';
 
@@ -40,6 +40,7 @@ export interface ImageModelDef {
   maxResolution: '1K' | '2K' | '4K'; // 最高分辨率档
   priceTier: number; // 每张计价(替代 PRICE_PER_IMAGE,非双乘 P2-a)
   resolutions?: ResolutionEntry[]; // admin 录的分辨率列表(百炼官方推荐表);空 → 用 imageSize 算
+  supportsBbox?: boolean; // 支持 bbox_list 局部重绘(仅万相2.7;千问编辑不支持)
 }
 
 // 分辨率条目(admin 照百炼文档录 比例:宽*高;tier 计价档由像素自动推,不存)。
@@ -85,6 +86,18 @@ export const IMAGE_MODELS: Record<string, ImageModelDef> = {
     key: 'qwen-image-edit', label: '图像编辑', modelId: 'qwen-image-edit',
     shape: 'S', sizeKind: 'wh', modes: ['img2img'],
     maxImages: 1, maxInputImages: 3, maxResolution: '2K', priceTier: 6,
+  },
+  // 万相2.7 编辑(异步含图,A_EDIT):支持 bbox_list 局部重绘 + 0-5 参考图 + n=1-4 出图。
+  // size 走 keyword(编辑封顶 2K);提交 /image-generation/generation + X-DashScope-Async,轮询 /tasks/{id}。
+  'wan2.7-image': {
+    key: 'wan2.7-image', label: '万相2.7 编辑', modelId: 'wan2.7-image',
+    shape: 'A_EDIT', sizeKind: 'keyword', modes: ['text2img', 'img2img'],
+    maxImages: 4, maxInputImages: 5, maxResolution: '2K', priceTier: 7, supportsBbox: true,
+  },
+  'wan2.7-image-pro': {
+    key: 'wan2.7-image-pro', label: '万相2.7 编辑 Pro', modelId: 'wan2.7-image-pro',
+    shape: 'A_EDIT', sizeKind: 'keyword', modes: ['text2img', 'img2img'],
+    maxImages: 4, maxInputImages: 5, maxResolution: '2K', priceTier: 10, supportsBbox: true,
   },
 };
 
