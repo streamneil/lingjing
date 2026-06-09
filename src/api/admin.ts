@@ -26,6 +26,8 @@ import {
   setUserStatus,
 } from '../auth/index.js';
 import { grant, balance } from '../credits/index.js';
+import { IMAGE_MODELS } from '../gateway/image-models.js';
+import type { ImageModelOverrideRow } from '../db/index.js';
 import { writePlatformAudit, PLATFORM_TENANT } from '../audit/index.js';
 import {
   platformLogin,
@@ -219,4 +221,101 @@ adminRouter.post('/api/tenants/:id/users/:uid/:action(disable|enable)', requireP
     const code = (e as { code?: string })?.code;
     return res.status(409).json({ error: e instanceof Error ? e.message : '操作失败', ...(code ? { code } : {}) });
   }
+});
+
+// ── AI 图片模型管理(CEO A2:代码拥有技术契约,DB 只覆盖展示/运营字段)──
+// 管理视图 = 代码 IMAGE_MODELS(技术契约只读)+ DB override(label/modelId/enabled/price/maxImages 可改)。
+// shape/sizeKind/modes/maxResolution 永不可编辑(防呆 by construction)。
+
+const SHAPE_TEMPLATES = Object.keys(IMAGE_MODELS); // 合法 shape_template = 代码定义的 key
+
+/** 列出所有模型(代码 key + DB 新增 key 的并集),含技术契约(只读)+ 当前生效值。 */
+adminRouter.get('/api/image-models', requirePlatformAdmin, (_req: Request, res: Response) => {
+  const rows = db
+    .prepare('SELECT * FROM image_model_override')
+    .all() as ImageModelOverrideRow[];
+  const ovByKey = new Map(rows.map((r) => [r.key, r]));
+  const keys = Array.from(new Set([...Object.keys(IMAGE_MODELS), ...rows.map((r) => r.key)]));
+  const models = keys.map((key) => {
+    const ov = ovByKey.get(key);
+    const tmplKey = ov?.shape_template ?? key;
+    const tmpl = IMAGE_MODELS[tmplKey];
+    return {
+      key,
+      isCode: !!IMAGE_MODELS[key], // 代码内置(不可删)vs DB 新增(可删)
+      // 生效值(DB 覆盖优先)
+      label: ov?.label ?? tmpl?.label ?? key,
+      modelId: ov?.model_id ?? tmpl?.modelId ?? '',
+      enabled: ov ? ov.enabled === 1 : true,
+      priceTier: ov?.price_tier ?? tmpl?.priceTier ?? 0,
+      maxImages: ov?.max_images ?? tmpl?.maxImages ?? 1,
+      shapeTemplate: tmplKey,
+      // 技术契约(只读)
+      shape: tmpl?.shape, sizeKind: tmpl?.sizeKind, modes: tmpl?.modes,
+      maxResolution: tmpl?.maxResolution, maxInputImages: tmpl?.maxInputImages,
+      hasOverride: !!ov,
+    };
+  });
+  res.json({ models, shapeTemplates: SHAPE_TEMPLATES });
+});
+
+function validModelBody(b: Record<string, unknown>): { ok: true; v: { label: string; modelId: string; enabled: number; priceTier: number; maxImages: number } } | { ok: false; error: string } {
+  const label = typeof b.label === 'string' ? b.label.trim() : '';
+  const modelId = typeof b.modelId === 'string' ? b.modelId.trim() : '';
+  if (!label) return { ok: false, error: '显示名不能为空' };
+  if (!modelId) return { ok: false, error: '模型名(modelId)不能为空' };
+  const priceTier = Number(b.priceTier);
+  const maxImages = Number(b.maxImages);
+  if (!Number.isFinite(priceTier) || priceTier <= 0) return { ok: false, error: '价格需为正数' };
+  if (!Number.isInteger(maxImages) || maxImages < 1) return { ok: false, error: '张数上限需 ≥1' };
+  const enabled = b.enabled === false || b.enabled === 0 ? 0 : 1;
+  return { ok: true, v: { label, modelId, enabled, priceTier, maxImages } };
+}
+
+/** 新增模型(DB 新增 key,必须选一个代码 shape 模板,A5 防技术契约被破)。 */
+adminRouter.post('/api/image-models', requirePlatformAdmin, (req: Request, res: Response) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const key = typeof b.key === 'string' ? b.key.trim() : '';
+  const shapeTemplate = typeof b.shapeTemplate === 'string' ? b.shapeTemplate : '';
+  if (!key || !/^[a-z0-9._-]+$/i.test(key)) return res.status(400).json({ error: 'key 仅限字母数字 . _ -' });
+  if (IMAGE_MODELS[key] || db.prepare('SELECT 1 FROM image_model_override WHERE key=?').get(key))
+    return res.status(409).json({ error: 'key 已存在' });
+  if (!SHAPE_TEMPLATES.includes(shapeTemplate)) return res.status(400).json({ error: '无效 shape 模板' });
+  const v = validModelBody(b);
+  if (!v.ok) return res.status(400).json({ error: v.error });
+  db.prepare(
+    `INSERT INTO image_model_override (key,label,model_id,enabled,price_tier,max_images,shape_template,created_at)
+     VALUES (?,?,?,?,?,?,?,?)`,
+  ).run(key, v.v.label, v.v.modelId, v.v.enabled, v.v.priceTier, v.v.maxImages, shapeTemplate, Date.now());
+  writePlatformAudit(req.padmin!.id, 'image_model_create', PLATFORM_TENANT, key, padminIp(req));
+  res.status(201).json({ ok: true });
+});
+
+/** 改模型(代码内置 → upsert override;DB 新增 → update)。技术契约不可改。 */
+adminRouter.put('/api/image-models/:key', requirePlatformAdmin, (req: Request, res: Response) => {
+  const key = req.params.key!;
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const codeDef = IMAGE_MODELS[key];
+  const existing = db.prepare('SELECT * FROM image_model_override WHERE key=?').get(key) as ImageModelOverrideRow | undefined;
+  if (!codeDef && !existing) return res.status(404).json({ error: '模型不存在' });
+  const v = validModelBody(b);
+  if (!v.ok) return res.status(400).json({ error: v.error });
+  // 代码内置改 → upsert(shape_template=自身,技术契约取自身);DB 新增改 → 保留原 shape_template。
+  const shapeTemplate: string | null = existing?.shape_template ?? (codeDef ? key : null);
+  db.prepare(
+    `INSERT INTO image_model_override (key,label,model_id,enabled,price_tier,max_images,shape_template,created_at)
+     VALUES (?,?,?,?,?,?,?,?)
+     ON CONFLICT(key) DO UPDATE SET label=excluded.label, model_id=excluded.model_id,
+       enabled=excluded.enabled, price_tier=excluded.price_tier, max_images=excluded.max_images`,
+  ).run(key, v.v.label, v.v.modelId, v.v.enabled, v.v.priceTier, v.v.maxImages, shapeTemplate, existing?.created_at ?? Date.now());
+  writePlatformAudit(req.padmin!.id, 'image_model_update', PLATFORM_TENANT, key, padminIp(req));
+  res.json({ ok: true });
+});
+
+/** 删除 override(代码内置 → 删 override 回落代码默认;DB 新增 → 整删)。 */
+adminRouter.delete('/api/image-models/:key', requirePlatformAdmin, (req: Request, res: Response) => {
+  const key = req.params.key!;
+  db.prepare('DELETE FROM image_model_override WHERE key=?').run(key);
+  writePlatformAudit(req.padmin!.id, 'image_model_delete', PLATFORM_TENANT, key, padminIp(req));
+  res.json({ ok: true, note: IMAGE_MODELS[key] ? '已回落代码默认' : '已删除' });
 });

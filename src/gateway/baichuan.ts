@@ -140,7 +140,7 @@ export class BaichuanGateway implements CapabilityGateway, SyncImageGateway {
       {
         model: def.modelId,
         input: { prompt: input.prompt },
-        parameters: { n, ...sizeParams(def, input.ratio, input.resolution) },
+        parameters: { n, ...sizeParams(def, input.ratio, input.resolution), ...seedParam(input.seed) },
       },
       { 'X-DashScope-Async': 'enable' },
     );
@@ -189,7 +189,12 @@ export class BaichuanGateway implements CapabilityGateway, SyncImageGateway {
       image: u,
     }));
     content.push({ text: input.prompt });
-    return callMultimodalSync(def.modelId, content, sizeParams(def, input.ratio, input.resolution), signal);
+    return callMultimodalSync(
+      def.modelId,
+      content,
+      { ...sizeParams(def, input.ratio, input.resolution), ...seedParam(input.seed) },
+      signal,
+    );
   }
 
   // 同步文生图(S 形状,纯文本 content,无输入图)。eng 外部声音 P1-a:
@@ -201,7 +206,7 @@ export class BaichuanGateway implements CapabilityGateway, SyncImageGateway {
     return callMultimodalSync(
       def.modelId,
       content,
-      { n: String(n), ...sizeParams(def, input.ratio, input.resolution) },
+      { n: String(n), ...sizeParams(def, input.ratio, input.resolution), ...seedParam(input.seed) },
       signal,
     );
   }
@@ -212,7 +217,7 @@ export class BaichuanGateway implements CapabilityGateway, SyncImageGateway {
 async function callMultimodalSync(
   modelId: string,
   content: Array<Record<string, string>>,
-  extraParams: Record<string, string>,
+  extraParams: Record<string, string | number>,
   signal: AbortSignal,
 ): Promise<string[]> {
   const params: Record<string, unknown> = { watermark: false, ...extraParams };
@@ -255,6 +260,14 @@ const RATIO_WH: Record<string, [number, number]> = {
   '3:2': [3, 2],
   '2:3': [2, 3],
 };
+// seed 透传(A4):有效整数 → { seed:n };空/未传/非法 → {}(不加字段 = 随机)。
+function seedParam(seed?: number): Record<string, number> {
+  if (typeof seed === 'number' && Number.isInteger(seed) && seed >= 0 && seed <= 2147483647) {
+    return { seed };
+  }
+  return {};
+}
+
 export function imageSize(ratio?: string, resolution?: string): string {
   const base = RES_BASE[resolution ?? '1K'] ?? 1024;
   const [rw, rh] = RATIO_WH[ratio ?? '1:1'] ?? [1, 1];

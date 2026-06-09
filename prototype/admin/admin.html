@@ -107,6 +107,40 @@
         <tbody id="rows"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
+
+    <div class="ph" style="margin-top:34px">
+      <div><h1>AI 图片模型</h1><p>管理显示名 / 模型名(modelId)/ 启用 / 价格 / 张数。技术契约(同步异步/尺寸形状)由代码定义,后台改不到。</p></div>
+      <button class="btn-new" onclick="openModel()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>新增模型</button>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>显示名</th><th>模型名(modelId)</th><th>形状</th><th>最高清晰度</th><th>价/张</th><th>张数</th><th>启用</th><th style="text-align:right">操作</th></tr></thead>
+        <tbody id="modelRows"><tr><td colspan="8" class="empty">加载中…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 新增/编辑 AI 图片模型 -->
+  <div class="ov" id="modelOv">
+    <div class="modal">
+      <h3 id="mTitle">新增模型</h3>
+      <p class="mdesc">技术契约(同步异步/尺寸形状/支持模式/最高清晰度)由所选「shape 模板」从代码取,不可手改 —— 防止配错导致整个模型不工作。</p>
+      <label>key(唯一标识,新增后不可改)</label>
+      <input id="mKey" placeholder="如 my-model">
+      <label>显示名</label>
+      <input id="mLabel" placeholder="如 专业版">
+      <label>模型名(百炼 modelId)</label>
+      <input id="mModelId" placeholder="如 qwen-image-2.0-pro">
+      <label>shape 模板(取技术契约)</label>
+      <select id="mShape"></select>
+      <label>价/张</label>
+      <input id="mPrice" type="number" min="1" value="4">
+      <label>张数上限</label>
+      <input id="mMax" type="number" min="1" value="1">
+      <label style="display:flex;align-items:center;gap:8px;margin-top:10px"><input id="mEnabled" type="checkbox" checked style="width:auto"> 启用</label>
+      <div class="mmsg" id="mMsg"></div>
+      <div class="mbtns"><button class="cancel" onclick="closeOv('modelOv')">取消</button><button class="ok" id="mOk" onclick="submitModel()">保存</button></div>
+    </div>
   </div>
 
   <!-- 新建租户(只建托管;私有化是独立部署交付,不在此管理)-->
@@ -228,8 +262,70 @@
             <button class="act" onclick='openManage(${JSON.stringify(t.id)})'>管理</button>
           </div></td>
         </tr>`).join('');
+      await loadModels();
     }catch(e){ /* 401 已跳转 */ }
   }
+
+  // ── AI 图片模型管理 ──
+  let shapeTemplates=[], editingKey=null;
+  async function loadModels(){
+    const rows=document.getElementById('modelRows');
+    try{
+      const { models, shapeTemplates:st }=await PA('GET','/api/image-models');
+      shapeTemplates=st||[];
+      if(!models.length){ rows.innerHTML='<tr><td colspan="8" class="empty">无模型</td></tr>'; return; }
+      rows.innerHTML=models.map(m=>`
+        <tr>
+          <td><div class="tn">${esc(m.label)}</div><div class="tid">${esc(m.key)}${m.isCode?'':' · 自定义'}</div></td>
+          <td style="font-family:var(--f-mono);font-size:12px">${esc(m.modelId)}</td>
+          <td>${esc(m.shape||'-')}</td>
+          <td>${esc(m.maxResolution||'-')}</td>
+          <td>${m.priceTier}</td>
+          <td>${m.maxImages}</td>
+          <td><span class="bdg ${m.enabled?'bdg-host':'bdg-priv'}">${m.enabled?'启用':'停用'}</span></td>
+          <td><div class="acts">
+            <button class="act" onclick='editModel(${JSON.stringify(m)})'>编辑</button>
+            ${m.isCode&&!m.hasOverride?'':`<button class="act" onclick='delModel(${JSON.stringify(m.key)},${JSON.stringify(!!m.isCode)})'>${m.isCode?'还原':'删除'}</button>`}
+          </div></td>
+        </tr>`).join('');
+    }catch(e){ rows.innerHTML='<tr><td colspan="8" class="empty">加载失败</td></tr>'; }
+  }
+  function fillShapeSel(){ document.getElementById('mShape').innerHTML=shapeTemplates.map(s=>`<option value="${s}">${esc(s)}</option>`).join(''); }
+  function openModel(){
+    editingKey=null; document.getElementById('mTitle').textContent='新增模型'; document.getElementById('mMsg').textContent='';
+    document.getElementById('mKey').disabled=false; document.getElementById('mKey').value='';
+    document.getElementById('mShape').disabled=false; fillShapeSel();
+    document.getElementById('mLabel').value=''; document.getElementById('mModelId').value='';
+    document.getElementById('mPrice').value='4'; document.getElementById('mMax').value='1'; document.getElementById('mEnabled').checked=true;
+    document.getElementById('modelOv').classList.add('on');
+  }
+  window.editModel=(m)=>{
+    editingKey=m.key; document.getElementById('mTitle').textContent='编辑模型'; document.getElementById('mMsg').textContent='';
+    fillShapeSel();
+    document.getElementById('mKey').value=m.key; document.getElementById('mKey').disabled=true;
+    document.getElementById('mShape').value=m.shapeTemplate||m.key; document.getElementById('mShape').disabled=true; // 编辑不改技术模板
+    document.getElementById('mLabel').value=m.label; document.getElementById('mModelId').value=m.modelId;
+    document.getElementById('mPrice').value=m.priceTier; document.getElementById('mMax').value=m.maxImages; document.getElementById('mEnabled').checked=m.enabled;
+    document.getElementById('modelOv').classList.add('on');
+  };
+  window.openModel=openModel;
+  async function submitModel(){
+    const key=document.getElementById('mKey').value.trim();
+    const body={ label:document.getElementById('mLabel').value.trim(), modelId:document.getElementById('mModelId').value.trim(),
+      priceTier:Number(document.getElementById('mPrice').value), maxImages:Number(document.getElementById('mMax').value),
+      enabled:document.getElementById('mEnabled').checked, shapeTemplate:document.getElementById('mShape').value };
+    try{
+      if(editingKey){ await PA('PUT',`/api/image-models/${encodeURIComponent(editingKey)}`,body); }
+      else { await PA('POST','/api/image-models',{ ...body, key }); }
+      closeOv('modelOv'); toast('✓ 已保存'); await loadModels();
+    }catch(e){ document.getElementById('mMsg').textContent=e.message||'保存失败'; }
+  }
+  window.submitModel=submitModel;
+  window.delModel=async(key,isCode)=>{
+    if(!confirm(isCode?'还原此模型为代码默认?':'删除此自定义模型?')) return;
+    try{ await PA('DELETE',`/api/image-models/${encodeURIComponent(key)}`); toast('✓ 已操作'); await loadModels(); }
+    catch(e){ toast(e.message||'操作失败','err'); }
+  };
   function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
   // 新建租户

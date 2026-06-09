@@ -8,7 +8,16 @@
 <link rel="stylesheet" href="app.css">
 <style>
   .img-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; }
-  .img-grid img { width:100%; border-radius:12px; display:block; background:var(--field); aspect-ratio:1; object-fit:cover; }
+  .img-grid img { width:100%; border-radius:12px; display:block; background:var(--field); object-fit:cover; }
+  /* item4:卡片元信息 + 动作 + 长词收展 */
+  .card-meta { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 2px; }
+  .card-meta .chip { font-size:11px; color:var(--t3); background:var(--field); border:1px solid var(--line); border-radius:7px; padding:2px 8px; }
+  .card-acts { display:flex; gap:8px; margin-top:10px; }
+  .card-acts button { display:inline-flex; align-items:center; gap:5px; font-size:12.5px; color:var(--t2); background:var(--field); border:1px solid var(--line); border-radius:9px; padding:7px 13px; cursor:pointer; transition:.15s; }
+  .card-acts button:hover { border-color:var(--line-hi); color:var(--t1); }
+  .card-acts button svg { width:14px; height:14px; }
+  .tx.clamp { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+  .tx-toggle { font-size:12px; color:var(--blue); cursor:pointer; margin-top:4px; display:inline-block; }
 
   /* 二级 tab(图片转图片/文字转图片/模板)*/
   .sub-tabs { display:flex; gap:4px; background:var(--field); border:1px solid var(--line); border-radius:var(--r); padding:4px; margin-bottom:14px; }
@@ -110,13 +119,19 @@
         <div class="pop" id="pop-set">
           <div class="pop-label">比例</div>
           <div class="ratio-row" id="ratioRow"></div>
-          <div class="pop-label">解析度</div>
-          <div class="seg-row" id="resSeg"><div class="seg on" data-res="1K">1K</div><div class="seg" data-res="2K">2K</div><div class="seg" data-res="4K">4K</div></div>
+          <div class="pop-label">清晰度</div>
+          <div class="seg-row" id="resSeg"></div>
           <div class="pop-label">输出张数</div>
           <div class="seg-row" id="countSeg"><div class="seg on" data-n="1">1</div><div class="seg" data-n="2">2</div><div class="seg" data-n="3">3</div><div class="seg" data-n="4">4</div></div>
         </div>
       </div>
-      <div class="cpill fixed" onclick="togglePop('set')" title="生成设置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></div>
+      <div class="pop-anchor">
+        <div class="cpill fixed" id="seedPill" onclick="togglePop('seed')" title="随机种子 Seed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+        <div class="pop" id="pop-seed" style="left:auto;right:0;width:200px">
+          <div class="pop-label">Seed(随机种子)</div>
+          <input id="seedInput" type="text" inputmode="numeric" placeholder="随机" style="width:100%;padding:9px 11px;background:var(--field);border:1px solid var(--line);border-radius:9px;color:var(--t1);font-size:13px;font-family:var(--f-mono)">
+        </div>
+      </div>
     </div>
     <div class="pop-ov" id="popOv" onclick="closePops()"></div>
 
@@ -159,8 +174,9 @@
 <script>
   const ta=document.getElementById('prompt'), cnt=document.getElementById('cnt'), btn=document.getElementById('createBtn');
   const feedList=document.querySelector('.feed-list');
-  let count=1, res='1K', ratio='1:1', mode='text2img', model='', allModels=[];
+  let count=1, res='1K', ratio='1:1', mode='text2img', model='', allModels=[], seed='';
 
+  const RES_ORDER={'1K':1,'2K':2,'4K':3};
   // ── 模型下拉(单一真相源:GET /image-models,自绘深色 popover)。按当前 mode 过滤 ──
   const modelOpts=document.getElementById('modelOpts');
   async function loadModels(){
@@ -174,20 +190,31 @@
       <span class="nm">${esc(m.label)}</span>${m.maxResolution==='4K'?'<span class="tag">4K</span>':''}
       <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg></div>`).join('')
       || '<div class="pop-opt"><span class="nm">该模式暂无可用模型</span></div>';
-    modelOpts.querySelectorAll('.pop-opt[data-k]').forEach(el=>el.onclick=()=>{ model=el.dataset.k; renderModels(); syncPills(); closePops(); scheduleEstimate(); });
+    modelOpts.querySelectorAll('.pop-opt[data-k]').forEach(el=>el.onclick=()=>{ model=el.dataset.k; renderModels(); closePops(); scheduleEstimate(); });
+    renderRes(); // 清晰度按所选模型 maxResolution(item5)
     syncPills();
+  }
+  // ── 清晰度按模型支持动态渲染(item5)──
+  function renderRes(){
+    const m=allModels.find(x=>x.key===model);
+    const maxR=RES_ORDER[m?m.maxResolution:'2K']||2;
+    const opts=['1K','2K','4K'].filter(r=>RES_ORDER[r]<=maxR);
+    if(!opts.includes(res)) res=opts[opts.length-1]; // 超上限回落最高档
+    const resSeg=document.getElementById('resSeg');
+    resSeg.innerHTML=opts.map(r=>`<div class="seg${r===res?' on':''}" data-res="${r}">${r}</div>`).join('');
+    resSeg.querySelectorAll('.seg').forEach(s=>s.onclick=()=>{ resSeg.querySelectorAll('.seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); res=s.dataset.res; syncPills(); scheduleEstimate(); });
   }
 
   // ── popover 开关 ──
   function togglePop(which){
-    const map={model:'pop-model',set:'pop-set'}; const id=map[which]; const el=document.getElementById(id);
-    const isOpen=el.classList.contains('show'); closePops();
-    if(!isOpen){ el.classList.add('show'); document.getElementById('popOv').classList.add('show');
-      (which==='model'?document.getElementById('modelPill'):document.getElementById('setPill')).classList.add('open'); }
+    const map={model:'pop-model',set:'pop-set',seed:'pop-seed'}; const pillMap={model:'modelPill',set:'setPill',seed:'seedPill'};
+    const el=document.getElementById(map[which]); const isOpen=el.classList.contains('show'); closePops();
+    if(!isOpen){ el.classList.add('show'); document.getElementById('popOv').classList.add('show'); document.getElementById(pillMap[which]).classList.add('open'); }
   }
   function closePops(){ document.querySelectorAll('.pop.show').forEach(p=>p.classList.remove('show')); document.querySelectorAll('.cpill.open').forEach(p=>p.classList.remove('open')); document.getElementById('popOv').classList.remove('show'); }
   window.togglePop=togglePop; window.closePops=closePops;
   document.addEventListener('keydown',e=>{ if(e.key==='Escape') closePops(); });
+  document.getElementById('seedInput').addEventListener('input',e=>{ seed=e.target.value.replace(/[^0-9]/g,''); e.target.value=seed; });
 
   // ── pill 文案同步 ──
   function syncPills(){
@@ -209,8 +236,7 @@
     ratio=c.dataset.ratio; syncPills(); scheduleEstimate();
   });
 
-  // ── 解析度 / 输出张数 段选 ──
-  document.querySelectorAll('#resSeg .seg').forEach(s=>s.onclick=()=>{ document.querySelectorAll('#resSeg .seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); res=s.dataset.res; syncPills(); scheduleEstimate(); });
+  // ── 输出张数 段选(清晰度由 renderRes 动态绑定,item5)──
   document.querySelectorAll('#countSeg .seg').forEach(s=>s.onclick=()=>{ document.querySelectorAll('#countSeg .seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); count=parseInt(s.dataset.n,10); syncPills(); scheduleEstimate(); });
 
   // ── 二级 tab 切换 ──
@@ -281,40 +307,84 @@
     document.querySelectorAll('.feed-list .fitem[id^=job-]').forEach(it=>{ it.style.display=(k==='all'||(it.dataset.st||'')===k)?'':'none'; });
   });
 
+  const jobInputs={}; // id → 原始 input(重新生成回放,item4)
+
+  // 提示词气泡:长词默认收起 + 展开/收起(item4)
+  function promptBubble(p){
+    const t=esc(p||''); const long=(p||'').length>80;
+    return `<div class="fbubble"><div class="tx${long?' clamp':''}">${t}</div>${long?'<span class="tx-toggle" onclick="this.previousElementSibling.classList.toggle(\'clamp\');this.textContent=this.previousElementSibling.classList.contains(\'clamp\')?\'展开\':\'收起\'">展开</span>':''}</div>`;
+  }
+  // 元信息 chips(模型·比例·清晰度,item4)
+  function metaChips(job){
+    const c=[]; if(job.modelLabel) c.push(job.modelLabel);
+    if(job.ratio) c.push(job.ratio==='auto'?'自动比例':job.ratio); if(job.resolution) c.push(job.resolution);
+    return c.length?`<div class="card-meta">${c.map(x=>`<span class="chip">${esc(x)}</span>`).join('')}</div>`:'';
+  }
+  // 动作按钮(重新生成 + 下载;成功/失败都有重新生成,item4)
+  function cardActs(job,ok){
+    const re=`<button onclick="regenJob('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>重新生成</button>`;
+    const dl=ok&&(job.outputUrls||[]).length?`<button onclick="downloadImgs('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg>下载</button>`:'';
+    return `<div class="card-acts">${re}${dl}</div>`;
+  }
+
   function renderCard(job){
     document.getElementById('sampleGallery').style.display='none';
+    if(job.input) jobInputs[job.id]=job.input; // detail 带 input;list 带散字段
     let card=document.getElementById('job-'+job.id);
     if(!card){ card=document.createElement('div'); card.className='fitem'; card.id='job-'+job.id; feedList.insertBefore(card, feedList.firstChild); }
+    const head=(color,led,txt)=>`<div class="fmeta"><b>AI 图片</b><span class="ts">刚刚</span><span class="sp"></span><span class="st" style="color:${color}"><span class="led ${led}"></span>${txt}</span></div>`;
+    // 图按比例显示(item4):ratio→aspect-ratio
+    const ar=(job.ratio&&job.ratio!=='auto')?job.ratio.replace(':','/'):'1/1';
     if(job.status==='queued'||job.status==='running'){
       card.dataset.st='running';
-      card.innerHTML=`<div class="fmeta"><b>AI 图片</b><span class="ts">刚刚</span><span class="sp"></span><span class="st" style="color:var(--amber)"><span class="led led-run"></span>${job.status==='queued'?'排队中':'生成中'}</span></div>
-        <div class="fbubble"><div class="tx">${esc(job.prompt||'')}</div></div>
-        <div class="fvideo proc"><div class="proc-in"><div class="spinner"></div><div class="lbl">${job.progress?('进度 '+job.progress+'%'):'已进入生成队列'}</div><div class="proc-bar"><i style="width:${job.progress||8}%"></i></div></div></div>`;
+      card.innerHTML=head('var(--amber)','led-run',job.status==='queued'?'排队中':'生成中')+promptBubble(job.prompt)+metaChips(job)+
+        `<div class="fvideo proc"><div class="proc-in"><div class="spinner"></div><div class="lbl">${job.progress?('进度 '+job.progress+'%'):'已进入生成队列'}</div><div class="proc-bar"><i style="width:${job.progress||8}%"></i></div></div></div>`;
     } else if(job.status==='done'){
       card.dataset.st='done';
-      const imgs=(job.outputUrls||[]).map(u=>`<img src="${u}" onclick="window.open('${u}','_blank')" title="点击查看大图">`).join('');
-      card.innerHTML=`<div class="fmeta"><b>AI 图片</b><span class="ts">刚刚</span><span class="sp"></span><span class="st" style="color:var(--green)"><span class="led led-ok"></span>已完成</span></div>
-        <div class="fbubble"><div class="tx">${esc(job.prompt||'')}</div></div>
-        <div class="img-grid">${imgs||'<div style="color:var(--t4);padding:20px">已生成</div>'}</div>`;
+      const imgs=(job.outputUrls||[]).map(u=>`<img src="${u}" style="aspect-ratio:${ar}" onclick="window.open('${u}','_blank')" title="点击查看大图">`).join('');
+      card.innerHTML=head('var(--green)','led-ok','已完成')+promptBubble(job.prompt)+metaChips(job)+
+        `<div class="img-grid">${imgs||'<div style="color:var(--t4);padding:20px">已生成</div>'}</div>`+cardActs(job,true);
     } else {
       card.dataset.st='failed';
-      card.innerHTML=`<div class="fmeta"><b>AI 图片</b><span class="ts">刚刚</span><span class="sp"></span><span class="st" style="color:var(--red)"><span class="led led-err"></span>生成失败</span></div>
-        <div class="fbubble"><div class="tx">${esc(job.prompt||'')}</div></div>
-        <div class="fvideo err"><div class="err-in"><div class="ei">!</div><div class="lbl">${esc(job.error||'生成失败,请重试')}</div></div></div>`;
+      card.innerHTML=head('var(--red)','led-err','生成失败')+promptBubble(job.prompt)+metaChips(job)+
+        `<div class="fvideo err"><div class="err-in"><div class="ei">!</div><div class="lbl">${esc(job.error||'生成失败,请重试')}</div></div></div>`+cardActs(job,false);
     }
   }
 
-  async function track(id, prompt){ try{ await LJ.pollJob(id, (job)=>renderCard({...job, prompt})); }catch(e){} }
+  // 重新生成(同 input 再提交;img2img 复用原 imageRefs+授权,不重新 consent,P2-regen-consent)
+  window.regenJob=async(id)=>{
+    const inp=jobInputs[id]; if(!inp){ window.LJToast&&window.LJToast('原参数丢失,无法重新生成','err'); return; }
+    try{
+      const res2=await LJ.createJob({ type:'ai_image', model:inp.model, mode:inp.mode||'text2img', prompt:inp.prompt,
+        imageRefs:inp.imageRefs, count:inp.count, resolution:inp.resolution, ratio:inp.ratio, seed:inp.seed });
+      renderCard({ id:res2.id, status:'queued', progress:0, prompt:inp.prompt, modelLabel:findLabel(inp.model), ratio:inp.ratio, resolution:inp.resolution });
+      track(res2.id, inp.prompt);
+      window.LJToast&&window.LJToast('✓ 已重新提交生成');
+    }catch(e){ window.LJToast&&window.LJToast('重新生成失败:'+e.message,'err'); }
+  };
+  function findLabel(k){ const m=allModels.find(x=>x.key===k); return m?m.label:undefined; }
+  // 下载(P1-download:跨域签名 URL,a[download] 无效 → fetch blob → 同源 objectURL 下载)
+  window.downloadImgs=async(id)=>{
+    const card=document.getElementById('job-'+id); const imgs=card?[...card.querySelectorAll('.img-grid img')]:[];
+    for(let i=0;i<imgs.length;i++){
+      try{ const r=await fetch(imgs[i].src); const b=await r.blob(); const u=URL.createObjectURL(b);
+        const a=document.createElement('a'); a.href=u; a.download=`lingjing-${id}-${i+1}.png`; a.click(); URL.revokeObjectURL(u);
+      }catch(e){ window.open(imgs[i].src,'_blank'); }
+    }
+  };
+
+  async function track(id, prompt){ try{ await LJ.pollJob(id, (job)=>renderCard({...job, prompt, ...(jobInputs[id]?{modelLabel:findLabel(jobInputs[id].model),ratio:jobInputs[id].ratio,resolution:jobInputs[id].resolution}:{})})); }catch(e){} }
 
   async function loadHistory(){
     let jobs=[]; try{ jobs=await LJ.listJobs(); }catch(e){ return; }
     const mine=jobs.filter(j=>j.type==='ai_image');
     if(!mine.length) return;
     document.getElementById('sampleGallery').style.display='none';
+    // list 已带 model/ratio/resolution/imageRefs 等(免 N+1);存 input 供重新生成。
     for(const j of [...mine].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))){
-      try{ const d=await LJ.getJob(j.id); renderCard({...d, prompt:(d.input&&d.input.prompt)||''});
-        if(d.status==='queued'||d.status==='running') track(d.id,(d.input&&d.input.prompt)||'');
-      }catch(e){}
+      jobInputs[j.id]={ model:j.model, mode:j.mode, prompt:j.script, imageRefs:j.imageRefs, count:j.count, resolution:j.resolution, ratio:j.ratio, seed:j.seed };
+      renderCard({...j, prompt:j.script});
+      if(j.status==='queued'||j.status==='running') track(j.id, j.script);
     }
   }
 
@@ -337,13 +407,14 @@
       if(mode==='img2img'){
         btn.textContent='上传中…';
         const imageRefs=await uploadInputImages();
-        payload={ type:'ai_image', model, mode:'img2img', prompt, imageRefs, resolution:res, ratio };
+        payload={ type:'ai_image', model, mode:'img2img', prompt, imageRefs, resolution:res, ratio, seed:seed||undefined };
       } else {
-        payload={ type:'ai_image', model, mode:'text2img', prompt, count, resolution:res, ratio };
+        payload={ type:'ai_image', model, mode:'text2img', prompt, count, resolution:res, ratio, seed:seed||undefined };
       }
       btn.textContent='提交中…';
       const res2=await LJ.createJob(payload);
-      renderCard({ id:res2.id, status:'queued', progress:0, prompt });
+      jobInputs[res2.id]={ model:payload.model, mode:payload.mode, prompt, imageRefs:payload.imageRefs, count:payload.count, resolution:payload.resolution, ratio:payload.ratio, seed:payload.seed };
+      renderCard({ id:res2.id, status:'queued', progress:0, prompt, modelLabel:findLabel(model), ratio, resolution:res });
       track(res2.id, prompt);
       ta.value=''; cnt.textContent='0';
       if(mode==='img2img'){ imgFiles=[]; renderPreview(); document.getElementById('consentChk').checked=false; }

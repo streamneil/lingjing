@@ -29,7 +29,7 @@ import { isUsableAvatar } from '../avatars/index.js';
 import { isUsableVoice } from '../voices/index.js';
 import { db } from '../db/index.js';
 import type { VideoGenInput, ImageGenInput, TtsGenInput } from '../gateway/types.js';
-import { IMAGE_MODELS, getImageModel, resolutionAllowed } from '../gateway/image-models.js';
+import { getImageModel, resolutionAllowed, isKnownModel, listEnabledModels, DEFAULT_IMAGE_MODEL } from '../gateway/image-models.js';
 
 export const jobsRouter = Router();
 
@@ -83,13 +83,22 @@ function buildVideoJob(body: Record<string, unknown>, tid: string): JobBuildResu
  *   resolve model(默认兜底)→ 校验 mode/4K/张数 → clamp(maxImages)→ 写 input.count+model → cost(读 priceTier)。
  */
 function buildImageJob(body: Record<string, unknown>): JobBuildResult {
-  const { model, prompt, count, resolution, ratio, mode, imageRefs } = body as Partial<ImageGenInput>;
+  const { model, prompt, count, resolution, ratio, mode, imageRefs, seed } = body as Partial<ImageGenInput>;
   if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0)
     return { ok: false, status: 400, error: '缺少 prompt(提示词)' };
   const res = typeof resolution === 'string' ? resolution : undefined;
 
-  // 1. resolve model:显式传的必须在白名单;缺省按 mode 走默认(C5b 老 job/前端未传兼容)。
-  if (model !== undefined && (typeof model !== 'string' || !IMAGE_MODELS[model]))
+  // seed 校验(A4):未传/空 ok(随机);传了必须是 [0,2147483647] 整数。
+  let seedVal: number | undefined;
+  if (seed !== undefined && seed !== null && (seed as unknown) !== '') {
+    const s = Number(seed);
+    if (!Number.isInteger(s) || s < 0 || s > 2147483647)
+      return { ok: false, status: 400, error: 'seed 需为 0–2147483647 的整数' };
+    seedVal = s;
+  }
+
+  // 1. resolve model:显式传的必须在 registry(代码或 DB);缺省按 mode 走默认。
+  if (model !== undefined && (typeof model !== 'string' || !isKnownModel(model)))
     return { ok: false, status: 400, error: '模型不可用' };
   const effMode: 'text2img' | 'img2img' = mode === 'img2img' ? 'img2img' : 'text2img';
   const def = getImageModel(model, effMode);
@@ -100,14 +109,18 @@ function buildImageJob(body: Record<string, unknown>): JobBuildResult {
   if (!resolutionAllowed(def, res))
     return { ok: false, status: 400, error: `该模型最高支持 ${def.maxResolution}` };
 
+  // P3:提交时快照 priceTier/maxImages 进 input,worker settle 读快照 → admin 改价 mid-flight 不破 reserve==settle。
+  const snap = { priceTierSnapshot: def.priceTier, maxImagesSnapshot: def.maxImages };
+
   if (effMode === 'img2img') {
     const refs = Array.isArray(imageRefs) ? imageRefs.filter((k) => typeof k === 'string') : [];
     if (refs.length === 0) return { ok: false, status: 400, error: '图生图需上传至少 1 张输入图' };
     if (refs.length > def.maxInputImages)
       return { ok: false, status: 400, error: `该模型最多 ${def.maxInputImages} 张输入图` };
-    const input: ImageGenInput = { model: def.key, mode: 'img2img', prompt, imageRefs: refs };
+    const input: ImageGenInput = { model: def.key, mode: 'img2img', prompt, imageRefs: refs, ...snap };
     if (res) input.resolution = res;
     if (typeof ratio === 'string') input.ratio = ratio;
+    if (seedVal !== undefined) input.seed = seedVal;
     return {
       ok: true,
       type: 'ai_image',
@@ -118,9 +131,10 @@ function buildImageJob(body: Record<string, unknown>): JobBuildResult {
 
   // 文生图:clamp 按 model maxImages 并回写 input.count(reserve==settle)
   const n = clampImageCount(count, def.maxImages);
-  const input: ImageGenInput = { model: def.key, mode: 'text2img', prompt, count: n };
+  const input: ImageGenInput = { model: def.key, mode: 'text2img', prompt, count: n, ...snap };
   if (res) input.resolution = res;
   if (typeof ratio === 'string') input.ratio = ratio;
+  if (seedVal !== undefined) input.seed = seedVal;
   return {
     ok: true,
     type: 'ai_image',
@@ -278,7 +292,9 @@ jobsRouter.post('/jobs/estimate', requireAuth, (req: Request, res: Response) => 
 // 图像模型清单 — 前端下拉的单一真相源(P2-b:requireAuth,同级路由一致)。
 // 吐 registry 的 UI 相关字段(不泄漏内部 modelId/priceTier 计费细节)。
 jobsRouter.get('/image-models', requireAuth, (_req: Request, res: Response) => {
-  const models = Object.values(IMAGE_MODELS).map((d) => ({
+  // 只列 enabled(DB override 优先);P2-default:default = 首个 enabled(禁用默认时前端不预选不在列表的)。
+  const enabled = listEnabledModels();
+  const models = enabled.map((d) => ({
     key: d.key,
     label: d.label,
     modes: d.modes,
@@ -286,7 +302,8 @@ jobsRouter.get('/image-models', requireAuth, (_req: Request, res: Response) => {
     maxInputImages: d.maxInputImages,
     maxResolution: d.maxResolution,
   }));
-  res.json({ models, default: 'qwen-image' });
+  const def = enabled.find((d) => d.key === DEFAULT_IMAGE_MODEL)?.key ?? enabled[0]?.key ?? DEFAULT_IMAGE_MODEL;
+  res.json({ models, default: def });
 });
 
 // 作品列表 — 任何登录角色(含 viewer)可读本租户作品
@@ -298,10 +315,24 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
       const outputUrls =
         j.status === 'done' && j.output_url ? await signOutputUrls(j.output_url) : [];
       // 文案/提示词:供卡片标题。video 取 script,ai_image 取 prompt;解析失败给空串不崩。
+      // item4:卡片要显示模型/比例/清晰度 + 重新生成要回放 input → projection 带这些字段(免 N+1)。
       let script = '';
+      let meta: Record<string, unknown> = {};
       try {
-        const inp = JSON.parse(j.input_json) as { script?: string; prompt?: string; text?: string };
+        const inp = JSON.parse(j.input_json) as {
+          script?: string; prompt?: string; text?: string;
+          model?: string; mode?: string; ratio?: string; resolution?: string; count?: number;
+          imageRefs?: string[]; seed?: number;
+        };
         script = inp.script ?? inp.prompt ?? inp.text ?? '';
+        if (j.type === 'ai_image') {
+          const modelLabel = inp.model ? getImageModel(inp.model, inp.mode === 'img2img' ? 'img2img' : 'text2img').label : undefined;
+          meta = {
+            model: inp.model, modelLabel, mode: inp.mode,
+            ratio: inp.ratio, resolution: inp.resolution, count: inp.count,
+            imageRefs: inp.imageRefs, seed: inp.seed, // 重新生成回放用
+          };
+        }
       } catch {
         /* 旧/坏数据忽略 */
       }
@@ -315,6 +346,7 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
         videoUrl: outputUrls[0] ?? null, // 兼容旧前端字段(单产物首个)
         outputUrls, // 多产物全量(图片多图)
         script,
+        ...meta,
         createdAt: j.created_at,
       };
     }),

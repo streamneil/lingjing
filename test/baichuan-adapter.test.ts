@@ -127,3 +127,40 @@ describe('同步文生图 generateImageSync(S+text2img,eng 外部声音 P1-a/P3-
     ).rejects.toThrow();
   });
 });
+
+describe('seed 透传(A4)', () => {
+  function spyCapture() {
+    let body: Record<string, unknown> = {};
+    vi.spyOn(globalThis, 'fetch').mockImplementation((_url, opts) => {
+      body = JSON.parse((opts as RequestInit).body as string);
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ output: { task_id: 't1', choices: [{ message: { content: [{ image: 'https://x/a.png' }] } }] } }),
+          { status: 200 },
+        ),
+      );
+    });
+    return () => body;
+  }
+
+  it('有 seed → parameters.seed = 数字', async () => {
+    const gw = new BaichuanGateway();
+    const get = spyCapture();
+    await gw.generateImageSync({ model: 'qwen-image-2.0-pro', prompt: 'x', seed: 12345 }, new AbortController().signal);
+    expect(((get().parameters as Record<string, unknown>).seed)).toBe(12345);
+  });
+
+  it('无 seed → 不加 seed 字段(随机)', async () => {
+    const gw = new BaichuanGateway();
+    const get = spyCapture();
+    await gw.generateImageSync({ model: 'qwen-image-2.0-pro', prompt: 'x' }, new AbortController().signal);
+    expect(((get().parameters as Record<string, unknown>).seed)).toBeUndefined();
+  });
+
+  it('submitImage(异步)同样透传 seed', async () => {
+    const gw = new BaichuanGateway();
+    const get = spyCapture();
+    await gw.submitImage({ model: 'qwen-image', prompt: 'x', seed: 7 });
+    expect(((get().parameters as Record<string, unknown>).seed)).toBe(7);
+  });
+});
