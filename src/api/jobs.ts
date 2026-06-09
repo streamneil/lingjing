@@ -230,9 +230,16 @@ jobsRouter.post(
 
     if (images.length === 0) return res.status(400).json({ error: '缺少图片(images)' });
     if (images.length > 3) return res.status(400).json({ error: '最多 3 张输入图' });
+    // 防御纵深:前端已拦 HEIC/非支持格式/超 10MB,但客户端可绕过 → 后端再校验一遍。
+    // 百炼图生图支持(qwen-image-edit 文档):JPEG/PNG/WEBP/BMP/TIFF/GIF;不含 HEIC。
+    const OK_IMG = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/bmp', 'image/tiff', 'image/gif']);
     for (const img of images) {
-      if (!img.mimetype.startsWith('image/'))
-        return res.status(400).json({ error: '仅支持图片文件' });
+      if (/heic|heif/i.test(img.mimetype) || /\.heic$|\.heif$/i.test(img.originalname))
+        return res.status(400).json({ error: '暂不支持 HEIC,请上传 JPG/PNG/WEBP' });
+      if (!OK_IMG.has(img.mimetype))
+        return res.status(400).json({ error: `不支持的格式 ${img.mimetype || '未知'},请用 JPG/PNG/WEBP` });
+      if (img.size > 10 * 1024 * 1024)
+        return res.status(400).json({ error: '单张图片不能超过 10MB' });
     }
     // 授权门票:含人输入图必须授权(同形象上传)
     if (!consent) {
