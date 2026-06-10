@@ -73,6 +73,12 @@
       <option value="">默认(随音色)</option>
     </select>
 
+    <div class="cfg-label" id="emoLabel">情绪 <span id="emoHint" style="color:var(--t4);font-weight:400;font-size:11px"></span></div>
+    <select class="vfilter" id="emotion" style="width:100%"><option value="auto">自动</option></select>
+
+    <div class="cfg-label">音高 <span id="pitchVal" style="color:var(--t4);font-weight:400">0</span></div>
+    <div class="sld-row"><span class="lbl">音高</span><input type="range" id="pitch" min="-12" max="12" step="1" value="0"><span class="val" id="pitchValR">0</span></div>
+
     <div class="cfg-label">语速</div>
     <div class="sld-row"><span class="lbl">速度</span><input type="range" id="rate" min="0.5" max="2" step="0.1" value="1"><span class="val" id="rateVal">1.0×</span></div>
     <div class="cfg-label">音量</div>
@@ -223,9 +229,14 @@
   };
   window.openVoices=openVoices; window.closeVoices=closeVoices; window.switchVTab=switchVTab; window.renderVoices=renderVoices;
 
-  // ── 品质模型(T-TTS-QUALITY-MODEL):按所选音色 transport 过滤 ──
-  let ttsModels=[];   // [{key,label,transport,supportsInstruction}]
-  async function loadModels(){ try{ const r=await LJ.get('/tts-models'); ttsModels=r.models||[]; }catch(e){} }
+  // ── 品质模型(T-TTS-QUALITY-MODEL)+ 情绪/音高(T-TTS-EMOTION)──
+  let ttsModels=[], ttsEmotions=[];   // [{key,label,transport,supportsInstruction}] / [{key,label}]
+  async function loadModels(){
+    try{ const r=await LJ.get('/tts-models'); ttsModels=r.models||[]; ttsEmotions=r.emotions||[];
+      document.getElementById('emotion').innerHTML=ttsEmotions.map(e=>`<option value="${esc(e.key)}">${esc(e.label)}</option>`).join('');
+      updateEmotionEnabled();
+    }catch(e){}
+  }
   function refreshModelOptions(){
     const sel=document.getElementById('ttsModel');
     const prev=sel.value;
@@ -235,8 +246,21 @@
     sel.innerHTML=opts.join('');
     // 切音色后若旧选模型不再兼容,回落默认
     if(prev && [...sel.options].some(o=>o.value===prev)) sel.value=prev; else sel.value='';
+    updateEmotionEnabled();
   }
-  window.onModelChange=()=>{ scheduleEstimate(); };
+  // 情绪/音高仅在所选品质模型支持指令时可用;否则灰 + 提示
+  function updateEmotionEnabled(){
+    const mk=document.getElementById('ttsModel').value;
+    const def=ttsModels.find(m=>m.key===mk);
+    const ok=!!(def&&def.supportsInstruction);
+    const emo=document.getElementById('emotion'), pit=document.getElementById('pitch');
+    emo.disabled=!ok; pit.disabled=!ok;
+    emo.style.opacity=pit.style.opacity=ok?'1':'.45';
+    document.getElementById('emoHint').textContent=ok?'':'(需选支持指令的品质模型)';
+    if(!ok){ emo.value='auto'; pit.value='0'; document.getElementById('pitchVal').textContent='0'; document.getElementById('pitchValR').textContent='0'; }
+  }
+  document.getElementById('pitch').oninput=function(){ document.getElementById('pitchVal').textContent=this.value; document.getElementById('pitchValR').textContent=this.value; };
+  window.onModelChange=()=>{ updateEmotionEnabled(); scheduleEstimate(); };
 
   // ── 声音设计弹窗(E7)──
   const DG_DIMS=['年轻女声','沉稳男声','温柔','活泼','磁性','播音腔','语速偏快','适合有声书'];
@@ -345,7 +369,8 @@
     const text=ta.value.trim(); if(!text||!selectedVoice) return;
     btn.disabled=true; const prev=btn.innerHTML; btn.textContent='提交中…';
     try{
-      const res=await LJ.createJob({ type:'tts', text, voiceRef:selectedVoice.id, rate:parseFloat(rate.value), volume:parseInt(vol.value,10), model:document.getElementById('ttsModel').value||undefined });
+      const emoV=document.getElementById('emotion').value, pitchV=parseInt(document.getElementById('pitch').value,10);
+      const res=await LJ.createJob({ type:'tts', text, voiceRef:selectedVoice.id, rate:parseFloat(rate.value), volume:parseInt(vol.value,10), model:document.getElementById('ttsModel').value||undefined, emotion:emoV!=='auto'?emoV:undefined, pitch:pitchV!==0?pitchV:undefined });
       renderCard({ id:res.id, status:'queued', progress:0, text });
       track(res.id, text);
       ta.value=''; cnt.textContent='0'; scheduleEstimate();

@@ -34,7 +34,7 @@ import {
 import { audit } from '../audit/index.js';
 import { isUsableAvatar } from '../avatars/index.js';
 import { isUsableVoice, voiceTransport } from '../voices/index.js';
-import { getTtsModel, TTS_MODELS } from '../gateway/tts-models.js';
+import { getTtsModel, getEmotion, TTS_MODELS, EMOTIONS } from '../gateway/tts-models.js';
 import { db } from '../db/index.js';
 import type { VideoGenInput, ImageGenInput, TtsGenInput, VideoGenT2VInput } from '../gateway/types.js';
 import { getImageModel, resolutionAllowed, isKnownModel, listEnabledModels, DEFAULT_IMAGE_MODEL, tierFromPixels } from '../gateway/image-models.js';
@@ -293,11 +293,26 @@ function buildTtsJob(body: Record<string, unknown>, tid: string): JobBuildResult
   const m = deriveTtsModel(body.model, voiceRef, tid);
   if (!m.ok) return { ok: false, status: 400, error: m.error };
 
+  // 情绪 / 音高(T-TTS-EMOTION):仅 supportsInstruction 模型有效;否则拒(避免静默无效)。
+  const { emotion, pitch } = body as Partial<TtsGenInput>;
+  const usesInstruction = (emotion !== undefined && emotion !== 'auto') || (pitch !== undefined && pitch !== 0);
+  if (usesInstruction) {
+    const def = getTtsModel(m.model);
+    if (!def?.supportsInstruction)
+      return { ok: false, status: 400, error: '情绪/音高需选支持指令控制的品质模型' };
+  }
+  if (emotion !== undefined && !getEmotion(emotion))
+    return { ok: false, status: 400, error: '情绪非法' };
+  if (pitch !== undefined && (typeof pitch !== 'number' || pitch < -12 || pitch > 12))
+    return { ok: false, status: 400, error: '音高需在 -12~+12 之间' };
+
   const input: TtsGenInput = { text, voiceRef };
   if (rate !== undefined) input.rate = rate;
   if (volume !== undefined) input.volume = volume;
   if (m.model) input.model = m.model;
   if (m.pricePerChar !== undefined) input.pricePerCharSnapshot = m.pricePerChar; // 快照(reserve==settle)
+  if (emotion !== undefined && emotion !== 'auto') input.emotion = emotion;
+  if (pitch !== undefined && pitch !== 0) input.pitch = pitch;
   return {
     ok: true,
     type: 'tts',
@@ -831,7 +846,9 @@ jobsRouter.get('/tts-models', requireAuth, (_req: Request, res: Response) => {
     transport: m.transport, // 前端据此匹配所选音色(ws/http)
     supportsInstruction: m.supportsInstruction, // 情绪/音高(T-TTS-EMOTION)
   }));
-  res.json({ models });
+  // 情绪选项(T-TTS-EMOTION):只吐 key/label,instruction 文本留后端。
+  const emotions = Object.values(EMOTIONS).map((e) => ({ key: e.key, label: e.label }));
+  res.json({ models, emotions });
 });
 
 // 文生视频模型清单 — 前端下拉单一真相源(只吐 UI 能力字段,不漏 modelId/priceTier)。

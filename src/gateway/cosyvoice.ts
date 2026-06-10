@@ -20,6 +20,8 @@ export interface TtsParams {
   model?: string; // 默认 cosyvoice-v2
   rate?: number; // 语速 0.5-2,默认 1(CosyVoice rate 参数)
   volume?: number; // 音量 0-100,默认 50(CosyVoice volume 参数)
+  instruction?: string; // 指令控制(情绪/风格,自然语言);仅 supportsInstruction 模型有效
+  pitch?: number; // 音高 -12~+12(CosyVoice pitch 参数;Qwen 不支持,折进 instruction)
 }
 
 /**
@@ -56,6 +58,8 @@ export function synthesizeSpeech(params: TtsParams): Promise<Buffer> {
             parameters: {
               text_type: 'PlainText', voice: params.voice, format: 'mp3', sample_rate: 22050,
               rate: params.rate ?? 1, volume: params.volume ?? 50,
+              ...(params.pitch !== undefined ? { pitch: params.pitch } : {}), // 音高(CosyVoice 原生)
+              ...(params.instruction ? { instruction: params.instruction } : {}), // 指令控制(情绪/风格)
             },
             input: {},
           },
@@ -125,7 +129,12 @@ export async function synthesizeSpeechHttp(params: TtsParams): Promise<Buffer> {
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: params.model,
-        input: { text: params.text, voice: params.voice },
+        // Qwen-TTS 指令控制用 instructions(复数);Qwen 无 pitch 参数,折进指令文本。
+        input: {
+          text: params.text,
+          voice: params.voice,
+          ...(params.instruction ? { instructions: params.instruction } : {}),
+        },
       }),
     },
   );

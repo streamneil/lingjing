@@ -108,6 +108,8 @@ export interface TtsGenInput {
   volume?: number; // 音量 0-100,默认 50
   model?: string; // 品质模型 key(TTS_MODELS;须与音色 transport 配套)。缺省按音色 kind 默认模型。
   pricePerCharSnapshot?: number; // 提交时快照每字单价(reserve==settle);worker settle 读它。
+  emotion?: string; // 情绪 key(EMOTIONS;仅 supportsInstruction 模型有效);worker 转 instruction。
+  pitch?: number; // 音高 -12~+12(CosyVoice 原生;仅 supportsInstruction 模型有效)。
 }
 
 export interface SyncImageGateway {
