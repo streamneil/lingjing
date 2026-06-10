@@ -110,3 +110,17 @@
 - **Why:** 截图竞品左面板有「情绪:自动」下拉 + 音高滑块;情感化配音是有声书/广告核心诉求。
 - **Context:** 来自 /plan-ceo-review 声音面板轮(候选3,Defer)。强依赖 T-TTS-QUALITY-MODEL:cosyvoice-v1 不支持情绪/指令,情绪需 Qwen3-TTS-Instruct 或 MiniMax。buildTtsJob 加 instruction/pitch 校验,gateway 透传 instruction(Qwen 路径)。
 - **Priority:** P2  **Depends on:** T-TTS-QUALITY-MODEL
+
+## 设计评审补充(2026-06-11,文字转语音 声音面板)
+
+### T-TTS-PANEL-SHEET-DEDUP:.vsheet 重构到 app.css 已有 .sheet-side 范式
+- **What:** tts.html 的 .vsheet 声音面板重造了 app.css 已有的侧滑组件(.sheet-side/.ss-seg/.ss-filters/.ss-body/.vcard + @keyframes slideIn),用了不同 token(--bg-soft vs --modal、硬编码 radii、方角 tab vs pill segment)。重构到共享范式或把新组件提升进 app.css 配真 token。
+- **Why:** 两套并行侧滑组件做同一件事、样式发散 —— 维护陷阱 + 视觉不一致(双 radii 体系、tab active 态语言不同)。来自 /design-review Claude 子代理 #5/#1/#6。
+- **Context:** app.css:389-414 已有 .sheet-side 全套(pill segment .ss-seg、--blue-bg、--r-pill)。.vsheet 在 tts.html:18-57 内联。重构需同步改面板 markup + JS(switchVTab/renderVoices 用新类名),有视觉回归风险,故 design-review 本轮未动(按 CSS-first + 低风险原则)。
+- **Priority:** P3  **Depends on:** 无
+
+### T-TTS-PANEL-TOKENS:声音面板硬编码 radii 对齐 --r* token
+- **What:** .vtab/.vfilter/.vcard2/.vd-dim 等硬编码 9/12/7/5px 圆角,非 --r-sm(11)/--r(15)/--r-pill token。
+- **Why:** token 债;与系统圆角体系不一致。来自 /design-review 子代理 #1。本轮未改因强行对齐会改变面板紧凑观感(视觉回归风险)。
+- **Context:** 若做 T-TTS-PANEL-SHEET-DEDUP 则一并解决(重构到 .ss-* 自带 token)。
+- **Priority:** P3  **Depends on:** 可并入 T-TTS-PANEL-SHEET-DEDUP
