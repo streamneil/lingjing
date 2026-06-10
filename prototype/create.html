@@ -342,8 +342,11 @@
   async function loadHistory(){
     let jobs=[];
     try{ jobs = await LJ.listJobs(); }catch(e){ return; }
+    // 只显本页(AI 虚拟人 s2v)的任务:/jobs 是全租户全类型,不过滤会把
+    // 文生视频/图转影片/图片等其他工具的记录混进来(与其余五页同口径)。
+    jobs = Array.isArray(jobs) ? jobs.filter(j=>j.type==='video') : [];
     const empty=document.getElementById('feedEmpty');
-    if(!Array.isArray(jobs) || !jobs.length){ if(empty) empty.style.display=''; return; }
+    if(!jobs.length){ if(empty) empty.style.display=''; return; }
     if(empty) empty.style.display='none';
     // 按创建时间正序渲染(renderCard 会把每张插到顶部 → 最终最新在最上)
     const ordered=[...jobs].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
