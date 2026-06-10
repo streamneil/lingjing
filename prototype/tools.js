@@ -32,7 +32,7 @@
     {
       key: 'img2video', label: '图片转影片',
       icon: '<rect x="3" y="4" width="14" height="14" rx="2"/><circle cx="8" cy="9" r="1.6"/><path d="m4 16 4-4 3 3"/><path d="m17 10 4-2v10l-4-2"/>',
-      enabled: false, outputKind: 'video', tier: 'next',
+      enabled: true, outputKind: 'video', page: 'img2video.html', tier: 'live',
     },
     {
       key: 'text2video', label: '文字转影片',

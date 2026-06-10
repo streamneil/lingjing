@@ -249,7 +249,7 @@ async function runVideoT2VJob(job: JobRow): Promise<void> {
   const input = JSON.parse(job.input_json) as VideoGenT2VInput;
 
   // 1. 生成前送审(提示词级)
-  const pre = await moderatePrompt(input.prompt);
+  const pre = await moderatePrompt(input.prompt ?? '');
   if (!pre.allowed) throw new Error(`送审拒绝:${pre.reason}`);
 
   // 2. 网关提交(按 shape 组体,返回 task_id)
@@ -267,16 +267,29 @@ async function runVideoT2VJob(job: JobRow): Promise<void> {
   const videoUrl = done.videoUrl;
   if (!videoUrl) throw new Error('厂商成功但未返回成品 URL');
 
-  // 4. 抓成品 MP4 为 Buffer
+  // 4-6. 共享尾段:抓 Buffer → 送审 → AI 标识 → 落库 → markDone → settle(eng A1)
+  await finalizeVideoJob(job, videoUrl, input as unknown as Record<string, unknown>, 'video_t2v');
+}
+
+/** 视频成品尾段(eng-review A1:t2v / i2v 两处共用,镜像 finalizeImageJob)。
+ *  抓成品 MP4 → moderateOutput → (按租户开关)applyAiLabel 打 AI 标识 → 落 MinIO → markDone → settle。
+ *  @param costInput 原始快照 input(costFor 读快照保 reserve==settle);@param costType 'video_t2v' | 'video_i2v'。 */
+export async function finalizeVideoJob(
+  job: JobRow,
+  videoUrl: string,
+  costInput: Record<string, unknown>,
+  costType: 'video_t2v' | 'video_i2v',
+): Promise<void> {
+  // 抓成品 MP4 为 Buffer
   const resp = await fetch(videoUrl);
   if (!resp.ok) throw new Error(`抓取成品失败 ${resp.status}`);
   const buf = Buffer.from(await resp.arrayBuffer());
 
-  // 5. 成品送审
+  // 成品送审
   const post = await moderateOutput('video');
   if (!post.allowed) throw new Error(`成品送审拒绝:${post.reason}`);
 
-  // 6. (按租户合规开关)ffmpeg 打 AI 标识 → 落 MinIO(同 s2v 合规尾段,eng A2)
+  // (按租户合规开关)ffmpeg 打 AI 标识 → 落 MinIO(同 s2v 合规尾段,eng A2)
   const objectKey = `videos/${job.tenant_id}/${job.id}.mp4`;
   const labelCfg = getAiLabelConfig(job.tenant_id);
   let aiLabel: string;
@@ -291,7 +304,52 @@ async function runVideoT2VJob(job: JobRow): Promise<void> {
 
   markDone(job.id, objectKey, aiLabel);
   // 成功结算:读快照计价(与提交 reserve 同一 costFor → 差额0,reserve==settle)
-  settle(job.tenant_id, job.id, costFor('video_t2v', input as unknown as Record<string, unknown>));
+  settle(job.tenant_id, job.id, costFor(costType, costInput));
+}
+
+/** 处理一个图转影片(i2v)job。镜像 runImageEditAsyncJob(送审 + publish 输入图)+ 视频尾段。
+ *
+ *   prompt 送审 → 各输入图送审 → publish 转公网 URL(就地覆写 input.imageRefs)→ submitVideoT2V(按 task 组 media)
+ *     → 轮询(videoT2vTimeoutMs)→ finalizeVideoJob(video_i2v)。无 TTS、无分段。
+ *
+ * 抛错由调用方捕获并标 failed(失败隔离)。 */
+async function runVideoI2VJob(job: JobRow): Promise<void> {
+  const input = JSON.parse(job.input_json) as VideoGenT2VInput;
+
+  // 1. 生成前送审(提示词级)。首帧/首尾帧 task 的 prompt 可选:为空时无内容可审,跳过送审
+  //    (moderatePrompt 对空串判「提示词为空」拒绝,直接传会误杀合法的无提示词图生视频)。
+  const prompt = (input.prompt ?? '').trim();
+  if (prompt) {
+    const pre = await moderatePrompt(prompt);
+    if (!pre.allowed) throw new Error(`送审拒绝:${pre.reason}`);
+  }
+
+  // 2. 输入图送审 + publish 转公网 URL(就地覆写 input.imageRefs 供 submit 读;DB input_json 未变 → 回放仍取存储 key)
+  const refs = input.imageRefs ?? [];
+  if (refs.length === 0) throw new Error('图转影片缺少输入图');
+  for (const k of refs) {
+    const v = await moderateImageInput(k);
+    if (!v.allowed) throw new Error(`输入图送审拒绝:${v.reason}`);
+  }
+  const publisher = getMediaPublisher(tenantDelivery(job.tenant_id));
+  input.imageRefs = await Promise.all(refs.map((k) => publisher.publish(k)));
+
+  // 3. 网关提交(按 task 组 media)+ 轮询
+  const gateway = getGateway(job.tenant_id);
+  const providerTaskId = await gateway.submitVideoT2V(input);
+  setProviderTaskId(job.id, providerTaskId);
+
+  const deadline = Date.now() + config.baichuan.videoT2vTimeoutMs;
+  const done = await pollUntilDone(
+    () => gateway.fetchJobStatus(providerTaskId),
+    (pct) => updateProgress(job.id, Math.min(99, pct)),
+    deadline,
+  );
+  const videoUrl = done.videoUrl;
+  if (!videoUrl) throw new Error('厂商成功但未返回成品 URL');
+
+  // 4-6. 共享尾段(costFor 用原始快照 input;但 imageRefs 已被覆写成公网 URL → costFor 不读 imageRefs,无碍)
+  await finalizeVideoJob(job, videoUrl, input as unknown as Record<string, unknown>, 'video_i2v');
 }
 
 /** 共享尾段:百炼图 URL → 拉进自有存储存 key → markDone(JSON key 数组,kind=image)→ settle。
@@ -503,6 +561,8 @@ async function processJob(job: JobRow): Promise<void> {
       return runVideoJob(job);
     case 'video_t2v':
       return runVideoT2VJob(job);
+    case 'video_i2v':
+      return runVideoI2VJob(job);
     case 'ai_image':
       return runImageJob(job);
     case 'tts':

@@ -4,6 +4,8 @@
 // 托管 = 平台百炼 key;私有化 = 客户云账号 key(切换点在 adapter 工厂)。
 // 决策来源:/plan-eng-review 设计文档"能力网关接口契约" + D2(异步可切换)。
 
+import type { VideoTask } from './video-models.js';
+
 // 业务侧入参(API/队列用):仍是"形象+音色+文案"。
 export interface VideoGenInput {
   avatarRef: string; // 形象引用(预置 ID 或自定义形象 id)
@@ -69,9 +71,10 @@ export interface ImageEditInput {
 // ── 文生视频(text2video:HappyHorse / 万相2.7 / 可灵)──
 // 异步任务:submitVideoT2V 返 task_id,轮询 /tasks/{id} 直到 SUCCEEDED;成品在 output.video_url。
 // 与数字人 s2v(图+音频驱动口型)是不同形状 —— 纯文生视频,无 TTS、无图、无分段。
+// i2v(图转影片)复用此 input,多 task + imageRefs 维度。
 export interface VideoGenT2VInput {
   model?: string; // 模型 key(registry,缺省 → DEFAULT_VIDEO_MODEL)
-  prompt: string; // 文本提示词(逐模型 maxPromptChars 校验)
+  prompt?: string; // 文本提示词(t2v/参考生必填;i2v 首帧/首尾帧可选 → 逐模型 maxPromptChars 校验)
   resolution?: string; // 720P | 1080P(V_DASH 直传;V_KLING 由 mode 映射,不直传)
   ratio?: string; // 宽高比(16:9 / 9:16 / 1:1 ...)
   duration?: number; // 时长(秒,clamp 到 model durationRange)
@@ -80,6 +83,9 @@ export interface VideoGenT2VInput {
   negativePrompt?: string; // 仅 wan2.7:反向提示词
   promptExtend?: boolean; // 仅 wan2.7:prompt 智能改写
   seed?: number; // 随机种子 [0,2147483647];空 = 随机
+  // ── 图转影片(i2v / video_i2v;t2v 不用)──
+  task?: VideoTask; // media 任务:first_frame / first_last / reference
+  imageRefs?: string[]; // 输入图存储 key(worker publish 转公网 URL 后就地覆写;submit 按 task 组 media)
   // ── 提交时快照(钱路 reserve==settle:admin/前端 mid-flight 改不破)──
   durationSnapshot?: number; // clamp 后的时长
   resSnapshot?: string; // 计价用分辨率档(可灵由 mode 翻译写入,R3)

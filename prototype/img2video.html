@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>图片转影片 · 灵镜</title>
+<link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
+<link rel="stylesheet" href="app.css">
+<style>
+  /* 记录卡(复用文字转影片样式)*/
+  .card-meta { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 2px; }
+  .card-meta .chip { font-size:11px; color:var(--t3); background:var(--field); border:1px solid var(--line); border-radius:7px; padding:2px 8px; }
+  .card-acts { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .card-acts button { display:inline-flex; align-items:center; gap:5px; font-size:12.5px; color:var(--t2); background:var(--field); border:1px solid var(--line); border-radius:9px; padding:7px 13px; cursor:pointer; transition:.15s; }
+  .card-acts button:hover { border-color:var(--line-hi); color:var(--t1); }
+  .card-acts button svg { width:14px; height:14px; }
+  .tx-wrap { flex:1; min-width:0; display:flex; flex-direction:column; padding-top:6px; }
+  .tx-wrap .tx { padding-top:0; }
+  .tx.clamp { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+  .tx-toggle { font-size:12px; color:var(--blue); cursor:pointer; margin-top:4px; display:none; align-self:flex-start; }
+  .tx-toggle.show { display:inline-block; }
+  .fvid { width:100%; border-radius:12px; display:block; background:#000; }
+  /* 记录卡里输入图缩略带 */
+  .in-thumbs { display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 2px; }
+  .in-thumbs img { width:44px; height:44px; object-fit:cover; border-radius:7px; border:1px solid var(--line); }
+
+  /* 任务 tab(開始圖 / 圖片間 / 參考圖)*/
+  .task-tabs { display:flex; gap:6px; background:var(--field); border:1px solid var(--line); border-radius:11px; padding:4px; margin-bottom:12px; }
+  .task-tab { flex:1; text-align:center; font-size:13px; color:var(--t3); padding:9px 6px; border-radius:8px; cursor:pointer; transition:.15s; }
+  .task-tab:hover { color:var(--t1); }
+  .task-tab.on { background:var(--card-hi); color:var(--t1); box-shadow:0 1px 0 rgba(0,0,0,.15); }
+
+  /* 输入图区:大主图卡 / 双槽 / 多图网格 */
+  .img-area { margin-bottom:4px; }
+  .up-card { position:relative; border:1.5px dashed var(--line-hi); border-radius:13px; background:var(--field); aspect-ratio:16/10; display:flex; align-items:center; justify-content:center; cursor:pointer; overflow:hidden; transition:.15s; }
+  .up-card:hover { border-color:var(--blue); }
+  .up-card img { width:100%; height:100%; object-fit:contain; background:#000; }
+  .up-card .ph { text-align:center; color:var(--t3); padding:18px; }
+  .up-card .ph svg { width:30px; height:30px; opacity:.55; margin-bottom:8px; }
+  .up-card .ph .t { font-size:13px; }
+  .up-card .ph .s { font-size:11px; color:var(--t4); margin-top:3px; }
+  .up-card .rm { position:absolute; top:8px; right:8px; width:26px; height:26px; border-radius:8px; background:rgba(0,0,0,.55); border:none; color:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .up-card .rm svg { width:14px; height:14px; }
+  .up-card .badge { position:absolute; top:8px; left:8px; font-size:11px; background:rgba(0,0,0,.6); color:#fff; padding:2px 8px; border-radius:7px; }
+
+  .dual { display:flex; gap:10px; }
+  .dual .up-card { flex:1; aspect-ratio:3/4; }
+
+  .ref-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .ref-cell { position:relative; aspect-ratio:1; border:1.5px dashed var(--line); border-radius:11px; background:var(--field); display:flex; align-items:center; justify-content:center; cursor:pointer; overflow:hidden; transition:.15s; }
+  .ref-cell:hover { border-color:var(--blue); }
+  .ref-cell.add { color:var(--t3); }
+  .ref-cell.add svg { width:24px; height:24px; opacity:.6; }
+  .ref-cell img { width:100%; height:100%; object-fit:cover; }
+  .ref-cell .num { position:absolute; top:5px; left:5px; font-size:11px; background:rgba(0,0,0,.62); color:#fff; padding:1px 7px; border-radius:6px; }
+  .ref-cell .rm { position:absolute; top:5px; right:5px; width:22px; height:22px; border-radius:7px; background:rgba(0,0,0,.55); border:none; color:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .ref-cell .rm svg { width:12px; height:12px; }
+  .area-hint { font-size:11px; color:var(--t4); margin:7px 0 0; }
+
+  /* 段选(解析度 / 时长)+ 比例 */
+  .seg-row { display:flex; gap:8px; }
+  .seg-row .seg { flex:1; display:flex; align-items:center; justify-content:center; text-align:center; min-height:42px; padding:10px; border-radius:10px; background:var(--field); border:1px solid var(--line); color:var(--t3); font-size:13px; cursor:pointer; transition:.15s; }
+  .seg-row .seg:hover { color:var(--t1); }
+  .seg-row .seg.on { background:var(--card-hi); color:var(--t1); border-color:var(--line-hi); }
+  .ratio-row { display:flex; gap:5px; flex-wrap:wrap; align-items:stretch; }
+  .ratio-cell { flex:1; min-width:54px; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:4px; padding:8px 2px; border:1px solid var(--line); border-radius:9px; background:var(--field); color:var(--t3); cursor:pointer; transition:.15s; }
+  .ratio-cell:hover { color:var(--t1); border-color:var(--line-hi); }
+  .ratio-cell.on { background:var(--card-hi); color:var(--t1); border-color:var(--line-hi); }
+  .ratio-cell .glyph { width:18px; height:18px; border:1.6px solid currentColor; border-radius:3px; }
+  .ratio-cell .lbl { font-size:10.5px; font-family:var(--f-mono); }
+  .cfg-label { font-size:12px; color:var(--t3); margin:14px 0 7px; }
+  .opt-toggle { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:11px 13px; border:1px solid var(--line); border-radius:10px; background:var(--field); margin-top:8px; }
+  .opt-toggle .ol { font-size:13px; color:var(--t2); }
+  .opt-toggle input[type=checkbox] { width:auto; }
+  .neg-input { width:100%; padding:9px 11px; background:var(--field); border:1px solid var(--line); border-radius:9px; color:var(--t1); font-size:13px; margin-top:8px; }
+  /* 授权同意(同 AI 图片编辑)*/
+  .consent { display:flex; gap:9px; align-items:flex-start; margin-top:12px; font-size:11.5px; color:var(--t3); line-height:1.5; }
+  .consent input { width:auto; margin-top:2px; }
+</style>
+</head>
+<body data-page="img2video" data-crumb="创作工具 > 图片转影片">
+<div class="shell" id="shell-mount">
+ <div class="main-col">
+  <div class="studio">
+  <!-- 左:配置 -->
+  <div class="cfg">
+    <div class="cfg-h"><span class="dot"></span>图片转影片 AI</div>
+
+    <!-- 任务 tab:跟随模型能力显隐 -->
+    <div class="task-tabs" id="taskTabs">
+      <div class="task-tab" data-task="first_frame">開始圖</div>
+      <div class="task-tab" data-task="first_last">圖片間</div>
+      <div class="task-tab" data-task="reference">參考圖</div>
+    </div>
+
+    <!-- 输入图区(按 task 切换形态)-->
+    <div class="img-area" id="imgArea"></div>
+    <input type="file" id="filePick" accept="image/*" style="display:none">
+
+    <!-- 提示词 -->
+    <div class="cfg-label" id="promptLabel">提示</div>
+    <div class="script">
+      <textarea id="prompt" maxlength="2000" placeholder="请描述影片内容(可选)。"></textarea>
+      <div class="f"><span class="h" id="estLabel">预估 — 点</span><span class="c"><b id="cnt">0</b> / <span id="maxChars">2000</span></span></div>
+    </div>
+
+    <div class="cfg-sp"></div>
+
+    <!-- 紧凑配置栏:模型 pill + 设置 pill(解析度/比例/时长/模型特有 收进 popover)+ seed -->
+    <div class="cfgbar">
+      <div class="pop-anchor" style="flex:1">
+        <div class="cpill" id="modelPill" onclick="togglePop('model')"><span class="v" id="modelPillV">模型</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+        <div class="pop" id="pop-model"><div class="pop-label">模型</div><div id="modelOpts"></div></div>
+      </div>
+      <div class="pop-anchor" style="flex:1.2">
+        <div class="cpill" id="setPill" onclick="togglePop('set')"><span class="v" id="setPillV">720P · 5秒</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+        <div class="pop" id="pop-set">
+          <div class="pop-label">解析度</div>
+          <div class="seg-row" id="resSeg"></div>
+          <div class="pop-label" id="ratioLabel">比例</div>
+          <div class="ratio-row" id="ratioRow"></div>
+          <div class="pop-label">长度</div>
+          <div class="seg-row" id="durSeg"></div>
+          <div id="modelOpts2"></div>
+        </div>
+      </div>
+      <div class="pop-anchor">
+        <div class="cpill fixed" id="seedPill" onclick="togglePop('seed')" title="随机种子 Seed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+        <div class="pop" id="pop-seed" style="left:auto;right:0;width:200px">
+          <div class="pop-label">Seed(随机种子)</div>
+          <input id="seedInput" type="text" inputmode="numeric" placeholder="随机" style="width:100%;padding:9px 11px;background:var(--field);border:1px solid var(--line);border-radius:9px;color:var(--t1);font-size:13px;font-family:var(--f-mono)">
+        </div>
+      </div>
+    </div>
+    <div class="pop-ov" id="popOv" onclick="closePops()"></div>
+
+    <label class="consent"><input type="checkbox" id="consentChk"><span>我确认对上传的图片拥有合法使用权,且内容不侵犯他人肖像权、著作权等合法权益,并同意按《用户协议》生成 AI 影片。</span></label>
+
+    <div class="cbtn-wrap">
+      <button class="cbtn" id="createBtn">
+        <span id="cbtnLabel">创建</span> <span class="gem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg> <b id="estGem">—</b></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 右:生成记录 -->
+  <div class="feed">
+    <div class="feed-tabs">
+      <button class="ftab active" data-st="all">全部</button>
+      <button class="ftab" data-st="running">生成中</button>
+      <button class="ftab" data-st="done">已完成</button>
+      <button class="ftab" data-st="failed">失败</button>
+    </div>
+    <div class="feed-list">
+      <div class="fitem" id="emptyHint" style="animation-delay:.02s">
+        <div class="fmeta">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m12 3 2.4 5.6L20 9l-4.3 3.8L17 18l-5-2.7L7 18l1.3-5.2L4 9l5.6-.4Z"/></svg>
+          <b>暂无记录</b><span class="ts">上传图片,生成你的第一条影片</span>
+        </div>
+      </div>
+    </div>
+  </div>
+ </div>
+</div>
+
+<script src="shell.js"></script>
+<script src="tools.js"></script>
+<script src="api.js"></script>
+<script>
+  const ta=document.getElementById('prompt'), cnt=document.getElementById('cnt'), btn=document.getElementById('createBtn');
+  const feedList=document.querySelector('.feed-list');
+  let model='', allModels=[], task='first_frame', ratio='16:9', resolution='720P', duration=5, negativePrompt='', promptExtend=true, seed='';
+  // 输入图状态:单/双槽 slots(固定位:开始图/结束图),参考多图 refs
+  let firstFrame=null, lastFrame=null, refFiles=[]; // {file,url}
+  let pickTarget=null; // 'first' | 'last' | 'ref'
+
+  function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function curModel(){ return allModels.find(m=>m.key===model); }
+  const RATIO_GLYPH={'16:9':[20,11],'9:16':[11,20],'1:1':[18,18],'3:4':[14,18],'4:3':[18,14],'4:5':[14,18],'5:4':[18,14],'9:21':[9,20],'21:9':[20,9]};
+  const TASK_LABEL={first_frame:'開始圖',first_last:'圖片間',reference:'參考圖'};
+
+  // ── 模型下拉(GET /i2v-models)──
+  const modelOpts=document.getElementById('modelOpts');
+  async function loadModels(){
+    try{ const r=await LJ.get('/i2v-models'); allModels=r.models||[]; if(r.default) model=r.default; renderModels(); }
+    catch(e){ modelOpts.innerHTML='<div class="pop-opt"><span class="nm">模型加载失败</span></div>'; }
+  }
+  function renderModels(){
+    if(allModels.length && !curModel()) model=allModels[0].key;
+    modelOpts.innerHTML=allModels.map(m=>`<div class="pop-opt${m.key===model?' on':''}" data-k="${m.key}">
+      <span class="nm">${esc(m.label)}</span>
+      <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg></div>`).join('')
+      || '<div class="pop-opt"><span class="nm">暂无可用模型</span></div>';
+    modelOpts.querySelectorAll('.pop-opt[data-k]').forEach(el=>el.onclick=()=>{ model=el.dataset.k; onModelChange(); closePops(); });
+    onModelChange();
+  }
+  function markModelOpt(){ modelOpts.querySelectorAll('.pop-opt[data-k]').forEach(el=>el.classList.toggle('on', el.dataset.k===model)); }
+
+  // 切模型:按 model.tasks 显隐 tab;若当前 task 不被支持,落到第一个支持的 task
+  function onModelChange(){
+    const m=curModel(); if(!m) return;
+    document.getElementById('maxChars').textContent=m.maxPromptChars; ta.maxLength=m.maxPromptChars;
+    markModelOpt();
+    renderTaskTabs();
+    if(!m.tasks.includes(task)) task=m.tasks[0];
+    renderTaskTabs(); renderImgArea(); renderRes(); renderRatios(); renderDur(); renderModelOpts(); syncPills(); refreshPromptLabel(); scheduleEstimate(); refreshBtn();
+  }
+  function renderTaskTabs(){
+    const m=curModel(); const tabs=document.getElementById('taskTabs');
+    tabs.querySelectorAll('.task-tab').forEach(t=>{
+      const supported=m.tasks.includes(t.dataset.task);
+      t.style.display=supported?'':'none';
+      t.classList.toggle('on', supported && t.dataset.task===task);
+    });
+  }
+  document.querySelectorAll('.task-tab').forEach(t=>t.onclick=()=>{
+    const m=curModel(); if(!m || !m.tasks.includes(t.dataset.task)) return;
+    task=t.dataset.task; renderTaskTabs(); renderImgArea(); renderRatios(); refreshPromptLabel(); syncPills(); scheduleEstimate(); refreshBtn();
+  });
+
+  // 提示词标签 + 占位:参考生必填且建议含 [图N];首帧/首尾帧可选
+  function refreshPromptLabel(){
+    const lbl=document.getElementById('promptLabel');
+    if(task==='reference'){ lbl.textContent='提示(必填)'; ta.placeholder='用 [图1]、[图2] 指代参考图,描述要生成的画面。例:[图1]中的女性站在[图2]的街道上行走。'; }
+    else { lbl.textContent='提示(可选)'; ta.placeholder='可补充影片动态描述(可选)。'; }
+  }
+
+  // ── 输入图区:按 task 渲染 ──
+  const filePick=document.getElementById('filePick');
+  function renderImgArea(){
+    const area=document.getElementById('imgArea');
+    if(task==='first_frame'){
+      area.innerHTML=mainCardHtml(firstFrame,'開始圖');
+      area.querySelector('.up-card').onclick=()=>pick('first');
+      const rm=area.querySelector('.rm'); if(rm) rm.onclick=(e)=>{ e.stopPropagation(); firstFrame=null; afterImgChange(); };
+    } else if(task==='first_last'){
+      area.innerHTML=`<div class="dual">${mainCardHtml(firstFrame,'開始圖','first')}${mainCardHtml(lastFrame,'結束圖','last')}</div>
+        <div class="area-hint">开始图 → 结束图 之间生成过渡影片(顺序固定)。</div>`;
+      const cards=area.querySelectorAll('.up-card');
+      cards[0].onclick=()=>pick('first'); cards[1].onclick=()=>pick('last');
+      area.querySelectorAll('.rm').forEach(rm=>rm.onclick=(e)=>{ e.stopPropagation(); const w=rm.dataset.slot; if(w==='first')firstFrame=null; else lastFrame=null; afterImgChange(); });
+    } else { // reference
+      const m=curModel(); const max=m.maxRefImages||9;
+      let cells=refFiles.map((r,i)=>`<div class="ref-cell" data-i="${i}"><span class="num">图${i+1}</span><button class="rm" data-rm="${i}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button><img src="${r.url}"></div>`).join('');
+      if(refFiles.length<max) cells+=`<div class="ref-cell add" id="addRef"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>`;
+      area.innerHTML=`<div class="ref-grid">${cells}</div><div class="area-hint">已选 ${refFiles.length}/${max} 张。提示词用 [图N] 指代第 N 张。</div>`;
+      const add=area.querySelector('#addRef'); if(add) add.onclick=()=>pick('ref');
+      area.querySelectorAll('[data-rm]').forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); refFiles.splice(Number(el.dataset.rm),1); afterImgChange(); });
+    }
+  }
+  function mainCardHtml(slot,badge,slotKey){
+    if(slot) return `<div class="up-card"><span class="badge">${badge}</span><button class="rm"${slotKey?` data-slot="${slotKey}"`:''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button><img src="${slot.url}"></div>`;
+    return `<div class="up-card"><span class="badge">${badge}</span><div class="ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.6-3.6a2 2 0 0 0-2.8 0L6 20"/></svg><div class="t">点击上传${badge}</div><div class="s">JPG / PNG,≤10MB</div></div></div>`;
+  }
+  function pick(target){ pickTarget=target; filePick.value=''; filePick.click(); }
+  filePick.onchange=()=>{
+    const f=filePick.files[0]; if(!f) return;
+    const url=URL.createObjectURL(f); const rec={file:f,url};
+    if(pickTarget==='first') firstFrame=rec; else if(pickTarget==='last') lastFrame=rec; else refFiles.push(rec);
+    afterImgChange();
+  };
+  function afterImgChange(){ renderImgArea(); refreshBtn(); scheduleEstimate(); }
+
+  // 解析度
+  function renderRes(){
+    const m=curModel(); const seg=document.getElementById('resSeg');
+    const opts=m.resolutions; if(!opts.includes(resolution)) resolution=opts[0];
+    seg.innerHTML=opts.map(r=>`<div class="seg${r===resolution?' on':''}" data-v="${r}">${r}</div>`).join('');
+    seg.querySelectorAll('.seg').forEach(s=>s.onclick=()=>{ seg.querySelectorAll('.seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); resolution=s.dataset.v; syncPills(); scheduleEstimate(); });
+  }
+  // 比例:仅参考生显(首帧/首尾帧跟首帧,ratios 空)
+  function renderRatios(){
+    const m=curModel(); const row=document.getElementById('ratioRow'); const lbl=document.getElementById('ratioLabel');
+    const showRatio = task==='reference' && m.ratios.length;
+    row.style.display=showRatio?'':'none'; lbl.style.display=showRatio?'':'none';
+    if(!showRatio) return;
+    if(!m.ratios.includes(ratio)) ratio=m.ratios[0];
+    row.innerHTML=m.ratios.map(r=>{ const g=RATIO_GLYPH[r]||[18,18];
+      return `<div class="ratio-cell${r===ratio?' on':''}" data-ratio="${r}"><span class="glyph" style="width:${g[0]}px;height:${g[1]}px"></span><span class="lbl">${r}</span></div>`; }).join('');
+    row.querySelectorAll('.ratio-cell').forEach(c=>c.onclick=()=>{ row.querySelectorAll('.ratio-cell').forEach(x=>x.classList.remove('on')); c.classList.add('on'); ratio=c.dataset.ratio; syncPills(); scheduleEstimate(); });
+  }
+  // 时长
+  function renderDur(){
+    const m=curModel(); const seg=document.getElementById('durSeg'); const [lo,hi]=m.durationRange;
+    const opts=[...new Set([lo,5,10,hi].filter(d=>d>=lo&&d<=hi))].sort((a,b)=>a-b);
+    if(!opts.includes(duration)) duration=m.defaultDuration;
+    seg.innerHTML=opts.map(d=>`<div class="seg${d===duration?' on':''}" data-d="${d}">${d}秒</div>`).join('');
+    seg.querySelectorAll('.seg').forEach(s=>s.onclick=()=>{ seg.querySelectorAll('.seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); duration=parseInt(s.dataset.d,10); syncPills(); scheduleEstimate(); });
+  }
+  // 模型特有控件(反向提示词 / 智能改写,仅 wan2.7)
+  function renderModelOpts(){
+    const m=curModel(); const box=document.getElementById('modelOpts2'); let h='';
+    if(m.supportsPromptExtend) h+=`<div class="opt-toggle"><span class="ol">智能改写提示词</span><input type="checkbox" id="extendChk"${promptExtend?' checked':''}></div>`;
+    if(m.supportsNegative) h+=`<input class="neg-input" id="negInput" placeholder="反向提示词(不希望出现的元素,可选)" value="${esc(negativePrompt)}">`;
+    box.innerHTML=h;
+    const e=document.getElementById('extendChk'); if(e) e.onchange=()=>{ promptExtend=e.checked; };
+    const n=document.getElementById('negInput'); if(n) n.oninput=()=>{ negativePrompt=n.value; };
+  }
+  function syncPills(){
+    const m=curModel();
+    document.getElementById('modelPillV').textContent=m?m.label:'模型';
+    const ratioPart = (task==='reference' && m && m.ratios.length) ? ' · '+ratio : '';
+    document.getElementById('setPillV').textContent=`${resolution} · ${duration}秒${ratioPart}`;
+  }
+
+  // ── popover 开关 ──
+  function togglePop(which){
+    const map={model:'pop-model',set:'pop-set',seed:'pop-seed'}; const pillMap={model:'modelPill',set:'setPill',seed:'seedPill'};
+    const el=document.getElementById(map[which]); const isOpen=el.classList.contains('show'); closePops();
+    if(!isOpen){ el.classList.add('show'); document.getElementById('popOv').classList.add('show'); document.getElementById(pillMap[which]).classList.add('open'); }
+  }
+  function closePops(){ document.querySelectorAll('.pop.show').forEach(p=>p.classList.remove('show')); document.querySelectorAll('.cpill.open').forEach(p=>p.classList.remove('open')); document.getElementById('popOv').classList.remove('show'); }
+  window.togglePop=togglePop; window.closePops=closePops;
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape') closePops(); });
+  document.getElementById('seedInput').addEventListener('input',e=>{ seed=e.target.value.replace(/[^0-9]/g,''); e.target.value=seed; });
+
+  // 当前 task 所需输入图(顺序固定:首尾帧 = [开始, 结束];参考 = refs 序)
+  function orderedFiles(){
+    if(task==='first_frame') return firstFrame?[firstFrame.file]:[];
+    if(task==='first_last') return (firstFrame&&lastFrame)?[firstFrame.file,lastFrame.file]:[];
+    return refFiles.map(r=>r.file);
+  }
+  function imagesReady(){
+    if(task==='first_frame') return !!firstFrame;
+    if(task==='first_last') return !!firstFrame && !!lastFrame;
+    return refFiles.length>=1;
+  }
+  function missingMsg(){
+    const m=curModel();
+    if(!imagesReady()){
+      if(task==='first_frame') return '请上传開始圖';
+      if(task==='first_last') return firstFrame?'请上传結束圖':'请上传開始圖';
+      return '请上传至少 1 张参考图';
+    }
+    if(task==='reference' && m && m.promptRequired && !ta.value.trim()) return '请输入描述';
+    if(!document.getElementById('consentChk').checked) return '请勾选授权同意';
+    return '';
+  }
+
+  async function uploadInputImages(){
+    const files=orderedFiles(); if(!files.length) return [];
+    const fd=new FormData(); files.forEach(f=>fd.append('images',f)); fd.append('consent','true');
+    const r=await fetch('/api/image-uploads',{method:'POST',body:fd,credentials:'same-origin'});
+    if(!r.ok){ const j=await r.json().catch(()=>({})); throw new Error(j.error||'上传失败'); }
+    return (await r.json()).imageRefs;
+  }
+
+  // 提交/估价体(build 与 estimate 同参,reserve==settle)。估价用 imageRefs 占位(数量对即可)。
+  function jobBody(imageRefs){
+    const m=curModel(); const b={ type:'video_i2v', model, task, imageRefs, resolution, duration };
+    if(ta.value.trim()) b.prompt=ta.value.trim();
+    if(task==='reference' && m.ratios.length) b.ratio=ratio;
+    if(seed) b.seed=parseInt(seed,10);
+    if(m.supportsNegative && negativePrompt.trim()) b.negativePrompt=negativePrompt;
+    if(m.supportsPromptExtend) b.promptExtend=promptExtend;
+    return b;
+  }
+
+  let estTimer=null;
+  function scheduleEstimate(){
+    clearTimeout(estTimer);
+    estTimer=setTimeout(async()=>{
+      const n=orderedFiles().length;
+      if(!imagesReady()){ document.getElementById('estLabel').textContent='预估 — 点'; document.getElementById('estGem').textContent='—'; return; }
+      try{ const placeholder=Array.from({length:n},(_,i)=>'est'+i); const r=await LJ.post('/jobs/estimate',jobBody(placeholder));
+        document.getElementById('estLabel').textContent='预估 '+r.cost+' 点';
+        document.getElementById('estGem').textContent=r.cost;
+      }catch(e){}
+    },350);
+  }
+  function refreshBtn(){
+    const msg=missingMsg(); const ok=!msg;
+    btn.classList.toggle('ready',ok); btn.disabled=!ok;
+    document.getElementById('cbtnLabel').textContent=ok?'创建':msg;
+  }
+  ta.addEventListener('input',()=>{ cnt.textContent=ta.value.length; refreshBtn(); scheduleEstimate(); });
+  document.getElementById('consentChk').addEventListener('change',refreshBtn);
+
+  document.querySelectorAll('.ftab').forEach(t=>t.onclick=function(){
+    this.parentNode.querySelectorAll('.ftab').forEach(x=>x.classList.remove('active')); this.classList.add('active');
+    const k=this.dataset.st;
+    document.querySelectorAll('.feed-list .fitem[id^=job-]').forEach(it=>{ it.style.display=(k==='all'||(it.dataset.st||'')===k)?'':'none'; });
+  });
+
+  const jobInputs={};
+  function findLabel(k){ const m=allModels.find(x=>x.key===k); return m?m.label:undefined; }
+
+  function promptBubble(p){
+    if(!p) return '';
+    return `<div class="fbubble"><div class="tx-wrap"><div class="tx clamp">${esc(p)}</div><span class="tx-toggle" onclick="toggleTx(this)">展开</span></div></div>`;
+  }
+  window.toggleTx=function(el){ const tx=el.previousElementSibling; const c=tx.classList.toggle('clamp'); el.textContent=c?'展开':'收起'; };
+  function fitBubble(card){
+    if(!card) return;
+    const tx=card.querySelector('.tx.clamp'), tg=card.querySelector('.tx-toggle');
+    if(!tx||!tg) return;
+    tg.classList.toggle('show', tx.scrollHeight - tx.clientHeight > 2);
+  }
+  function inThumbs(urls){
+    if(!urls||!urls.length) return '';
+    return `<div class="in-thumbs">${urls.map(u=>`<img src="${u}">`).join('')}</div>`;
+  }
+  function metaChips(job){
+    const c=[]; if(job.modelLabel) c.push(job.modelLabel);
+    if(job.task) c.push(TASK_LABEL[job.task]||job.task);
+    if(job.sizeLabel) c.push(job.sizeLabel); if(job.duration) c.push(job.duration+'秒'); if(job.ratio) c.push(job.ratio);
+    return c.length?`<div class="card-meta">${c.map(x=>`<span class="chip">${esc(x)}</span>`).join('')}</div>`:'';
+  }
+  function cardActs(job,ok){
+    const re=`<button data-act="regen" onclick="regenJob('${job.id}',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>重新生成</button>`;
+    const dl=ok&&(job.outputUrls||[]).length?`<button onclick="downloadVid('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg>下载</button>`:'';
+    const del=`<button onclick="delJob('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除</button>`;
+    return `<div class="card-acts">${re}${dl}${del}</div>`;
+  }
+
+  function renderCard(job){
+    document.getElementById('emptyHint').style.display='none';
+    if(job.input) jobInputs[job.id]=job.input;
+    let card=document.getElementById('job-'+job.id); const existed=!!card;
+    if(!card){ card=document.createElement('div'); card.className='fitem'; card.id='job-'+job.id; feedList.insertBefore(card, feedList.firstChild); }
+    const head=(color,led,txt)=>`<div class="fmeta"><b>图片转影片</b><span class="ts">刚刚</span><span class="sp"></span><span class="st" style="color:${color}"><span class="led ${led}"></span>${txt}</span></div>`;
+    if((job.status==='queued'||job.status==='running') && existed && card.dataset.st==='running'){
+      const lbl=card.querySelector('.proc-in .lbl'); const bar=card.querySelector('.proc-bar i');
+      if(lbl) lbl.textContent=job.progress?('进度 '+job.progress+'%'):'已进入生成队列';
+      if(bar) bar.style.width=(job.progress||8)+'%';
+      return;
+    }
+    if(job.status==='queued'||job.status==='running'){
+      card.dataset.st='running';
+      card.innerHTML=head('var(--amber)','led-run',job.status==='queued'?'排队中':'生成中')+promptBubble(job.prompt)+inThumbs(job.inputUrls)+metaChips(job)+
+        `<div class="fvideo proc"><div class="proc-in"><div class="spinner"></div><div class="lbl">${job.progress?('进度 '+job.progress+'%'):'已进入生成队列'}</div><div class="proc-bar"><i style="width:${job.progress||8}%"></i></div><div style="font-size:11px;color:var(--t4);margin-top:8px">视频生成约需 1-5 分钟,请耐心等待</div></div></div>`;
+    } else if(job.status==='done'){
+      card.dataset.st='done';
+      const u=(job.outputUrls||[])[0];
+      const vid=u?`<video class="fvid" src="${u}" controls preload="metadata"></video>`:'<div style="color:var(--t4);padding:20px">已生成</div>';
+      card.innerHTML=head('var(--green)','led-ok','已完成')+promptBubble(job.prompt)+inThumbs(job.inputUrls)+metaChips(job)+vid+cardActs(job,true);
+    } else {
+      card.dataset.st='failed';
+      card.innerHTML=head('var(--red)','led-err','生成失败')+promptBubble(job.prompt)+inThumbs(job.inputUrls)+metaChips(job)+
+        `<div class="fvideo err"><div class="err-in"><div class="ei">!</div><div class="lbl">${esc(job.error||'生成失败,请重试')}</div></div></div>`+cardActs(job,false);
+    }
+    requestAnimationFrame(()=>fitBubble(card));
+  }
+
+  // 重新生成:复用原 imageRefs + task(无需重新上传/consent)
+  const regenInFlight=new Set();
+  window.regenJob=async(id,b)=>{
+    if(regenInFlight.has(id)) return;
+    const inp=jobInputs[id]; if(!inp||!(inp.imageRefs||[]).length){ window.LJToast&&window.LJToast('原输入图丢失,无法重新生成','err'); return; }
+    regenInFlight.add(id);
+    if(b){ b.disabled=true; b.dataset.t=b.textContent; b.textContent='提交中…'; }
+    try{
+      const body={ type:'video_i2v', model:inp.model, task:inp.task, imageRefs:inp.imageRefs, resolution:inp.resolution, duration:inp.duration };
+      if(inp.prompt) body.prompt=inp.prompt;
+      if(inp.ratio) body.ratio=inp.ratio;
+      if(inp.negativePrompt) body.negativePrompt=inp.negativePrompt;
+      if(typeof inp.promptExtend==='boolean') body.promptExtend=inp.promptExtend;
+      if(typeof inp.seed==='number') body.seed=inp.seed;
+      const r=await LJ.createJob(body);
+      renderCard({ id:r.id, status:'queued', progress:0, prompt:inp.prompt, modelLabel:findLabel(inp.model), task:inp.task, ratio:inp.ratio, duration:inp.duration, sizeLabel:inp.resolution, inputUrls:inp.inputUrls });
+      jobInputs[r.id]=inp;
+      track(r.id, inp.prompt, inp.inputUrls);
+      window.LJToast&&window.LJToast('✓ 已重新提交生成');
+    }catch(e){ window.LJToast&&window.LJToast('重新生成失败:'+e.message,'err'); }
+    finally{ regenInFlight.delete(id); if(b){ b.disabled=false; if(b.dataset.t){ b.textContent=b.dataset.t; delete b.dataset.t; } } }
+  };
+  window.delJob=async(id)=>{
+    if(!(await window.LJConfirm({title:'删除作品',body:'确认删除这条生成记录吗?删除后不可恢复。',confirmText:'删除',danger:true}))) return;
+    try{ await LJ.del('/jobs/'+id); const c=document.getElementById('job-'+id); if(c) c.remove(); delete jobInputs[id]; window.LJToast&&window.LJToast('✓ 已删除'); }
+    catch(e){ window.LJToast&&window.LJToast('删除失败:'+(e.message||'生成中不可删'),'err'); }
+  };
+  window.downloadVid=async(id)=>{
+    const card=document.getElementById('job-'+id); const v=card?card.querySelector('video'):null; if(!v) return;
+    try{ const r=await fetch(v.src); const bl=await r.blob(); const u=URL.createObjectURL(bl); const a=document.createElement('a'); a.href=u; a.download=`lingjing-${id}.mp4`; a.click(); URL.revokeObjectURL(u); }
+    catch(e){ window.open(v.src,'_blank'); }
+  };
+
+  async function track(id, prompt, inputUrls){ try{ await LJ.pollJob(id, (job)=>renderCard({...job, prompt, inputUrls, ...(jobInputs[id]?{modelLabel:findLabel(jobInputs[id].model),task:jobInputs[id].task,ratio:jobInputs[id].ratio,duration:jobInputs[id].duration}:{})})); }catch(e){} }
+
+  async function loadHistory(){
+    let jobs=[]; try{ jobs=await LJ.listJobs(); }catch(e){ return; }
+    const mine=jobs.filter(j=>j.type==='video_i2v');
+    if(!mine.length) return;
+    document.getElementById('emptyHint').style.display='none';
+    for(const j of [...mine].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))){
+      jobInputs[j.id]={ model:j.model, task:j.task, prompt:j.script, imageRefs:j.imageRefs, inputUrls:j.inputUrls, resolution:j.resolution, ratio:j.ratio, duration:j.duration, negativePrompt:j.negativePrompt, promptExtend:j.promptExtend, seed:j.seed };
+      renderCard({...j, prompt:j.script});
+      if(j.status==='queued'||j.status==='running') track(j.id, j.script, j.inputUrls);
+    }
+  }
+
+  btn.addEventListener('click', async ()=>{
+    if(btn.disabled) return;
+    btn.disabled=true; const prev=btn.innerHTML; btn.textContent='上传中…';
+    try{
+      const imageRefs=await uploadInputImages();
+      if(!imageRefs.length) throw new Error('请先上传图片');
+      btn.textContent='提交中…';
+      const body=jobBody(imageRefs);
+      const r=await LJ.createJob(body);
+      jobInputs[r.id]={ model:body.model, task:body.task, prompt:body.prompt, imageRefs, resolution:body.resolution, ratio:body.ratio, duration:body.duration, negativePrompt:body.negativePrompt, promptExtend:body.promptExtend, seed:body.seed };
+      // 本地缩略(blob url)立即上卡,免等签名回包
+      const localThumbs=orderedFiles().map((f,i)=>{ const all=[firstFrame,lastFrame,...refFiles].filter(Boolean); return all[i]?all[i].url:null; }).filter(Boolean);
+      const thumbs = task==='reference' ? refFiles.map(r=>r.url) : [firstFrame,lastFrame].filter(Boolean).map(r=>r.url);
+      jobInputs[r.id].inputUrls=thumbs;
+      renderCard({ id:r.id, status:'queued', progress:0, prompt:body.prompt, modelLabel:findLabel(model), task, ratio:body.ratio, duration, sizeLabel:resolution, inputUrls:thumbs });
+      track(r.id, body.prompt, thumbs);
+      window.LJToast&&window.LJToast('✓ 已提交生成,可在右侧查看进度');
+    }catch(e){ window.LJToast&&window.LJToast('提交失败:'+e.message,'err'); }
+    finally{ btn.innerHTML=prev; refreshBtn(); }
+  });
+
+  LJ.me().then(()=>{ loadModels(); loadHistory(); }).catch(()=>{});
+  refreshBtn();
+</script>
+</body>
+</html>
