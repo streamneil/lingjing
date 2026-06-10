@@ -293,12 +293,14 @@ img { display: block; }
 .pop .pop-label { font-size: 11px; color: var(--t3); margin: 0 0 7px; }
 .pop .pop-label:not(:first-child) { margin-top: 13px; }
 /* popover 内模型选项 */
-.pop-opt { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 9px; cursor: pointer; transition: background .15s; border: 1px solid transparent; }
+.pop-opt { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 9px; cursor: pointer; transition: background .15s, border-color .15s; border: 1px solid transparent; }
 .pop-opt:hover { background: var(--card-hi); }
-.pop-opt.on { background: var(--card-hi); border-color: var(--line-hi); }
+/* 选中态:蓝色描边 + 蓝底高亮,清晰可辨(不再依赖几乎看不见的 card-hi 微差)*/
+.pop-opt.on { background: var(--blue-bg); border-color: var(--blue); }
 .pop-opt .nm { font-size: 13.5px; font-weight: 600; color: var(--t1); }
+.pop-opt.on .nm { color: var(--blue); }
 .pop-opt .tag { font-size: 10px; color: var(--t4); margin-left: auto; }
-.pop-opt .ck { width: 15px; height: 15px; color: var(--blue); margin-left: auto; opacity: 0; }
+.pop-opt .ck { width: 16px; height: 16px; color: var(--blue); margin-left: auto; opacity: 0; flex-shrink: 0; }
 .pop-opt.on .ck { opacity: 1; }
 .pop-opt.on .tag { margin-left: 8px; }
 .pop-ov { position: fixed; inset: 0; z-index: 55; display: none; }

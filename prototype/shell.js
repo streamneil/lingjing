@@ -1,5 +1,18 @@
 // 共享左侧导航 — 各页 <body data-page="..."> 决定高亮(工具页用 tools.js 的 key 当 data-page)
 (function(){
+  // 全局 popover 关闭:点击 .pop-anchor 之外的任意区域 → 关闭所有打开的 modelPill/setPill/seed 弹框。
+  // 不依赖每页的 .pop-ov 透明遮罩(z-index 边界 case 下遮罩可能被更高层元素挡住吞掉点击)。
+  // 用 mousedown 捕获,比 click 更早、更稳;点击弹框内部(.pop)或锚点(.pop-anchor)不关闭。
+  document.addEventListener('mousedown', (e)=>{
+    if (!document.querySelector('.pop.show')) return; // 无打开的弹框,快速返回
+    if (e.target.closest('.pop-anchor')) return;      // 点在 pill / 弹框内部 → 不关
+    if (typeof window.closePops === 'function') window.closePops();
+    else {
+      document.querySelectorAll('.pop.show').forEach(p=>p.classList.remove('show'));
+      document.querySelectorAll('.cpill.open').forEach(p=>p.classList.remove('open'));
+      document.querySelectorAll('.pop-ov.show').forEach(o=>o.classList.remove('show'));
+    }
+  });
   // 确保依赖已加载(系统页只引 shell.js 即自带登录态/登出 + 工具注册表)
   if (!window.LJ && !document.querySelector('script[src="api.js"]')) {
     const s = document.createElement('script'); s.src = 'api.js'; document.head.appendChild(s);
