@@ -69,14 +69,6 @@
 - **Context:** 来自 /plan-ceo-review 项目收尾 D5/TODO3。与 T-PUBLIC-URL 同类私有化交付细节。本轮水印已做优雅降级(ffmpeg 缺失跳过烙字但标 ai_label)。
 - **Priority:** P2  **Depends on:** 私有化首单落地
 
-## CEO 审计补充(2026-06-04,HOLD SCOPE — 系统设置)
-
-### T-SETTINGS-AUDIT-DIFF:设置变更字段级审计
-- **What:** update_settings 审计记录改了哪个字段、旧值→新值,而非只记一条"改了设置"。
-- **Why:** 政企合规可能要求设置变更可追溯到字段。送审已改常开(消除最敏感操作),但默认参数/AI 标识文案变更仍值得留痕。
-- **Context:** 来自 /plan-ceo-review 系统设置审计。audit 表可加 detail 字段;settings.ts:66 现只 audit('update_settings')。
-- **Priority:** P2  **Depends on:** audit 表加 detail 列
-
 ## 设计评审补充(2026-06-10,img2video UI parity)
 
 ### T-PASTE-UPLOAD:粘贴上传(Cmd/Ctrl+V)
@@ -85,21 +77,16 @@
 - **Context:** 来自 /plan-design-review img2video UI parity 轮。需处理焦点上下文(粘在提示词框里的文字 vs 图)+ 三页各自槽位路由(img2video 还分首帧/尾帧/参考)。全站级体验缺口而非 img2video 个体差距,故不入 parity 轮。
 - **Priority:** P3  **Depends on:** 无
 
-## CEO 审计补充(2026-06-10,SELECTIVE EXPANSION — 文字转语音 声音面板)
-
-### T-TTS-QUALITY-MODEL:品质模型选择 + 按 model tier 计价
-- **What:** 文字转语音左面板加「品质」下拉(cosyvoice-v1 免费 / qwen3-tts-flash / MiniMax),不同模型能力与价格不同;estimateTtsCost 加 model 参,buildTtsJob 快照 modelTier。
-- **Why:** 截图竞品左下有「品质 V2.0」下拉;不同模型音质/价格分层是付费分级的抓手。
-- **Context:** 来自 /plan-ceo-review 声音面板轮(候选4,Defer)。钱路改动:estimateTtsCost(textLength) → estimateTtsCost(textLength, modelTier),buildTtsJob 必须快照 modelTier 保 reserve==settle(即便厂商返回不同)。本轮已加 voice.target_model 列为此铺路。是 T-TTS-EMOTION 的前置(情绪需 Qwen-Instruct/MiniMax)。
-- **Priority:** P2  **Depends on:** 无(但解锁 T-TTS-EMOTION)
-
-### T-TTS-EMOTION:情绪下拉 + 音高滑块
-- **What:** 文字转语音左面板加「情绪」下拉(自动/开朗/沉稳/温柔/严肃/活泼…)+ 音高滑块 -12~+12;经 instruction 参数透传给 Qwen3-TTS-Instruct。
-- **Why:** 截图竞品左面板有「情绪:自动」下拉 + 音高滑块;情感化配音是有声书/广告核心诉求。
-- **Context:** 来自 /plan-ceo-review 声音面板轮(候选3,Defer)。强依赖 T-TTS-QUALITY-MODEL:cosyvoice-v1 不支持情绪/指令,情绪需 Qwen3-TTS-Instruct 或 MiniMax。buildTtsJob 加 instruction/pitch 校验,gateway 透传 instruction(Qwen 路径)。
-- **Priority:** P2  **Depends on:** T-TTS-QUALITY-MODEL
-
 ## ✅ 已完成(归档,保留可追溯)
+
+### T-TTS-QUALITY-MODEL:品质模型选择 + 按 tier 计价 — ✅ 2026-06-11
+- 完成证据:TTS_MODELS 注册表(cosyvoice-v1/v3.5-flash/qwen3-tts-flash/instruct)+ 品质下拉按音色 transport 过滤。estimateTtsCost(len,pricePerChar) 默认不变(byte-identical)、costFor 读 pricePerCharSnapshot;buildTtsJob 校验模型⟂音色 transport(不兼容 400)+ 快照单价(reserve==settle);GET /tts-models。test/tts-quality-model.test.ts 15 例。merge fd18281。
+
+### T-TTS-EMOTION:情绪下拉 + 音高滑块 — ✅ 2026-06-11
+- 完成证据:EMOTIONS 注册表 + buildInstruction(emotion,pitch);gateway 两路透传(CosyVoice instruction+pitch、Qwen instructions);buildTtsJob 情绪/音高仅 supportsInstruction 模型可用(否则 400)+ 越界校验;前端情绪下拉+音高滑块仅指令模型启用。test/tts-emotion.test.ts 12 例。merge 400958a。
+
+### T-SETTINGS-AUDIT-DIFF:设置变更字段级审计 — ✅ 2026-06-11
+- 完成证据:audit_log 加 detail 列;audit()/writeAudit() 加 detail 参(AuditDetail);settings.ts applyIfChanged 逐字段对比旧→新只记真正变的、空改动不写;GET /audit 投影 detail。test/settings-audit-diff.test.ts 4 例。merge 9d63e0e。
 
 ### T-TTS-PANEL-SHEET-DEDUP:.vsheet 重构到共享 .sheet-side 范式 — ✅ 2026-06-11
 - 完成证据:tts.html 旧自定义类(.vtab/.vcard2/.vdesign-btn/.vplay)已删干净(grep 零残留),改用共享 .sheet-side/.ss-head/.ss-seg/.ss-filters/.ss-body/.vcard/.vc-play(19 处)。commit b821630。真机 480px 单列、pill segment、选中蓝边、设计弹窗 z 在上;voices.html 未受影响。
