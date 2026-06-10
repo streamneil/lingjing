@@ -16,8 +16,10 @@
   .voice-pick .ar svg { width:18px; height:18px; color:var(--t4); }
 
   /* 音色选择 sheet(侧滑) */
-  .vsheet-ov { position:fixed; inset:0; background:rgba(0,0,0,.55); backdrop-filter:blur(3px); display:none; z-index:300; }
+  .vsheet-ov { position:fixed; inset:0; background:rgba(4,4,5,.66); backdrop-filter:blur(8px); display:none; z-index:300; }
   .vsheet-ov.on { display:block; }
+  /* 设计弹窗从面板内打开,须盖在面板(z301)之上(否则被遮挡) */
+  #ov-design { z-index:320; }
   .vsheet { position:fixed; top:0; right:0; bottom:0; width:420px; max-width:90vw; background:var(--bg-soft); border-left:1px solid var(--line); z-index:301; transform:translateX(100%); transition:.3s var(--ease-out); display:flex; flex-direction:column; }
   .vsheet.on { transform:none; }
   .vsheet { width:480px; }
