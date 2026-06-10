@@ -6,7 +6,7 @@
 <link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
 <link rel="stylesheet" href="app.css">
 </head>
-<body data-page="avatars" data-crumb="创作 > 形象库">
+<body data-page="ai-avatar" data-crumb="创作 > AI 虚拟人 > 形象库">
 <div class="shell" id="shell-mount">
   <div class="main-col">
     <main class="page">
@@ -252,13 +252,13 @@
       ? '<span class="av-tag" style="background:rgba(255,178,62,.22);color:#FFB23E">处理中</span>'
       : (a.isDefault ? '<span class="av-tag" style="background:var(--blue-bg);color:var(--blue)">默认</span>'
         : `<span class="av-tag">${a.kind==='video'?'视频':'自定义'}</span>`);
-    const cta = a.status==='ready' ? `<div class="av-cta" onclick="location.href='create.html'">创建影片</div>` : '';
+    const cta = a.status==='ready' ? `<div class="av-cta" onclick="location.href='create.html?avatar='+encodeURIComponent('${a.id}')">创建影片</div>` : '';
     const menu = `<div class="av-more" onclick="event.stopPropagation();avMenu('${a.id}','${esc(a.name)}',${a.isDefault?1:0},event)"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></div>`;
     return `<div class="av"><div class="av-img" style="${bg}"></div><div class="av-veil"></div>${status}${ratioBadge(a.orientation)}<div class="av-name">${esc(a.name)}</div>${menu}${cta}</div>`;
   }
   // 预置卡(只读)
   function presetCard(p){
-    return `<div class="av"><div class="av-img" style="background-image:url('${p.thumb}')"></div><div class="av-veil"></div><span class="av-tag">${esc(p.scene||'预置')}</span>${ratioBadge(p.orientation)}<div class="av-name">${esc(p.name)}</div><div class="av-cta" onclick="location.href='create.html'">创建影片</div></div>`;
+    return `<div class="av"><div class="av-img" style="background-image:url('${p.thumb}')"></div><div class="av-veil"></div><span class="av-tag">${esc(p.scene||'预置')}</span>${ratioBadge(p.orientation)}<div class="av-name">${esc(p.name)}</div><div class="av-cta" onclick="location.href='create.html?avatar='+encodeURIComponent('${p.id}')">创建影片</div></div>`;
   }
 
   // C6 操作菜单:锚定 ⋯ 的下拉(重命名/设默认/删除),替代 prompt 三连
