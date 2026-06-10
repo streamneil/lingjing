@@ -41,6 +41,7 @@
   /* 音色卡:旗帜+名+热门徽标+标签行 + 圆形试听 */
   .vcard2 { display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:12px; cursor:pointer; transition:.15s; border:1px solid transparent; }
   .vcard2:hover { background:var(--card); }
+  .vcard2:focus-visible { outline:2px solid var(--blue); outline-offset:-1px; }
   .vcard2.on { background:var(--card-hi); border-color:var(--line-hi); }
   .vcard2 .vmeta { flex:1; min-width:0; }
   .vcard2 .vn { font-size:14px; font-weight:600; color:var(--t1); display:flex; align-items:center; gap:6px; }
@@ -122,15 +123,15 @@
 <!-- 音色选择 sheet(音色库/我的声音 Tab + 筛选 + 试听 + 复制或设计)-->
 <div class="vsheet-ov" id="vsheetOv" onclick="closeVoices()"></div>
 <div class="vsheet" id="vsheet">
-  <div class="vsheet-h"><h3>所有声音</h3><div class="x" onclick="closeVoices()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:22px;height:22px"><path d="M18 6 6 18M6 6l12 12"/></svg></div></div>
-  <div class="vtabs">
-    <button class="vtab on" data-tab="preset" onclick="switchVTab('preset')">音色库</button>
-    <button class="vtab" data-tab="mine" onclick="switchVTab('mine')">我的声音</button>
+  <div class="vsheet-h"><h3>所有声音</h3><div class="x" onclick="closeVoices()" role="button" tabindex="0" aria-label="关闭" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();closeVoices();}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:22px;height:22px"><path d="M18 6 6 18M6 6l12 12"/></svg></div></div>
+  <div class="vtabs" role="tablist" aria-label="音色来源">
+    <button class="vtab on" data-tab="preset" role="tab" aria-selected="true" onclick="switchVTab('preset')">音色库</button>
+    <button class="vtab" data-tab="mine" role="tab" aria-selected="false" onclick="switchVTab('mine')">我的声音</button>
     <button class="vdesign-btn" onclick="openDesign()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>复制或设计</button>
   </div>
   <div class="vfilters">
-    <select class="vfilter" id="vfLang" onchange="renderVoices()"><option value="">语言:全部</option><option value="中文">中文</option><option value="英文">英文</option></select>
-    <select class="vfilter" id="vfGender" onchange="renderVoices()"><option value="">性别:全部</option><option value="女">女</option><option value="男">男</option></select>
+    <select class="vfilter" id="vfLang" aria-label="按语言筛选" onchange="renderVoices()"><option value="">语言:全部</option><option value="中文">中文</option><option value="英文">英文</option></select>
+    <select class="vfilter" id="vfGender" aria-label="按性别筛选" onchange="renderVoices()"><option value="">性别:全部</option><option value="女">女</option><option value="男">男</option></select>
   </div>
   <div class="vsheet-body" id="vsheetBody"><div style="color:var(--t4);padding:20px">加载音色中…</div></div>
 </div>
@@ -173,7 +174,7 @@
 
   function openVoices(){ document.getElementById('vsheetOv').classList.add('on'); document.getElementById('vsheet').classList.add('on'); loadVoices(); }
   function closeVoices(){ window.LJAudioPreview.stop(); document.getElementById('vsheetOv').classList.remove('on'); document.getElementById('vsheet').classList.remove('on'); }
-  function switchVTab(t){ vTab=t; document.querySelectorAll('.vtab').forEach(b=>b.classList.toggle('on',b.dataset.tab===t)); renderVoices(); }
+  function switchVTab(t){ vTab=t; document.querySelectorAll('.vtab').forEach(b=>{ const on=b.dataset.tab===t; b.classList.toggle('on',on); b.setAttribute('aria-selected',on?'true':'false'); }); renderVoices(); }
 
   async function loadVoices(){
     const body=document.getElementById('vsheetBody');
@@ -209,7 +210,8 @@
       const on=selectedVoice&&selectedVoice.id===v.id;
       const canPlay=!!v.sample;
       const play=`<button class="vplay" data-src="${esc(v.sample||'')}" ${canPlay?'':'disabled'} onclick="event.stopPropagation();window.LJAudioPreview.play(this.dataset.src,this)" aria-label="试听">${PLAY_SVG}</button>`;
-      return `<div class="vcard2${on?' on':''}" data-id="${esc(v.id)}" onclick='pickVoiceObj(${JSON.stringify({id:v.id,name:v.name,desc}).replace(/'/g,"&#39;")})'>`
+      const pick=`pickVoiceObj(${JSON.stringify({id:v.id,name:v.name,desc}).replace(/'/g,"&#39;")})`;
+      return `<div class="vcard2${on?' on':''}" data-id="${esc(v.id)}" role="button" tabindex="0" aria-pressed="${on?'true':'false'}" aria-label="选择音色 ${esc(v.name)}" onclick='${pick}' onkeydown='if(event.key==="Enter"||event.key===" "){event.preventDefault();${pick};}'>`
         +`<div class="vmeta"><div class="vn"><span class="flag">🇨🇳</span>${esc(v.name)}${hot}</div><div class="vd">${esc(desc)}</div></div>${play}</div>`;
     }).join('');
   }
