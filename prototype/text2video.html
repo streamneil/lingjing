@@ -138,11 +138,16 @@
     modelOpts.querySelectorAll('.pop-opt[data-k]').forEach(el=>el.onclick=()=>{ model=el.dataset.k; onModelChange(); closePops(); });
     onModelChange();
   }
-  // 切模型:重渲解析度(可灵显 std/pro)、比例、时长、模型特有控件 + 字数上限 + pill
+  // 弹框选中态与当前 model 同步(选项点击/重新提示改 model 后,勾与高亮跟着走,不再与 pill 脱节)
+  function markModelOpt(){
+    modelOpts.querySelectorAll('.pop-opt[data-k]').forEach(el=>el.classList.toggle('on', el.dataset.k===model));
+  }
+  // 切模型:重渲解析度(可灵显 std/pro)、比例、时长、模型特有控件 + 字数上限 + pill + 弹框选中态
   function onModelChange(){
     const m=curModel(); if(!m) return;
     document.getElementById('maxChars').textContent=m.maxPromptChars;
     ta.maxLength=m.maxPromptChars;
+    markModelOpt();
     renderRes(); renderRatios(); renderDur(); renderModelOpts(); syncPills(); scheduleEstimate(); refreshBtn();
   }
   // 解析度:V_DASH 显 720P/1080P;V_KLING 显 std/pro(代替,design D4)

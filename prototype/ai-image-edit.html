@@ -479,9 +479,14 @@
     modelOpts.querySelectorAll('.pop-opt[data-k]').forEach(el=>el.onclick=()=>{ model=el.dataset.k; onModelChange(); closePops(); });
     onModelChange();
   }
+  // 弹框选中态与当前 model 同步(选项点击改 model 后,勾与高亮跟着走,不与 pill 脱节)
+  function markModelOpt(){
+    modelOpts.querySelectorAll('.pop-opt[data-k]').forEach(el=>el.classList.toggle('on', el.dataset.k===model));
+  }
   function onModelChange(){
     if(refFiles.length>maxRefs()) refFiles=refFiles.slice(0,maxRefs());
     if(!supportsBbox() && mainFile){ mainFile.bbox=null; mainFile.strokes=[]; }
+    markModelOpt();
     renderMain(); renderRefs(); syncMkEditCard(); renderCount(); syncPills(); refreshBtn(); scheduleEstimate();
   }
   function renderCount(){
