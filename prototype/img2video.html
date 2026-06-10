@@ -20,20 +20,21 @@
   .tx-toggle { font-size:12px; color:var(--blue); cursor:pointer; margin-top:4px; display:none; align-self:flex-start; }
   .tx-toggle.show { display:inline-block; }
   .fvid { width:100%; border-radius:12px; display:block; background:#000; }
-  /* 记录卡里输入图缩略带 */
-  .in-thumbs { display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 2px; }
-  .in-thumbs img { width:44px; height:44px; object-fit:cover; border-radius:7px; border:1px solid var(--line); }
+  /* 记录卡里输入图缩略带(与 ai-image-edit 同款:label + 可放大)*/
+  .in-thumbs { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin:8px 0 2px; }
+  .in-thumbs .lbl { font-size:11px; color:var(--t4); margin-right:2px; }
+  .in-thumbs img { width:44px; height:44px; object-fit:cover; border-radius:7px; border:1px solid var(--line); cursor:zoom-in; }
 
-  /* 任务 tab(開始圖 / 圖片間 / 參考圖)*/
+  /* 任务 tab(開始圖 / 圖片間 / 參考圖)— 与 ai-image .sub-tabs 同款,button 元素(键盘可达)*/
   .task-tabs { display:flex; gap:6px; background:var(--field); border:1px solid var(--line); border-radius:11px; padding:4px; margin-bottom:12px; }
-  .task-tab { flex:1; text-align:center; font-size:13px; color:var(--t3); padding:9px 6px; border-radius:8px; cursor:pointer; transition:.15s; }
+  .task-tab { flex:1; text-align:center; font-size:13px; color:var(--t3); padding:9px 6px; border-radius:8px; cursor:pointer; transition:.15s; background:none; border:none; font-family:inherit; }
   .task-tab:hover { color:var(--t1); }
   .task-tab.on { background:var(--card-hi); color:var(--t1); box-shadow:0 1px 0 rgba(0,0,0,.15); }
 
   /* 输入图区:大主图卡 / 双槽 / 多图网格 */
   .img-area { margin-bottom:4px; }
   .up-card { position:relative; border:1.5px dashed var(--line-hi); border-radius:13px; background:var(--field); aspect-ratio:16/10; display:flex; align-items:center; justify-content:center; cursor:pointer; overflow:hidden; transition:.15s; }
-  .up-card:hover { border-color:var(--blue); }
+  .up-card:hover, .up-card.drag { border-color:var(--blue); }
   .up-card img { width:100%; height:100%; object-fit:contain; background:#000; }
   .up-card .ph { text-align:center; color:var(--t3); padding:18px; }
   .up-card .ph svg { width:30px; height:30px; opacity:.55; margin-bottom:8px; }
@@ -43,12 +44,16 @@
   .up-card .rm svg { width:14px; height:14px; }
   .up-card .badge { position:absolute; top:8px; left:8px; font-size:11px; background:rgba(0,0,0,.6); color:#fff; padding:2px 8px; border-radius:7px; }
 
-  .dual { display:flex; gap:10px; }
+  .dual { display:flex; gap:8px; align-items:center; }
   .dual .up-card { flex:1; aspect-ratio:3/4; }
+  .swap-btn { flex:0 0 auto; width:32px; height:32px; border-radius:50%; background:var(--field); border:1px solid var(--line); color:var(--t3); display:grid; place-items:center; cursor:pointer; transition:.15s; }
+  .swap-btn:hover { color:var(--t1); border-color:var(--line-hi); }
+  .swap-btn svg { width:15px; height:15px; }
+  .swap-btn:disabled { opacity:.3; cursor:default; }
 
   .ref-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
   .ref-cell { position:relative; aspect-ratio:1; border:1.5px dashed var(--line); border-radius:11px; background:var(--field); display:flex; align-items:center; justify-content:center; cursor:pointer; overflow:hidden; transition:.15s; }
-  .ref-cell:hover { border-color:var(--blue); }
+  .ref-cell:hover, .ref-cell.drag { border-color:var(--blue); }
   .ref-cell.add { color:var(--t3); }
   .ref-cell.add svg { width:24px; height:24px; opacity:.6; }
   .ref-cell img { width:100%; height:100%; object-fit:cover; }
@@ -56,6 +61,7 @@
   .ref-cell .rm { position:absolute; top:5px; right:5px; width:22px; height:22px; border-radius:7px; background:rgba(0,0,0,.55); border:none; color:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; }
   .ref-cell .rm svg { width:12px; height:12px; }
   .area-hint { font-size:11px; color:var(--t4); margin:7px 0 0; }
+  .fmt-hint { font-size:11px; color:var(--t4); margin:7px 0 0; line-height:1.5; }
 
   /* 段选(解析度 / 时长)+ 比例 */
   .seg-row { display:flex; gap:8px; }
@@ -76,6 +82,13 @@
   /* 授权同意(同 AI 图片编辑)*/
   .consent { display:flex; gap:9px; align-items:flex-start; margin-top:12px; font-size:11.5px; color:var(--t3); line-height:1.5; }
   .consent input { width:auto; margin-top:2px; }
+
+  /* 大图查看器(与 ai-image-edit 同款)*/
+  .lightbox { position:fixed; inset:0; background:rgba(0,0,0,.88); backdrop-filter:blur(4px); z-index:500; display:none; align-items:center; justify-content:center; padding:40px; cursor:zoom-out; }
+  .lightbox.on { display:flex; }
+  .lightbox img { max-width:92vw; max-height:88vh; border-radius:12px; cursor:default; }
+  .lightbox .lb-x { position:absolute; top:22px; right:26px; width:42px; height:42px; border-radius:50%; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.18); display:grid; place-items:center; cursor:pointer; }
+  .lightbox .lb-x svg { width:22px; height:22px; color:#fff; }
 </style>
 </head>
 <body data-page="img2video" data-crumb="创作工具 > 图片转影片">
@@ -86,16 +99,17 @@
   <div class="cfg">
     <div class="cfg-h"><span class="dot"></span>图片转影片 AI</div>
 
-    <!-- 任务 tab:跟随模型能力显隐 -->
+    <!-- 任务 tab:任务优先,三 tab 常显(design-review D1);模型列表随任务过滤 -->
     <div class="task-tabs" id="taskTabs">
-      <div class="task-tab" data-task="first_frame">開始圖</div>
-      <div class="task-tab" data-task="first_last">圖片間</div>
-      <div class="task-tab" data-task="reference">參考圖</div>
+      <button type="button" class="task-tab" data-task="first_frame">開始圖</button>
+      <button type="button" class="task-tab" data-task="first_last">圖片間</button>
+      <button type="button" class="task-tab" data-task="reference">參考圖</button>
     </div>
 
     <!-- 输入图区(按 task 切换形态)-->
     <div class="img-area" id="imgArea"></div>
-    <input type="file" id="filePick" accept="image/*" style="display:none">
+    <div class="fmt-hint">支持 JPG / PNG / WEBP / BMP / TIFF / GIF,单张 ≤ 10MB。暂不支持 HEIC(iPhone 实况照片,请在相册导出为 JPG 或截图后上传)。</div>
+    <input type="file" id="filePick" accept="image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif,.jpg,.jpeg,.png,.webp,.bmp,.tiff,.gif" multiple style="display:none">
 
     <!-- 提示词 -->
     <div class="cfg-label" id="promptLabel">提示</div>
@@ -125,7 +139,7 @@
         </div>
       </div>
       <div class="pop-anchor">
-        <div class="cpill fixed" id="seedPill" onclick="togglePop('seed')" title="随机种子 Seed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+        <div class="cpill fixed" id="seedPill" onclick="togglePop('seed')" title="随机种子 Seed" aria-label="随机种子 Seed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
         <div class="pop" id="pop-seed" style="left:auto;right:0;width:200px">
           <div class="pop-label">Seed(随机种子)</div>
           <input id="seedInput" type="text" inputmode="numeric" placeholder="随机" style="width:100%;padding:9px 11px;background:var(--field);border:1px solid var(--line);border-radius:9px;color:var(--t1);font-size:13px;font-family:var(--f-mono)">
@@ -152,15 +166,22 @@
       <button class="ftab" data-st="failed">失败</button>
     </div>
     <div class="feed-list">
-      <div class="fitem" id="emptyHint" style="animation-delay:.02s">
-        <div class="fmeta">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m12 3 2.4 5.6L20 9l-4.3 3.8L17 18l-5-2.7L7 18l1.3-5.2L4 9l5.6-.4Z"/></svg>
-          <b>暂无记录</b><span class="ts">上传图片,生成你的第一条影片</span>
+      <div class="fitem feed-empty" id="emptyHint">
+        <div class="feed-empty-in">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="4" width="14" height="14" rx="2"/><circle cx="8" cy="9" r="1.6"/><path d="m4 16 4-4 3 3"/><path d="m17 10 4-2v10l-4-2"/></svg>
+          <div class="t">还没有影片作品</div>
+          <div class="s">上传图片、点「创建」就能生成第一条。</div>
         </div>
       </div>
     </div>
   </div>
  </div>
+</div>
+
+<!-- 大图查看器 -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <div class="lb-x" onclick="closeLightbox()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
+  <img id="lightboxImg" src="" alt="" onclick="event.stopPropagation()">
 </div>
 
 <script src="shell.js"></script>
@@ -172,51 +193,58 @@
   let model='', allModels=[], task='first_frame', ratio='16:9', resolution='720P', duration=5, negativePrompt='', promptExtend=true, seed='';
   // 输入图状态:单/双槽 slots(固定位:开始图/结束图),参考多图 refs
   let firstFrame=null, lastFrame=null, refFiles=[]; // {file,url}
+  // 重新提示复用原 job 输入图(免重传;贴 ai-image-edit 的 reuseRefs 模式)
+  let reuseRefs=null, reuseUrls=null;
   let pickTarget=null; // 'first' | 'last' | 'ref'
 
   function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   function curModel(){ return allModels.find(m=>m.key===model); }
+  function usableModels(){ return allModels.filter(m=>(m.tasks||[]).includes(task)); }
+  function reuseActive(){ return !!(reuseRefs&&reuseRefs.length) && !firstFrame && !lastFrame && !refFiles.length; }
+  function clearReuse(){ reuseRefs=null; reuseUrls=null; }
   const RATIO_GLYPH={'16:9':[20,11],'9:16':[11,20],'1:1':[18,18],'3:4':[14,18],'4:3':[18,14],'4:5':[14,18],'5:4':[18,14],'9:21':[9,20],'21:9':[20,9]};
   const TASK_LABEL={first_frame:'開始圖',first_last:'圖片間',reference:'參考圖'};
 
-  // ── 模型下拉(GET /i2v-models)──
+  // ── 模型下拉(GET /i2v-models)。任务优先:列表按当前 task 过滤(贴 ai-image 按 mode 过滤)──
   const modelOpts=document.getElementById('modelOpts');
   async function loadModels(){
-    try{ const r=await LJ.get('/i2v-models'); allModels=r.models||[]; if(r.default) model=r.default; renderModels(); }
+    try{ const r=await LJ.get('/i2v-models'); allModels=r.models||[]; if(r.default) model=r.default; renderTaskTabs(); renderModels(); }
     catch(e){ modelOpts.innerHTML='<div class="pop-opt"><span class="nm">模型加载失败</span></div>'; }
   }
   function renderModels(){
-    if(allModels.length && !curModel()) model=allModels[0].key;
-    modelOpts.innerHTML=allModels.map(m=>`<div class="pop-opt${m.key===model?' on':''}" data-k="${m.key}">
+    const usable=usableModels();
+    if(usable.length && !usable.find(m=>m.key===model)) model=usable[0].key;
+    modelOpts.innerHTML=usable.map(m=>`<div class="pop-opt${m.key===model?' on':''}" data-k="${m.key}">
       <span class="nm">${esc(m.label)}</span>
       <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg></div>`).join('')
-      || '<div class="pop-opt"><span class="nm">暂无可用模型</span></div>';
+      || '<div class="pop-opt"><span class="nm">该任务暂无可用模型</span></div>';
     modelOpts.querySelectorAll('.pop-opt[data-k]').forEach(el=>el.onclick=()=>{ model=el.dataset.k; onModelChange(); closePops(); });
     onModelChange();
   }
   function markModelOpt(){ modelOpts.querySelectorAll('.pop-opt[data-k]').forEach(el=>el.classList.toggle('on', el.dataset.k===model)); }
 
-  // 切模型:按 model.tasks 显隐 tab;若当前 task 不被支持,落到第一个支持的 task
+  // 切模型(同任务内):重渲模型相关控件。不再反向操纵 tab(D1:任务优先)。
   function onModelChange(){
     const m=curModel(); if(!m) return;
     document.getElementById('maxChars').textContent=m.maxPromptChars; ta.maxLength=m.maxPromptChars;
     markModelOpt();
+    renderImgArea(); renderRes(); renderRatios(); renderDur(); renderModelOpts(); syncPills(); refreshPromptLabel(); scheduleEstimate(); refreshBtn();
+  }
+  // 切任务:三 tab 常显常可点;当前模型不支持新任务 → 自动落到第一个可用模型 + Toast(D2)
+  function switchTask(t){
+    if(t===task) return;
+    task=t;
+    if(reuseActive()) clearReuse(); // 复用态跨任务无意义(图数/语义都变),清掉避免混淆
+    const m=curModel();
+    const needSwitch=!m || !(m.tasks||[]).includes(task);
     renderTaskTabs();
-    if(!m.tasks.includes(task)) task=m.tasks[0];
-    renderTaskTabs(); renderImgArea(); renderRes(); renderRatios(); renderDur(); renderModelOpts(); syncPills(); refreshPromptLabel(); scheduleEstimate(); refreshBtn();
+    renderModels(); // 重过滤;不支持则回落第一个可用(renderModels 内)并重渲全部
+    if(needSwitch){ const nm=curModel(); if(nm&&window.LJToast) LJToast(`已切换为「${nm.label}」(该模型支持${TASK_LABEL[task]})`); }
   }
   function renderTaskTabs(){
-    const m=curModel(); const tabs=document.getElementById('taskTabs');
-    tabs.querySelectorAll('.task-tab').forEach(t=>{
-      const supported=m.tasks.includes(t.dataset.task);
-      t.style.display=supported?'':'none';
-      t.classList.toggle('on', supported && t.dataset.task===task);
-    });
+    document.querySelectorAll('.task-tab').forEach(b=>b.classList.toggle('on', b.dataset.task===task));
   }
-  document.querySelectorAll('.task-tab').forEach(t=>t.onclick=()=>{
-    const m=curModel(); if(!m || !m.tasks.includes(t.dataset.task)) return;
-    task=t.dataset.task; renderTaskTabs(); renderImgArea(); renderRatios(); refreshPromptLabel(); syncPills(); scheduleEstimate(); refreshBtn();
-  });
+  document.querySelectorAll('.task-tab').forEach(b=>b.onclick=()=>switchTask(b.dataset.task));
 
   // 提示词标签 + 占位:参考生必填且建议含 [图N];首帧/首尾帧可选
   function refreshPromptLabel(){
@@ -225,39 +253,83 @@
     else { lbl.textContent='提示(可选)'; ta.placeholder='可补充影片动态描述(可选)。'; }
   }
 
-  // ── 输入图区:按 task 渲染 ──
+  // ── 文件校验(>10MB / 非图 客户端即拒,贴 ai-image 提示行约束)──
+  function validFile(f){
+    if(!f) return false;
+    if(!(f.type||'').startsWith('image/')){ window.LJToast&&LJToast('仅支持图片文件(JPG/PNG/WEBP 等)','err'); return false; }
+    if(f.size>10*1024*1024){ window.LJToast&&LJToast('单张图片需 ≤ 10MB','err'); return false; }
+    return true;
+  }
+  // 入槽统一口(点击选择与拖放共用)。复用态一旦本地传图即失效。
+  function addFile(f, target){
+    if(!validFile(f)) return;
+    if(reuseActive()) clearReuse();
+    const rec={file:f,url:URL.createObjectURL(f)};
+    if(target==='first') firstFrame=rec;
+    else if(target==='last') lastFrame=rec;
+    else { const m=curModel(); const max=(m&&m.maxRefImages)||9; if(refFiles.length>=max){ window.LJToast&&LJToast(`参考图最多 ${max} 张`,'err'); return; } refFiles.push(rec); }
+    afterImgChange();
+  }
+  function bindDrop(el, handler){
+    if(!el) return;
+    el.addEventListener('dragover',e=>{ e.preventDefault(); el.classList.add('drag'); });
+    el.addEventListener('dragleave',()=>el.classList.remove('drag'));
+    el.addEventListener('drop',e=>{ e.preventDefault(); el.classList.remove('drag'); handler(e.dataTransfer.files); });
+  }
+
+  // ── 输入图区:按 task 渲染(本地图 / 复用原图 两态)──
   const filePick=document.getElementById('filePick');
+  function slotView(slotKey){ // 本地优先;复用态映射 reuseUrls 槽位
+    if(slotKey==='first') return firstFrame ? firstFrame.url : (reuseActive()&&reuseUrls&&reuseUrls[0]) || null;
+    return lastFrame ? lastFrame.url : (reuseActive()&&reuseUrls&&reuseUrls[1]) || null;
+  }
   function renderImgArea(){
     const area=document.getElementById('imgArea');
     if(task==='first_frame'){
-      area.innerHTML=mainCardHtml(firstFrame,'開始圖');
-      area.querySelector('.up-card').onclick=()=>pick('first');
-      const rm=area.querySelector('.rm'); if(rm) rm.onclick=(e)=>{ e.stopPropagation(); firstFrame=null; afterImgChange(); };
+      area.innerHTML=mainCardHtml(slotView('first'),'開始圖','first');
+      const card=area.querySelector('.up-card');
+      card.onclick=()=>pick('first');
+      bindDrop(card, fs=>addFile(fs[0],'first'));
+      const rm=area.querySelector('.rm'); if(rm) rm.onclick=(e)=>{ e.stopPropagation(); firstFrame=null; clearReuse(); afterImgChange(); };
     } else if(task==='first_last'){
-      area.innerHTML=`<div class="dual">${mainCardHtml(firstFrame,'開始圖','first')}${mainCardHtml(lastFrame,'結束圖','last')}</div>
-        <div class="area-hint">开始图 → 结束图 之间生成过渡影片(顺序固定)。</div>`;
+      const both=!!(slotView('first')&&slotView('last'));
+      area.innerHTML=`<div class="dual">${mainCardHtml(slotView('first'),'開始圖','first')}
+        <button type="button" class="swap-btn" id="swapBtn" title="交换开始图与结束图" aria-label="交换开始图与结束图"${both?'':' disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg></button>
+        ${mainCardHtml(slotView('last'),'結束圖','last')}</div>
+        <div class="area-hint">开始图 → 结束图 之间生成过渡影片(顺序固定,可用中间按钮交换)。</div>`;
       const cards=area.querySelectorAll('.up-card');
       cards[0].onclick=()=>pick('first'); cards[1].onclick=()=>pick('last');
-      area.querySelectorAll('.rm').forEach(rm=>rm.onclick=(e)=>{ e.stopPropagation(); const w=rm.dataset.slot; if(w==='first')firstFrame=null; else lastFrame=null; afterImgChange(); });
+      bindDrop(cards[0], fs=>addFile(fs[0],'first')); bindDrop(cards[1], fs=>addFile(fs[0],'last'));
+      area.querySelectorAll('.rm').forEach(rm=>rm.onclick=(e)=>{ e.stopPropagation(); const w=rm.dataset.slot; if(reuseActive()){ clearReuse(); } else if(w==='first'){ firstFrame=null; } else { lastFrame=null; } afterImgChange(); });
+      const sw=area.querySelector('#swapBtn');
+      if(sw) sw.onclick=(e)=>{ e.stopPropagation(); swapFrames(); };
     } else { // reference
-      const m=curModel(); const max=m.maxRefImages||9;
-      let cells=refFiles.map((r,i)=>`<div class="ref-cell" data-i="${i}"><span class="num">图${i+1}</span><button class="rm" data-rm="${i}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button><img src="${r.url}"></div>`).join('');
-      if(refFiles.length<max) cells+=`<div class="ref-cell add" id="addRef"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>`;
-      area.innerHTML=`<div class="ref-grid">${cells}</div><div class="area-hint">已选 ${refFiles.length}/${max} 张。提示词用 [图N] 指代第 N 张。</div>`;
+      const m=curModel(); const max=(m&&m.maxRefImages)||9;
+      const urls = reuseActive() ? (reuseUrls||[]) : refFiles.map(r=>r.url);
+      let cells=urls.map((u,i)=>`<div class="ref-cell" data-i="${i}"><span class="num">图${i+1}</span><button type="button" class="rm" data-rm="${i}" aria-label="删除第${i+1}张参考图"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button><img src="${u}"></div>`).join('');
+      if(urls.length<max && !reuseActive()) cells+=`<div class="ref-cell add" id="addRef" role="button" aria-label="添加参考图"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>`;
+      area.innerHTML=`<div class="ref-grid" id="refGrid">${cells}</div><div class="area-hint">已选 ${urls.length}/${max} 张${reuseActive()?'(复用上次原图,点 ✕ 可清除)':''}。提示词用 [图N] 指代第 N 张。</div>`;
       const add=area.querySelector('#addRef'); if(add) add.onclick=()=>pick('ref');
-      area.querySelectorAll('[data-rm]').forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); refFiles.splice(Number(el.dataset.rm),1); afterImgChange(); });
+      bindDrop(area.querySelector('#refGrid'), fs=>{ Array.from(fs).forEach(f=>addFile(f,'ref')); });
+      area.querySelectorAll('[data-rm]').forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); if(reuseActive()){ clearReuse(); } else { refFiles.splice(Number(el.dataset.rm),1); } afterImgChange(); });
     }
   }
-  function mainCardHtml(slot,badge,slotKey){
-    if(slot) return `<div class="up-card"><span class="badge">${badge}</span><button class="rm"${slotKey?` data-slot="${slotKey}"`:''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button><img src="${slot.url}"></div>`;
-    return `<div class="up-card"><span class="badge">${badge}</span><div class="ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.6-3.6a2 2 0 0 0-2.8 0L6 20"/></svg><div class="t">点击上传${badge}</div><div class="s">JPG / PNG,≤10MB</div></div></div>`;
+  function mainCardHtml(url,badge,slotKey){
+    if(url) return `<div class="up-card"><span class="badge">${badge}${reuseActive()?' · 原图':''}</span><button type="button" class="rm" data-slot="${slotKey}" aria-label="删除${badge}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button><img src="${url}"></div>`;
+    return `<div class="up-card"><span class="badge">${badge}</span><div class="ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.6-3.6a2 2 0 0 0-2.8 0L6 20"/></svg><div class="t">点击或拖入${badge}</div><div class="s">单张 ≤ 10MB</div></div></div>`;
+  }
+  // 圖片間:交换开始/结束(本地态换 slot;复用态换 refs+urls 序,提交体随之互换)
+  function swapFrames(){
+    if(reuseActive()){ if(reuseRefs&&reuseRefs.length===2){ reuseRefs.reverse(); reuseUrls.reverse(); } }
+    else { const t=firstFrame; firstFrame=lastFrame; lastFrame=t; }
+    afterImgChange();
+    window.LJToast&&LJToast('✓ 已交换开始图与结束图');
   }
   function pick(target){ pickTarget=target; filePick.value=''; filePick.click(); }
   filePick.onchange=()=>{
-    const f=filePick.files[0]; if(!f) return;
-    const url=URL.createObjectURL(f); const rec={file:f,url};
-    if(pickTarget==='first') firstFrame=rec; else if(pickTarget==='last') lastFrame=rec; else refFiles.push(rec);
-    afterImgChange();
+    const fs=Array.from(filePick.files||[]); if(!fs.length) return;
+    if(pickTarget==='ref') fs.forEach(f=>addFile(f,'ref'));
+    else addFile(fs[0], pickTarget==='last'?'last':'first');
   };
   function afterImgChange(){ renderImgArea(); refreshBtn(); scheduleEstimate(); }
 
@@ -311,7 +383,10 @@
   }
   function closePops(){ document.querySelectorAll('.pop.show').forEach(p=>p.classList.remove('show')); document.querySelectorAll('.cpill.open').forEach(p=>p.classList.remove('open')); document.getElementById('popOv').classList.remove('show'); }
   window.togglePop=togglePop; window.closePops=closePops;
-  document.addEventListener('keydown',e=>{ if(e.key==='Escape') closePops(); });
+  // ── 大图查看器(输入图缩略放大,贴 ai-image-edit)──
+  window.openLightbox=(url)=>{ document.getElementById('lightboxImg').src=url; document.getElementById('lightbox').classList.add('on'); };
+  window.closeLightbox=()=>{ document.getElementById('lightbox').classList.remove('on'); document.getElementById('lightboxImg').src=''; };
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeLightbox(); closePops(); } });
   document.getElementById('seedInput').addEventListener('input',e=>{ seed=e.target.value.replace(/[^0-9]/g,''); e.target.value=seed; });
 
   // 当前 task 所需输入图(顺序固定:首尾帧 = [开始, 结束];参考 = refs 序)
@@ -320,16 +395,23 @@
     if(task==='first_last') return (firstFrame&&lastFrame)?[firstFrame.file,lastFrame.file]:[];
     return refFiles.map(r=>r.file);
   }
+  function neededCount(){ return task==='first_last'?2:1; }
   function imagesReady(){
+    if(reuseActive()){
+      if(task==='first_frame') return reuseRefs.length===1;
+      if(task==='first_last') return reuseRefs.length===2;
+      return reuseRefs.length>=1;
+    }
     if(task==='first_frame') return !!firstFrame;
     if(task==='first_last') return !!firstFrame && !!lastFrame;
     return refFiles.length>=1;
   }
+  function imageCount(){ return reuseActive() ? reuseRefs.length : orderedFiles().length; }
   function missingMsg(){
     const m=curModel();
     if(!imagesReady()){
       if(task==='first_frame') return '请上传開始圖';
-      if(task==='first_last') return firstFrame?'请上传結束圖':'请上传開始圖';
+      if(task==='first_last') return (firstFrame||(reuseActive()&&reuseRefs.length>0))?'请上传結束圖':'请上传開始圖';
       return '请上传至少 1 张参考图';
     }
     if(task==='reference' && m && m.promptRequired && !ta.value.trim()) return '请输入描述';
@@ -338,6 +420,7 @@
   }
 
   async function uploadInputImages(){
+    if(reuseActive()) return reuseRefs.slice(); // 复用态:沿用原 refs(免重传,服务端 replay 同 key)
     const files=orderedFiles(); if(!files.length) return [];
     const fd=new FormData(); files.forEach(f=>fd.append('images',f)); fd.append('consent','true');
     const r=await fetch('/api/image-uploads',{method:'POST',body:fd,credentials:'same-origin'});
@@ -360,9 +443,8 @@
   function scheduleEstimate(){
     clearTimeout(estTimer);
     estTimer=setTimeout(async()=>{
-      const n=orderedFiles().length;
       if(!imagesReady()){ document.getElementById('estLabel').textContent='预估 — 点'; document.getElementById('estGem').textContent='—'; return; }
-      try{ const placeholder=Array.from({length:n},(_,i)=>'est'+i); const r=await LJ.post('/jobs/estimate',jobBody(placeholder));
+      try{ const placeholder=Array.from({length:imageCount()},(_,i)=>'est'+i); const r=await LJ.post('/jobs/estimate',jobBody(placeholder));
         document.getElementById('estLabel').textContent='预估 '+r.cost+' 点';
         document.getElementById('estGem').textContent=r.cost;
       }catch(e){}
@@ -398,7 +480,7 @@
   }
   function inThumbs(urls){
     if(!urls||!urls.length) return '';
-    return `<div class="in-thumbs">${urls.map(u=>`<img src="${u}">`).join('')}</div>`;
+    return `<div class="in-thumbs"><span class="lbl">输入图</span>${urls.map(u=>`<img src="${esc(u)}" onclick="openLightbox('${esc(u)}')" alt="输入图">`).join('')}</div>`;
   }
   function metaChips(job){
     const c=[]; if(job.modelLabel) c.push(job.modelLabel);
@@ -408,9 +490,10 @@
   }
   function cardActs(job,ok){
     const re=`<button data-act="regen" onclick="regenJob('${job.id}',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>重新生成</button>`;
+    const rp=`<button onclick="repromptJob('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19 7-7 3 3-7 7-3-3z"/><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="m2 2 7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>重新提示</button>`;
     const dl=ok&&(job.outputUrls||[]).length?`<button onclick="downloadVid('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg>下载</button>`:'';
     const del=`<button onclick="delJob('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除</button>`;
-    return `<div class="card-acts">${re}${dl}${del}</div>`;
+    return `<div class="card-acts">${re}${rp}${dl}${del}</div>`;
   }
 
   function renderCard(job){
@@ -464,6 +547,25 @@
     }catch(e){ window.LJToast&&window.LJToast('重新生成失败:'+e.message,'err'); }
     finally{ regenInFlight.delete(id); if(b){ b.disabled=false; if(b.dataset.t){ b.textContent=b.dataset.t; delete b.dataset.t; } } }
   };
+  // 重新提示:回填提示词 + 任务 + 模型 + 参数到左侧,原图走 reuseRefs 免重传(贴 ai-image-edit)
+  window.repromptJob=(id)=>{
+    const inp=jobInputs[id]; if(!inp){ window.LJToast&&window.LJToast('原参数丢失','err'); return; }
+    if(inp.task && TASK_LABEL[inp.task]) task=inp.task;
+    if(inp.model && allModels.find(m=>m.key===inp.model)) model=inp.model;
+    if(inp.resolution) resolution=inp.resolution;
+    if(typeof inp.duration==='number') duration=inp.duration;
+    if(inp.ratio) ratio=inp.ratio;
+    negativePrompt=inp.negativePrompt||'';
+    if(typeof inp.promptExtend==='boolean') promptExtend=inp.promptExtend;
+    seed = inp.seed!=null ? String(inp.seed) : '';
+    const si=document.getElementById('seedInput'); if(si) si.value=seed;
+    firstFrame=null; lastFrame=null; refFiles=[];
+    reuseRefs=(inp.imageRefs||[]).slice(); reuseUrls=(inp.inputUrls||[]).slice();
+    renderTaskTabs(); renderModels(); // 任务优先:tab 高亮 + 模型按任务重过滤(onModelChange 在内)
+    ta.value=inp.prompt||''; cnt.textContent=ta.value.length;
+    refreshBtn(); scheduleEstimate(); ta.focus();
+    window.LJToast&&window.LJToast('✓ 已回填参数与原图,可改后创建');
+  };
   window.delJob=async(id)=>{
     if(!(await window.LJConfirm({title:'删除作品',body:'确认删除这条生成记录吗?删除后不可恢复。',confirmText:'删除',danger:true}))) return;
     try{ await LJ.del('/jobs/'+id); const c=document.getElementById('job-'+id); if(c) c.remove(); delete jobInputs[id]; window.LJToast&&window.LJToast('✓ 已删除'); }
@@ -491,18 +593,16 @@
 
   btn.addEventListener('click', async ()=>{
     if(btn.disabled) return;
-    btn.disabled=true; const prev=btn.innerHTML; btn.textContent='上传中…';
+    btn.disabled=true; const prev=btn.innerHTML; btn.textContent=reuseActive()?'提交中…':'上传中…';
     try{
       const imageRefs=await uploadInputImages();
       if(!imageRefs.length) throw new Error('请先上传图片');
       btn.textContent='提交中…';
       const body=jobBody(imageRefs);
       const r=await LJ.createJob(body);
-      jobInputs[r.id]={ model:body.model, task:body.task, prompt:body.prompt, imageRefs, resolution:body.resolution, ratio:body.ratio, duration:body.duration, negativePrompt:body.negativePrompt, promptExtend:body.promptExtend, seed:body.seed };
-      // 本地缩略(blob url)立即上卡,免等签名回包
-      const localThumbs=orderedFiles().map((f,i)=>{ const all=[firstFrame,lastFrame,...refFiles].filter(Boolean); return all[i]?all[i].url:null; }).filter(Boolean);
-      const thumbs = task==='reference' ? refFiles.map(r=>r.url) : [firstFrame,lastFrame].filter(Boolean).map(r=>r.url);
-      jobInputs[r.id].inputUrls=thumbs;
+      const thumbs = reuseActive() ? (reuseUrls||[]).slice()
+        : (task==='reference' ? refFiles.map(x=>x.url) : [firstFrame,lastFrame].filter(Boolean).map(x=>x.url));
+      jobInputs[r.id]={ model:body.model, task:body.task, prompt:body.prompt, imageRefs, inputUrls:thumbs, resolution:body.resolution, ratio:body.ratio, duration:body.duration, negativePrompt:body.negativePrompt, promptExtend:body.promptExtend, seed:body.seed };
       renderCard({ id:r.id, status:'queued', progress:0, prompt:body.prompt, modelLabel:findLabel(model), task, ratio:body.ratio, duration, sizeLabel:resolution, inputUrls:thumbs });
       track(r.id, body.prompt, thumbs);
       window.LJToast&&window.LJToast('✓ 已提交生成,可在右侧查看进度');
@@ -511,7 +611,7 @@
   });
 
   LJ.me().then(()=>{ loadModels(); loadHistory(); }).catch(()=>{});
-  refreshBtn();
+  renderTaskTabs(); renderImgArea(); refreshBtn();
 </script>
 </body>
 </html>

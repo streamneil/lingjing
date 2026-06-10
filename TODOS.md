@@ -88,3 +88,11 @@
 - **Why:** 政企合规可能要求设置变更可追溯到字段。送审已改常开(消除最敏感操作),但默认参数/AI 标识文案变更仍值得留痕。
 - **Context:** 来自 /plan-ceo-review 系统设置审计。audit 表可加 detail 字段;settings.ts:66 现只 audit('update_settings')。
 - **Priority:** P2  **Depends on:** audit 表加 detail 列
+
+## 设计评审补充(2026-06-10,img2video UI parity)
+
+### T-PASTE-UPLOAD:粘贴上传(Cmd/Ctrl+V)
+- **What:** img2video / ai-image / ai-image-edit 三页支持直接粘贴剪贴板图片上传。
+- **Why:** 融媒体编辑常从截图/素材库复制图,省去「存文件→选文件」两步。三页共享一个 paste 监听实现。
+- **Context:** 来自 /plan-design-review img2video UI parity 轮。需处理焦点上下文(粘在提示词框里的文字 vs 图)+ 三页各自槽位路由(img2video 还分首帧/尾帧/参考)。全站级体验缺口而非 img2video 个体差距,故不入 parity 轮。
+- **Priority:** P3  **Depends on:** 无
