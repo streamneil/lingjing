@@ -31,11 +31,11 @@ import { isUsableVoice } from '../voices/index.js';
 import { db } from '../db/index.js';
 import type { VideoGenInput, ImageGenInput, TtsGenInput, VideoGenT2VInput } from '../gateway/types.js';
 import { getImageModel, resolutionAllowed, isKnownModel, listEnabledModels, DEFAULT_IMAGE_MODEL, tierFromPixels } from '../gateway/image-models.js';
-import { getVideoModel, isKnownVideoModel, listVideoModels, klingModeToResolution } from '../gateway/video-models.js';
+import { getVideoModel, isKnownVideoModel, listVideoModels, klingModeToResolution, getI2VModel, listI2VModels, type VideoTask } from '../gateway/video-models.js';
 
 export const jobsRouter = Router();
 
-// 图生图输入图上传:multer 内存缓冲,≤30MB,最多 5 张(万相2.7 上限;千问编辑 3 张按 model maxInputImages 在 buildImageJob 校验)。
+// 图生图/i2v 输入图上传:multer 内存缓冲,≤30MB,最多 9 张(i2v 参考生 HappyHorse-r2v 上限;各 model 上限在 builder 校验)。
 const imageUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024 } });
 
 // 输入图存储 key → 签名 URL(供记录卡显示 + 重新提示回填)。逐 key 签名,坏 key 跳过不整体 500。
@@ -328,12 +328,94 @@ function buildVideoT2VJob(body: Record<string, unknown>): JobBuildResult {
   };
 }
 
+/** 校验并构建 video_i2v(图转影片)job 入参 + 计价。task 感知(R1.3/R1.4):
+ *  - first_frame / first_last task:跳过 ratio(跟首帧);prompt 可选。
+ *  - reference task:有 ratio(model 声明);prompt 必填(含 [图N] 指代)。
+ *  - media 组合校验(R3.2,reserve 前):first_frame=1图、first_last=2图、reference=1..maxRefImages 图。 */
+function buildVideoI2VJob(body: Record<string, unknown>): JobBuildResult {
+  const modelKey = typeof body.model === 'string' ? body.model : undefined;
+  if (modelKey && (!isKnownVideoModel(modelKey) || getVideoModel(modelKey).tasks.length === 0))
+    return { ok: false, status: 400, error: '未知图转影片模型' };
+  const def = getI2VModel(modelKey);
+
+  // task 校验(在 model.tasks)
+  const task = (typeof body.task === 'string' ? body.task : '') as VideoTask;
+  if (!def.tasks.includes(task)) return { ok: false, status: 400, error: '该模型不支持所选任务' };
+
+  // media 组合校验(reserve 前,R3.2):按 task 定图数。
+  const refs = Array.isArray(body.imageRefs)
+    ? body.imageRefs.filter((k): k is string => typeof k === 'string')
+    : [];
+  if (task === 'first_frame' && refs.length !== 1)
+    return { ok: false, status: 400, error: '首帧任务须上传 1 张首帧图' };
+  if (task === 'first_last' && refs.length !== 2)
+    return { ok: false, status: 400, error: '首尾帧任务须上传開始图 + 結束图(共 2 张)' };
+  if (task === 'reference') {
+    const max = def.maxRefImages ?? 1;
+    if (refs.length < 1 || refs.length > max)
+      return { ok: false, status: 400, error: `参考生须上传 1–${max} 张参考图` };
+  }
+
+  // prompt task 感知(R1.4):参考生必填;首帧/首尾帧可选。
+  const prompt = typeof body.prompt === 'string' ? body.prompt : '';
+  if (def.promptRequired && !prompt.trim())
+    return { ok: false, status: 400, error: '参考生任务须输入描述(含 [图N] 指代)' };
+  if (prompt.length > def.maxPromptChars)
+    return { ok: false, status: 400, error: `提示词超过 ${def.maxPromptChars} 字上限`, extra: { length: prompt.length } };
+
+  // ratio task 感知(R1.3):仅 reference task 且 model 声明 ratios 时校验/取;首帧/首尾帧跳过。
+  let ratio: string | undefined;
+  if (task === 'reference' && def.ratios.length) {
+    ratio = typeof body.ratio === 'string' ? body.ratio : def.ratios[0]!;
+    if (!def.ratios.includes(ratio)) return { ok: false, status: 400, error: '该模型不支持所选比例' };
+  }
+
+  // resolution + duration 校验(同 t2v V_DASH;i2v 全 V_DASH)
+  const resolution = typeof body.resolution === 'string' ? body.resolution : '720P';
+  if (!def.resolutions.includes(resolution as '720P' | '1080P'))
+    return { ok: false, status: 400, error: '该模型不支持所选分辨率' };
+  if (body.duration !== undefined) {
+    const d = body.duration;
+    const [dmin, dmax] = def.durationRange;
+    if (typeof d !== 'number' || !Number.isInteger(d) || d < dmin || d > dmax)
+      return { ok: false, status: 400, error: `时长需为 ${dmin}–${dmax} 秒之间的整数` };
+  }
+  if (body.seed !== undefined && (typeof body.seed !== 'number' || body.seed < 0 || body.seed > 2147483647))
+    return { ok: false, status: 400, error: 'seed 需在 0–2147483647 之间' };
+
+  // 派生(复用 deriveVideoT2VParams:duration clamp + res 档 + audio;i2v 全 V_DASH 故 audio false)
+  const { duration, priceTier } = deriveVideoT2VParams(def, body);
+
+  const input: VideoGenT2VInput = { model: def.key, task, imageRefs: refs, resolution };
+  if (prompt.trim()) input.prompt = prompt;
+  if (ratio) input.ratio = ratio;
+  if (def.supportsNegative && typeof body.negativePrompt === 'string' && body.negativePrompt.trim())
+    input.negativePrompt = body.negativePrompt;
+  if (def.supportsPromptExtend && typeof body.promptExtend === 'boolean')
+    input.promptExtend = body.promptExtend;
+  input.duration = duration;
+  if (typeof body.seed === 'number') input.seed = body.seed;
+  // 快照(reserve==settle):duration/res/priceTier(R5.2:首帧跳 ratio 但仍快照 res);audio 恒 false。
+  input.durationSnapshot = duration;
+  input.resSnapshot = resolution;
+  input.audioSnapshot = false;
+  input.priceTierSnapshot = priceTier;
+
+  return {
+    ok: true,
+    type: 'video_i2v',
+    input: input as unknown as Record<string, unknown>,
+    cost: estimateVideoCost(duration, priceTier, resolution, false),
+  };
+}
+
 // 封闭 allowlist:type → builder。Object.create(null) 防原型链污染(type='__proto__' 取不到)。
 const JOB_BUILDERS: Record<string, (body: Record<string, unknown>, tid: string) => JobBuildResult> =
   Object.assign(Object.create(null), {
     video: buildVideoJob,
     ai_image: (body: Record<string, unknown>) => buildImageJob(body),
     video_t2v: (body: Record<string, unknown>) => buildVideoT2VJob(body),
+    video_i2v: (body: Record<string, unknown>) => buildVideoI2VJob(body),
     tts: buildTtsJob,
   });
 
@@ -379,7 +461,7 @@ jobsRouter.post(
   '/image-uploads',
   requireRole('admin', 'creator'),
   imageUpload.fields([
-    { name: 'images', maxCount: 5 },
+    { name: 'images', maxCount: 9 }, // i2v 参考生 HappyHorse-r2v 1-9 张(R2.2);各模型上限在 builder maxRefImages 校验
     { name: 'proof', maxCount: 1 },
   ]),
   async (req: Request, res: Response) => {
@@ -390,7 +472,7 @@ jobsRouter.post(
     const tid = req.user!.tenantId;
 
     if (images.length === 0) return res.status(400).json({ error: '缺少图片(images)' });
-    if (images.length > 5) return res.status(400).json({ error: '最多 5 张输入图' });
+    if (images.length > 9) return res.status(400).json({ error: '最多 9 张输入图' });
     // 防御纵深:前端已拦 HEIC/非支持格式/超 10MB,但客户端可绕过 → 后端再校验一遍。
     // 百炼图生图支持(qwen-image-edit 文档):JPEG/PNG/WEBP/BMP/TIFF/GIF;不含 HEIC。
     const OK_IMG = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/bmp', 'image/tiff', 'image/gif']);
@@ -468,6 +550,12 @@ jobsRouter.post('/jobs/estimate', requireAuth, (req: Request, res: Response) => 
     const { duration, resolution, audio, priceTier } = deriveVideoT2VParams(def, body);
     return res.json({ cost: estimateVideoCost(duration, priceTier, resolution, audio) });
   }
+  if (type === 'video_i2v') {
+    // 与 buildVideoI2VJob 同派生(audio 恒 false;i2v 全 V_DASH)。res 用 body.resolution。
+    const def = getI2VModel(typeof body.model === 'string' ? body.model : undefined);
+    const { duration, resolution, priceTier } = deriveVideoT2VParams(def, body);
+    return res.json({ cost: estimateVideoCost(duration, priceTier, resolution, false) });
+  }
   if (type === 'tts') {
     return res.json({ cost: estimateTtsCost(typeof body.text === 'string' ? body.text.length : 0) });
   }
@@ -498,21 +586,43 @@ jobsRouter.get('/image-models', requireAuth, (_req: Request, res: Response) => {
 });
 
 // 文生视频模型清单 — 前端下拉单一真相源(只吐 UI 能力字段,不漏 modelId/priceTier)。
+// 仅 t2v 模型(tasks 空);i2v 走 /i2v-models。
 jobsRouter.get('/video-models', requireAuth, (_req: Request, res: Response) => {
-  const models = listVideoModels().map((d) => ({
+  const models = listVideoModels()
+    .filter((d) => d.tasks.length === 0)
+    .map((d) => ({
+      key: d.key,
+      label: d.label,
+      shape: d.shape, // 前端据此显 mode(V_KLING)或 resolution 段控(V_DASH)
+      resolutions: d.resolutions,
+      ratios: d.ratios,
+      durationRange: d.durationRange,
+      defaultDuration: d.defaultDuration,
+      maxPromptChars: d.maxPromptChars,
+      supportsAudio: d.supportsAudio, // 前端据此显/隐有声开关(仅可灵)
+      supportsNegative: d.supportsNegative, // wan2.7
+      supportsPromptExtend: d.supportsPromptExtend, // wan2.7
+    }));
+  res.json({ models, default: getVideoModel().key });
+});
+
+// 图转影片模型清单 — img2video 页下拉真相源(吐 tasks/maxRefImages/promptRequired 供 tab 显隐 + 校验)。
+jobsRouter.get('/i2v-models', requireAuth, (_req: Request, res: Response) => {
+  const models = listI2VModels().map((d) => ({
     key: d.key,
     label: d.label,
-    shape: d.shape, // 前端据此显 mode(V_KLING)或 resolution 段控(V_DASH)
     resolutions: d.resolutions,
-    ratios: d.ratios,
+    ratios: d.ratios, // 空=首帧/首尾帧跟首帧(前端不显比例);非空=参考生显比例
     durationRange: d.durationRange,
     defaultDuration: d.defaultDuration,
     maxPromptChars: d.maxPromptChars,
-    supportsAudio: d.supportsAudio, // 前端据此显/隐有声开关(仅可灵)
-    supportsNegative: d.supportsNegative, // wan2.7
-    supportsPromptExtend: d.supportsPromptExtend, // wan2.7
+    supportsNegative: d.supportsNegative,
+    supportsPromptExtend: d.supportsPromptExtend,
+    tasks: d.tasks, // 前端据此显隐 tab(first_frame/first_last/reference)
+    maxRefImages: d.maxRefImages, // 参考生上限
+    promptRequired: d.promptRequired, // 参考生 prompt 必填
   }));
-  res.json({ models, default: getVideoModel().key });
+  res.json({ models, default: getI2VModel().key });
 });
 
 // 作品列表 — 任何登录角色(含 viewer)可读本租户作品
@@ -532,7 +642,7 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
           script?: string; prompt?: string; text?: string;
           model?: string; mode?: string; source?: string; ratio?: string; resolution?: string; count?: number;
           imageRefs?: string[]; seed?: number; width?: number; height?: number; bboxList?: number[][][];
-          duration?: number; audio?: boolean; negativePrompt?: string; promptExtend?: boolean;
+          duration?: number; audio?: boolean; negativePrompt?: string; promptExtend?: boolean; task?: string;
         };
         script = inp.script ?? inp.prompt ?? inp.text ?? '';
         if (j.type === 'ai_image') {
@@ -554,6 +664,16 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
             model: inp.model, modelLabel: vdef.label, mode: inp.mode,
             ratio: inp.ratio, resolution: inp.resolution, sizeLabel, duration: inp.duration,
             audio: inp.audio, negativePrompt: inp.negativePrompt, promptExtend: inp.promptExtend, seed: inp.seed,
+          };
+        } else if (j.type === 'video_i2v') {
+          // 图转影片卡片:显模型/任务/分辨率/时长 + 输入图缩略;回放 task/imageRefs。
+          const idef = getI2VModel(inp.model);
+          const inputUrls = await signInputUrls(inp.imageRefs);
+          meta = {
+            model: inp.model, modelLabel: idef.label, task: inp.task,
+            ratio: inp.ratio, resolution: inp.resolution, sizeLabel: inp.resolution || '720P', duration: inp.duration,
+            negativePrompt: inp.negativePrompt, promptExtend: inp.promptExtend, seed: inp.seed,
+            imageRefs: inp.imageRefs, inputUrls, // 输入图缩略 + 重新生成回放
           };
         }
       } catch {

@@ -55,6 +55,20 @@ async function httpJson(
   return { status: res.status, json };
 }
 
+/** i2v media 组装(R3.1):按 task 把已 publish 的公网 URL 数组组成 input.media[{type,url}]。
+ *  - first_frame → [{first_frame}]  (urls 须 1 张)
+ *  - first_last  → [{first_frame},{last_frame}]  (urls[0]=首帧、[1]=尾帧,序由前端槽位定)
+ *  - reference   → [{reference_image}×N]  (1..maxRefImages 张) */
+function buildMedia(task: string, urls: string[]): Array<{ type: string; url: string }> {
+  if (task === 'first_frame') return [{ type: 'first_frame', url: urls[0]! }];
+  if (task === 'first_last') return [
+    { type: 'first_frame', url: urls[0]! },
+    { type: 'last_frame', url: urls[1]! },
+  ];
+  // reference
+  return urls.map((url) => ({ type: 'reference_image', url }));
+}
+
 /** 把百炼的 task_status 归一到网关的 4 态。 */
 function normalizeStatus(s: string | undefined): ProviderJobStatus {
   switch (s) {
@@ -206,7 +220,14 @@ export class BaichuanGateway implements CapabilityGateway, SyncImageGateway {
     const def = getVideoModel(input.model);
     const duration = input.durationSnapshot ?? input.duration ?? def.defaultDuration;
     const parameters: Record<string, unknown> = { duration, watermark: false };
-    const reqInput: Record<string, unknown> = { prompt: input.prompt };
+    const reqInput: Record<string, unknown> = {};
+    // prompt:i2v 首帧/首尾帧可选 → 空则不发(gateway 仅在有内容时设);t2v/参考生有 prompt。
+    if (input.prompt && input.prompt.trim()) reqInput.prompt = input.prompt;
+
+    // ── i2v media 组装(R3.1):imageRefs 已是 worker publish 的公网 URL,按 task 组 input.media ──
+    if (input.task && Array.isArray(input.imageRefs) && input.imageRefs.length) {
+      reqInput.media = buildMedia(input.task, input.imageRefs);
+    }
 
     if (def.shape === 'V_KLING') {
       // 可灵:mode(std/pro)+ aspect_ratio + audio。无 resolution 字段(R3:档由 mode 决定)。
@@ -214,9 +235,9 @@ export class BaichuanGateway implements CapabilityGateway, SyncImageGateway {
       parameters.aspect_ratio = input.ratio ?? '16:9';
       parameters.audio = def.supportsAudio ? !!input.audio : false;
     } else {
-      // V_DASH:resolution(720P/1080P)+ ratio。
+      // V_DASH:resolution(720P/1080P)。ratio 仅当模型声明(参考生有、i2v 首帧跟首帧不传)。
       parameters.resolution = input.resolution ?? '720P';
-      parameters.ratio = input.ratio ?? '16:9';
+      if (def.ratios.length && input.ratio) parameters.ratio = input.ratio;
       if (def.supportsPromptExtend) parameters.prompt_extend = input.promptExtend ?? true;
       if (def.supportsNegative && input.negativePrompt) reqInput.negative_prompt = input.negativePrompt;
     }

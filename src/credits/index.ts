@@ -113,8 +113,10 @@ export function costFor(toolType: string, input: Record<string, unknown>): numbe
         maxImages,
       );
     }
-    case 'video_t2v': {
-      // 文生视频:读快照计价(reserve==settle)。无快照(老 job)回落实时派生(同 build 规则)。
+    case 'video_t2v':
+    case 'video_i2v': {
+      // 文生视频 / 图转影片:同计价(秒×档×tier;i2v audio 恒 false)。读快照(reserve==settle);
+      // 无快照(老 job)回落实时派生(同 build 规则,R5.1 DRY)。
       const def = getVideoModel(typeof input.model === 'string' ? input.model : undefined);
       const priceTier = typeof input.priceTierSnapshot === 'number' ? input.priceTierSnapshot : def.priceTier;
       const duration = typeof input.durationSnapshot === 'number'

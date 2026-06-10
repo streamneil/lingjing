@@ -15,11 +15,11 @@ const { VIDEO_MODELS, getVideoModel, isKnownVideoModel, listVideoModels, klingMo
 const { estimateVideoCost, costFor } = await import('../src/credits/index.js');
 
 describe('VIDEO_MODELS registry 自洽性', () => {
-  it('三模型 shape 合法、modelId 非空、durationRange 合理、maxPromptChars>0', () => {
-    const keys = Object.keys(VIDEO_MODELS);
-    expect(keys.length).toBe(3);
-    for (const k of keys) {
-      const d = VIDEO_MODELS[k]!;
+  it('t2v 三模型 shape 合法、modelId 非空、durationRange 合理、maxPromptChars>0、ratios 非空', () => {
+    // t2v 模型 = tasks 空(i2v 模型另在 text2video-i2v 测;此处只验 t2v)。
+    const t2v = Object.values(VIDEO_MODELS).filter((d) => d.tasks.length === 0);
+    expect(t2v.length).toBe(3);
+    for (const d of t2v) {
       expect(['V_DASH', 'V_KLING']).toContain(d.shape);
       expect(d.modelId.length).toBeGreaterThan(0);
       const [lo, hi] = d.durationRange;
@@ -29,7 +29,7 @@ describe('VIDEO_MODELS registry 自洽性', () => {
       expect(d.defaultDuration).toBeLessThanOrEqual(hi);
       expect(d.maxPromptChars).toBeGreaterThan(0);
       expect(d.resolutions.every((r) => r === '720P' || r === '1080P')).toBe(true);
-      expect(d.ratios.length).toBeGreaterThan(0);
+      expect(d.ratios.length).toBeGreaterThan(0); // t2v 都有 ratio(i2v 首帧无)
     }
   });
 
@@ -60,10 +60,9 @@ describe('VIDEO_MODELS registry 自洽性', () => {
     expect(getVideoModel().key).toBe('wan2.7-t2v');
   });
 
-  it('listVideoModels 列全三模型', () => {
-    expect(listVideoModels().map((d) => d.key).sort()).toEqual(
-      ['happyhorse-1.0-t2v', 'kling-v3-t2v', 'wan2.7-t2v'],
-    );
+  it('listVideoModels 含三 t2v 模型(i2v 模型也在,任务非空)', () => {
+    const t2vKeys = listVideoModels().filter((d) => d.tasks.length === 0).map((d) => d.key).sort();
+    expect(t2vKeys).toEqual(['happyhorse-1.0-t2v', 'kling-v3-t2v', 'wan2.7-t2v']);
   });
 
   it('isKnownVideoModel 白名单', () => {
