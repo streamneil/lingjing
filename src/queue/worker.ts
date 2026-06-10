@@ -116,7 +116,7 @@ type Transport = 'ws' | 'http';
  *   - 克隆(clone)→ cloneModel(v3.5,复刻与合成必须同模型)、ws。
  *   - 设计(design)→ designModel(Qwen-VD)、http。VD 创建的音色须用同 target_model 合成。
  *  复刻/设计未产出(provider_voice_id 空)则回退预置(v1,ws),避免任务整体失败。 */
-function resolveVoice(
+export function resolveVoice(
   voiceRef: string,
   tenantId: string,
 ): { voice: string; model: string; transport: Transport } {
