@@ -11,13 +11,13 @@
   <div class="main-col">
     <main class="page">
       <div class="ph">
-        <div><h1 class="t-h1">音色库</h1><p class="desc">40 个预置人声（400 小时语音包），以及上传 5–30s 样本克隆的专属音色。配音可调语速 0.5–2 倍与音量。</p></div>
+        <div><h1 class="t-h1">音色库</h1><p class="desc">预置人声可逐个试听,以及上传 5–30s 样本克隆、或用文字描述设计专属音色。配音可调语速 0.5–2 倍与音量。</p></div>
         <button class="btn btn-white" id="cloneBtn" onclick="cloneVoiceFlow()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>克隆新音色</button>
         <input type="file" id="voiceSample" accept="audio/*" style="display:none">
         <input type="file" id="voiceProof" accept="image/*,application/pdf" style="display:none">
       </div>
       <div class="bar">
-        <button class="chip active">我的克隆 · 4</button><button class="chip">预置人声 · 40</button>
+        <button class="chip active">我的音色</button><button class="chip">预置人声</button>
         <div class="sp"></div>
         <div class="msel" style="min-width:140px">语言：全部 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
         <div class="msel" style="min-width:140px">性别：全部 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
@@ -44,8 +44,6 @@
     <button class="btn btn-white" id="cvSubmitBtn" style="width:100%;padding:15px;font-size:15px" onclick="submitClone()">克隆音色</button>
   </div>
 </div></div>
-
-<audio id="cvAudio" style="display:none"></audio>
 <script src="shell.js"></script>
 <script src="app.js"></script>
 <script src="api.js"></script>
@@ -56,15 +54,17 @@
 
   document.querySelectorAll('.chip').forEach((b,i)=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));this.classList.add('active');render(i===0?'clone':'preset');}));
 
-  // 播放图标 / 停止图标
-  const PLAY_SVG='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
-  const STOP_SVG='<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
+  // 试听用共享 LJAudioPreview(shell.js);播放图标取其内置 SVG
+  const PLAY_SVG=window.LJAudioPreview.PLAY_SVG;
+  function togglePlay(btn){ window.LJAudioPreview.play(btn.dataset.src, btn); }
+  function stopAudio(){ window.LJAudioPreview.stop(); }
 
   function card(v,isClone){
+    const kindLabel = v.kind==='design' ? '设计音色' : '克隆音色';
     const status = v.status==='processing'?' · 复刻中':(v.status==='failed'?' · 失败':'');
     const tag = isClone?'':' <span class="hot">预置</span>';
-    const desc = isClone?('克隆音色'+status):(`${v.gender||''} · ${v.desc||''}`);
-    // 克隆卡:试听 + 删除 独立操作行(不再把删除塞进圆形播放槽 → 不重叠)
+    const desc = isClone?(kindLabel+status):(`${v.gender||''} · ${v.desc||''}`);
+    // 自建(克隆/设计)卡:试听 + 删除 独立操作行
     let actions;
     if(isClone){
       const canPlay = v.status==='ready' && v.sample;
@@ -72,8 +72,9 @@
       const del = `<button class="btn btn-dark" style="padding:8px 12px;font-size:12.5px" onclick="event.stopPropagation();delVoice('${v.id}','${esc(v.name)}')">删除</button>`;
       actions = `<div class="vc-actions">${play}${del}</div>`;
     } else {
-      // 预置:圆形播放占位(预置无真实样本 URL,保持装饰)
-      actions = `<div class="vc-p">${PLAY_SVG}</div>`;
+      // 预置:有 sample 则可真试听(E9 预置试听样本库),否则置灰
+      const canPlay = !!v.sample;
+      actions = `<button class="vc-p vc-play" data-src="${v.sample||''}" ${canPlay?'':'disabled style="opacity:.4;cursor:not-allowed"'} onclick="event.stopPropagation();togglePlay(this)" aria-label="试听">${PLAY_SVG}</button>`;
     }
     return `<div class="vcard"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>${esc(v.name)}${tag}</div><div class="vc-d">${esc(desc)}</div></div>${actions}</div>`;
   }
@@ -81,21 +82,8 @@
     stopAudio();
     const list = which==='preset'?data.presets:data.clones;
     grid.innerHTML = list.length?list.map(v=>card(v,which!=='preset')).join('')
-      :`<div style="color:var(--t4);padding:40px">${which==='preset'?'暂无预置':'还没有克隆音色,点右上角克隆一个'}</div>`;
+      :`<div style="color:var(--t4);padding:40px">${which==='preset'?'暂无预置':'还没有自建音色,点右上角克隆或设计一个'}</div>`;
   }
-
-  // ── 试听:点播放,再点停;切换其它卡自动停 ──
-  const cvAudio=document.getElementById('cvAudio');
-  let playingBtn=null;
-  function stopAudio(){ try{cvAudio.pause();}catch(_){} if(playingBtn){ playingBtn.innerHTML=PLAY_SVG; playingBtn=null; } }
-  function togglePlay(btn){
-    if(playingBtn===btn){ stopAudio(); return; }
-    stopAudio();
-    const src=btn.dataset.src; if(!src) return;
-    cvAudio.src=src; cvAudio.play().then(()=>{ btn.innerHTML=STOP_SVG; playingBtn=btn; })
-      .catch(()=>window.LJToast('试听失败,样本可能已过期','err'));
-  }
-  cvAudio.addEventListener('ended',stopAudio);
 
   async function delVoice(id,name){
     const ok = await window.LJConfirm({title:'删除音色',body:`确认删除「<b style="color:var(--t1)">${esc(name)}</b>」?删除后不可恢复。`,confirmText:'删除',danger:true});
@@ -174,7 +162,7 @@
     try{
       data=await LJ.get('/voices');
       const chips=document.querySelectorAll('.chip');
-      if(chips[0])chips[0].textContent='我的克隆 · '+data.clones.length;
+      if(chips[0])chips[0].textContent='我的音色 · '+data.clones.length;
       if(chips[1])chips[1].textContent='预置人声 · '+data.presets.length;
       const active=document.querySelector('.chip.active');
       render(active===chips[1]?'preset':'clone');

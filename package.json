@@ -14,7 +14,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "probe:connect": "node scripts/probe-connectivity.mjs",
-    "probe:baichuan": "node scripts/probe-baichuan.mjs"
+    "probe:baichuan": "node scripts/probe-baichuan.mjs",
+    "seed:voices": "tsx scripts/seed-preset-samples.mjs"
   },
   "dependencies": {
     "ali-oss": "^6.23.0",

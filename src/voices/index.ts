@@ -19,8 +19,18 @@ const PRESETS: { id: string; name: string; lang: string; gender: string; desc: s
   { id: 'longcheng', name: '磁性男声 · 浩然', lang: '中文', gender: '男', desc: '磁性 · 广告、品牌' },
 ];
 
+/** 预置音色试听样本在 MinIO 的稳定 key(由 preset id 派生)。
+ *  样本由 scripts/seed-preset-samples 一次性合成上传;GET /voices 每请求签名(URL 会过期,不缓存)。 */
+export function presetSampleKey(presetId: string): string {
+  return `voices/presets/${presetId}.mp3`;
+}
 export function listPresets() {
-  return PRESETS.map((p) => ({ ...p, kind: 'preset' as const, status: 'ready' as const }));
+  return PRESETS.map((p) => ({
+    ...p,
+    kind: 'preset' as const,
+    status: 'ready' as const,
+    sampleKey: presetSampleKey(p.id),
+  }));
 }
 export function isPreset(ref: string): boolean {
   return PRESETS.some((p) => p.id === ref);

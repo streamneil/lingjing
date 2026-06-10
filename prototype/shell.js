@@ -389,5 +389,41 @@
     );
   };
 
+  /**
+   * 共享音色试听器(单例 <audio>)。voices.html / tts.html 声音面板共用。
+   * 行为:点 ▶ 播放、再点 ■ 停;切到另一卡自动停上一个;ended 自动复位图标。
+   * 按钮图标在 ▶/■ 间切换(播放图标内置,调用方无需传 SVG)。
+   * play(url, btn): 播放 url,btn 切 ■;若 btn 正在播则停。
+   * stop(): 停止并复位当前按钮。
+   */
+  window.LJAudioPreview = (function(){
+    const PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+    const STOP = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
+    let audio = null, curBtn = null;
+    function ensure(){
+      if(!audio){
+        audio = document.createElement('audio');
+        audio.style.display = 'none';
+        document.body.appendChild(audio);
+        audio.addEventListener('ended', stop);
+      }
+      return audio;
+    }
+    function stop(){
+      try{ if(audio) audio.pause(); }catch(_){}
+      if(curBtn){ curBtn.innerHTML = PLAY; curBtn = null; }
+    }
+    function play(url, btn){
+      if(curBtn === btn){ stop(); return; }   // 再点同一个 → 停
+      stop();                                  // 切卡 → 先停上一个
+      if(!url) return;
+      const a = ensure();
+      a.src = url;
+      a.play().then(()=>{ btn.innerHTML = STOP; curBtn = btn; })
+        .catch(()=>{ window.LJToast && window.LJToast('试听失败,样本可能已过期','err'); });
+    }
+    return { play, stop, PLAY_SVG: PLAY, STOP_SVG: STOP };
+  })();
+
   bindAuth();
 })();
