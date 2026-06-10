@@ -52,7 +52,7 @@
     {
       key: 'ai-video-edit', label: 'AI 影片编辑器',
       icon: '<rect x="3" y="5" width="14" height="13" rx="2"/><path d="m8 9 4 2.5L8 14V9Z"/><path d="M15 18.5 20 13.5l2 2-5 5H15v-2.5Z"/>',
-      enabled: false, outputKind: 'video', tier: 'later',
+      enabled: true, outputKind: 'video', page: 'video-edit.html', tier: 'live',
     },
     {
       key: 'ai-avatar', label: 'AI 虚拟人',

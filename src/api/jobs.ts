@@ -13,7 +13,7 @@ import {
   retryJob,
   deleteJobForTenant,
 } from '../queue/index.js';
-import { signOutputUrls, getSignedUrl, putObject } from '../storage/index.js';
+import { signOutputUrls, getSignedUrl, putObject, getObject } from '../storage/index.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import {
   estimateCost,
@@ -31,12 +31,46 @@ import { isUsableVoice } from '../voices/index.js';
 import { db } from '../db/index.js';
 import type { VideoGenInput, ImageGenInput, TtsGenInput, VideoGenT2VInput } from '../gateway/types.js';
 import { getImageModel, resolutionAllowed, isKnownModel, listEnabledModels, DEFAULT_IMAGE_MODEL, tierFromPixels } from '../gateway/image-models.js';
-import { getVideoModel, isKnownVideoModel, listVideoModels, klingModeToResolution, getI2VModel, listI2VModels, type VideoTask } from '../gateway/video-models.js';
+import { getVideoModel, isKnownVideoModel, listVideoModels, klingModeToResolution, getI2VModel, listI2VModels, getEditModel, listEditModels, type VideoTask, type VideoModelDef } from '../gateway/video-models.js';
+import { probeVideoMeta, type VideoMeta } from '../pipeline/ai-label.js';
+import { readFile, unlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 
 export const jobsRouter = Router();
 
 // 图生图/i2v 输入图上传:multer 内存缓冲,≤30MB,最多 9 张(i2v 参考生 HappyHorse-r2v 上限;各 model 上限在 builder 校验)。
 const imageUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024 } });
+
+// 视频编辑输入视频上传:走临时磁盘(eng-review A2:100MB 进内存有并发 OOM 风险),
+// 探测/落 MinIO 后 finally 删临时文件。
+const videoUpload = multer({ dest: tmpdir(), limits: { fileSize: 100 * 1024 * 1024 } });
+
+// ── 视频编辑 sidecar 元数据(eng-review D5:时长服务端真相)──
+// 上传时 ffprobe → {key}.meta.json 写 MinIO;build/estimate 按 videoRef 读回算计费快照。
+// 绝不信任客户端上报的时长(可伪造少付,对抗测试覆盖)。
+function videoMetaKey(videoRef: string): string {
+  return `${videoRef}.meta.json`;
+}
+async function readVideoSidecar(videoRef: string): Promise<VideoMeta | null> {
+  try {
+    const buf = await getObject(videoMetaKey(videoRef));
+    const m = JSON.parse(buf.toString('utf8')) as Partial<VideoMeta>;
+    if (typeof m.duration === 'number' && m.duration > 0 && typeof m.width === 'number' && typeof m.height === 'number') {
+      return { duration: m.duration, width: m.width, height: m.height };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+/** 计费秒 = 输入 + 预计输出(贴厂商 usage.duration=in+out;CEO D3)。
+ *  HH:输出 = min(输入, 15);wan:输出 = 截断生效 ? min(截断, 输入) : 输入。 */
+function editBillableSeconds(def: VideoModelDef, inDur: number, truncate?: number): number {
+  let out = inDur;
+  if (def.maxOutSeconds) out = Math.min(out, def.maxOutSeconds);
+  if (def.supportsTruncate && truncate && truncate > 0) out = Math.min(out, truncate);
+  return inDur + out;
+}
 
 // 输入图存储 key → 签名 URL(供记录卡显示 + 重新提示回填)。逐 key 签名,坏 key 跳过不整体 500。
 async function signInputUrls(refs?: string[]): Promise<string[]> {
@@ -409,18 +443,117 @@ function buildVideoI2VJob(body: Record<string, unknown>): JobBuildResult {
   };
 }
 
+/** 校验并构建 video_edit(视频编辑)job 入参 + 计价。
+ *  时长真相只认 sidecar(eng-review D5/E5):客户端 body 里的 duration/billableSeconds
+ *  一概忽略,伪造无效。async:builder 通道已放宽支持 Promise(eng-review E1)。 */
+async function buildVideoEditJob(body: Record<string, unknown>): Promise<JobBuildResult> {
+  const modelKey = typeof body.model === 'string' ? body.model : undefined;
+  if (modelKey && (!isKnownVideoModel(modelKey) || !getVideoModel(modelKey).tasks.includes('edit')))
+    return { ok: false, status: 400, error: '未知的视频编辑模型' };
+  const def = getEditModel(modelKey);
+
+  // 输入视频:必传 + sidecar 元数据回读(服务端真相)
+  const videoRef = typeof body.videoRef === 'string' ? body.videoRef : '';
+  if (!videoRef) return { ok: false, status: 400, error: '请先上传视频' };
+  const meta = await readVideoSidecar(videoRef);
+  if (!meta) return { ok: false, status: 400, error: '视频元数据丢失,请重新上传' };
+
+  // 逐模型输入时长界(HH 3-60 / wan 2-10)
+  const [vmin, vmax] = def.videoDurRange ?? [2, 60];
+  if (meta.duration < vmin || meta.duration > vmax)
+    return { ok: false, status: 400, error: `${def.label} 限 ${vmin}-${vmax} 秒输入视频(当前 ${meta.duration.toFixed(1)} 秒)` };
+
+  // 参考图 0..maxRefImages
+  const refs = Array.isArray(body.imageRefs)
+    ? body.imageRefs.filter((k): k is string => typeof k === 'string')
+    : [];
+  const maxRefs = def.maxRefImages ?? 0;
+  if (refs.length > maxRefs)
+    return { ok: false, status: 400, error: `参考图最多 ${maxRefs} 张` };
+
+  // prompt:HH 必填 / wan 可选;字数上限
+  const prompt = typeof body.prompt === 'string' ? body.prompt : '';
+  if (def.promptRequired && !prompt.trim())
+    return { ok: false, status: 400, error: '请输入编辑指令(如:换装/风格化/局部替换)' };
+  if (prompt.length > def.maxPromptChars)
+    return { ok: false, status: 400, error: `提示词超过 ${def.maxPromptChars} 字上限`, extra: { length: prompt.length } };
+
+  // resolution
+  const resolution = typeof body.resolution === 'string' ? body.resolution : '720P';
+  if (!def.resolutions.includes(resolution as '720P' | '1080P'))
+    return { ok: false, status: 400, error: '该模型不支持所选分辨率' };
+
+  // ratio:仅 wan(ratios 非空)且用户显式指定;缺省 = 跟原视频(不传)
+  let ratio: string | undefined;
+  if (typeof body.ratio === 'string' && body.ratio) {
+    if (!def.ratios.length || !def.ratios.includes(body.ratio))
+      return { ok: false, status: 400, error: '该模型不支持所选比例' };
+    ratio = body.ratio;
+  }
+
+  // 截断时长:仅 wan;2-10 整数;≥输入时长则无意义 → 拒(避免用户误解)
+  let truncate: number | undefined;
+  if (body.truncateDuration !== undefined) {
+    const t = body.truncateDuration;
+    if (!def.supportsTruncate) return { ok: false, status: 400, error: '该模型不支持截断时长' };
+    if (typeof t !== 'number' || !Number.isInteger(t) || t < 2 || t > 10)
+      return { ok: false, status: 400, error: '截断时长需为 2-10 秒之间的整数' };
+    if (t < meta.duration) truncate = t; // ≥输入时长 = 不截断,静默忽略
+  }
+
+  // audio_setting:auto(缺省)/ origin
+  let audioSetting: 'auto' | 'origin' | undefined;
+  if (body.audioSetting !== undefined) {
+    if (body.audioSetting !== 'auto' && body.audioSetting !== 'origin')
+      return { ok: false, status: 400, error: 'audioSetting 仅支持 auto / origin' };
+    if (body.audioSetting === 'origin') audioSetting = 'origin';
+  }
+
+  if (body.seed !== undefined && (typeof body.seed !== 'number' || body.seed < 0 || body.seed > 2147483647))
+    return { ok: false, status: 400, error: 'seed 需在 0–2147483647 之间' };
+
+  // 计费秒 = 输入 + 预计输出(贴厂商;客户端传来的任何时长字段到不了这里)
+  const billable = editBillableSeconds(def, meta.duration, truncate);
+
+  const input: VideoGenT2VInput = { model: def.key, task: 'edit', videoRef, imageRefs: refs, resolution };
+  if (prompt.trim()) input.prompt = prompt;
+  if (ratio) input.ratio = ratio;
+  if (truncate) input.truncateDuration = truncate;
+  if (audioSetting) input.audioSetting = audioSetting;
+  if (def.supportsNegative && typeof body.negativePrompt === 'string' && body.negativePrompt.trim())
+    input.negativePrompt = body.negativePrompt;
+  if (def.supportsPromptExtend && typeof body.promptExtend === 'boolean')
+    input.promptExtend = body.promptExtend;
+  if (typeof body.seed === 'number') input.seed = body.seed;
+  // 快照(reserve==settle)
+  input.resSnapshot = resolution;
+  input.priceTierSnapshot = def.priceTier;
+  input.audioSnapshot = false;
+  input.inputDurationSnapshot = meta.duration;
+  input.billableSecondsSnapshot = billable;
+
+  return {
+    ok: true,
+    type: 'video_edit',
+    input: input as unknown as Record<string, unknown>,
+    cost: estimateVideoCost(billable, def.priceTier, resolution, false),
+  };
+}
+
 // 封闭 allowlist:type → builder。Object.create(null) 防原型链污染(type='__proto__' 取不到)。
-const JOB_BUILDERS: Record<string, (body: Record<string, unknown>, tid: string) => JobBuildResult> =
+// builder 可同步可异步(eng-review E1:video_edit 须 await 读 sidecar;同步 builder 被 await 后行为不变)。
+const JOB_BUILDERS: Record<string, (body: Record<string, unknown>, tid: string) => JobBuildResult | Promise<JobBuildResult>> =
   Object.assign(Object.create(null), {
     video: buildVideoJob,
     ai_image: (body: Record<string, unknown>) => buildImageJob(body),
     video_t2v: (body: Record<string, unknown>) => buildVideoT2VJob(body),
     video_i2v: (body: Record<string, unknown>) => buildVideoI2VJob(body),
+    video_edit: (body: Record<string, unknown>) => buildVideoEditJob(body),
     tts: buildTtsJob,
   });
 
 // 提交生成 — 仅 admin/creator(viewer 不能发起生成,验收第8条)
-jobsRouter.post('/jobs', requireRole('admin', 'creator'), (req: Request, res: Response) => {
+jobsRouter.post('/jobs', requireRole('admin', 'creator'), async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
   const tid = req.user!.tenantId;
 
@@ -433,7 +566,7 @@ jobsRouter.post('/jobs', requireRole('admin', 'creator'), (req: Request, res: Re
     return res.status(400).json({ error: `不支持的任务类型:${type}` });
   }
 
-  const built = builder(body, tid);
+  const built = await builder(body, tid);
   if (!built.ok) {
     return res.status(built.status).json({ error: built.error, ...(built.extra ?? {}) });
   }
@@ -517,8 +650,63 @@ jobsRouter.post(
   },
 );
 
+// ── 视频编辑输入视频上传 ──
+// 仅 admin/creator + consent(含人视频编辑=深度合成真人,合规口径同输入图)。
+// 流程:multer 临时盘 → ffprobe(严格:失败即 400,计费真相不可缺)→ 校验格式/时长下限
+// → 落 MinIO(视频 + {key}.meta.json sidecar)→ finally 删临时文件。
+// 逐模型时长上界在 buildVideoEditJob 按所选模型校验(此处只挡通用下限 2s / 上限 60s 全集)。
+jobsRouter.post(
+  '/video-uploads',
+  requireRole('admin', 'creator'),
+  videoUpload.single('video'),
+  async (req: Request, res: Response) => {
+    const file = req.file;
+    const consent = req.body?.consent === 'true' || req.body?.consent === true;
+    const tid = req.user!.tenantId;
+    if (!file) return res.status(400).json({ error: '缺少视频文件(video)' });
+    const cleanup = () => unlink(file.path).catch(() => {});
+    try {
+      // 格式:MP4 / MOV(防御纵深:前端已拦,客户端可绕过 → 后端再验)。
+      const OK_VIDEO = new Set(['video/mp4', 'video/quicktime']);
+      const extOk = /\.(mp4|mov)$/i.test(file.originalname || '');
+      if (!OK_VIDEO.has(file.mimetype) && !extOk) {
+        return res.status(400).json({ error: `不支持的格式 ${file.mimetype || '未知'},请上传 MP4/MOV` });
+      }
+      if (!consent) {
+        return res.status(400).json({ error: '必须勾选"已获视频中人物授权"(政企合规)' });
+      }
+      // ffprobe 严格模式(eng-review E4):时长是计费真相,probe 失败必须拒,不可优雅放行。
+      const meta = await probeVideoMeta(file.path);
+      if (!meta) {
+        return res.status(400).json({ error: '无法解析视频,请检查文件是否完整(需 MP4/MOV)' });
+      }
+      // 通用时长界(全模型并集 2-60s);逐模型界在提交时按所选模型再验。
+      if (meta.duration < 2 || meta.duration > 60) {
+        return res.status(400).json({ error: `视频时长需在 2-60 秒之间(当前 ${meta.duration.toFixed(1)} 秒)` });
+      }
+      const ext = /\.mov$/i.test(file.originalname || '') ? 'mov' : 'mp4';
+      const key = `video-inputs/${tid}/${randomUUID()}.${ext}`;
+      const buf = await readFile(file.path);
+      await putObject(key, buf, file.mimetype || 'video/mp4');
+      // sidecar:时长真相(build/estimate 只认它,客户端上报无效)
+      await putObject(videoMetaKey(key), JSON.stringify({ ...meta, size: file.size }), 'application/json');
+      // 授权存证(同输入图口径)
+      db.prepare(
+        `INSERT INTO authorization (id,tenant_id,subject_type,consent,proof_key,terms_version,created_by,created_at)
+         VALUES (?,?,?,?,?,?,?,?)`,
+      ).run(randomUUID(), tid, 'video-edit', 1, null, 'v1', req.user!.id, Date.now());
+      console.log(`[video-uploads] tenant=${tid} key=${key} size=${file.size} dur=${meta.duration.toFixed(2)}s ${meta.width}x${meta.height}`);
+      return res.json({ videoRef: key, duration: meta.duration, width: meta.width, height: meta.height });
+    } catch (e) {
+      return res.status(500).json({ error: e instanceof Error ? e.message : '上传失败' });
+    } finally {
+      void cleanup();
+    }
+  },
+);
+
 // 费用预估(生成前展示,验收第4条)。按 type 计价;默认 video。
-jobsRouter.post('/jobs/estimate', requireAuth, (req: Request, res: Response) => {
+jobsRouter.post('/jobs/estimate', requireAuth, async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
   const type = typeof body.type === 'string' && body.type ? body.type : 'video';
   if (type === 'ai_image') {
@@ -555,6 +743,19 @@ jobsRouter.post('/jobs/estimate', requireAuth, (req: Request, res: Response) => 
     const def = getI2VModel(typeof body.model === 'string' ? body.model : undefined);
     const { duration, resolution, priceTier } = deriveVideoT2VParams(def, body);
     return res.json({ cost: estimateVideoCost(duration, priceTier, resolution, false) });
+  }
+  if (type === 'video_edit') {
+    // 与 buildVideoEditJob 同读 sidecar(时长服务端真相,estimate≡build → reserve==settle)。
+    const def = getEditModel(typeof body.model === 'string' ? body.model : undefined);
+    const videoRef = typeof body.videoRef === 'string' ? body.videoRef : '';
+    if (!videoRef) return res.status(400).json({ error: '请先上传视频' });
+    const meta = await readVideoSidecar(videoRef);
+    if (!meta) return res.status(400).json({ error: '视频元数据丢失,请重新上传' });
+    const truncate = def.supportsTruncate && typeof body.truncateDuration === 'number' ? body.truncateDuration : undefined;
+    const billable = editBillableSeconds(def, meta.duration, truncate);
+    const resolution = typeof body.resolution === 'string' && def.resolutions.includes(body.resolution as '720P' | '1080P')
+      ? body.resolution : def.resolutions[0]!;
+    return res.json({ cost: estimateVideoCost(billable, def.priceTier, resolution, false), inputDuration: meta.duration });
   }
   if (type === 'tts') {
     return res.json({ cost: estimateTtsCost(typeof body.text === 'string' ? body.text.length : 0) });
@@ -625,6 +826,27 @@ jobsRouter.get('/i2v-models', requireAuth, (_req: Request, res: Response) => {
   res.json({ models, default: getI2VModel().key });
 });
 
+// 视频编辑模型清单 — video-edit 页下拉真相源(吐输入视频约束供前端校验/文案,不漏 priceTier)。
+jobsRouter.get('/edit-models', requireAuth, (_req: Request, res: Response) => {
+  const models = listEditModels().map((d) => ({
+    key: d.key,
+    label: d.label,
+    resolutions: d.resolutions,
+    ratios: d.ratios, // 空=输出跟输入(HH);非空=可指定(wan,前端首格「跟原视频」)
+    maxPromptChars: d.maxPromptChars,
+    promptRequired: d.promptRequired, // HH 必填 / wan 可选
+    maxRefImages: d.maxRefImages, // 参考图上限(HH 5 / wan 4)
+    supportsNegative: d.supportsNegative,
+    supportsPromptExtend: d.supportsPromptExtend,
+    videoDurRange: d.videoDurRange, // 输入视频时长界(切模型即时重验 + 空态文案)
+    videoMaxMB: d.videoMaxMB,
+    maxOutSeconds: d.maxOutSeconds, // HH=15(估价说明)
+    supportsTruncate: d.supportsTruncate, // wan 截断时长档
+    supportsAudioOrigin: d.supportsAudioOrigin, // 保留原声 toggle
+  }));
+  res.json({ models, default: getEditModel().key });
+});
+
 // 作品列表 — 任何登录角色(含 viewer)可读本租户作品
 jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
   const rows = listJobsForTenant(req.user!.tenantId);
@@ -643,6 +865,7 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
           model?: string; mode?: string; source?: string; ratio?: string; resolution?: string; count?: number;
           imageRefs?: string[]; seed?: number; width?: number; height?: number; bboxList?: number[][][];
           duration?: number; audio?: boolean; negativePrompt?: string; promptExtend?: boolean; task?: string;
+          videoRef?: string; truncateDuration?: number; audioSetting?: string; inputDurationSnapshot?: number;
         };
         script = inp.script ?? inp.prompt ?? inp.text ?? '';
         if (j.type === 'ai_image') {
@@ -674,6 +897,17 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
             ratio: inp.ratio, resolution: inp.resolution, sizeLabel: inp.resolution || '720P', duration: inp.duration,
             negativePrompt: inp.negativePrompt, promptExtend: inp.promptExtend, seed: inp.seed,
             imageRefs: inp.imageRefs, inputUrls, // 输入图缩略 + 重新生成回放
+          };
+        } else if (j.type === 'video_edit') {
+          // 视频编辑卡片:显模型/分辨率/输入时长 chip + 参考图缩略;回放 videoRef/imageRefs(免重传 100MB)。
+          const edef = getEditModel(inp.model);
+          const inputUrls = await signInputUrls(inp.imageRefs);
+          meta = {
+            model: inp.model, modelLabel: edef.label, task: 'edit',
+            ratio: inp.ratio, resolution: inp.resolution, sizeLabel: inp.resolution || '720P',
+            inputDuration: inp.inputDurationSnapshot, truncateDuration: inp.truncateDuration, audioSetting: inp.audioSetting,
+            negativePrompt: inp.negativePrompt, promptExtend: inp.promptExtend, seed: inp.seed,
+            videoRef: inp.videoRef, imageRefs: inp.imageRefs, inputUrls,
           };
         }
       } catch {

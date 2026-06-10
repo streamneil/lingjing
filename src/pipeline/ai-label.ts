@@ -63,6 +63,40 @@ export async function probeAudioDuration(audioBuf: Buffer): Promise<number | nul
 }
 
 /**
+ * 用 ffprobe 读视频时长 + 宽高(/video-uploads 用,文件已在 multer 临时盘上,直接探路径)。
+ *
+ * ⚠ 与 probeAudioDuration 的「优雅降级」刻意相反:视频时长是计费真相
+ *   (video_edit 计费秒 = 输入 + 预计输出),probe 失败/ffprobe 缺失时返回 null,
+ *   调用方必须 400 拒绝上传 —— 绝不能放行无时长的视频(钱路,eng-review E4)。
+ *   未来不要把这里「统一」成跳过校验。
+ */
+export interface VideoMeta { duration: number; width: number; height: number }
+export async function probeVideoMeta(filePath: string): Promise<VideoMeta | null> {
+  if (!(await ffmpegAvailable())) return null; // 调用方 400,非跳过
+  return new Promise<VideoMeta | null>((resolve) => {
+    const p = spawn('ffprobe', [
+      '-v', 'error', '-select_streams', 'v:0',
+      '-show_entries', 'stream=width,height',
+      '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1', filePath,
+    ]);
+    let out = '';
+    p.stdout.on('data', (d) => (out += d.toString()));
+    p.on('error', () => resolve(null));
+    p.on('close', () => {
+      // 输出形如:width=1280\nheight=720\nduration=5.04
+      const get = (k: string) => {
+        const m = out.match(new RegExp(`${k}=([0-9.]+)`));
+        return m ? parseFloat(m[1]!) : NaN;
+      };
+      const width = get('width'), height = get('height'), duration = get('duration');
+      if (![width, height, duration].every((n) => Number.isFinite(n) && n > 0)) return resolve(null);
+      resolve({ duration, width, height });
+    });
+  });
+}
+
+/**
  * 用 ffprobe 读图片真实宽高,推出比例朝向。ffprobe 不可用或读失败返回 null
  * (调用方据此回退用户手选值)。
  *

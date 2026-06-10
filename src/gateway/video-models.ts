@@ -27,9 +27,9 @@
 // DB 审计:本轮无 DB override 表(技术契约全在代码,比图片更简单;后续 admin 需要再加,同图片起步)。
 
 export type VideoShape = 'V_DASH' | 'V_KLING'; // V_DASH=百炼原生(res+ratio) V_KLING=可灵(mode+aspect_ratio+audio)
-// i2v media 任务(图转影片):first_frame=首帧、first_last=首尾帧、reference=参考生(多图)。
-// t2v(文生视频)模型 tasks 为空。
-export type VideoTask = 'first_frame' | 'first_last' | 'reference';
+// media 任务:first_frame=首帧、first_last=首尾帧、reference=参考生(图转影片);
+// edit=视频编辑(影片编辑器,media 必含 1 个 video)。t2v(文生视频)模型 tasks 为空。
+export type VideoTask = 'first_frame' | 'first_last' | 'reference' | 'edit';
 
 export interface VideoModelDef {
   key: string; // 内部 key(input.model 存它)
@@ -45,10 +45,16 @@ export interface VideoModelDef {
   supportsAudio: boolean; // 支持有声视频(audio 布尔;本轮仅可灵开关可见,见 design D4/R6)
   supportsNegative: boolean; // 支持反向提示词(仅 wan2.7)
   supportsPromptExtend: boolean; // 支持 prompt 智能改写(仅 wan2.7)
-  // ── 图转影片(i2v)──
+  // ── 图转影片(i2v)/ 视频编辑(edit)──
   tasks: VideoTask[]; // 支持的 media 任务(t2v 模型为 []);前端按此显隐 tab
-  maxRefImages?: number; // 参考生(reference task)参考图上限(HappyHorse-r2v 9、wan2.7-r2v 5)
-  promptRequired?: boolean; // prompt 必填(参考生 true;首帧/首尾帧可选)
+  maxRefImages?: number; // 参考图上限(r2v:HH 9 / wan 5;edit:HH 5 / wan 4)
+  promptRequired?: boolean; // prompt 必填(参考生/HH 编辑 true;首帧/首尾帧/wan 编辑可选)
+  // ── 视频编辑(edit task)专属:输入视频约束 + 输出规则 ──
+  videoDurRange?: [number, number]; // 输入视频时长界(秒;HH 3-60、wan 2-10)
+  videoMaxMB?: number; // 输入视频大小上限(两家都 100MB)
+  maxOutSeconds?: number; // 输出时长上限(HH=15:输入>15s 截前 15;wan 无上限=跟输入/截断)
+  supportsTruncate?: boolean; // 支持 duration 截断参数(仅 wan 编辑,2-10s)
+  supportsAudioOrigin?: boolean; // 支持 audio_setting=origin(保留原声;两编辑模型都支持)
 }
 
 // 三模型(纯文生视频打平)。modelId 按用户给的百炼文档核实。
@@ -144,6 +150,37 @@ export const VIDEO_MODELS: Record<string, VideoModelDef> = {
     supportsAudio: false, supportsNegative: true, supportsPromptExtend: true,
     tasks: ['reference'], maxRefImages: 5, promptRequired: true,
   },
+
+  // ── 视频编辑(edit task),两模型同端点同 media[],必含 1 个 video 元素 ──
+  // 计费秒 = 输入时长 + 预计输出时长(贴厂商 usage.duration=in+out;eng-review 3A:tier 对齐同庐 r2v 档)。
+  // ⚠ HappyHorse 编辑的 watermark 厂商默认 true(烙「Happy Horse」)→ 网关对 edit 模型显式传 false。
+  'happyhorse-1.0-video-edit': {
+    key: 'happyhorse-1.0-video-edit', label: 'HappyHorse 1.0 (视频编辑)', modelId: 'happyhorse-1.0-video-edit',
+    shape: 'V_DASH',
+    resolutions: ['720P', '1080P'],
+    ratios: [], // 编辑:输出比例跟输入视频,无 ratio 参数
+    durationRange: [3, 60], defaultDuration: 5, // 编辑模型 durationRange 即输入视频时长界
+    maxPromptChars: 2500, // 「5000非中/2500中」取安全下限(同 HH t2v 口径)
+    priceTier: 4,
+    supportsAudio: false, supportsNegative: false, supportsPromptExtend: false,
+    tasks: ['edit'], maxRefImages: 5, promptRequired: true,
+    videoDurRange: [3, 60], videoMaxMB: 100, maxOutSeconds: 15, // 输入>15s → 输出截前 15
+    supportsTruncate: false, supportsAudioOrigin: true,
+  },
+  // 万相2.7 视频编辑:指令编辑/局部替换/风格迁移;ratio 可选(不传跟原视频)、duration 截断 2-10s。
+  'wan2.7-videoedit': {
+    key: 'wan2.7-videoedit', label: '大师 (万相2.7 视频编辑)', modelId: 'wan2.7-videoedit',
+    shape: 'V_DASH',
+    resolutions: ['720P', '1080P'],
+    ratios: ['16:9', '9:16', '1:1', '4:3', '3:4'], // 可选:不传则跟原视频(前端首格「跟原视频」)
+    durationRange: [2, 10], defaultDuration: 5,
+    maxPromptChars: 5000,
+    priceTier: 6,
+    supportsAudio: false, supportsNegative: true, supportsPromptExtend: true,
+    tasks: ['edit'], maxRefImages: 4, promptRequired: false,
+    videoDurRange: [2, 10], videoMaxMB: 100, // 输出=输入(或截断);无 15s 上限
+    supportsTruncate: true, supportsAudioOrigin: true,
+  },
 };
 
 // 默认模型(前端未传/老 job 兼容兜底)。大师(万相2.7)能力最全,作默认。
@@ -172,16 +209,38 @@ export function klingModeToResolution(mode?: string): '720P' | '1080P' {
 }
 
 // ── 图转影片(i2v)──
+// ⚠ 三向隔离(eng-review A1):t2v=tasks 空、i2v=含 I2V_TASKS、edit=含 'edit'。
+// 不能再用「tasks 非空」当 i2v 过滤条件,否则 edit 模型会泄进图转影片页。
+const I2V_TASKS: VideoTask[] = ['first_frame', 'first_last', 'reference'];
+
 // 默认 i2v 模型(前端首选):wan2.7-i2v(首帧+首尾帧最全)。
 export const DEFAULT_I2V_MODEL = 'wan2.7-i2v';
 
-/** i2v/r2v 模型清单(tasks 非空 = 图转影片;前端 img2video 下拉真相源)。 */
+/** i2v/r2v 模型清单(tasks 含图转任务;前端 img2video 下拉真相源)。不含 edit 模型。 */
 export function listI2VModels(): VideoModelDef[] {
-  return Object.values(VIDEO_MODELS).filter((d) => d.tasks.length > 0);
+  return Object.values(VIDEO_MODELS).filter((d) => d.tasks.some((t) => I2V_TASKS.includes(t)));
 }
 
-/** 取 i2v 模型(图转影片);未知/缺省 → 默认 i2v 模型(不回落到 t2v 模型)。 */
+/** 取 i2v 模型(图转影片);未知/缺省/非 i2v → 默认 i2v 模型(不回落 t2v / edit)。 */
 export function getI2VModel(key?: string): VideoModelDef {
-  if (key && isKnownVideoModel(key) && VIDEO_MODELS[key]!.tasks.length > 0) return VIDEO_MODELS[key]!;
+  if (key && isKnownVideoModel(key) && VIDEO_MODELS[key]!.tasks.some((t) => I2V_TASKS.includes(t))) {
+    return VIDEO_MODELS[key]!;
+  }
   return VIDEO_MODELS[DEFAULT_I2V_MODEL]!;
+}
+
+// ── 视频编辑(edit)──
+export const DEFAULT_EDIT_MODEL = 'wan2.7-videoedit';
+
+/** 视频编辑模型清单(tasks 含 'edit';前端 video-edit 下拉真相源)。 */
+export function listEditModels(): VideoModelDef[] {
+  return Object.values(VIDEO_MODELS).filter((d) => d.tasks.includes('edit'));
+}
+
+/** 取视频编辑模型;未知/缺省/非 edit → 默认编辑模型(不回落 t2v / i2v)。 */
+export function getEditModel(key?: string): VideoModelDef {
+  if (key && isKnownVideoModel(key) && VIDEO_MODELS[key]!.tasks.includes('edit')) {
+    return VIDEO_MODELS[key]!;
+  }
+  return VIDEO_MODELS[DEFAULT_EDIT_MODEL]!;
 }

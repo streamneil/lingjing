@@ -218,14 +218,31 @@ export class BaichuanGateway implements CapabilityGateway, SyncImageGateway {
    *     T2 硬验证门:实测三家真实回包字段 + 状态字面量 + 可灵 watermark_video_url(取非水印 video_url)。 */
   async submitVideoT2V(input: VideoGenT2VInput): Promise<string> {
     const def = getVideoModel(input.model);
+    const isEdit = input.task === 'edit';
+    // ⚠ 编辑任务不发 duration(发了会把输入视频截到该秒数);仅 wan 截断参数显式生效。
+    //   watermark 恒显式 false:HappyHorse 编辑厂商默认 true(烙「Happy Horse」角标)。
     const duration = input.durationSnapshot ?? input.duration ?? def.defaultDuration;
-    const parameters: Record<string, unknown> = { duration, watermark: false };
+    const parameters: Record<string, unknown> = isEdit
+      ? { watermark: false }
+      : { duration, watermark: false };
+    if (isEdit && def.supportsTruncate && input.truncateDuration) {
+      parameters.duration = input.truncateDuration; // wan 编辑:从 0 秒截取至该长度(2-10s)
+    }
+    if (isEdit && input.audioSetting === 'origin') {
+      parameters.audio_setting = 'origin'; // 保留原声;auto 为厂商默认,缺省不发
+    }
     const reqInput: Record<string, unknown> = {};
-    // prompt:i2v 首帧/首尾帧可选 → 空则不发(gateway 仅在有内容时设);t2v/参考生有 prompt。
+    // prompt:i2v 首帧/首尾帧、wan 编辑可选 → 空则不发;t2v/参考生/HH 编辑必填(build 已挡)。
     if (input.prompt && input.prompt.trim()) reqInput.prompt = input.prompt;
 
-    // ── i2v media 组装(R3.1):imageRefs 已是 worker publish 的公网 URL,按 task 组 input.media ──
-    if (input.task && Array.isArray(input.imageRefs) && input.imageRefs.length) {
+    // ── media 组装:编辑 = [{video}] + 0..N reference_image;i2v 按 task 组(R3.1)。
+    //    videoRef/imageRefs 已是 worker publish 的公网 URL。
+    if (isEdit && input.videoRef) {
+      reqInput.media = [
+        { type: 'video', url: input.videoRef },
+        ...(input.imageRefs ?? []).map((url) => ({ type: 'reference_image', url })),
+      ];
+    } else if (input.task && Array.isArray(input.imageRefs) && input.imageRefs.length) {
       reqInput.media = buildMedia(input.task, input.imageRefs);
     }
 

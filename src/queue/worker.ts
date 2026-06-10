@@ -278,7 +278,7 @@ export async function finalizeVideoJob(
   job: JobRow,
   videoUrl: string,
   costInput: Record<string, unknown>,
-  costType: 'video_t2v' | 'video_i2v',
+  costType: 'video_t2v' | 'video_i2v' | 'video_edit',
 ): Promise<void> {
   // 抓成品 MP4 为 Buffer
   const resp = await fetch(videoUrl);
@@ -307,32 +307,47 @@ export async function finalizeVideoJob(
   settle(job.tenant_id, job.id, costFor(costType, costInput));
 }
 
-/** 处理一个图转影片(i2v)job。镜像 runImageEditAsyncJob(送审 + publish 输入图)+ 视频尾段。
+/** 媒体类视频任务共享 runner(eng-review 2A:i2v 与视频编辑只差「是否先发布输入视频」一步,
+ *  抽共享消第三份近似 worker)。镜像 runImageEditAsyncJob(送审 + publish)+ 视频尾段。
  *
- *   prompt 送审 → 各输入图送审 → publish 转公网 URL(就地覆写 input.imageRefs)→ submitVideoT2V(按 task 组 media)
- *     → 轮询(videoT2vTimeoutMs)→ finalizeVideoJob(video_i2v)。无 TTS、无分段。
+ *   prompt 送审(空跳过)→ [withVideo: 输入视频送审 stub + publish 覆写 input.videoRef]
+ *     → 各输入图送审 + publish 覆写 input.imageRefs → submitVideoT2V(按 task 组 media)
+ *     → 轮询(videoT2vTimeoutMs)→ finalizeVideoJob(costType)。
  *
- * 抛错由调用方捕获并标 failed(失败隔离)。 */
-async function runVideoI2VJob(job: JobRow): Promise<void> {
+ *  publish 是就地覆写运行时 input(DB input_json 未变 → 回放仍取存储 key)。
+ *  抛错由调用方捕获并标 failed(失败隔离)。 */
+async function runMediaVideoJob(
+  job: JobRow,
+  opts: { withVideo: boolean; requireRefs: boolean; costType: 'video_i2v' | 'video_edit' },
+): Promise<void> {
   const input = JSON.parse(job.input_json) as VideoGenT2VInput;
 
-  // 1. 生成前送审(提示词级)。首帧/首尾帧 task 的 prompt 可选:为空时无内容可审,跳过送审
-  //    (moderatePrompt 对空串判「提示词为空」拒绝,直接传会误杀合法的无提示词图生视频)。
+  // 1. 生成前送审(提示词级)。首帧/首尾帧/wan 编辑的 prompt 可选:为空时无内容可审,跳过送审
+  //    (moderatePrompt 对空串判「提示词为空」拒绝,直接传会误杀合法的无提示词任务)。
   const prompt = (input.prompt ?? '').trim();
   if (prompt) {
     const pre = await moderatePrompt(prompt);
     if (!pre.allowed) throw new Error(`送审拒绝:${pre.reason}`);
   }
 
-  // 2. 输入图送审 + publish 转公网 URL(就地覆写 input.imageRefs 供 submit 读;DB input_json 未变 → 回放仍取存储 key)
+  const publisher = getMediaPublisher(tenantDelivery(job.tenant_id));
+
+  // 2a. 输入视频(仅视频编辑):送审 stub(帧级检测走 T-MODERATION-API 统一升级)+ publish 覆写
+  if (opts.withVideo) {
+    if (!input.videoRef) throw new Error('视频编辑缺少输入视频');
+    const v = await moderateOutput('video'); // 输入视频内容送审占位(与成品同 stub 口径)
+    if (!v.allowed) throw new Error(`输入视频送审拒绝:${v.reason}`);
+    input.videoRef = await publisher.publish(input.videoRef);
+  }
+
+  // 2b. 输入图送审 + publish 覆写(i2v 必有;编辑 0..N 张可选)
   const refs = input.imageRefs ?? [];
-  if (refs.length === 0) throw new Error('图转影片缺少输入图');
+  if (opts.requireRefs && refs.length === 0) throw new Error('图转影片缺少输入图');
   for (const k of refs) {
     const v = await moderateImageInput(k);
     if (!v.allowed) throw new Error(`输入图送审拒绝:${v.reason}`);
   }
-  const publisher = getMediaPublisher(tenantDelivery(job.tenant_id));
-  input.imageRefs = await Promise.all(refs.map((k) => publisher.publish(k)));
+  if (refs.length) input.imageRefs = await Promise.all(refs.map((k) => publisher.publish(k)));
 
   // 3. 网关提交(按 task 组 media)+ 轮询
   const gateway = getGateway(job.tenant_id);
@@ -348,8 +363,18 @@ async function runVideoI2VJob(job: JobRow): Promise<void> {
   const videoUrl = done.videoUrl;
   if (!videoUrl) throw new Error('厂商成功但未返回成品 URL');
 
-  // 4-6. 共享尾段(costFor 用原始快照 input;但 imageRefs 已被覆写成公网 URL → costFor 不读 imageRefs,无碍)
-  await finalizeVideoJob(job, videoUrl, input as unknown as Record<string, unknown>, 'video_i2v');
+  // 4-6. 共享尾段(costFor 用原始快照 input;refs/videoRef 已覆写成公网 URL → costFor 只读快照,无碍)
+  await finalizeVideoJob(job, videoUrl, input as unknown as Record<string, unknown>, opts.costType);
+}
+
+/** 图转影片(i2v):共享 runner 薄包装(行为与抽取前逐字节等价,328 既有测试兑底)。 */
+async function runVideoI2VJob(job: JobRow): Promise<void> {
+  return runMediaVideoJob(job, { withVideo: false, requireRefs: true, costType: 'video_i2v' });
+}
+
+/** 视频编辑(video_edit):共享 runner 薄包装(media 首元素为输入视频)。 */
+async function runVideoEditJob(job: JobRow): Promise<void> {
+  return runMediaVideoJob(job, { withVideo: true, requireRefs: false, costType: 'video_edit' });
 }
 
 /** 共享尾段:百炼图 URL → 拉进自有存储存 key → markDone(JSON key 数组,kind=image)→ settle。
@@ -563,6 +588,8 @@ async function processJob(job: JobRow): Promise<void> {
       return runVideoT2VJob(job);
     case 'video_i2v':
       return runVideoI2VJob(job);
+    case 'video_edit':
+      return runVideoEditJob(job);
     case 'ai_image':
       return runImageJob(job);
     case 'tts':
