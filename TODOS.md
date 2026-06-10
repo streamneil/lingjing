@@ -42,23 +42,11 @@
 - **Context:** 来自 /plan-ceo-review D3.5。需先验证百炼 s2v 能否换背景,否则要自建抠图管线。
 - **Priority:** P2  **Depends on:** 百炼能力确认(C-research)
 
-### T-WORKS-POLL:作品库轮询自动刷新
-- **What:** 作品库页对生成中任务轮询,自动转"已完成",无需手动刷页。
-- **Why:** 体验连贯,用户不用手动刷新看进度。
-- **Context:** 来自 /plan-ceo-review D3.6。create.html 对话流已有轮询,复用其模式即可。非断裂(手动刷新可见),优先级低。
-- **Priority:** P3
-
 ### T-SEAT-BILLING:席位与计费/订单后端打通
 - **What:** 把 tenant.max_creator_seats 接入真实计费——"升级套餐买更多席位"的支付流程。
 - **Why:** 本轮席位已真实强制(默认 10,超限拦截),但上限值现在靠后台/SQL 手设;商业化需让客户自助升级。
 - **Context:** 来自 /plan-design-review 成员模块 D7。当前无计费后端,max_creator_seats 是 tenant 字段。
 - **Depends on:** 计费/订单后端(尚不存在)。
-- **Priority:** P2
-
-### T-ROLE-CHANGE:改已有成员角色
-- **What:** 后端 PUT /members/:id/role 接口 + UI,允许 admin 调整已有成员角色(creator↔viewer↔admin)。
-- **Why:** 当前只能在邀请时定角色;改角色得删了重建,丢历史。
-- **Context:** 来自 /plan-design-review 成员模块 Pass7。需复用席位校验(viewer→creator 要查席位)+ last-admin 校验(admin→其他要保最后一个 admin)。
 - **Priority:** P2
 
 ## CEO 审计补充(2026-06-04,HOLD SCOPE — 项目收尾)
@@ -111,16 +99,16 @@
 - **Context:** 来自 /plan-ceo-review 声音面板轮(候选3,Defer)。强依赖 T-TTS-QUALITY-MODEL:cosyvoice-v1 不支持情绪/指令,情绪需 Qwen3-TTS-Instruct 或 MiniMax。buildTtsJob 加 instruction/pitch 校验,gateway 透传 instruction(Qwen 路径)。
 - **Priority:** P2  **Depends on:** T-TTS-QUALITY-MODEL
 
-## 设计评审补充(2026-06-11,文字转语音 声音面板)
+## ✅ 已完成(归档,保留可追溯)
 
-### T-TTS-PANEL-SHEET-DEDUP:.vsheet 重构到 app.css 已有 .sheet-side 范式
-- **What:** tts.html 的 .vsheet 声音面板重造了 app.css 已有的侧滑组件(.sheet-side/.ss-seg/.ss-filters/.ss-body/.vcard + @keyframes slideIn),用了不同 token(--bg-soft vs --modal、硬编码 radii、方角 tab vs pill segment)。重构到共享范式或把新组件提升进 app.css 配真 token。
-- **Why:** 两套并行侧滑组件做同一件事、样式发散 —— 维护陷阱 + 视觉不一致(双 radii 体系、tab active 态语言不同)。来自 /design-review Claude 子代理 #5/#1/#6。
-- **Context:** app.css:389-414 已有 .sheet-side 全套(pill segment .ss-seg、--blue-bg、--r-pill)。.vsheet 在 tts.html:18-57 内联。重构需同步改面板 markup + JS(switchVTab/renderVoices 用新类名),有视觉回归风险,故 design-review 本轮未动(按 CSS-first + 低风险原则)。
-- **Priority:** P3  **Depends on:** 无
+### T-TTS-PANEL-SHEET-DEDUP:.vsheet 重构到共享 .sheet-side 范式 — ✅ 2026-06-11
+- 完成证据:tts.html 旧自定义类(.vtab/.vcard2/.vdesign-btn/.vplay)已删干净(grep 零残留),改用共享 .sheet-side/.ss-head/.ss-seg/.ss-filters/.ss-body/.vcard/.vc-play(19 处)。commit b821630。真机 480px 单列、pill segment、选中蓝边、设计弹窗 z 在上;voices.html 未受影响。
 
-### T-TTS-PANEL-TOKENS:声音面板硬编码 radii 对齐 --r* token
-- **What:** .vtab/.vfilter/.vcard2/.vd-dim 等硬编码 9/12/7/5px 圆角,非 --r-sm(11)/--r(15)/--r-pill token。
-- **Why:** token 债;与系统圆角体系不一致。来自 /design-review 子代理 #1。本轮未改因强行对齐会改变面板紧凑观感(视觉回归风险)。
-- **Context:** 若做 T-TTS-PANEL-SHEET-DEDUP 则一并解决(重构到 .ss-* 自带 token)。
-- **Priority:** P3  **Depends on:** 可并入 T-TTS-PANEL-SHEET-DEDUP
+### T-TTS-PANEL-TOKENS:声音面板硬编码 radii 对齐 token — ✅ 2026-06-11
+- 完成证据:随 T-TTS-PANEL-SHEET-DEDUP 一并解决。面板 CSS 无 9/12/7px 硬编码圆角(grep 空),现存圆角均 var(--r-sm)/var(--r) token(filter 下拉 10px 为合理局部值)。
+
+### T-ROLE-CHANGE:改已有成员角色 — ✅ 漏标补归档
+- 完成证据:auth.ts:152 有 PUT /members/:id/role(requireRole admin)+ changeRole();约束完整 —— 角色合法性、席位上限(升 creator 校验 SEATS_FULL)、last-admin 保护(降级 admin 查 countActiveAdmins<=1)。test/members-seats.test.ts 覆盖。
+
+### T-WORKS-POLL:作品库轮询自动刷新 — ✅ 漏标补归档
+- 完成证据:works.html:210/214 有列表级自动轮询(schedulePoll,仅 queued/running 才轮、全终态停、离页 visibilitychange 暂停、回页立刷),复用 load() 全量刷新。
