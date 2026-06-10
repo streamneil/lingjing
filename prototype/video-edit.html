@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 影片编辑器 · 灵镜</title>
+<link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
+<link rel="stylesheet" href="app.css">
+<style>
+  /* 记录卡(与 img2video 同款)*/
+  .card-meta { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 2px; }
+  .card-meta .chip { font-size:11px; color:var(--t3); background:var(--field); border:1px solid var(--line); border-radius:7px; padding:2px 8px; }
+  .card-acts { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .card-acts button { display:inline-flex; align-items:center; gap:5px; font-size:12.5px; color:var(--t2); background:var(--field); border:1px solid var(--line); border-radius:9px; padding:7px 13px; cursor:pointer; transition:.15s; }
+  .card-acts button:hover { border-color:var(--line-hi); color:var(--t1); }
+  .card-acts button svg { width:14px; height:14px; }
+  .tx-wrap { flex:1; min-width:0; display:flex; flex-direction:column; padding-top:6px; }
+  .tx-wrap .tx { padding-top:0; }
+  .tx.clamp { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+  .tx-toggle { font-size:12px; color:var(--blue); cursor:pointer; margin-top:4px; display:none; align-self:flex-start; }
+  .tx-toggle.show { display:inline-block; }
+  /* 成品视频:缩略尺度约束盒(与图片记录一致)*/
+  .fvid { display:block; width:auto; height:auto; max-width:min(320px,100%); max-height:280px; border-radius:12px; background:#000; border:1px solid var(--line); }
+  .in-thumbs { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin:8px 0 2px; }
+  .in-thumbs .lbl { font-size:11px; color:var(--t4); margin-right:2px; }
+  .in-thumbs img { width:44px; height:44px; object-fit:cover; border-radius:7px; border:1px solid var(--line); cursor:zoom-in; }
+
+  /* ── 输入视频卡(img-drop 派生:同卡框同虚线,状态机 空态→上传中→就绪/复用)── */
+  .img-tiles-card { border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:14px; }
+  .vid-stage { position:relative; border:1.5px dashed var(--line-hi); border-radius:12px; background:var(--field); min-height:170px; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden; cursor:pointer; transition:.15s; padding:0; }
+  .vid-stage:hover, .vid-stage.drag { border-color:var(--blue); }
+  .vid-stage.invalid { border-color:var(--red); border-style:solid; }
+  .vid-stage video { width:100%; max-height:260px; display:block; background:#000; }
+  .vid-stage .ph { display:flex; flex-direction:column; align-items:center; gap:12px; color:var(--t3); padding:24px 16px; text-align:center; }
+  .vid-stage .ph svg { width:38px; height:38px; color:var(--t3); }
+  .vid-stage .ph .dt { font-size:14px; color:var(--t2); }
+  .vid-stage .ph .ds { font-size:11.5px; color:var(--t4); }
+  .vid-stage .rmx { position:absolute; top:8px; right:8px; width:24px; height:24px; background:rgba(0,0,0,.6); border-radius:50%; display:grid; place-items:center; color:#fff; font-size:14px; line-height:1; cursor:pointer; border:none; padding:0; z-index:2; }
+  .vid-prog { width:min(360px,80%); padding:18px 0; }
+  .vid-prog .bar { height:4px; border-radius:99px; background:var(--line); overflow:hidden; }
+  .vid-prog .bar i { display:block; height:100%; background:var(--blue); width:0; transition:width .2s; }
+  .vid-prog .t { font-size:11.5px; color:var(--t3); margin-top:7px; text-align:center; }
+  .vid-meta { display:flex; gap:6px; flex-wrap:wrap; margin-top:9px; }
+  .vid-meta .chip { font-size:11px; color:var(--t3); background:var(--field); border:1px solid var(--line); border-radius:7px; padding:2px 8px; }
+  .vid-err { font-size:11.5px; color:var(--red); margin-top:7px; }
+  /* 复用态(重新提示回填,无本地预览)*/
+  .vid-reuse { display:flex; flex-direction:column; align-items:center; gap:10px; color:var(--t3); padding:28px 16px; }
+  .vid-reuse svg { width:32px; height:32px; opacity:.6; }
+  .vid-reuse .t { font-size:13px; color:var(--t2); }
+
+  /* 参考图网格(与 ai-image/img2video 同款 tiles)*/
+  .img-tiles { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:12px; }
+  .img-tile { position:relative; aspect-ratio:1/1; border-radius:12px; overflow:hidden; border:1px solid var(--line); background:var(--field); }
+  .img-tile img { width:100%; height:100%; object-fit:cover; display:block; }
+  .img-tile .rmx { position:absolute; top:6px; right:6px; width:22px; height:22px; background:rgba(0,0,0,.6); border-radius:50%; display:grid; place-items:center; color:#fff; font-size:13px; line-height:1; cursor:pointer; border:none; padding:0; }
+  .img-tile .num { position:absolute; top:6px; left:6px; font-size:11px; background:rgba(0,0,0,.62); color:#fff; padding:1px 7px; border-radius:6px; z-index:1; }
+  .img-tile.add { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; border:1.5px dashed var(--line-hi); cursor:pointer; color:var(--t3); transition:.15s; }
+  .img-tile.add:hover, .img-tile.add.drag { border-color:var(--blue); color:var(--t1); background:var(--card); }
+  .img-tile.add .plus { font-size:30px; font-weight:300; line-height:1; }
+  .img-tile.add .lbl { font-size:12.5px; }
+  .area-hint { font-size:11px; color:var(--t4); margin:7px 0 0; }
+  .fmt-hint { font-size:11px; color:var(--t4); margin:7px 0 0; line-height:1.5; }
+
+  /* 段选 / 比例 / 配置(与 img2video 同款)*/
+  .seg-row { display:flex; gap:8px; flex-wrap:wrap; }
+  .seg-row .seg { flex:1; min-width:52px; display:flex; align-items:center; justify-content:center; text-align:center; min-height:42px; padding:10px 6px; border-radius:10px; background:var(--field); border:1px solid var(--line); color:var(--t3); font-size:13px; cursor:pointer; transition:.15s; }
+  .seg-row .seg:hover { color:var(--t1); }
+  .seg-row .seg.on { background:var(--card-hi); color:var(--t1); border-color:var(--line-hi); }
+  .ratio-row { display:flex; gap:5px; flex-wrap:wrap; align-items:stretch; }
+  .ratio-cell { flex:1; min-width:54px; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:4px; padding:8px 2px; border:1px solid var(--line); border-radius:9px; background:var(--field); color:var(--t3); cursor:pointer; transition:.15s; }
+  .ratio-cell:hover { color:var(--t1); border-color:var(--line-hi); }
+  .ratio-cell.on { background:var(--card-hi); color:var(--t1); border-color:var(--line-hi); }
+  .ratio-cell .glyph { width:18px; height:18px; border:1.6px solid currentColor; border-radius:3px; }
+  .ratio-cell .lbl { font-size:10.5px; font-family:var(--f-mono); }
+  .cfg-label { font-size:12px; color:var(--t3); margin:14px 0 7px; }
+  .opt-toggle { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:11px 13px; border:1px solid var(--line); border-radius:10px; background:var(--field); margin-top:8px; }
+  .opt-toggle .ol { font-size:13px; color:var(--t2); }
+  .opt-toggle input[type=checkbox] { width:auto; }
+  .neg-input { width:100%; padding:9px 11px; background:var(--field); border:1px solid var(--line); border-radius:9px; color:var(--t1); font-size:13px; margin-top:8px; }
+  .consent { display:flex; gap:9px; align-items:flex-start; margin-top:12px; font-size:11.5px; color:var(--t3); line-height:1.5; }
+  .consent input { width:auto; margin-top:2px; }
+
+  /* 大图查看器 */
+  .lightbox { position:fixed; inset:0; background:rgba(0,0,0,.88); backdrop-filter:blur(4px); z-index:500; display:none; align-items:center; justify-content:center; padding:40px; cursor:zoom-out; }
+  .lightbox.on { display:flex; }
+  .lightbox img { max-width:92vw; max-height:88vh; border-radius:12px; cursor:default; }
+  .lightbox .lb-x { position:absolute; top:22px; right:26px; width:42px; height:42px; border-radius:50%; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.18); display:grid; place-items:center; cursor:pointer; }
+  .lightbox .lb-x svg { width:22px; height:22px; color:#fff; }
+</style>
+</head>
+<body data-page="video-edit" data-crumb="创作工具 > AI 影片编辑器">
+<div class="shell" id="shell-mount">
+ <div class="main-col">
+  <div class="studio">
+  <!-- 左:配置 -->
+  <div class="cfg">
+    <div class="cfg-h"><span class="dot"></span>AI 影片编辑器</div>
+
+    <!-- 输入视频卡(选完即传:估价依赖服务端探测时长,design D-A)+ 参考图网格 -->
+    <div class="img-tiles-card">
+      <div id="vidArea"></div>
+      <div id="refArea"></div>
+    </div>
+    <div class="fmt-hint">视频:MP4 / MOV,≤ 100MB,选择后立即上传探测。参考图:JPG / PNG / WEBP,单张 ≤ 10MB。</div>
+    <input type="file" id="vidPick" accept="video/mp4,video/quicktime,.mp4,.mov" style="display:none">
+    <input type="file" id="refPick" accept="image/jpeg,image/png,image/webp,image/bmp,.jpg,.jpeg,.png,.webp,.bmp" multiple style="display:none">
+
+    <!-- 提示词(HH 必填 / wan 可选)-->
+    <div class="cfg-label" id="promptLabel">编辑指令</div>
+    <div class="script">
+      <textarea id="prompt" maxlength="5000" placeholder="描述编辑意图:换装 / 风格化 / 局部替换…"></textarea>
+      <div class="f"><span class="h" id="estLabel">预估 — 点</span><span class="c"><b id="cnt">0</b> / <span id="maxChars">5000</span></span></div>
+    </div>
+
+    <div class="cfg-sp"></div>
+
+    <!-- 紧凑配置栏 -->
+    <div class="cfgbar">
+      <div class="pop-anchor" style="flex:1">
+        <div class="cpill" id="modelPill" onclick="togglePop('model')"><span class="v" id="modelPillV">模型</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+        <div class="pop" id="pop-model"><div class="pop-label">模型</div><div id="modelOpts"></div></div>
+      </div>
+      <div class="pop-anchor" style="flex:1.2">
+        <div class="cpill" id="setPill" onclick="togglePop('set')"><span class="v" id="setPillV">720P</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+        <div class="pop" id="pop-set">
+          <div class="pop-label">解析度</div>
+          <div class="seg-row" id="resSeg"></div>
+          <div class="pop-label" id="ratioLabel">输出比例</div>
+          <div class="ratio-row" id="ratioRow"></div>
+          <div class="pop-label" id="durLabel">输出时长</div>
+          <div class="seg-row" id="durSeg"></div>
+          <div id="modelOpts2"></div>
+          <div class="opt-toggle"><span class="ol">保留原声(不重新生成音频)</span><input type="checkbox" id="originChk"></div>
+        </div>
+      </div>
+      <div class="pop-anchor">
+        <div class="cpill fixed" id="seedPill" onclick="togglePop('seed')" title="随机种子 Seed" aria-label="随机种子 Seed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+        <div class="pop" id="pop-seed" style="left:auto;right:0;width:200px">
+          <div class="pop-label">Seed(随机种子)</div>
+          <input id="seedInput" type="text" inputmode="numeric" placeholder="随机" style="width:100%;padding:9px 11px;background:var(--field);border:1px solid var(--line);border-radius:9px;color:var(--t1);font-size:13px;font-family:var(--f-mono)">
+        </div>
+      </div>
+    </div>
+    <div class="pop-ov" id="popOv" onclick="closePops()"></div>
+
+    <label class="consent"><input type="checkbox" id="consentChk"><span>我确认对上传的视频与图片拥有合法使用权,已获视频中人物授权,且内容不侵犯他人肖像权、著作权等合法权益,并同意按《用户协议》生成 AI 影片。</span></label>
+
+    <div class="cbtn-wrap">
+      <button class="cbtn" id="createBtn">
+        <span id="cbtnLabel">创建</span> <span class="gem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg> <b id="estGem">—</b></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 右:生成记录 -->
+  <div class="feed">
+    <div class="feed-tabs">
+      <button class="ftab active" data-st="all">全部</button>
+      <button class="ftab" data-st="running">生成中</button>
+      <button class="ftab" data-st="done">已完成</button>
+      <button class="ftab" data-st="failed">失败</button>
+    </div>
+    <div class="feed-list">
+      <div class="fitem feed-empty" id="emptyHint">
+        <div class="feed-empty-in">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5 4 4"/><path d="M13 7 8.7 2.7a2.4 2.4 0 0 0-3.4 0L2.7 5.3a2.4 2.4 0 0 0 0 3.4L7 13"/><path d="m8 14 8-8"/><path d="m2 22 5.5-1.5L21.6 6.4a2.1 2.1 0 0 0 0-3L18.6.4a2.1 2.1 0 0 0-3 0L1.5 14.5Z"/></svg>
+          <div class="t">还没有编辑作品</div>
+          <div class="s">上传一段视频、写编辑指令,点「创建」就能出片。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+ </div>
+</div>
+
+<!-- 大图查看器 -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <div class="lb-x" onclick="closeLightbox()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
+  <img id="lightboxImg" src="" alt="" onclick="event.stopPropagation()">
+</div>
+
+<script src="shell.js"></script>
+<script src="tools.js"></script>
+<script src="api.js"></script>
+<script>
+  const ta=document.getElementById('prompt'), cnt=document.getElementById('cnt'), btn=document.getElementById('createBtn');
+  const feedList=document.querySelector('.feed-list');
+  let model='', allModels=[], resolution='720P', ratio='', truncateDur=0, originAudio=false, negativePrompt='', promptExtend=true, seed='';
+  // 输入视频状态机:empty → uploading → ready;重新提示回填 → reuse(复用 videoRef 免重传)
+  let vidState='empty', videoRef='', videoMeta=null, videoLocalUrl='', upPct=0, vidName='';
+  // 参考图:本地 File 列表;重新提示回填走 reuseRefs(免重传)
+  let refFiles=[], reuseRefs=null, reuseUrls=null;
+
+  function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function curModel(){ return allModels.find(m=>m.key===model); }
+  function reuseActive(){ return !!(reuseRefs&&reuseRefs.length) && !refFiles.length; }
+  function clearReuse(){ reuseRefs=null; reuseUrls=null; }
+  const RATIO_GLYPH={'16:9':[20,11],'9:16':[11,20],'1:1':[18,18],'4:3':[18,14],'3:4':[14,18]};
+
+  // ── 模型下拉(GET /edit-models)──
+  const modelOpts=document.getElementById('modelOpts');
+  async function loadModels(){
+    try{ const r=await LJ.get('/edit-models'); allModels=r.models||[]; if(r.default) model=r.default; renderModels(); }
+    catch(e){ modelOpts.innerHTML='<div class="pop-opt"><span class="nm">模型加载失败</span></div>'; }
+  }
+  function renderModels(){
+    if(allModels.length && !curModel()) model=allModels[0].key;
+    modelOpts.innerHTML=allModels.map(m=>`<div class="pop-opt${m.key===model?' on':''}" data-k="${m.key}">
+      <span class="nm">${esc(m.label)}</span>
+      <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg></div>`).join('')
+      || '<div class="pop-opt"><span class="nm">暂无可用模型</span></div>';
+    modelOpts.querySelectorAll('.pop-opt[data-k]').forEach(el=>el.onclick=()=>{ model=el.dataset.k; onModelChange(); closePops(); });
+    onModelChange();
+  }
+  function markModelOpt(){ modelOpts.querySelectorAll('.pop-opt[data-k]').forEach(el=>el.classList.toggle('on', el.dataset.k===model)); }
+  // 切模型:重渲全部 + 即时重验已传视频(design A3:失配标红,不静默)
+  function onModelChange(){
+    const m=curModel(); if(!m) return;
+    document.getElementById('maxChars').textContent=m.maxPromptChars; ta.maxLength=m.maxPromptChars;
+    markModelOpt();
+    renderVidCard(); renderRefs(); renderRes(); renderRatios(); renderDur(); renderModelOpts(); syncPills(); refreshPromptLabel(); scheduleEstimate(); refreshBtn();
+  }
+  function refreshPromptLabel(){
+    const m=curModel(); const lbl=document.getElementById('promptLabel');
+    if(m&&m.promptRequired){ lbl.textContent='编辑指令(必填)'; ta.placeholder='描述编辑意图:让人物穿上图中的毛衣 / 把画面变成黏土风格 / 替换背景…'; }
+    else { lbl.textContent='编辑指令(可选)'; ta.placeholder='描述编辑意图(可选):风格化可只传指令;局部替换建议配参考图。'; }
+  }
+
+  // ── 输入视频:校验 + 急传(XHR 带上传进度;fetch 拿不到 upload progress)──
+  function vidLimitText(){ const m=curModel(); const [a,b]=(m&&m.videoDurRange)||[2,60]; return `当前模型限 ${a}-${b} 秒 · ≤${(m&&m.videoMaxMB)||100}MB`; }
+  function vidInvalidMsg(){
+    const m=curModel(); if(!m||!videoMeta) return '';
+    const [a,b]=m.videoDurRange||[2,60];
+    if(videoMeta.duration<a||videoMeta.duration>b) return `当前模型限 ${a}-${b} 秒(已传 ${videoMeta.duration.toFixed(1)} 秒)`;
+    return '';
+  }
+  function validVideoFile(f){
+    if(!f) return false;
+    const okType=['video/mp4','video/quicktime'].includes(f.type) || /\.(mp4|mov)$/i.test(f.name||'');
+    if(!okType){ window.LJToast&&LJToast('仅支持 MP4 / MOV 视频','err'); return false; }
+    if(f.size>100*1024*1024){ window.LJToast&&LJToast('视频超过 100MB('+(f.size/1048576).toFixed(0)+'MB),请压缩后上传','err'); return false; }
+    return true;
+  }
+  function uploadVideo(f){
+    if(!validVideoFile(f)) return;
+    if(videoLocalUrl) URL.revokeObjectURL(videoLocalUrl);
+    vidState='uploading'; upPct=0; vidName=f.name; videoRef=''; videoMeta=null;
+    videoLocalUrl=URL.createObjectURL(f);
+    renderVidCard(); refreshBtn();
+    const fd=new FormData(); fd.append('video', f); fd.append('consent','true');
+    const xhr=new XMLHttpRequest();
+    xhr.open('POST','/api/video-uploads');
+    xhr.upload.onprogress=(e)=>{ if(e.lengthComputable){ upPct=Math.round(e.loaded/e.total*100); renderVidCard(); } };
+    xhr.onload=()=>{
+      let j={}; try{ j=JSON.parse(xhr.responseText||'{}'); }catch(e){}
+      if(xhr.status===200 && j.videoRef){
+        videoRef=j.videoRef; videoMeta={duration:j.duration,width:j.width,height:j.height,size:f.size};
+        vidState='ready'; renderVidCard(); renderDur(); scheduleEstimate(); refreshBtn();
+      } else {
+        window.LJToast&&LJToast('上传失败:'+(j.error||('HTTP '+xhr.status)),'err');
+        resetVideo();
+      }
+    };
+    xhr.onerror=()=>{ window.LJToast&&LJToast('上传失败,请重试','err'); resetVideo(); };
+    xhr.send(fd);
+  }
+  function resetVideo(){
+    if(videoLocalUrl) URL.revokeObjectURL(videoLocalUrl);
+    vidState='empty'; videoRef=''; videoMeta=null; videoLocalUrl=''; upPct=0; vidName='';
+    truncateDur=0; renderVidCard(); renderDur(); syncPills(); scheduleEstimate(); refreshBtn();
+  }
+  function bindDrop(el, handler){
+    if(!el) return;
+    el.addEventListener('dragover',e=>{ e.preventDefault(); el.classList.add('drag'); });
+    el.addEventListener('dragleave',()=>el.classList.remove('drag'));
+    el.addEventListener('drop',e=>{ e.preventDefault(); el.classList.remove('drag'); handler(e.dataTransfer.files); });
+  }
+  function renderVidCard(){
+    const area=document.getElementById('vidArea');
+    const invalid = (vidState==='ready'||vidState==='reuse') ? vidInvalidMsg() : '';
+    if(vidState==='empty'){
+      area.innerHTML=`<div class="vid-stage" id="vidStage"><div class="ph">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="14" height="14" rx="2"/><path d="m22 7-6 4 6 4V7Z"/></svg>
+        <div class="dt">点击或拖放视频以上传(MP4 / MOV)</div>
+        <div class="ds">${vidLimitText()} · 选择后立即上传并探测时长</div>
+      </div></div>`;
+    } else if(vidState==='uploading'){
+      const probing=upPct>=100;
+      area.innerHTML=`<div class="vid-stage" style="cursor:default"><div class="vid-prog">
+        <div class="bar"><i style="width:${upPct}%"></i></div>
+        <div class="t">${probing?'探测时长与尺寸中…':('上传中 '+upPct+'%')} · ${esc(vidName)}</div>
+      </div></div>`;
+    } else if(vidState==='reuse'){
+      area.innerHTML=`<div class="vid-stage${invalid?' invalid':''}" style="cursor:default">
+        <button type="button" class="rmx" id="vidRm" aria-label="清除原视频">×</button>
+        <div class="vid-reuse">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="14" height="14" rx="2"/><path d="m22 7-6 4 6 4V7Z"/></svg>
+          <div class="t">原视频 · ${videoMeta?videoMeta.duration.toFixed(1):'?'} 秒(复用上次,免重传)</div>
+        </div></div>
+        ${invalid?`<div class="vid-err">${esc(invalid)}</div>`:''}`;
+      const rm=area.querySelector('#vidRm'); if(rm) rm.onclick=(e)=>{ e.stopPropagation(); resetVideo(); };
+      return;
+    } else { // ready
+      const mm=videoMeta||{};
+      const chips=[`${(mm.duration||0).toFixed(1)} 秒`, `${mm.width||'?'}×${mm.height||'?'}`, `${((mm.size||0)/1048576).toFixed(1)} MB`]
+        .map(c=>`<span class="chip">${c}</span>`).join('');
+      area.innerHTML=`<div class="vid-stage${invalid?' invalid':''}" style="cursor:default">
+          <button type="button" class="rmx" id="vidRm" aria-label="删除视频">×</button>
+          <video src="${videoLocalUrl}" muted playsinline preload="metadata" controls></video>
+        </div>
+        <div class="vid-meta">${chips}</div>
+        ${invalid?`<div class="vid-err">${esc(invalid)}</div>`:''}`;
+      const rm=area.querySelector('#vidRm'); if(rm) rm.onclick=(e)=>{ e.stopPropagation(); resetVideo(); };
+      return;
+    }
+    const stage=area.querySelector('#vidStage');
+    if(stage && vidState==='empty'){
+      stage.onclick=()=>{ const p=document.getElementById('vidPick'); p.value=''; p.click(); };
+      bindDrop(stage, fs=>{ if(fs[0]) uploadVideo(fs[0]); });
+    }
+  }
+  document.getElementById('vidPick').onchange=function(){ if(this.files[0]) uploadVideo(this.files[0]); };
+
+  // ── 参考图(本地缓存,提交时上传;复用态免重传)──
+  const OK_TYPES=['image/jpeg','image/png','image/webp','image/bmp'];
+  function addRefFiles(list){
+    const m=curModel(); const max=(m&&m.maxRefImages)||4;
+    for(const f of list){
+      if(!OK_TYPES.includes(f.type)){ window.LJToast&&LJToast('参考图仅支持 JPG/PNG/WEBP/BMP','err'); continue; }
+      if(f.size>10*1024*1024){ window.LJToast&&LJToast('参考图超过 10MB,请压缩','err'); continue; }
+      if((reuseActive()?0:refFiles.length)>=max){ window.LJToast&&LJToast(`参考图最多 ${max} 张`,'err'); break; }
+      if(reuseActive()) clearReuse();
+      refFiles.push({file:f,url:URL.createObjectURL(f)});
+    }
+    renderRefs(); scheduleEstimate(); refreshBtn();
+  }
+  function renderRefs(){
+    const m=curModel(); const max=(m&&m.maxRefImages)||4;
+    const area=document.getElementById('refArea');
+    const urls = reuseActive() ? (reuseUrls||[]) : refFiles.map(r=>r.url);
+    let tiles=urls.map((u,i)=>`<div class="img-tile"><span class="num">图${i+1}</span><button type="button" class="rmx" data-rm="${i}" aria-label="删除第${i+1}张参考图">×</button><img src="${u}"></div>`).join('');
+    if(urls.length<max && !reuseActive()) tiles+=`<div class="img-tile add" id="addRef" role="button" aria-label="添加参考图"><span class="plus">+</span><span class="lbl">参考图(可选)</span></div>`;
+    area.innerHTML=`<div class="img-tiles" id="refGrid">${tiles}</div><div class="area-hint">参考图 ${urls.length}/${max} 张(可选)${reuseActive()?' · 复用上次原图,点 × 可清除':''}:局部替换时上传目标物(如要换的衣服)。</div>`;
+    const add=area.querySelector('#addRef');
+    if(add){ add.onclick=()=>{ const p=document.getElementById('refPick'); p.value=''; p.click(); }; bindDrop(add, fs=>addRefFiles(Array.from(fs))); }
+    area.querySelectorAll('.rmx[data-rm]').forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); if(reuseActive()){ clearReuse(); } else { refFiles.splice(Number(el.dataset.rm),1); } renderRefs(); scheduleEstimate(); refreshBtn(); });
+  }
+  document.getElementById('refPick').onchange=function(){ addRefFiles(Array.from(this.files||[])); };
+
+  // ── 设置 popover ──
+  function renderRes(){
+    const m=curModel(); const seg=document.getElementById('resSeg');
+    const opts=m.resolutions; if(!opts.includes(resolution)) resolution=opts[0];
+    seg.innerHTML=opts.map(r=>`<div class="seg${r===resolution?' on':''}" data-v="${r}">${r}</div>`).join('');
+    seg.querySelectorAll('.seg').forEach(s=>s.onclick=()=>{ seg.querySelectorAll('.seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); resolution=s.dataset.v; syncPills(); scheduleEstimate(); });
+  }
+  // 输出比例:仅 wan(ratios 非空);首格「跟原视频」= 不传 ratio(design 布局序 2)
+  function renderRatios(){
+    const m=curModel(); const row=document.getElementById('ratioRow'); const lbl=document.getElementById('ratioLabel');
+    const show=!!(m&&m.ratios&&m.ratios.length);
+    row.style.display=show?'':'none'; lbl.style.display=show?'':'none';
+    if(!show){ ratio=''; return; }
+    if(ratio && !m.ratios.includes(ratio)) ratio='';
+    const cells=[{v:'',l:'跟原视频',w:18,h:18}].concat(m.ratios.map(r=>{ const g=RATIO_GLYPH[r]||[18,18]; return {v:r,l:r,w:g[0],h:g[1]}; }));
+    row.innerHTML=cells.map(c=>`<div class="ratio-cell${c.v===ratio?' on':''}" data-ratio="${c.v}"><span class="glyph" style="width:${c.w}px;height:${c.h}px"></span><span class="lbl">${c.l}</span></div>`).join('');
+    row.querySelectorAll('.ratio-cell').forEach(c=>c.onclick=()=>{ row.querySelectorAll('.ratio-cell').forEach(x=>x.classList.remove('on')); c.classList.add('on'); ratio=c.dataset.ratio; syncPills(); scheduleEstimate(); });
+  }
+  // 输出时长:仅 wan(supportsTruncate);首格「跟原视频」+ 2..min(10,输入秒) 动态档;截断实时降估价
+  function renderDur(){
+    const m=curModel(); const seg=document.getElementById('durSeg'); const lbl=document.getElementById('durLabel');
+    const show=!!(m&&m.supportsTruncate);
+    seg.style.display=show?'':'none'; lbl.style.display=show?'':'none';
+    if(!show){ truncateDur=0; return; }
+    const cap=videoMeta?Math.min(10,Math.floor(videoMeta.duration)):10;
+    const opts=[]; for(let i=2;i<=cap;i+=2) opts.push(i);
+    if(truncateDur && (truncateDur>cap)) truncateDur=0;
+    seg.innerHTML=[`<div class="seg${!truncateDur?' on':''}" data-d="0">跟原视频</div>`]
+      .concat(opts.map(d=>`<div class="seg${d===truncateDur?' on':''}" data-d="${d}">截 ${d} 秒</div>`)).join('');
+    seg.querySelectorAll('.seg').forEach(s=>s.onclick=()=>{ seg.querySelectorAll('.seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); truncateDur=parseInt(s.dataset.d,10)||0; syncPills(); scheduleEstimate(); });
+  }
+  function renderModelOpts(){
+    const m=curModel(); const box=document.getElementById('modelOpts2'); let h='';
+    if(m.supportsPromptExtend) h+=`<div class="opt-toggle"><span class="ol">智能改写提示词</span><input type="checkbox" id="extendChk"${promptExtend?' checked':''}></div>`;
+    if(m.supportsNegative) h+=`<input class="neg-input" id="negInput" placeholder="反向提示词(不希望出现的元素,可选)" value="${esc(negativePrompt)}">`;
+    box.innerHTML=h;
+    const e=document.getElementById('extendChk'); if(e) e.onchange=()=>{ promptExtend=e.checked; };
+    const n=document.getElementById('negInput'); if(n) n.oninput=()=>{ negativePrompt=n.value; };
+  }
+  document.getElementById('originChk').onchange=function(){ originAudio=this.checked; syncPills(); };
+  function syncPills(){
+    const m=curModel();
+    document.getElementById('modelPillV').textContent=m?m.label:'模型';
+    const parts=[resolution];
+    if(ratio) parts.push(ratio);
+    if(truncateDur) parts.push('截'+truncateDur+'秒');
+    if(originAudio) parts.push('原声');
+    document.getElementById('setPillV').textContent=parts.join(' · ');
+  }
+
+  // ── popover / lightbox ──
+  function togglePop(which){
+    const map={model:'pop-model',set:'pop-set',seed:'pop-seed'}; const pillMap={model:'modelPill',set:'setPill',seed:'seedPill'};
+    const el=document.getElementById(map[which]); const isOpen=el.classList.contains('show'); closePops();
+    if(!isOpen){ el.classList.add('show'); document.getElementById('popOv').classList.add('show'); document.getElementById(pillMap[which]).classList.add('open'); }
+  }
+  function closePops(){ document.querySelectorAll('.pop.show').forEach(p=>p.classList.remove('show')); document.querySelectorAll('.cpill.open').forEach(p=>p.classList.remove('open')); document.getElementById('popOv').classList.remove('show'); }
+  window.togglePop=togglePop; window.closePops=closePops;
+  window.openLightbox=(url)=>{ document.getElementById('lightboxImg').src=url; document.getElementById('lightbox').classList.add('on'); };
+  window.closeLightbox=()=>{ document.getElementById('lightbox').classList.remove('on'); document.getElementById('lightboxImg').src=''; };
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeLightbox(); closePops(); } });
+  document.getElementById('seedInput').addEventListener('input',e=>{ seed=e.target.value.replace(/[^0-9]/g,''); e.target.value=seed; });
+
+  // ── 门禁(design 优先级:无视频 → 失配 → HH 空指令 → 授权)──
+  function missingMsg(){
+    const m=curModel();
+    if(vidState==='uploading') return '视频上传中…';
+    if(!videoRef) return '请上传视频';
+    if(vidInvalidMsg()) return '视频不符合当前模型限制';
+    if(m && m.promptRequired && !ta.value.trim()) return '请输入编辑指令';
+    if(!document.getElementById('consentChk').checked) return '请勾选授权同意';
+    return '';
+  }
+  function refreshBtn(){
+    const msg=missingMsg(); const ok=!msg;
+    btn.classList.toggle('ready',ok); btn.disabled=!ok;
+    document.getElementById('cbtnLabel').textContent=ok?'创建':msg;
+  }
+  ta.addEventListener('input',()=>{ cnt.textContent=ta.value.length; refreshBtn(); scheduleEstimate(); });
+  document.getElementById('consentChk').addEventListener('change',refreshBtn);
+
+  // ── 估价(estimate≡build:都按 videoRef 读服务端 sidecar 时长,前端不传时长)──
+  let estTimer=null;
+  function scheduleEstimate(){
+    clearTimeout(estTimer);
+    estTimer=setTimeout(async()=>{
+      if(!videoRef){ document.getElementById('estLabel').textContent='预估 — 点'; document.getElementById('estGem').textContent='—'; return; }
+      try{
+        const b={ type:'video_edit', model, videoRef, resolution };
+        if(truncateDur) b.truncateDuration=truncateDur;
+        const r=await LJ.post('/jobs/estimate',b);
+        document.getElementById('estLabel').textContent='预估 '+r.cost+' 点';
+        document.getElementById('estGem').textContent=r.cost;
+      }catch(e){}
+    },300);
+  }
+
+  async function uploadRefImages(){
+    if(reuseActive()) return reuseRefs.slice();
+    if(!refFiles.length) return [];
+    const fd=new FormData(); refFiles.forEach(r=>fd.append('images',r.file)); fd.append('consent','true');
+    const r=await fetch('/api/image-uploads',{method:'POST',body:fd,credentials:'same-origin'});
+    if(!r.ok){ const j=await r.json().catch(()=>({})); throw new Error(j.error||'参考图上传失败'); }
+    return (await r.json()).imageRefs;
+  }
+  function jobBody(imageRefs){
+    const m=curModel(); const b={ type:'video_edit', model, videoRef, imageRefs, resolution };
+    if(ta.value.trim()) b.prompt=ta.value.trim();
+    if(ratio) b.ratio=ratio;
+    if(truncateDur) b.truncateDuration=truncateDur;
+    if(originAudio) b.audioSetting='origin';
+    if(m.supportsNegative && negativePrompt.trim()) b.negativePrompt=negativePrompt;
+    if(m.supportsPromptExtend) b.promptExtend=promptExtend;
+    if(seed) b.seed=parseInt(seed,10);
+    return b;
+  }
+
+  document.querySelectorAll('.ftab').forEach(t=>t.onclick=function(){
+    this.parentNode.querySelectorAll('.ftab').forEach(x=>x.classList.remove('active')); this.classList.add('active');
+    const k=this.dataset.st;
+    document.querySelectorAll('.feed-list .fitem[id^=job-]').forEach(it=>{ it.style.display=(k==='all'||(it.dataset.st||'')===k)?'':'none'; });
+  });
+
+  // ── 生成记录 ──
+  const jobInputs={};
+  function findLabel(k){ const m=allModels.find(x=>x.key===k); return m?m.label:undefined; }
+  function promptBubble(p){
+    if(!p) return '';
+    return `<div class="fbubble"><div class="tx-wrap"><div class="tx clamp">${esc(p)}</div><span class="tx-toggle" onclick="toggleTx(this)">展开</span></div></div>`;
+  }
+  window.toggleTx=function(el){ const tx=el.previousElementSibling; const c=tx.classList.toggle('clamp'); el.textContent=c?'展开':'收起'; };
+  function fitBubble(card){
+    if(!card) return;
+    const tx=card.querySelector('.tx.clamp'), tg=card.querySelector('.tx-toggle');
+    if(!tx||!tg) return;
+    tg.classList.toggle('show', tx.scrollHeight - tx.clientHeight > 2);
+  }
+  function inThumbs(urls){
+    if(!urls||!urls.length) return '';
+    return `<div class="in-thumbs"><span class="lbl">参考图</span>${urls.map(u=>`<img src="${esc(u)}" onclick="openLightbox('${esc(u)}')" alt="参考图">`).join('')}</div>`;
+  }
+  function metaChips(job){
+    const c=[]; if(job.modelLabel) c.push(job.modelLabel);
+    if(job.inputDuration) c.push('输入 '+Number(job.inputDuration).toFixed(1)+'秒');
+    if(job.truncateDuration) c.push('截 '+job.truncateDuration+'秒');
+    if(job.sizeLabel) c.push(job.sizeLabel);
+    if(job.ratio) c.push(job.ratio);
+    if(job.audioSetting==='origin') c.push('原声');
+    return c.length?`<div class="card-meta">${c.map(x=>`<span class="chip">${esc(x)}</span>`).join('')}</div>`:'';
+  }
+  function cardActs(job,ok){
+    const re=`<button data-act="regen" onclick="regenJob('${job.id}',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>重新生成</button>`;
+    const rp=`<button onclick="repromptJob('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19 7-7 3 3-7 7-3-3z"/><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="m2 2 7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>重新提示</button>`;
+    const dl=ok&&(job.outputUrls||[]).length?`<button onclick="downloadVid('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg>下载</button>`:'';
+    const del=`<button onclick="delJob('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除</button>`;
+    return `<div class="card-acts">${re}${rp}${dl}${del}</div>`;
+  }
+
+  function renderCard(job){
+    document.getElementById('emptyHint').style.display='none';
+    if(job.input) jobInputs[job.id]=job.input;
+    let card=document.getElementById('job-'+job.id); const existed=!!card;
+    if(!card){ card=document.createElement('div'); card.className='fitem'; card.id='job-'+job.id; feedList.insertBefore(card, feedList.firstChild); }
+    const head=(color,led,txt)=>`<div class="fmeta"><b>AI 影片编辑</b><span class="ts">${(window.LJTimeAgo&&LJTimeAgo(job.createdAt))||'刚刚'}</span><span class="sp"></span><span class="st" style="color:${color}"><span class="led ${led}"></span>${txt}</span></div>`;
+    if((job.status==='queued'||job.status==='running') && existed && card.dataset.st==='running'){
+      const lbl=card.querySelector('.proc-in .lbl'); const bar=card.querySelector('.proc-bar i');
+      if(lbl) lbl.textContent=job.progress?('进度 '+job.progress+'%'):'已进入生成队列';
+      if(bar) bar.style.width=(job.progress||8)+'%';
+      return;
+    }
+    if(job.status==='queued'||job.status==='running'){
+      card.dataset.st='running';
+      card.innerHTML=head('var(--amber)','led-run',job.status==='queued'?'排队中':'生成中')+promptBubble(job.prompt)+inThumbs(job.inputUrls)+metaChips(job)+
+        `<div class="fvideo proc"><div class="proc-in"><div class="spinner"></div><div class="lbl">${job.progress?('进度 '+job.progress+'%'):'已进入生成队列'}</div><div class="proc-bar"><i style="width:${job.progress||8}%"></i></div><div style="font-size:11px;color:var(--t4);margin-top:8px">视频编辑约需 1-5 分钟,请耐心等待</div></div></div>`;
+    } else if(job.status==='done'){
+      card.dataset.st='done';
+      const u=(job.outputUrls||[])[0];
+      const vid=u?`<video class="fvid" src="${u}" controls preload="metadata"></video>`:'<div style="color:var(--t4);padding:20px">已生成</div>';
+      card.innerHTML=head('var(--green)','led-ok','已完成')+promptBubble(job.prompt)+inThumbs(job.inputUrls)+metaChips(job)+vid+cardActs(job,true);
+    } else {
+      card.dataset.st='failed';
+      card.innerHTML=head('var(--red)','led-err','生成失败')+promptBubble(job.prompt)+inThumbs(job.inputUrls)+metaChips(job)+
+        `<div class="fvideo err"><div class="err-in"><div class="ei">!</div><div class="lbl">${esc(job.error||'生成失败,请重试')}</div></div></div>`+cardActs(job,false);
+    }
+    requestAnimationFrame(()=>fitBubble(card));
+  }
+
+  // 重新生成:复用原 videoRef + imageRefs(免重传 100MB)
+  const regenInFlight=new Set();
+  window.regenJob=async(id,b)=>{
+    if(regenInFlight.has(id)) return;
+    const inp=jobInputs[id]; if(!inp||!inp.videoRef){ window.LJToast&&window.LJToast('原视频丢失,无法重新生成','err'); return; }
+    regenInFlight.add(id);
+    if(b){ b.disabled=true; b.dataset.t=b.textContent; b.textContent='提交中…'; }
+    try{
+      const body={ type:'video_edit', model:inp.model, videoRef:inp.videoRef, imageRefs:inp.imageRefs||[], resolution:inp.resolution };
+      if(inp.prompt) body.prompt=inp.prompt;
+      if(inp.ratio) body.ratio=inp.ratio;
+      if(inp.truncateDuration) body.truncateDuration=inp.truncateDuration;
+      if(inp.audioSetting==='origin') body.audioSetting='origin';
+      if(inp.negativePrompt) body.negativePrompt=inp.negativePrompt;
+      if(typeof inp.promptExtend==='boolean') body.promptExtend=inp.promptExtend;
+      if(typeof inp.seed==='number') body.seed=inp.seed;
+      const r=await LJ.createJob(body);
+      renderCard({ id:r.id, status:'queued', progress:0, prompt:inp.prompt, modelLabel:findLabel(inp.model), inputDuration:inp.inputDurationSnapshot, truncateDuration:inp.truncateDuration, audioSetting:inp.audioSetting, ratio:inp.ratio, sizeLabel:inp.resolution, inputUrls:inp.inputUrls });
+      jobInputs[r.id]=inp;
+      track(r.id, inp.prompt, inp.inputUrls);
+      window.LJToast&&window.LJToast('✓ 已重新提交生成');
+    }catch(e){ window.LJToast&&window.LJToast('重新生成失败:'+e.message,'err'); }
+    finally{ regenInFlight.delete(id); if(b){ b.disabled=false; if(b.dataset.t){ b.textContent=b.dataset.t; delete b.dataset.t; } } }
+  };
+  // 重新提示:回填参数;原视频走 reuse 态(免重传)、参考图走 reuseRefs
+  window.repromptJob=(id)=>{
+    const inp=jobInputs[id]; if(!inp){ window.LJToast&&window.LJToast('原参数丢失','err'); return; }
+    if(inp.model && allModels.find(m=>m.key===inp.model)) model=inp.model;
+    if(inp.resolution) resolution=inp.resolution;
+    ratio=inp.ratio||''; truncateDur=inp.truncateDuration||0; originAudio=inp.audioSetting==='origin';
+    document.getElementById('originChk').checked=originAudio;
+    negativePrompt=inp.negativePrompt||'';
+    if(typeof inp.promptExtend==='boolean') promptExtend=inp.promptExtend;
+    seed = inp.seed!=null ? String(inp.seed) : '';
+    const si=document.getElementById('seedInput'); if(si) si.value=seed;
+    // 原视频复用(免重传 100MB)
+    if(videoLocalUrl) URL.revokeObjectURL(videoLocalUrl);
+    videoLocalUrl=''; refFiles=[];
+    videoRef=inp.videoRef||''; videoMeta=inp.inputDurationSnapshot?{duration:inp.inputDurationSnapshot,width:0,height:0,size:0}:null;
+    vidState=videoRef?'reuse':'empty';
+    reuseRefs=(inp.imageRefs||[]).slice(); reuseUrls=(inp.inputUrls||[]).slice();
+    renderModels(); // 内部 onModelChange 重渲全部
+    ta.value=inp.prompt||''; cnt.textContent=ta.value.length;
+    refreshBtn(); scheduleEstimate(); ta.focus();
+    window.LJToast&&window.LJToast('✓ 已回填参数与原视频,可改后创建');
+  };
+  window.delJob=async(id)=>{
+    if(!(await window.LJConfirm({title:'删除作品',body:'确认删除这条生成记录吗?删除后不可恢复。',confirmText:'删除',danger:true}))) return;
+    try{ await LJ.del('/jobs/'+id); const c=document.getElementById('job-'+id); if(c) c.remove(); delete jobInputs[id]; window.LJToast&&window.LJToast('✓ 已删除'); }
+    catch(e){ window.LJToast&&window.LJToast('删除失败:'+(e.message||'生成中不可删'),'err'); }
+  };
+  window.downloadVid=async(id)=>{
+    const card=document.getElementById('job-'+id); const v=card?card.querySelector('video.fvid'):null; if(!v) return;
+    try{ const r=await fetch(v.src); const bl=await r.blob(); const u=URL.createObjectURL(bl); const a=document.createElement('a'); a.href=u; a.download=`lingjing-${id}.mp4`; a.click(); URL.revokeObjectURL(u); }
+    catch(e){ window.open(v.src,'_blank'); }
+  };
+
+  async function track(id, prompt, inputUrls){ try{ await LJ.pollJob(id, (job)=>renderCard({...job, prompt, inputUrls, ...(jobInputs[id]?{modelLabel:findLabel(jobInputs[id].model),inputDuration:jobInputs[id].inputDurationSnapshot,truncateDuration:jobInputs[id].truncateDuration,audioSetting:jobInputs[id].audioSetting,ratio:jobInputs[id].ratio,sizeLabel:jobInputs[id].resolution}:{})})); }catch(e){} }
+
+  async function loadHistory(){
+    let jobs=[]; try{ jobs=await LJ.listJobs(); }catch(e){ return; }
+    const mine=jobs.filter(j=>j.type==='video_edit');
+    if(!mine.length) return;
+    document.getElementById('emptyHint').style.display='none';
+    for(const j of [...mine].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))){
+      jobInputs[j.id]={ model:j.model, prompt:j.script, videoRef:j.videoRef, imageRefs:j.imageRefs, inputUrls:j.inputUrls,
+        resolution:j.resolution, ratio:j.ratio, truncateDuration:j.truncateDuration, audioSetting:j.audioSetting,
+        inputDurationSnapshot:j.inputDuration, negativePrompt:j.negativePrompt, promptExtend:j.promptExtend, seed:j.seed };
+      renderCard({...j, prompt:j.script});
+      if(j.status==='queued'||j.status==='running') track(j.id, j.script, j.inputUrls);
+    }
+  }
+
+  btn.addEventListener('click', async ()=>{
+    if(btn.disabled) return;
+    btn.disabled=true; const prev=btn.innerHTML; btn.textContent=reuseActive()||!refFiles.length?'提交中…':'上传参考图…';
+    try{
+      const imageRefs=await uploadRefImages();
+      btn.textContent='提交中…';
+      const body=jobBody(imageRefs);
+      const r=await LJ.createJob(body);
+      const thumbs = reuseActive() ? (reuseUrls||[]).slice() : refFiles.map(x=>x.url);
+      jobInputs[r.id]={ model:body.model, prompt:body.prompt, videoRef:body.videoRef, imageRefs, inputUrls:thumbs,
+        resolution:body.resolution, ratio:body.ratio, truncateDuration:body.truncateDuration, audioSetting:body.audioSetting,
+        inputDurationSnapshot:videoMeta?videoMeta.duration:undefined, negativePrompt:body.negativePrompt, promptExtend:body.promptExtend, seed:body.seed };
+      renderCard({ id:r.id, status:'queued', progress:0, prompt:body.prompt, modelLabel:findLabel(model),
+        inputDuration:videoMeta?videoMeta.duration:undefined, truncateDuration:body.truncateDuration, audioSetting:body.audioSetting,
+        ratio:body.ratio, sizeLabel:resolution, inputUrls:thumbs });
+      track(r.id, body.prompt, thumbs);
+      window.LJToast&&window.LJToast('✓ 已提交生成,可在右侧查看进度');
+    }catch(e){ window.LJToast&&window.LJToast('提交失败:'+e.message,'err'); }
+    finally{ btn.innerHTML=prev; refreshBtn(); }
+  });
+
+  LJ.me().then(()=>{ loadModels(); loadHistory(); }).catch(()=>{});
+  renderVidCard(); refreshBtn();
+</script>
+</body>
+</html>

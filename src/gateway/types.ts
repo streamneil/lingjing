@@ -84,13 +84,19 @@ export interface VideoGenT2VInput {
   promptExtend?: boolean; // 仅 wan2.7:prompt 智能改写
   seed?: number; // 随机种子 [0,2147483647];空 = 随机
   // ── 图转影片(i2v / video_i2v;t2v 不用)──
-  task?: VideoTask; // media 任务:first_frame / first_last / reference
+  task?: VideoTask; // media 任务:first_frame / first_last / reference / edit
   imageRefs?: string[]; // 输入图存储 key(worker publish 转公网 URL 后就地覆写;submit 按 task 组 media)
+  // ── 视频编辑(video_edit;task='edit')──
+  videoRef?: string; // 输入视频存储 key(worker publish 转公网 URL 后就地覆写;media 首元素 {type:'video'})
+  audioSetting?: 'auto' | 'origin'; // 声音:auto=模型自控(缺省不发)、origin=保留原声
+  truncateDuration?: number; // 仅 wan 编辑:截断输出时长(2-10s);缺省=跟输入,不发 duration
   // ── 提交时快照(钱路 reserve==settle:admin/前端 mid-flight 改不破)──
   durationSnapshot?: number; // clamp 后的时长
   resSnapshot?: string; // 计价用分辨率档(可灵由 mode 翻译写入,R3)
   audioSnapshot?: boolean; // 计价用 audio(V_DASH 恒 false)
   priceTierSnapshot?: number; // 提交时模型每秒计价基数
+  inputDurationSnapshot?: number; // 编辑:服务端探测的输入视频时长(秒,sidecar 真相)
+  billableSecondsSnapshot?: number; // 编辑:计费秒快照 = 输入 + 预计输出(贴厂商 in+out)
 }
 
 // ── 文转语音(TTS,cosyvoice)──

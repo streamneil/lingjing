@@ -113,6 +113,17 @@ export function costFor(toolType: string, input: Record<string, unknown>): numbe
         maxImages,
       );
     }
+    case 'video_edit': {
+      // 视频编辑:计费秒快照 = 输入 + 预计输出(贴厂商 usage.duration=in+out,CEO D3)。
+      // 快照在 buildVideoEditJob 写入(时长源自 sidecar 服务端真相);无快照视为坏数据,按 0 秒拒绝出价。
+      const def = getVideoModel(typeof input.model === 'string' ? input.model : undefined);
+      const priceTier = typeof input.priceTierSnapshot === 'number' ? input.priceTierSnapshot : def.priceTier;
+      const billable = typeof input.billableSecondsSnapshot === 'number' ? input.billableSecondsSnapshot : 0;
+      const resolution = typeof input.resSnapshot === 'string'
+        ? input.resSnapshot
+        : (typeof input.resolution === 'string' ? input.resolution : '720P');
+      return estimateVideoCost(billable, priceTier, resolution, false);
+    }
     case 'video_t2v':
     case 'video_i2v': {
       // 文生视频 / 图转影片:同计价(秒×档×tier;i2v audio 恒 false)。读快照(reserve==settle);
