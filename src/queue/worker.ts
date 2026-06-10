@@ -9,7 +9,7 @@
 import { config } from '../config.js';
 import { getGateway } from '../gateway/baichuan.js';
 import { synthesizeSpeech, synthesizeSpeechHttp } from '../gateway/cosyvoice.js';
-import { getTtsModel } from '../gateway/tts-models.js';
+import { getTtsModel, buildInstruction } from '../gateway/tts-models.js';
 import { getMediaPublisher, tenantDelivery } from '../gateway/media-publisher.js';
 import type { VideoGenInput, VideoSubmitUrls, ImageGenInput, TtsGenInput, VideoGenT2VInput, ProviderJobStatus } from '../gateway/types.js';
 import { storage } from '../storage/index.js';
@@ -579,6 +579,10 @@ async function runTtsJob(job: JobRow): Promise<void> {
   if (segments.length === 0) throw new Error('文本分段为空');
   const deadline = Date.now() + config.baichuan.jobTimeoutMs;
 
+  // 情绪 + 音高 → 指令(T-TTS-EMOTION);两路透传(WS instruction、Qwen instructions)。
+  // pitch 另以 CosyVoice 原生参数走 WS(buildInstruction 已折一份兜底给 Qwen)。
+  const instruction = buildInstruction(input.emotion, input.pitch);
+
   const audioBufs: Buffer[] = [];
   for (let i = 0; i < segments.length; i++) {
     if (Date.now() > deadline) throw new Error(`生成超时(>${config.baichuan.jobTimeoutMs}ms),已放弃`);
@@ -586,10 +590,11 @@ async function runTtsJob(job: JobRow): Promise<void> {
     // transport 分支:仅「逐段怎么拿 buffer」不同;两路均返 Buffer
     const buf =
       transport === 'http'
-        ? await synthesizeSpeechHttp({ text: segments[i]!, voice, model }) // Qwen 无 rate/volume
+        ? await synthesizeSpeechHttp({ text: segments[i]!, voice, model, instruction: instruction || undefined }) // Qwen 无 rate/volume/pitch
         : await synthesizeSpeech({
             text: segments[i]!, voice, model,
             rate: input.rate ?? 1, volume: input.volume ?? 50,
+            instruction: instruction || undefined, pitch: input.pitch,
           });
     audioBufs.push(buf);
   }
