@@ -213,8 +213,11 @@
   // ── 模型下拉(GET /edit-models)──
   const modelOpts=document.getElementById('modelOpts');
   async function loadModels(){
-    try{ const r=await LJ.get('/edit-models'); allModels=r.models||[]; if(r.default) model=r.default; renderModels(); }
-    catch(e){ modelOpts.innerHTML='<div class="pop-opt"><span class="nm">模型加载失败</span></div>'; }
+    let r;
+    try{ r=await LJ.get('/edit-models'); }
+    catch(e){ modelOpts.innerHTML='<div class="pop-opt"><span class="nm">模型加载失败</span></div>'; return; }
+    // 拉取成功后的渲染异常不该被吞成「加载失败」(否则掩盖前端 bug):让它正常抛到控制台。
+    allModels=r.models||[]; if(r.default) model=r.default; renderModels();
   }
   function renderModels(){
     if(allModels.length && !curModel()) model=allModels[0].key;
@@ -233,10 +236,12 @@
     markModelOpt();
     renderVidCard(); renderRefs(); renderRes(); renderRatios(); renderDur(); renderModelOpts(); syncPills(); refreshPromptLabel(); scheduleEstimate(); refreshBtn();
   }
+  // 指令卡无独立标签(与 ai-image-edit 一致),必填/可选语义放进 placeholder。
   function refreshPromptLabel(){
-    const m=curModel(); const lbl=document.getElementById('promptLabel');
-    if(m&&m.promptRequired){ lbl.textContent='编辑指令(必填)'; ta.placeholder='描述编辑意图:让人物穿上图中的毛衣 / 把画面变成黏土风格 / 替换背景…'; }
-    else { lbl.textContent='编辑指令(可选)'; ta.placeholder='描述编辑意图(可选):风格化可只传指令;局部替换建议配参考图。'; }
+    const m=curModel();
+    ta.placeholder = (m&&m.promptRequired)
+      ? '编辑指令(必填):让人物穿上图中的毛衣 / 把画面变成黏土风格 / 替换背景…'
+      : '编辑指令(可选):风格化可只传指令;局部替换建议配参考图。';
   }
 
   // ── 输入视频:校验 + 急传(XHR 带上传进度;fetch 拿不到 upload progress)──
