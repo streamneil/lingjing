@@ -33,7 +33,8 @@ import {
 } from '../credits/index.js';
 import { audit } from '../audit/index.js';
 import { isUsableAvatar } from '../avatars/index.js';
-import { isUsableVoice } from '../voices/index.js';
+import { isUsableVoice, voiceTransport } from '../voices/index.js';
+import { getTtsModel, TTS_MODELS } from '../gateway/tts-models.js';
 import { db } from '../db/index.js';
 import type { VideoGenInput, ImageGenInput, TtsGenInput, VideoGenT2VInput } from '../gateway/types.js';
 import { getImageModel, resolutionAllowed, isKnownModel, listEnabledModels, DEFAULT_IMAGE_MODEL, tierFromPixels } from '../gateway/image-models.js';
@@ -258,6 +259,24 @@ function buildImageJob(body: Record<string, unknown>): JobBuildResult {
 }
 
 /** 校验并构建 tts(文转语音)job 入参 + 计价。 */
+/** 派生 TTS 品质模型 + 每字单价(build 与 /jobs/estimate 共用,保 reserve==settle)。
+ *  - 未选 model → null(走音色默认模型 + 历史扁价,byte-identical)。
+ *  - 选了 model → 必须存在且与音色 transport 配套,否则返 error(400)。 */
+function deriveTtsModel(
+  bodyModel: unknown,
+  voiceRef: string,
+  tid: string,
+): { ok: true; model?: string; pricePerChar?: number } | { ok: false; error: string } {
+  if (bodyModel === undefined || bodyModel === null || bodyModel === '') return { ok: true };
+  if (typeof bodyModel !== 'string') return { ok: false, error: 'model 非法' };
+  const def = getTtsModel(bodyModel);
+  if (!def) return { ok: false, error: '品质模型不存在' };
+  // 传输配套:CosyVoice(ws)音色不能用 Qwen(http)模型,反之亦然。
+  if (def.transport !== voiceTransport(voiceRef, tid))
+    return { ok: false, error: '该品质模型与所选音色不兼容(传输不匹配)' };
+  return { ok: true, model: def.key, pricePerChar: def.pricePerChar };
+}
+
 function buildTtsJob(body: Record<string, unknown>, tid: string): JobBuildResult {
   const { text, voiceRef, rate, volume } = body as Partial<TtsGenInput>;
   if (!text || typeof text !== 'string' || text.trim().length === 0)
@@ -271,14 +290,19 @@ function buildTtsJob(body: Record<string, unknown>, tid: string): JobBuildResult
   if (volume !== undefined && (typeof volume !== 'number' || volume < 0 || volume > 100))
     return { ok: false, status: 400, error: '音量需在 0–100 之间' };
 
+  const m = deriveTtsModel(body.model, voiceRef, tid);
+  if (!m.ok) return { ok: false, status: 400, error: m.error };
+
   const input: TtsGenInput = { text, voiceRef };
   if (rate !== undefined) input.rate = rate;
   if (volume !== undefined) input.volume = volume;
+  if (m.model) input.model = m.model;
+  if (m.pricePerChar !== undefined) input.pricePerCharSnapshot = m.pricePerChar; // 快照(reserve==settle)
   return {
     ok: true,
     type: 'tts',
     input: input as unknown as Record<string, unknown>,
-    cost: estimateTtsCost(text.length),
+    cost: estimateTtsCost(text.length, m.pricePerChar),
   };
 }
 
@@ -764,7 +788,13 @@ jobsRouter.post('/jobs/estimate', requireAuth, async (req: Request, res: Respons
     return res.json({ cost: estimateVideoCost(billable, def.priceTier, resolution, false), inputDuration: meta.duration });
   }
   if (type === 'tts') {
-    return res.json({ cost: estimateTtsCost(typeof body.text === 'string' ? body.text.length : 0) });
+    // 与 buildTtsJob 同派生品质模型单价(estimate≡build → reserve==settle)。
+    const voiceRef = typeof body.voiceRef === 'string' ? body.voiceRef : '';
+    const m = deriveTtsModel(body.model, voiceRef, req.user!.tenantId);
+    const pricePerChar = m.ok ? m.pricePerChar : undefined; // 不兼容时回落扁价估(build 会 400 拦)
+    return res.json({
+      cost: estimateTtsCost(typeof body.text === 'string' ? body.text.length : 0, pricePerChar),
+    });
   }
   if (typeof body.script !== 'string') return res.status(400).json({ error: '缺少 script' });
   return res.json({
@@ -790,6 +820,18 @@ jobsRouter.get('/image-models', requireAuth, (_req: Request, res: Response) => {
   }));
   const def = enabled.find((d) => d.key === DEFAULT_IMAGE_MODEL)?.key ?? enabled[0]?.key ?? DEFAULT_IMAGE_MODEL;
   res.json({ models, default: def });
+});
+
+// TTS 品质模型清单(T-TTS-QUALITY-MODEL)— 前端品质下拉按所选音色 transport 过滤。
+// 只吐 UI 字段(key/label/transport/supportsInstruction),不漏 modelId/pricePerChar。
+jobsRouter.get('/tts-models', requireAuth, (_req: Request, res: Response) => {
+  const models = Object.values(TTS_MODELS).map((m) => ({
+    key: m.key,
+    label: m.label,
+    transport: m.transport, // 前端据此匹配所选音色(ws/http)
+    supportsInstruction: m.supportsInstruction, // 情绪/音高(T-TTS-EMOTION)
+  }));
+  res.json({ models });
 });
 
 // 文生视频模型清单 — 前端下拉单一真相源(只吐 UI 能力字段,不漏 modelId/priceTier)。

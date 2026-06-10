@@ -9,6 +9,7 @@
 import { config } from '../config.js';
 import { getGateway } from '../gateway/baichuan.js';
 import { synthesizeSpeech, synthesizeSpeechHttp } from '../gateway/cosyvoice.js';
+import { getTtsModel } from '../gateway/tts-models.js';
 import { getMediaPublisher, tenantDelivery } from '../gateway/media-publisher.js';
 import type { VideoGenInput, VideoSubmitUrls, ImageGenInput, TtsGenInput, VideoGenT2VInput, ProviderJobStatus } from '../gateway/types.js';
 import { storage } from '../storage/index.js';
@@ -115,23 +116,27 @@ type Transport = 'ws' | 'http';
  *   - 预置(preset)→ ttsModel(v1,免费、够用)、ws。
  *   - 克隆(clone)→ cloneModel(v3.5,复刻与合成必须同模型)、ws。
  *   - 设计(design)→ designModel(Qwen-VD)、http。VD 创建的音色须用同 target_model 合成。
- *  复刻/设计未产出(provider_voice_id 空)则回退预置(v1,ws),避免任务整体失败。 */
+ *  复刻/设计未产出(provider_voice_id 空)则回退预置(v1,ws),避免任务整体失败。
+ *  chosenModel(T-TTS-QUALITY-MODEL):用户选的品质模型 key(TTS_MODELS),有则覆盖合成 model
+ *  (传输已由 buildTtsJob 校验配套);无则用音色 kind 默认模型。 */
 export function resolveVoice(
   voiceRef: string,
   tenantId: string,
+  chosenModel?: string,
 ): { voice: string; model: string; transport: Transport } {
+  const override = chosenModel ? getTtsModel(chosenModel)?.modelId : undefined;
   if (isPresetVoice(voiceRef))
-    return { voice: voiceRef, model: config.baichuan.ttsModel, transport: 'ws' };
+    return { voice: voiceRef, model: override ?? config.baichuan.ttsModel, transport: 'ws' };
   const v = getVoice(voiceRef, tenantId);
   if (v?.provider_voice_id) {
     if (v.kind === 'design')
-      // Qwen 设计音色:voice_id + Qwen-VD 模型 = HTTP 合成
-      return { voice: v.provider_voice_id, model: config.baichuan.designModel, transport: 'http' };
-    // 声音复刻:voice_id + 同复刻模型 = 本人声音(CosyVoice WS)
-    return { voice: v.provider_voice_id, model: config.baichuan.cloneModel, transport: 'ws' };
+      // Qwen 设计音色:voice_id + Qwen 模型(默认 Qwen-VD,或用户选的 Qwen 品质模型)= HTTP 合成
+      return { voice: v.provider_voice_id, model: override ?? config.baichuan.designModel, transport: 'http' };
+    // 声音复刻:voice_id + CosyVoice 模型(默认 cloneModel,或用户选的 CosyVoice 品质模型)= WS
+    return { voice: v.provider_voice_id, model: override ?? config.baichuan.cloneModel, transport: 'ws' };
   }
   // 克隆/设计未产出 / 解析失败:回退预置音色(v1,ws),避免任务整体失败
-  return { voice: DEFAULT_PRESET_VOICE, model: config.baichuan.ttsModel, transport: 'ws' };
+  return { voice: DEFAULT_PRESET_VOICE, model: override ?? config.baichuan.ttsModel, transport: 'ws' };
 }
 
 // 默认回退音色:cosyvoice-v1 合法音色名(新闻播报场景)
@@ -565,8 +570,9 @@ async function runTtsJob(job: JobRow): Promise<void> {
   const pre = await moderatePrompt(input.text);
   if (!pre.allowed) throw new Error(`送审拒绝:${pre.reason}`);
 
-  // 2. 音色解析(复用 resolveVoice:预置/克隆/设计 + transport;失败回退由 isUsableVoice 在 API 层已拦)
-  const { voice, model, transport } = resolveVoice(input.voiceRef, job.tenant_id);
+  // 2. 音色解析(复用 resolveVoice:预置/克隆/设计 + transport;input.model 选品质模型覆盖,
+  //    传输配套已由 buildTtsJob 校验;失败回退由 isUsableVoice 在 API 层已拦)
+  const { voice, model, transport } = resolveVoice(input.voiceRef, job.tenant_id, input.model);
 
   // 3. 分段(两路都分段:ws 防 cosyvoice 单次上限、http 防 Qwen 单次上限)+ job 级 deadline
   const segments = segmentScript(input.text, TTS_MAX_CHARS);
