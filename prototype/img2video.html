@@ -626,12 +626,24 @@
       const thumbs = reuseActive() ? (reuseUrls||[]).slice()
         : (task==='reference' ? refFiles.map(x=>x.url) : [firstFrame,lastFrame].filter(Boolean).map(x=>x.url));
       jobInputs[r.id]={ model:body.model, task:body.task, prompt:body.prompt, imageRefs, inputUrls:thumbs, resolution:body.resolution, ratio:body.ratio, duration:body.duration, negativePrompt:body.negativePrompt, promptExtend:body.promptExtend, seed:body.seed };
-      renderCard({ id:r.id, status:'queued', progress:0, prompt:body.prompt, modelLabel:findLabel(model), task, ratio:body.ratio, duration, sizeLabel:resolution, inputUrls:thumbs });
+      const sizeLabel=resolution;
+      // 提交成功即清左侧回空态(防误点重复扣费);先于 renderCard/track,避免下游异常打断清理。
+      resetAfterSubmit();
+      renderCard({ id:r.id, status:'queued', progress:0, prompt:body.prompt, modelLabel:findLabel(body.model), task:body.task, ratio:body.ratio, duration:body.duration, sizeLabel, inputUrls:thumbs });
       track(r.id, body.prompt, thumbs);
       window.LJToast&&window.LJToast('✓ 已提交生成,可在右侧查看进度');
     }catch(e){ window.LJToast&&window.LJToast('提交失败:'+e.message,'err'); }
     finally{ btn.innerHTML=prev; refreshBtn(); }
   });
+
+  // 提交成功后清空左侧:输入图(当前 task 的槽位)+ 提示词 + 取消授权勾(同图再生成走记录卡「重新提示」免重传)。
+  // ⚠ 不 revoke blob URL(记录卡 inputUrls 还在用);仅丢数组/槽位引用。每步守卫防一步抛错挡住后续。
+  function resetAfterSubmit(){
+    firstFrame=null; lastFrame=null; refFiles=[]; clearReuse();
+    ta.value=''; cnt.textContent='0';
+    const c=document.getElementById('consentChk'); if(c) c.checked=false;
+    try{ renderImgArea(); scheduleEstimate(); refreshBtn(); }catch(e){}
+  }
 
   LJ.me().then(()=>{ loadModels(); loadHistory(); }).catch(()=>{});
   renderTaskTabs(); renderImgArea(); refreshBtn();
