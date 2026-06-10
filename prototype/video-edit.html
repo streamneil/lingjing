@@ -48,17 +48,23 @@
   .vid-reuse svg { width:32px; height:32px; opacity:.6; }
   .vid-reuse .t { font-size:13px; color:var(--t2); }
 
-  /* 参考图网格(与 ai-image/img2video 同款 tiles)*/
-  .img-tiles { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:12px; }
-  .img-tile { position:relative; aspect-ratio:1/1; border-radius:12px; overflow:hidden; border:1px solid var(--line); background:var(--field); }
-  .img-tile img { width:100%; height:100%; object-fit:cover; display:block; }
-  .img-tile .rmx { position:absolute; top:6px; right:6px; width:22px; height:22px; background:rgba(0,0,0,.6); border-radius:50%; display:grid; place-items:center; color:#fff; font-size:13px; line-height:1; cursor:pointer; border:none; padding:0; }
-  .img-tile .num { position:absolute; top:6px; left:6px; font-size:11px; background:rgba(0,0,0,.62); color:#fff; padding:1px 7px; border-radius:6px; z-index:1; }
-  .img-tile.add { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; border:1.5px dashed var(--line-hi); cursor:pointer; color:var(--t3); transition:.15s; }
-  .img-tile.add:hover, .img-tile.add.drag { border-color:var(--blue); color:var(--t1); background:var(--card); }
-  .img-tile.add .plus { font-size:30px; font-weight:300; line-height:1; }
-  .img-tile.add .lbl { font-size:12.5px; }
-  .area-hint { font-size:11px; color:var(--t4); margin:7px 0 0; }
+  /* ── 指令卡:参考图缩略 + 编辑指令 + 上传按钮(与 AI 图片编辑器同款)── */
+  .instr-card { border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:14px; margin-top:12px; }
+  #refStrip { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  #refStrip:empty { display:none; }
+  .refchip { position:relative; width:70px; height:70px; border-radius:10px; overflow:hidden; border:1px solid var(--line); background:var(--field); }
+  .refchip img { width:100%; height:100%; object-fit:cover; display:block; }
+  /* ✕ 优化:深色磨砂圆嵌在右上角内侧(不外溢卡片),hover 转红;比原红圆外溢更克制 */
+  .refchip .rmx { position:absolute; top:4px; right:4px; width:20px; height:20px; border-radius:50%; background:rgba(20,20,22,.72); backdrop-filter:blur(2px); border:1px solid rgba(255,255,255,.14); display:grid; place-items:center; color:#fff; cursor:pointer; transition:.15s; padding:0; }
+  .refchip .rmx:hover { background:var(--red,#ff5b5b); border-color:transparent; }
+  .refchip .rmx svg { width:11px; height:11px; }
+  .instr-card textarea { width:100%; min-height:88px; background:none; border:none; resize:none; color:var(--t1); font-size:14px; line-height:1.6; outline:none; font-family:inherit; }
+  .instr-card textarea::placeholder { color:var(--t4); }
+  .instr-foot { display:flex; align-items:center; justify-content:space-between; margin-top:8px; }
+  .refbtn { display:inline-flex; align-items:center; gap:7px; background:var(--field); border:1px solid var(--line); border-radius:10px; padding:8px 14px; font-size:12.5px; color:var(--t2); cursor:pointer; transition:.15s; }
+  .refbtn:hover { color:var(--t1); border-color:var(--line-hi); }
+  .refbtn svg { width:16px; height:16px; }
+  .instr-foot .cc { font-size:12px; color:var(--t4); }
   .fmt-hint { font-size:11px; color:var(--t4); margin:7px 0 0; line-height:1.5; }
 
   /* 段选 / 比例 / 配置(与 img2video 同款)*/
@@ -96,21 +102,28 @@
   <div class="cfg">
     <div class="cfg-h"><span class="dot"></span>AI 影片编辑器</div>
 
-    <!-- 输入视频卡(选完即传:估价依赖服务端探测时长,design D-A)+ 参考图网格 -->
+    <!-- 输入视频卡(选完即传:估价依赖服务端探测时长,design D-A)-->
     <div class="img-tiles-card">
       <div id="vidArea"></div>
-      <div id="refArea"></div>
     </div>
-    <div class="fmt-hint">视频:MP4 / MOV,≤ 100MB,选择后立即上传探测。参考图:JPG / PNG / WEBP,单张 ≤ 10MB。</div>
+    <div class="fmt-hint">视频:MP4 / MOV,≤ 100MB,选择后立即上传探测。</div>
+
+    <!-- 指令卡(参考图缩略在顶部 + 编辑指令 + 底部上传按钮,与 AI 图片编辑器同款)-->
+    <div class="instr-card">
+      <div id="refStrip"></div>
+      <textarea id="prompt" maxlength="5000" placeholder="描述编辑意图:换装 / 风格化 / 局部替换…"></textarea>
+      <div class="instr-foot">
+        <div class="refbtn" id="refBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>
+          <span id="refBtnLbl">参考图片 (0/4)</span>
+        </div>
+        <div class="cc"><b id="cnt">0</b> / <span id="maxChars">5000</span></div>
+      </div>
+    </div>
+    <div class="area-hint" id="refHint" style="font-size:11px;color:var(--t4);margin:7px 0 0">参考图可选:局部替换时上传目标物(如要换的衣服)。JPG / PNG / WEBP,单张 ≤ 10MB。</div>
+    <span id="estLabel" style="display:none"></span>
     <input type="file" id="vidPick" accept="video/mp4,video/quicktime,.mp4,.mov" style="display:none">
     <input type="file" id="refPick" accept="image/jpeg,image/png,image/webp,image/bmp,.jpg,.jpeg,.png,.webp,.bmp" multiple style="display:none">
-
-    <!-- 提示词(HH 必填 / wan 可选)-->
-    <div class="cfg-label" id="promptLabel">编辑指令</div>
-    <div class="script">
-      <textarea id="prompt" maxlength="5000" placeholder="描述编辑意图:换装 / 风格化 / 局部替换…"></textarea>
-      <div class="f"><span class="h" id="estLabel">预估 — 点</span><span class="c"><b id="cnt">0</b> / <span id="maxChars">5000</span></span></div>
-    </div>
 
     <div class="cfg-sp"></div>
 
@@ -334,18 +347,23 @@
     }
     renderRefs(); scheduleEstimate(); refreshBtn();
   }
+  // 缩略带在指令卡顶部 + 底部「参考图片 (N/max)」按钮(与 AI 图片编辑器同款)。
   function renderRefs(){
     const m=curModel(); const max=(m&&m.maxRefImages)||4;
-    const area=document.getElementById('refArea');
+    const strip=document.getElementById('refStrip');
     const urls = reuseActive() ? (reuseUrls||[]) : refFiles.map(r=>r.url);
-    let tiles=urls.map((u,i)=>`<div class="img-tile"><span class="num">图${i+1}</span><button type="button" class="rmx" data-rm="${i}" aria-label="删除第${i+1}张参考图">×</button><img src="${u}"></div>`).join('');
-    if(urls.length<max && !reuseActive()) tiles+=`<div class="img-tile add" id="addRef" role="button" aria-label="添加参考图"><span class="plus">+</span><span class="lbl">参考图(可选)</span></div>`;
-    area.innerHTML=`<div class="img-tiles" id="refGrid">${tiles}</div><div class="area-hint">参考图 ${urls.length}/${max} 张(可选)${reuseActive()?' · 复用上次原图,点 × 可清除':''}:局部替换时上传目标物(如要换的衣服)。</div>`;
-    const add=area.querySelector('#addRef');
-    if(add){ add.onclick=()=>{ const p=document.getElementById('refPick'); p.value=''; p.click(); }; bindDrop(add, fs=>addRefFiles(Array.from(fs))); }
-    area.querySelectorAll('.rmx[data-rm]').forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); if(reuseActive()){ clearReuse(); } else { refFiles.splice(Number(el.dataset.rm),1); } renderRefs(); scheduleEstimate(); refreshBtn(); });
+    const rmSvg='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+    strip.innerHTML=urls.map((u,i)=>`<div class="refchip"><img src="${u}"><button type="button" class="rmx" data-rm="${i}" aria-label="删除第${i+1}张参考图">${rmSvg}</button></div>`).join('');
+    strip.querySelectorAll('.rmx[data-rm]').forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); if(reuseActive()){ clearReuse(); } else { refFiles.splice(Number(el.dataset.rm),1); } renderRefs(); scheduleEstimate(); refreshBtn(); });
+    document.getElementById('refBtnLbl').textContent=`参考图片 (${urls.length}/${max})`;
+    const atMax = urls.length>=max;
+    const btn=document.getElementById('refBtn');
+    btn.style.opacity=atMax?'.5':''; btn.style.pointerEvents=atMax?'none':'';
   }
+  document.getElementById('refBtn').onclick=()=>{ const p=document.getElementById('refPick'); p.value=''; p.click(); };
   document.getElementById('refPick').onchange=function(){ addRefFiles(Array.from(this.files||[])); };
+  // 指令卡整体可拖入参考图(贴 ai-image-edit 指令卡拖放)
+  (function(){ const card=document.querySelector('.instr-card'); if(card) bindDrop(card, fs=>addRefFiles(Array.from(fs).filter(f=>f.type.startsWith('image/')))); })();
 
   // ── 设置 popover ──
   function renderRes(){
