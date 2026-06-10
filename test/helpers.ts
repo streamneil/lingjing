@@ -10,6 +10,12 @@ export interface Res {
   setCookie?: string;
 }
 
+export interface RawRes {
+  status: number;
+  headers: http.IncomingHttpHeaders;
+  buf: Buffer;
+}
+
 export class Client {
   private cookie: string | undefined;
   constructor(private app: Express) {}
@@ -130,6 +136,29 @@ export class Client {
   }
   del(path: string) {
     return this.request('DELETE', path);
+  }
+  /** 原始 GET:拿 status + headers + 二进制 body(下载端点测 Content-Disposition / 字节)。 */
+  getRaw(path: string): Promise<RawRes> {
+    return new Promise((resolveP, reject) => {
+      const server = this.app.listen(0, () => {
+        const port = (server.address() as any).port;
+        const headers: Record<string, string> = {};
+        if (this.cookie) headers['Cookie'] = this.cookie;
+        const req = http.request({ host: '127.0.0.1', port, path, method: 'GET', headers }, (res) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (c) => chunks.push(Buffer.from(c)));
+          res.on('end', () => {
+            server.close();
+            resolveP({ status: res.statusCode!, headers: res.headers, buf: Buffer.concat(chunks) });
+          });
+        });
+        req.on('error', (e) => {
+          server.close();
+          reject(e);
+        });
+        req.end();
+      });
+    });
   }
   /** 丢弃当前 cookie(模拟未登录 / 新客户端)。 */
   clearCookie() {

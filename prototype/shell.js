@@ -330,5 +330,64 @@
     return t.getFullYear() + '-' + pad(t.getMonth()+1) + '-' + pad(t.getDate());
   };
 
+  /**
+   * 统一下载工具(图片/视频/音频通用)。
+   * 「下载一闪而过」根因:OSS 签名 URL 无 CORS 头,fetch(签名URL) 被浏览器 CORS 拦截,
+   *   回落 window.open 打开图片直链 → 一闪而过。
+   * 正解:同源下载端点(/api/jobs/:id/download/:idx,后端加 Content-Disposition:attachment),
+   *   同源 URL 上 <a download> 直接生效,无需 fetch,无 CORS。
+   * 本函数:
+   *   · 同源 URL → 直接 <a href download>(挂 DOM → click → 延迟移除),最稳;
+   *   · 跨域 URL(兜底,理论上不再走到)→ fetch blob;失败再回落 window.open。
+   * 返回 Promise<boolean>:true=已触发下载,false=回落到新窗口打开。
+   */
+  function isSameOrigin(url){
+    try{ return new URL(url, location.href).origin === location.origin; }
+    catch{ return false; }
+  }
+  function clickAnchor(href, filename, revokeUrl){
+    const a = document.createElement('a');
+    a.href = href; a.download = filename || 'lingjing-download';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    // 延迟移除 <a> + 回收 objectURL,给浏览器留出异步抓取窗口(过早回收会闪一下就没)
+    setTimeout(()=>{ a.remove(); if(revokeUrl) URL.revokeObjectURL(revokeUrl); }, 4000);
+  }
+  window.LJDownload = async function(url, filename){
+    if(!url) return false;
+    // 同源(下载代理端点)→ 直接 <a download>,无需 fetch
+    if(isSameOrigin(url)){ clickAnchor(url, filename); return true; }
+    // 跨域兜底:fetch → blob → 同源 objectURL
+    try{
+      const r = await fetch(url, { credentials:'same-origin' });
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const blob = await r.blob();
+      const u = URL.createObjectURL(blob);
+      clickAnchor(u, filename, u);
+      return true;
+    }catch(e){
+      window.open(url, '_blank', 'noopener'); // 最终回落:新窗口(用户可右键另存)
+      return false;
+    }
+  };
+
+  /**
+   * 批量下载多个文件(串行 + 间隔),用于一条记录多图。
+   * items: [{url, filename}, ...]
+   */
+  window.LJDownloadAll = async function(items){
+    if(!items || !items.length) return;
+    let ok = 0;
+    for(let i=0; i<items.length; i++){
+      const done = await window.LJDownload(items[i].url, items[i].filename);
+      if(done) ok++;
+      if(i < items.length-1) await new Promise(r=>setTimeout(r, 600)); // 间隔避免浏览器拦截
+    }
+    window.LJToast && window.LJToast(
+      items.length>1 ? `✓ 已开始下载 ${items.length} 个文件` : '✓ 已开始下载'
+    );
+  };
+
   bindAuth();
 })();
