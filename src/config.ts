@@ -63,6 +63,9 @@ export const config = {
     // v1 对复刻支持差(几乎不像本人,官方明说);v2 免费且像很多;v3.5 最像但需付费。
     // 默认 v3.5-plus(最佳保真);若无付费额度,改为 cosyvoice-v2(免费)。
     cloneModel: optional('BAICHUAN_CLONE_MODEL', 'cosyvoice-v3.5-plus'),
+    // 声音设计模型(Qwen-TTS-VD):描述→音色。设计 + 用设计音色合成都用它,走 HTTP
+    // MultiModalConversation(非 CosyVoice WebSocket)。VD 创建的音色须用同 target_model 合成。
+    designModel: optional('BAICHUAN_DESIGN_MODEL', 'qwen3-tts-vd-2026-01-26'),
     // 任务回收模式:'poll'(私有化兜底,默认) | 'webhook'(托管可选)
     jobMode: optional('BAICHUAN_JOB_MODE', 'poll') as 'poll' | 'webhook',
     pollIntervalMs: Number(optional('POLL_INTERVAL_MS', '3000')),

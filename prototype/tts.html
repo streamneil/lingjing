@@ -20,15 +20,40 @@
   .vsheet-ov.on { display:block; }
   .vsheet { position:fixed; top:0; right:0; bottom:0; width:420px; max-width:90vw; background:var(--bg-soft); border-left:1px solid var(--line); z-index:301; transform:translateX(100%); transition:.3s var(--ease-out); display:flex; flex-direction:column; }
   .vsheet.on { transform:none; }
-  .vsheet-h { padding:20px 22px; border-bottom:1px solid var(--line-soft); display:flex; align-items:center; }
-  .vsheet-h h3 { font-size:17px; font-weight:700; }
-  .vsheet-h .x { margin-left:auto; cursor:pointer; color:var(--t3); }
-  .vsheet-body { flex:1; overflow-y:auto; padding:14px 18px; }
+  .vsheet { width:480px; }
+  .vsheet-h { padding:18px 22px 0; border-bottom:1px solid var(--line-soft); display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .vsheet-h h3 { font-size:17px; font-weight:700; margin-right:auto; }
+  .vsheet-h .x { cursor:pointer; color:var(--t3); order:9; }
+  /* 音色库/我的声音 Tab + 复制或设计 入口 */
+  .vtabs { display:flex; gap:4px; padding:14px 22px 0; }
+  .vtab { padding:8px 16px; border-radius:9px; background:transparent; border:1px solid transparent; color:var(--t3); font-size:13px; font-weight:600; cursor:pointer; transition:.15s; }
+  .vtab:hover { color:var(--t1); }
+  .vtab.on { background:var(--card-hi); border-color:var(--line-hi); color:var(--t1); }
+  .vdesign-btn { margin-left:auto; display:flex; align-items:center; gap:6px; padding:8px 13px; border-radius:9px; background:var(--field); border:1px solid var(--line); color:var(--t2); font-size:12.5px; font-weight:600; cursor:pointer; transition:.15s; }
+  .vdesign-btn:hover { border-color:var(--line-hi); color:var(--t1); }
+  .vdesign-btn svg { width:14px; height:14px; }
+  /* 语言/性别 筛选 */
+  .vfilters { display:flex; gap:8px; padding:12px 22px; }
+  .vfilter { flex:1; padding:9px 12px; background:var(--field); border:1px solid var(--line); border-radius:9px; color:var(--t2); font-size:12.5px; cursor:pointer; appearance:none; }
+  .vsheet-body { flex:1; overflow-y:auto; padding:4px 18px 18px; }
+  /* 音色卡:旗帜+名+热门徽标+标签行 + 圆形试听 */
   .vcard2 { display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:12px; cursor:pointer; transition:.15s; border:1px solid transparent; }
   .vcard2:hover { background:var(--card); }
   .vcard2.on { background:var(--card-hi); border-color:var(--line-hi); }
-  .vcard2 .vn { font-size:14px; font-weight:600; color:var(--t1); }
-  .vcard2 .vd { font-size:11.5px; color:var(--t4); margin-top:2px; }
+  .vcard2 .vmeta { flex:1; min-width:0; }
+  .vcard2 .vn { font-size:14px; font-weight:600; color:var(--t1); display:flex; align-items:center; gap:6px; }
+  .vcard2 .vn .flag { font-size:13px; }
+  .vcard2 .vn .hot { font-size:9px; padding:1px 5px; border-radius:5px; background:rgba(56,132,255,.16); color:var(--blue); font-weight:700; }
+  .vcard2 .vd { font-size:11.5px; color:var(--t4); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .vcard2 .vplay { flex:0 0 auto; width:34px; height:34px; border-radius:50%; display:grid; place-items:center; background:var(--field); border:1px solid var(--line); color:var(--t2); cursor:pointer; transition:.15s; }
+  .vcard2 .vplay:hover:not([disabled]) { border-color:var(--line-hi); color:var(--t1); }
+  .vcard2 .vplay svg { width:15px; height:15px; }
+  .vcard2 .vplay[disabled] { opacity:.35; cursor:not-allowed; }
+  /* 设计弹窗 */
+  .vd-dims { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 4px; }
+  .vd-dim { font-size:11px; padding:4px 9px; border-radius:7px; background:var(--field); border:1px solid var(--line); color:var(--t3); cursor:pointer; transition:.15s; }
+  .vd-dim:hover { border-color:var(--blue); color:var(--t1); }
+  .vd-preview { margin-top:12px; }
 
   .sld-row { display:flex; align-items:center; gap:12px; padding:11px 14px; background:var(--field); border:1px solid var(--line); border-radius:var(--r); }
   .sld-row .lbl { font-size:13px; color:var(--t3); width:36px; }
@@ -91,12 +116,34 @@
  </div>
 </div>
 
-<!-- 音色选择 sheet -->
+<!-- 音色选择 sheet(音色库/我的声音 Tab + 筛选 + 试听 + 复制或设计)-->
 <div class="vsheet-ov" id="vsheetOv" onclick="closeVoices()"></div>
 <div class="vsheet" id="vsheet">
-  <div class="vsheet-h"><h3>选择音色</h3><div class="x" onclick="closeVoices()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:22px;height:22px"><path d="M18 6 6 18M6 6l12 12"/></svg></div></div>
+  <div class="vsheet-h"><h3>所有声音</h3><div class="x" onclick="closeVoices()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:22px;height:22px"><path d="M18 6 6 18M6 6l12 12"/></svg></div></div>
+  <div class="vtabs">
+    <button class="vtab on" data-tab="preset" onclick="switchVTab('preset')">音色库</button>
+    <button class="vtab" data-tab="mine" onclick="switchVTab('mine')">我的声音</button>
+    <button class="vdesign-btn" onclick="openDesign()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>复制或设计</button>
+  </div>
+  <div class="vfilters">
+    <select class="vfilter" id="vfLang" onchange="renderVoices()"><option value="">语言:全部</option><option value="中文">中文</option><option value="英文">英文</option></select>
+    <select class="vfilter" id="vfGender" onchange="renderVoices()"><option value="">性别:全部</option><option value="女">女</option><option value="男">男</option></select>
+  </div>
   <div class="vsheet-body" id="vsheetBody"><div style="color:var(--t4);padding:20px">加载音色中…</div></div>
 </div>
+
+<!-- 声音设计弹窗 -->
+<div class="ov" id="ov-design"><div class="modal">
+  <div class="mh"><h3>设计音色</h3><div class="mc" onclick="closeModal('design')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></div></div>
+  <div class="mb">
+    <div class="iline"><label>音色名称</label><input id="dgName" placeholder="例如:温柔知性女声" maxlength="40" oninput="refreshDgBtn()"></div>
+    <div class="cfg-label" style="margin-top:2px">声音描述(越具体越精准,≤2048 字)</div>
+    <textarea id="dgPrompt" maxlength="2048" placeholder="例如:年轻活泼的女性声音,语速较快,带有明显的上扬语调,适合介绍时尚产品。" style="width:100%;min-height:84px;padding:11px 13px;background:var(--field);border:1px solid var(--line);border-radius:10px;color:var(--t1);font-size:13px;resize:vertical" oninput="refreshDgBtn()"></textarea>
+    <div class="vd-dims" id="dgDims"></div>
+    <div class="vd-preview" id="dgPreview" style="display:none"></div>
+    <button class="btn btn-white" id="dgSubmitBtn" style="width:100%;padding:14px;font-size:15px;margin-top:12px" onclick="submitDesign()">生成音色</button>
+  </div>
+</div></div>
 
 <script src="shell.js"></script>
 <script src="tools.js"></script>
@@ -113,30 +160,105 @@
   rate.oninput=()=>document.getElementById('rateVal').textContent=parseFloat(rate.value).toFixed(1)+'×';
   vol.oninput=()=>document.getElementById('volVal').textContent=vol.value;
 
-  // 音色 sheet
+  // ── 音色 sheet:音色库/我的声音 Tab + 语言/性别筛选 + 逐音色试听 ──
+  const PLAY_SVG=window.LJAudioPreview.PLAY_SVG;
+  let vsData={presets:[],clones:[]};   // /voices 原始数据
+  let vTab='preset';                   // 当前 Tab:preset | mine
+  function openModal(id){ document.getElementById('ov-'+id)?.classList.add('show'); }
+  function closeModal(id){ document.getElementById('ov-'+id)?.classList.remove('show'); }
+  window.openModal=openModal; window.closeModal=closeModal;
+
   function openVoices(){ document.getElementById('vsheetOv').classList.add('on'); document.getElementById('vsheet').classList.add('on'); loadVoices(); }
-  function closeVoices(){ document.getElementById('vsheetOv').classList.remove('on'); document.getElementById('vsheet').classList.remove('on'); }
+  function closeVoices(){ window.LJAudioPreview.stop(); document.getElementById('vsheetOv').classList.remove('on'); document.getElementById('vsheet').classList.remove('on'); }
+  function switchVTab(t){ vTab=t; document.querySelectorAll('.vtab').forEach(b=>b.classList.toggle('on',b.dataset.tab===t)); renderVoices(); }
+
   async function loadVoices(){
     const body=document.getElementById('vsheetBody');
+    body.innerHTML='<div style="color:var(--t4);padding:20px">加载音色中…</div>';
     try{
-      const vc=await LJ.get('/voices');
-      const items=[...((vc.clones||[]).filter(v=>v.status==='ready')), ...(vc.presets||[])];
-      body.innerHTML=items.map(v=>{
-        const desc=v.kind==='clone' ? '克隆音色 · 本人声音' : `${v.gender||''} · ${v.desc||''}`;
-        const on=selectedVoice&&selectedVoice.id===v.id;
-        return `<div class="vcard2${on?' on':''}" onclick='pickVoice(${JSON.stringify({id:v.id,name:v.name,desc}).replace(/'/g,"&#39;")})'><div class="vn">${esc(v.name)}${v.kind==='preset'?' <span class="hot" style="font-size:9px">预置</span>':''}</div><div class="vd">${esc(desc)}</div></div>`;
-      }).join('') || '<div style="color:var(--t4);padding:20px">暂无音色</div>';
-      if(!selectedVoice && items[0]) pickVoice({id:items[0].id,name:items[0].name,desc:''}, true);
+      vsData=await LJ.get('/voices');
+      renderVoices();
+      // 默认选中:首个可用音色(优先当前 Tab)
+      if(!selectedVoice){ const first=currentList()[0]; if(first) pickVoiceObj(first,true); }
     }catch(e){ body.innerHTML='<div style="color:var(--red);padding:20px">音色加载失败</div>'; }
   }
-  window.pickVoice=(v, silent)=>{
-    selectedVoice=v;
+  function currentList(){
+    if(vTab==='mine') return (vsData.clones||[]).filter(v=>v.status==='ready');
+    return vsData.presets||[];
+  }
+  function renderVoices(){
+    window.LJAudioPreview.stop();
+    const body=document.getElementById('vsheetBody');
+    const lang=document.getElementById('vfLang').value, gender=document.getElementById('vfGender').value;
+    let list=currentList();
+    // 筛选(预置有 lang/gender;自建音色无,语言/性别筛选时排除)
+    if(lang) list=list.filter(v=>(v.lang||'')===lang);
+    if(gender) list=list.filter(v=>(v.gender||'')===gender);
+    if(!list.length){
+      body.innerHTML=`<div style="color:var(--t4);padding:30px;text-align:center">${vTab==='mine'?'还没有自己的声音,点「复制或设计」创建一个':'没有符合筛选的音色'}</div>`;
+      return;
+    }
+    body.innerHTML=list.map(v=>{
+      const isMine=vTab==='mine';
+      const kindLabel=v.kind==='design'?'设计音色':(v.kind==='clone'?'克隆音色':'');
+      const desc=isMine?kindLabel:`${[v.gender,v.lang].filter(Boolean).join(' · ')}${v.desc?' · '+v.desc:''}`;
+      const hot=(!isMine)?' <span class="hot">预置</span>':'';
+      const on=selectedVoice&&selectedVoice.id===v.id;
+      const canPlay=!!v.sample;
+      const play=`<button class="vplay" data-src="${esc(v.sample||'')}" ${canPlay?'':'disabled'} onclick="event.stopPropagation();window.LJAudioPreview.play(this.dataset.src,this)" aria-label="试听">${PLAY_SVG}</button>`;
+      return `<div class="vcard2${on?' on':''}" data-id="${esc(v.id)}" onclick='pickVoiceObj(${JSON.stringify({id:v.id,name:v.name,desc}).replace(/'/g,"&#39;")})'>`
+        +`<div class="vmeta"><div class="vn"><span class="flag">🇨🇳</span>${esc(v.name)}${hot}</div><div class="vd">${esc(desc)}</div></div>${play}</div>`;
+    }).join('');
+  }
+  window.pickVoiceObj=(v, silent)=>{
+    selectedVoice={id:v.id,name:v.name,desc:v.desc};
     document.getElementById('voiceName').textContent=v.name;
     document.getElementById('voiceDesc').textContent=v.desc||'已选择';
+    document.querySelectorAll('#vsheetBody .vcard2').forEach(c=>c.classList.toggle('on', c.dataset.id===v.id));
     if(!silent) closeVoices(); refreshBtn();
-    document.querySelectorAll('#vsheetBody .vcard2').forEach(c=>c.classList.toggle('on', c.textContent.includes(v.name)));
   };
-  window.openVoices=openVoices; window.closeVoices=closeVoices;
+  window.openVoices=openVoices; window.closeVoices=closeVoices; window.switchVTab=switchVTab; window.renderVoices=renderVoices;
+
+  // ── 声音设计弹窗(E7)──
+  const DG_DIMS=['年轻女声','沉稳男声','温柔','活泼','磁性','播音腔','语速偏快','适合有声书'];
+  function openDesign(){
+    document.getElementById('dgName').value=''; document.getElementById('dgPrompt').value='';
+    document.getElementById('dgPreview').style.display='none'; document.getElementById('dgPreview').innerHTML='';
+    document.getElementById('dgDims').innerHTML=DG_DIMS.map(d=>`<span class="vd-dim" onclick="addDgDim('${d}')">${d}</span>`).join('');
+    refreshDgBtn(); openModal('design');
+    setTimeout(()=>document.getElementById('dgName').focus(),60);
+  }
+  window.addDgDim=(d)=>{ const t=document.getElementById('dgPrompt'); t.value=(t.value?t.value.replace(/[，。]?$/,'，'):'')+d; refreshDgBtn(); t.focus(); };
+  function refreshDgBtn(){
+    const btn=document.getElementById('dgSubmitBtn');
+    const name=document.getElementById('dgName').value.trim(), prompt=document.getElementById('dgPrompt').value.trim();
+    let ok=true, txt='生成音色';
+    if(!name){ ok=false; txt='请输入音色名称'; }
+    else if(!prompt){ ok=false; txt='请输入声音描述'; }
+    btn.disabled=!ok; btn.textContent=txt;
+  }
+  async function submitDesign(){
+    const btn=document.getElementById('dgSubmitBtn'); if(btn.disabled) return;
+    const name=document.getElementById('dgName').value.trim(), voicePrompt=document.getElementById('dgPrompt').value.trim();
+    btn.disabled=true; btn.textContent='生成中…';
+    try{
+      const r=await LJ.post('/voices/design',{name,voicePrompt});
+      // 预览试听
+      const pv=document.getElementById('dgPreview');
+      if(r.previewUrl){
+        pv.style.display=''; pv.innerHTML=`<div class="cfg-label">预览试听</div><audio src="${esc(r.previewUrl)}" controls preload="metadata" style="width:100%"></audio>`;
+      }
+      window.LJToast&&window.LJToast('✓ 音色「'+name+'」已生成,可在「我的声音」选用');
+      await loadVoices(); switchVTab('mine');
+      // 自动选中新音色
+      pickVoiceObj({id:r.id,name:r.name,desc:'设计音色'}, true);
+      setTimeout(()=>closeModal('design'), r.previewUrl?2500:300);
+    }catch(e){ window.LJToast&&window.LJToast(e.message||'设计失败','err'); }
+    finally{ refreshDgBtn(); }
+  }
+  window.openDesign=openDesign; window.refreshDgBtn=refreshDgBtn; window.submitDesign=submitDesign;
+  // Esc 关设计弹窗
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&document.getElementById('ov-design').classList.contains('show')) closeModal('design'); });
 
   // 预估
   let estTimer=null;

@@ -8,7 +8,7 @@
 
 import { config } from '../config.js';
 import { getGateway } from '../gateway/baichuan.js';
-import { synthesizeSpeech } from '../gateway/cosyvoice.js';
+import { synthesizeSpeech, synthesizeSpeechHttp } from '../gateway/cosyvoice.js';
 import { getMediaPublisher, tenantDelivery } from '../gateway/media-publisher.js';
 import type { VideoGenInput, VideoSubmitUrls, ImageGenInput, TtsGenInput, VideoGenT2VInput, ProviderJobStatus } from '../gateway/types.js';
 import { storage } from '../storage/index.js';
@@ -107,18 +107,31 @@ async function resolveImageUrl(avatarRef: string, tenantId: string): Promise<str
   throw new Error(`形象不可用:${avatarRef}`);
 }
 
-/** 把 voiceRef 解析为 {voice, model}。
- *  预置音色用 ttsModel(v1,免费、够用);克隆音色用 cloneModel(v3.5,保真度高,
- *  复刻与合成必须同模型)。复刻未产出则回退预置(v1)。 */
-function resolveVoice(voiceRef: string, tenantId: string): { voice: string; model: string } {
-  if (isPresetVoice(voiceRef)) return { voice: voiceRef, model: config.baichuan.ttsModel };
-  const clone = getVoice(voiceRef, tenantId);
-  if (clone?.provider_voice_id) {
-    // 真实声音复刻:voice_id + 同复刻模型 = 本人声音
-    return { voice: clone.provider_voice_id, model: config.baichuan.cloneModel };
+/** 合成传输:CosyVoice 走 WebSocket(返 Buffer);Qwen 设计音色走 HTTP MultiModalConversation。 */
+type Transport = 'ws' | 'http';
+
+/** 把 voiceRef 解析为 {voice, model, transport}。
+ *  transport 由音色 kind 推导(eng-review 张力1:不存 DB target_model 列,克隆共用全局 cloneModel):
+ *   - 预置(preset)→ ttsModel(v1,免费、够用)、ws。
+ *   - 克隆(clone)→ cloneModel(v3.5,复刻与合成必须同模型)、ws。
+ *   - 设计(design)→ designModel(Qwen-VD)、http。VD 创建的音色须用同 target_model 合成。
+ *  复刻/设计未产出(provider_voice_id 空)则回退预置(v1,ws),避免任务整体失败。 */
+export function resolveVoice(
+  voiceRef: string,
+  tenantId: string,
+): { voice: string; model: string; transport: Transport } {
+  if (isPresetVoice(voiceRef))
+    return { voice: voiceRef, model: config.baichuan.ttsModel, transport: 'ws' };
+  const v = getVoice(voiceRef, tenantId);
+  if (v?.provider_voice_id) {
+    if (v.kind === 'design')
+      // Qwen 设计音色:voice_id + Qwen-VD 模型 = HTTP 合成
+      return { voice: v.provider_voice_id, model: config.baichuan.designModel, transport: 'http' };
+    // 声音复刻:voice_id + 同复刻模型 = 本人声音(CosyVoice WS)
+    return { voice: v.provider_voice_id, model: config.baichuan.cloneModel, transport: 'ws' };
   }
-  // 克隆未产出 / 解析失败:回退预置音色(v1),避免任务整体失败
-  return { voice: DEFAULT_PRESET_VOICE, model: config.baichuan.ttsModel };
+  // 克隆/设计未产出 / 解析失败:回退预置音色(v1,ws),避免任务整体失败
+  return { voice: DEFAULT_PRESET_VOICE, model: config.baichuan.ttsModel, transport: 'ws' };
 }
 
 // 默认回退音色:cosyvoice-v1 合法音色名(新闻播报场景)
@@ -538,10 +551,12 @@ const TTS_MAX_CHARS = 2000;
 
 /** 处理一个文转语音(TTS,cosyvoice)job。抛错由调用方捕获并标 failed(失败隔离)。
  *
- * 管线:文本送审 → 音色解析 → 分段(TTS 字数上限,非视频 90)→ 逐段 synthesizeSpeech → concatAudio
+ * 管线:文本送审 → 音色解析(含 transport)→ 分段(TTS 字数上限)→ 逐段合成 → concatAudio
  *   → putObject(buffer)存 key → output_kind=audio。
- * ⚠️ synthesizeSpeech 是 WebSocket,自带 60s 内部超时(无 AbortSignal,外部声音 P1-A);job 级
- *   deadline 每段前检查防多段累计跑超(外部声音 P1-B)。**不抄 renderSegment 的 15MB/20s s2v 守卫**。
+ * ⚠️ transport 分支(eng-review):ws=CosyVoice WebSocket(自带 60s 内超时);http=Qwen-TTS
+ *   MultiModalConversation。两路共享分段+concat 骨架,均返 Buffer → 统一 putObject(非 putObjectFromUrl)。
+ *   http 也分段(防 Qwen 单次输入上限硬失败);rate/volume 仅 CosyVoice 支持,http 路径不传。
+ *   job 级 deadline 每段前检查防多段累计跑超。**不抄 renderSegment 的 15MB/20s s2v 守卫**。
  */
 async function runTtsJob(job: JobRow): Promise<void> {
   const input = JSON.parse(job.input_json) as TtsGenInput;
@@ -550,10 +565,10 @@ async function runTtsJob(job: JobRow): Promise<void> {
   const pre = await moderatePrompt(input.text);
   if (!pre.allowed) throw new Error(`送审拒绝:${pre.reason}`);
 
-  // 2. 音色解析(复用 resolveVoice:预置/克隆;克隆失败回退由 isUsableVoice 在 API 层已拦)
-  const { voice, model } = resolveVoice(input.voiceRef, job.tenant_id);
+  // 2. 音色解析(复用 resolveVoice:预置/克隆/设计 + transport;失败回退由 isUsableVoice 在 API 层已拦)
+  const { voice, model, transport } = resolveVoice(input.voiceRef, job.tenant_id);
 
-  // 3. 分段(TTS 字数上限;多数单段)+ job 级 deadline(段间检查防累计超)
+  // 3. 分段(两路都分段:ws 防 cosyvoice 单次上限、http 防 Qwen 单次上限)+ job 级 deadline
   const segments = segmentScript(input.text, TTS_MAX_CHARS);
   if (segments.length === 0) throw new Error('文本分段为空');
   const deadline = Date.now() + config.baichuan.jobTimeoutMs;
@@ -562,14 +577,18 @@ async function runTtsJob(job: JobRow): Promise<void> {
   for (let i = 0; i < segments.length; i++) {
     if (Date.now() > deadline) throw new Error(`生成超时(>${config.baichuan.jobTimeoutMs}ms),已放弃`);
     updateProgress(job.id, Math.min(99, Math.floor((i / segments.length) * 100)));
-    const buf = await synthesizeSpeech({
-      text: segments[i]!, voice, model,
-      rate: input.rate ?? 1, volume: input.volume ?? 50,
-    });
+    // transport 分支:仅「逐段怎么拿 buffer」不同;两路均返 Buffer
+    const buf =
+      transport === 'http'
+        ? await synthesizeSpeechHttp({ text: segments[i]!, voice, model }) // Qwen 无 rate/volume
+        : await synthesizeSpeech({
+            text: segments[i]!, voice, model,
+            rate: input.rate ?? 1, volume: input.volume ?? 50,
+          });
     audioBufs.push(buf);
   }
 
-  // 4. 拼接(单段直返不调 ffmpeg)+ 落存储(synthesizeSpeech 返 Buffer → putObject,非 putObjectFromUrl)
+  // 4. 拼接(单段直返不调 ffmpeg)+ 落存储(两路均返 Buffer → putObject,非 putObjectFromUrl)
   const merged = await concatAudio(audioBufs);
   const key = `audio/${job.tenant_id}/${job.id}.mp3`;
   await storage.putObject(key, merged, 'audio/mpeg');

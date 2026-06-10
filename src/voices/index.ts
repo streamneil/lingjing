@@ -19,8 +19,18 @@ const PRESETS: { id: string; name: string; lang: string; gender: string; desc: s
   { id: 'longcheng', name: '磁性男声 · 浩然', lang: '中文', gender: '男', desc: '磁性 · 广告、品牌' },
 ];
 
+/** 预置音色试听样本在 MinIO 的稳定 key(由 preset id 派生)。
+ *  样本由 scripts/seed-preset-samples 一次性合成上传;GET /voices 每请求签名(URL 会过期,不缓存)。 */
+export function presetSampleKey(presetId: string): string {
+  return `voices/presets/${presetId}.mp3`;
+}
 export function listPresets() {
-  return PRESETS.map((p) => ({ ...p, kind: 'preset' as const, status: 'ready' as const }));
+  return PRESETS.map((p) => ({
+    ...p,
+    kind: 'preset' as const,
+    status: 'ready' as const,
+    sampleKey: presetSampleKey(p.id),
+  }));
 }
 export function isPreset(ref: string): boolean {
   return PRESETS.some((p) => p.id === ref);
@@ -70,6 +80,55 @@ export function createCloneVoice(p: CreateVoiceParams): VoiceRow {
     v.authorization_id, v.created_at,
   );
   return v;
+}
+
+export interface CreateDesignVoiceParams {
+  tenantId: string;
+  name: string;
+  providerVoiceId: string; // Qwen 声音设计返回的 voice id(必有,否则 API 层已拒)
+}
+
+/** 设计音色:纯文本描述生成的合成音色(非真人),无需授权存证(与克隆区别)。
+ *  kind=design → resolveVoice 路由到 Qwen HTTP 合成(designModel)。 */
+export function createDesignVoice(p: CreateDesignVoiceParams): VoiceRow {
+  const v: VoiceRow = {
+    id: randomUUID(),
+    tenant_id: p.tenantId,
+    name: p.name,
+    kind: 'design',
+    status: 'ready', // 设计音色创建即可用(provider_voice_id 必有)
+    source_key: null, // 设计无音频样本
+    provider_voice_id: p.providerVoiceId,
+    authorization_id: null, // 合成音色无真人,无需授权
+    created_at: now(),
+  };
+  db.prepare(
+    `INSERT INTO voice (id,tenant_id,name,kind,status,source_key,provider_voice_id,authorization_id,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    v.id, v.tenant_id, v.name, v.kind, v.status, v.source_key, v.provider_voice_id,
+    v.authorization_id, v.created_at,
+  );
+  return v;
+}
+
+// ── 配额/限流闸(eng-review 张力2:防刷付费 Qwen 预览)──
+/** 某租户自建音色(克隆+设计)总数。用于总数上限闸。 */
+export function countCustomVoices(tenantId: string): number {
+  const row = db
+    .prepare(`SELECT COUNT(*) AS n FROM voice WHERE tenant_id=? AND kind IN ('clone','design')`)
+    .get(tenantId) as { n: number };
+  return row.n;
+}
+/** 某租户近 windowMs 内创建的设计音色数。用于创建频率闸。 */
+export function countRecentDesignVoices(tenantId: string, windowMs: number): number {
+  const since = now() - windowMs;
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM voice WHERE tenant_id=? AND kind='design' AND created_at >= ?`,
+    )
+    .get(tenantId, since) as { n: number };
+  return row.n;
 }
 
 export function listClones(tenantId: string): VoiceRow[] {
