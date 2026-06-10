@@ -74,11 +74,12 @@ export function estimateVideoCost(duration: number, priceTier: number, resolutio
   return Math.max(MIN_COST, Math.ceil(cost));
 }
 
-// 文转语音(TTS)计价:按字数(无分辨率维度)。
-const TTS_PRICE_PER_CHAR = 0.02; // 每字 0.02 积分(配音比视频便宜,占位可配)
-/** TTS 费用预估:按字数。 */
-export function estimateTtsCost(textLength: number): number {
-  return Math.max(MIN_COST, Math.ceil(textLength * TTS_PRICE_PER_CHAR));
+// 文转语音(TTS)计价:按字数 × 每字单价(单价随品质模型,T-TTS-QUALITY-MODEL)。
+const TTS_PRICE_PER_CHAR = 0.02; // 默认每字 0.02(= cosyvoice-v1;不选模型时与历史扁价一致)
+/** TTS 费用预估:ceil(字数 × 每字单价)。pricePerChar 缺省回落扁价(老调用/测试逐字节不变)。
+ *  品质模型单价由 buildTtsJob 从 TTS_MODELS 取并快照 → costFor 读快照,保 reserve==settle。 */
+export function estimateTtsCost(textLength: number, pricePerChar = TTS_PRICE_PER_CHAR): number {
+  return Math.max(MIN_COST, Math.ceil(textLength * pricePerChar));
 }
 
 /**
@@ -146,8 +147,12 @@ export function costFor(toolType: string, input: Record<string, unknown>): numbe
         : (def.supportsAudio ? !!input.audio : false);
       return estimateVideoCost(duration, priceTier, resolution, audio);
     }
-    case 'tts':
-      return estimateTtsCost(typeof input.text === 'string' ? input.text.length : 0);
+    case 'tts': {
+      // 读快照单价(reserve==settle);老 job 无快照 → 回落扁价(estimateTtsCost 默认),byte-identical。
+      const pricePerChar =
+        typeof input.pricePerCharSnapshot === 'number' ? input.pricePerCharSnapshot : undefined;
+      return estimateTtsCost(typeof input.text === 'string' ? input.text.length : 0, pricePerChar);
+    }
     default:
       throw new Error(`未知工具类型,无法计价:${toolType}`);
   }

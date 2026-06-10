@@ -106,6 +106,8 @@ export interface TtsGenInput {
   voiceRef: string; // 音色:预置音色名 或 克隆音色 id(经 voices 校验)
   rate?: number; // 语速 0.5-2,默认 1
   volume?: number; // 音量 0-100,默认 50
+  model?: string; // 品质模型 key(TTS_MODELS;须与音色 transport 配套)。缺省按音色 kind 默认模型。
+  pricePerCharSnapshot?: number; // 提交时快照每字单价(reserve==settle);worker settle 读它。
 }
 
 export interface SyncImageGateway {
