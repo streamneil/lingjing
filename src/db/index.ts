@@ -173,7 +173,7 @@ db.exec(`
     id            TEXT PRIMARY KEY,
     tenant_id     TEXT NOT NULL,
     name          TEXT NOT NULL,
-    kind          TEXT NOT NULL DEFAULT 'preset',   -- preset | clone
+    kind          TEXT NOT NULL DEFAULT 'preset',   -- preset | clone | design
     status        TEXT NOT NULL DEFAULT 'ready',    -- processing | ready | failed
     source_key    TEXT,                             -- 样本音频在 MinIO 的 key
     provider_voice_id TEXT,                          -- 百炼声音复刻返回的 voice_id(克隆音色合成时用)
@@ -434,7 +434,7 @@ export interface AuthorizationRow {
   created_at: number;
 }
 
-export type VoiceKind = 'preset' | 'clone';
+export type VoiceKind = 'preset' | 'clone' | 'design';
 export type VoiceStatus = 'processing' | 'ready' | 'failed';
 
 export interface VoiceRow {

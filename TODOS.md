@@ -96,3 +96,17 @@
 - **Why:** 融媒体编辑常从截图/素材库复制图,省去「存文件→选文件」两步。三页共享一个 paste 监听实现。
 - **Context:** 来自 /plan-design-review img2video UI parity 轮。需处理焦点上下文(粘在提示词框里的文字 vs 图)+ 三页各自槽位路由(img2video 还分首帧/尾帧/参考)。全站级体验缺口而非 img2video 个体差距,故不入 parity 轮。
 - **Priority:** P3  **Depends on:** 无
+
+## CEO 审计补充(2026-06-10,SELECTIVE EXPANSION — 文字转语音 声音面板)
+
+### T-TTS-QUALITY-MODEL:品质模型选择 + 按 model tier 计价
+- **What:** 文字转语音左面板加「品质」下拉(cosyvoice-v1 免费 / qwen3-tts-flash / MiniMax),不同模型能力与价格不同;estimateTtsCost 加 model 参,buildTtsJob 快照 modelTier。
+- **Why:** 截图竞品左下有「品质 V2.0」下拉;不同模型音质/价格分层是付费分级的抓手。
+- **Context:** 来自 /plan-ceo-review 声音面板轮(候选4,Defer)。钱路改动:estimateTtsCost(textLength) → estimateTtsCost(textLength, modelTier),buildTtsJob 必须快照 modelTier 保 reserve==settle(即便厂商返回不同)。本轮已加 voice.target_model 列为此铺路。是 T-TTS-EMOTION 的前置(情绪需 Qwen-Instruct/MiniMax)。
+- **Priority:** P2  **Depends on:** 无(但解锁 T-TTS-EMOTION)
+
+### T-TTS-EMOTION:情绪下拉 + 音高滑块
+- **What:** 文字转语音左面板加「情绪」下拉(自动/开朗/沉稳/温柔/严肃/活泼…)+ 音高滑块 -12~+12;经 instruction 参数透传给 Qwen3-TTS-Instruct。
+- **Why:** 截图竞品左面板有「情绪:自动」下拉 + 音高滑块;情感化配音是有声书/广告核心诉求。
+- **Context:** 来自 /plan-ceo-review 声音面板轮(候选3,Defer)。强依赖 T-TTS-QUALITY-MODEL:cosyvoice-v1 不支持情绪/指令,情绪需 Qwen3-TTS-Instruct 或 MiniMax。buildTtsJob 加 instruction/pitch 校验,gateway 透传 instruction(Qwen 路径)。
+- **Priority:** P2  **Depends on:** T-TTS-QUALITY-MODEL
