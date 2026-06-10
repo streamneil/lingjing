@@ -18,13 +18,22 @@ function clientIp(req: Request): string | null {
 }
 
 /** 从已鉴权请求写一条租户审计(req.user 必须存在)。 */
-export function audit(req: Request, action: string, target?: string): void {
-  writeAudit(req.user?.tenantId ?? 'unknown', req.user?.id ?? null, action, target ?? null, clientIp(req));
+/** detail:字段级变更详情(T-SETTINGS-AUDIT-DIFF)。设置变更类操作传 [{field,old,new}],其余省略。 */
+export function audit(
+  req: Request,
+  action: string,
+  target?: string,
+  detail?: AuditDetail,
+): void {
+  writeAudit(req.user?.tenantId ?? 'unknown', req.user?.id ?? null, action, target ?? null, clientIp(req), 'user', detail);
 }
+
+export type AuditDetail = { field: string; old: string; new: string }[];
 
 /** 低层写入(登录场景 req.user 还没挂,直接传 tenant/user)。actorType 默认 user。
  *  超管操作传 actorType='platform_admin' + actorId=platform_admin.id;
- *  跨租户操作的 tenantId 记目标租户,租户 admin 能在自己审计看到"平台 X 操作"。 */
+ *  跨租户操作的 tenantId 记目标租户,租户 admin 能在自己审计看到"平台 X 操作"。
+ *  detail:字段级变更 JSON([{field,old,new}]);只设置变更类操作写,其余 null。 */
 export function writeAudit(
   tenantId: string,
   userId: string | null,
@@ -32,11 +41,12 @@ export function writeAudit(
   target: string | null,
   ip: string | null,
   actorType: ActorType = 'user',
+  detail?: AuditDetail,
 ): void {
   db.prepare(
-    `INSERT INTO audit_log (id,tenant_id,user_id,actor_type,action,target,ip,created_at)
-     VALUES (?,?,?,?,?,?,?,?)`,
-  ).run(randomUUID(), tenantId, userId, actorType, action, target, ip, Date.now());
+    `INSERT INTO audit_log (id,tenant_id,user_id,actor_type,action,target,ip,detail,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
+  ).run(randomUUID(), tenantId, userId, actorType, action, target, ip, detail ? JSON.stringify(detail) : null, Date.now());
 }
 
 /** 平台超管操作审计(actor_type=platform_admin)。

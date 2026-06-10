@@ -92,16 +92,21 @@ settingsRouter.put('/settings', requireRole('admin'), (req: Request, res: Respon
   if (defaultResolution !== undefined && !['720P', '480P'].includes(defaultResolution)) {
     return res.status(400).json({ error: '默认分辨率非法(仅 720P / 480P)' });
   }
-  if (typeof aiLabelEnabled === 'boolean') {
-    setSetting(tenantId, 'ai_label_enabled', String(aiLabelEnabled));
-  }
-  if (typeof aiLabelText === 'string') {
-    setSetting(tenantId, 'ai_label_text', sanitizeLabelText(aiLabelText) || 'AI 生成');
-  }
-  if (defaultResolution === '720P' || defaultResolution === '480P') {
-    setSetting(tenantId, 'default_resolution', defaultResolution);
-  }
-  audit(req, 'update_settings');
+  // 字段级审计(T-SETTINGS-AUDIT-DIFF):逐字段对比旧值→新值,只记真正变了的。
+  const diff: { field: string; old: string; new: string }[] = [];
+  const applyIfChanged = (key: string, newVal: string) => {
+    const oldVal = getSetting(tenantId, key);
+    if (oldVal !== newVal) {
+      setSetting(tenantId, key, newVal);
+      diff.push({ field: key, old: oldVal, new: newVal });
+    }
+  };
+  if (typeof aiLabelEnabled === 'boolean') applyIfChanged('ai_label_enabled', String(aiLabelEnabled));
+  if (typeof aiLabelText === 'string') applyIfChanged('ai_label_text', sanitizeLabelText(aiLabelText) || 'AI 生成');
+  if (defaultResolution === '720P' || defaultResolution === '480P') applyIfChanged('default_resolution', defaultResolution);
+
+  // 只在确有变更时写审计(空改动不留噪声);detail 记字段级旧→新。
+  if (diff.length) audit(req, 'update_settings', undefined, diff);
   res.json({ ok: true });
 });
 
