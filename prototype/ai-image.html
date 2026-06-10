@@ -567,14 +567,11 @@
     }catch(e){ window.LJToast&&window.LJToast('删除失败:'+(e.message||'生成中不可删'),'err'); }
   };
   function findLabel(k){ const m=allModels.find(x=>x.key===k); return m?m.label:undefined; }
-  // 下载(P1-download:跨域签名 URL,a[download] 无效 → fetch blob → 同源 objectURL 下载)
+  // 下载(走同源代理端点 /api/jobs/:id/download/:idx,后端 attachment,根治 CORS 导致的一闪而过)
   window.downloadImgs=async(id)=>{
-    const card=document.getElementById('job-'+id); const imgs=card?[...card.querySelectorAll('.img-grid img')]:[];
-    for(let i=0;i<imgs.length;i++){
-      try{ const r=await fetch(imgs[i].src); const b=await r.blob(); const u=URL.createObjectURL(b);
-        const a=document.createElement('a'); a.href=u; a.download=`lingjing-${id}-${i+1}.png`; a.click(); URL.revokeObjectURL(u);
-      }catch(e){ window.open(imgs[i].src,'_blank'); }
-    }
+    const card=document.getElementById('job-'+id); const n=card?card.querySelectorAll('.img-grid img').length:0;
+    if(!n) return;
+    await window.LJDownloadAll(Array.from({length:n},(_,i)=>({url:`/api/jobs/${id}/download/${i}`, filename:`lingjing-${id}-${i+1}.png`})));
   };
 
   async function track(id, prompt){ try{ await LJ.pollJob(id, (job)=>renderCard({...job, prompt, ...(jobInputs[id]?{modelLabel:findLabel(jobInputs[id].model),ratio:jobInputs[id].ratio,resolution:jobInputs[id].resolution}:{})})); }catch(e){} }

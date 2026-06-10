@@ -13,7 +13,13 @@ import {
   retryJob,
   deleteJobForTenant,
 } from '../queue/index.js';
-import { signOutputUrls, getSignedUrl, putObject, getObject } from '../storage/index.js';
+import {
+  signOutputUrls,
+  getSignedUrl,
+  putObject,
+  getObject,
+  parseOutputKeys,
+} from '../storage/index.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import {
   estimateCost,
@@ -964,6 +970,46 @@ jobsRouter.get('/jobs/:id', requireAuth, async (req: Request, res: Response) => 
   }
 
   return res.json(payload);
+});
+
+// 成品下载代理 — 同源强制下载,根治「下载一闪而过」。
+// 根因:OSS 签名 URL 无 CORS 头,前端 fetch(签名URL) 被浏览器 CORS 拦截 → 回落
+// window.open 打开图片直链 → 一闪而过。改由后端拉对象、加 Content-Disposition:
+// attachment 回传(同源,无 CORS,<a download> 直接生效)。覆盖图/视频/未来音频。
+// 鉴权:复用 getJobForTenant 做租户隔离,只能下本机构的成品;越权/越界一律 404。
+jobsRouter.get('/jobs/:id/download/:idx', requireAuth, async (req: Request, res: Response) => {
+  const job = getJobForTenant(req.params.id!, req.user!.tenantId);
+  // 不存在 / 非本租户 / 未完成 / 无产物 → 统一 404(不泄露任务存在性)
+  if (!job || job.status !== 'done' || !job.output_url) return res.status(404).end();
+
+  const keys = parseOutputKeys(job.output_url);
+  const idx = Number(req.params.idx);
+  if (!Number.isInteger(idx) || idx < 0 || idx >= keys.length) return res.status(404).end();
+  const key = keys[idx]!;
+
+  // 扩展名:按 output_kind 给默认,再让 key 自带后缀覆盖(音频可能是 mp3/wav/m4a)
+  const extFromKey = (key.split('?')[0]!.match(/\.([a-z0-9]{2,4})$/i) || [])[1];
+  const kindExt: Record<string, string> = { image: 'png', video: 'mp4', audio: 'mp3' };
+  const ext = (extFromKey || kindExt[job.output_kind] || 'bin').toLowerCase();
+  const mimes: Record<string, string> = {
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp',
+    mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm',
+    mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4',
+  };
+
+  let buf: Buffer;
+  try {
+    buf = await getObject(key);
+  } catch {
+    return res.status(502).json({ error: '成品暂不可下载,请稍后重试' });
+  }
+
+  const filename = `lingjing-${job.id}-${idx + 1}.${ext}`;
+  res.setHeader('Content-Type', mimes[ext] || 'application/octet-stream');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Length', String(buf.length));
+  res.setHeader('Cache-Control', 'private, max-age=0, no-store');
+  return res.end(buf);
 });
 
 // 失败重试 — 仅 admin/creator,且只能重试本租户的

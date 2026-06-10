@@ -348,8 +348,8 @@
   };
   window.downloadVid=async(id)=>{
     const card=document.getElementById('job-'+id); const v=card?card.querySelector('video'):null; if(!v) return;
-    try{ const r=await fetch(v.src); const bl=await r.blob(); const u=URL.createObjectURL(bl); const a=document.createElement('a'); a.href=u; a.download=`lingjing-${id}.mp4`; a.click(); URL.revokeObjectURL(u); }
-    catch(e){ window.open(v.src,'_blank'); }
+    await window.LJDownload(`/api/jobs/${id}/download/0`, `lingjing-${id}.mp4`);
+    window.LJToast && window.LJToast('✓ 已开始下载');
   };
 
   async function track(id, prompt){ try{ await LJ.pollJob(id, (job)=>renderCard({...job, prompt, ...(jobInputs[id]?{modelLabel:findLabel(jobInputs[id].model),ratio:jobInputs[id].ratio,duration:jobInputs[id].duration}:{})})); }catch(e){} }
