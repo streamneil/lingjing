@@ -15,48 +15,30 @@
   .voice-pick p { font-size:12px; color:var(--t4); margin-top:2px; }
   .voice-pick .ar svg { width:18px; height:18px; color:var(--t4); }
 
-  /* 音色选择 sheet(侧滑) */
-  .vsheet-ov { position:fixed; inset:0; background:rgba(4,4,5,.66); backdrop-filter:blur(8px); display:none; z-index:300; }
-  .vsheet-ov.on { display:block; }
-  /* 设计弹窗从面板内打开,须盖在面板(z301)之上(否则被遮挡) */
+  /* 音色面板复用共享 sheet-side / ss-head / ss-seg / vcard(app.css,与 create.html 一致);
+     仅覆盖:窄单列(合成器内选音色,非整页素材库)+ 新增(筛选 / 试听 / 设计入口)。 */
+  #sheet-voices { width:min(480px,92vw); }   /* 共享面板默认宽 64vw,这里收窄成单列选择器 */
+  #sheet-voices .ss-head { gap:10px; padding:22px 22px 14px; flex-wrap:wrap; }  /* 窄面板:收紧 gutter */
+  #sheet-voices .ss-head h3 { font-size:17px; white-space:nowrap; }  /* 不换行 */
+  #sheet-voices .ss-filters { padding:0 22px 14px; }
+  #sheet-voices .ss-body { grid-template-columns:1fr; padding:0 22px 22px; }  /* 单列 + 收紧 gutter */
+  /* 设计弹窗从面板内打开,须盖在面板(.sheet-side z110)之上 */
   #ov-design { z-index:320; }
-  .vsheet { position:fixed; top:0; right:0; bottom:0; width:420px; max-width:90vw; background:var(--bg-soft); border-left:1px solid var(--line); z-index:301; transform:translateX(100%); transition:.3s var(--ease-out); display:flex; flex-direction:column; }
-  .vsheet.on { transform:none; }
-  .vsheet { width:480px; }
-  .vsheet-h { padding:18px 22px 0; border-bottom:1px solid var(--line-soft); display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-  .vsheet-h h3 { font-size:17px; font-weight:700; margin-right:auto; }
-  .vsheet-h .x { cursor:pointer; color:var(--t3); order:9; }
-  /* 音色库/我的声音 Tab + 复制或设计 入口 */
-  .vtabs { display:flex; gap:4px; padding:14px 22px 0; }
-  .vtab { padding:8px 16px; border-radius:9px; background:transparent; border:1px solid transparent; color:var(--t3); font-size:13px; font-weight:600; cursor:pointer; transition:.15s; }
-  .vtab:hover { color:var(--t1); }
-  .vtab.on { background:var(--card-hi); border-color:var(--line-hi); color:var(--t1); }
-  .vdesign-btn { margin-left:auto; display:flex; align-items:center; gap:6px; padding:8px 13px; border-radius:9px; background:var(--field); border:1px solid var(--line); color:var(--t2); font-size:12.5px; font-weight:600; cursor:pointer; transition:.15s; }
-  .vdesign-btn:hover { border-color:var(--line-hi); color:var(--t1); }
-  .vdesign-btn svg { width:14px; height:14px; }
-  /* 语言/性别 筛选 */
-  .vfilters { display:flex; gap:8px; padding:12px 22px; }
-  .vfilter { flex:1; padding:9px 12px; background:var(--field); border:1px solid var(--line); border-radius:9px; color:var(--t2); font-size:12.5px; cursor:pointer; appearance:none; }
-  .vsheet-body { flex:1; overflow-y:auto; padding:4px 18px 18px; }
-  /* 音色卡:旗帜+名+热门徽标+标签行 + 圆形试听 */
-  .vcard2 { display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:12px; cursor:pointer; transition:.15s; border:1px solid transparent; }
-  .vcard2:hover { background:var(--card); }
-  .vcard2:focus-visible { outline:2px solid var(--blue); outline-offset:-1px; }
-  .vcard2.on { background:var(--card-hi); border-color:var(--line-hi); }
-  .vcard2 .vmeta { flex:1; min-width:0; }
-  .vcard2 .vn { font-size:14px; font-weight:600; color:var(--t1); display:flex; align-items:center; gap:6px; }
-  .vcard2 .vn .flag { font-size:13px; }
-  .vcard2 .vn .hot { font-size:9px; padding:1px 5px; border-radius:5px; background:var(--blue-bg); color:var(--blue); font-weight:700; }
-  .vcard2 .vd { font-size:11.5px; color:var(--t4); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .vcard2 .vplay { flex:0 0 auto; width:44px; height:44px; border-radius:50%; display:grid; place-items:center; background:var(--field); border:1px solid var(--line); color:var(--t2); cursor:pointer; transition:.15s; }
-  .vcard2 .vplay:hover:not([disabled]) { border-color:var(--line-hi); color:var(--t1); }
-  .vcard2 .vplay:focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
-  .vcard2 .vplay svg { width:17px; height:17px; }
-  .vcard2 .vplay[disabled] { opacity:.35; cursor:not-allowed; }
-  /* 设计弹窗 */
+  /* 面板遮罩(.ov 不带,侧滑面板自配一层):对齐系统 .ov 配方 */
+  .vsheet-ov { position:fixed; inset:0; background:rgba(4,4,5,.66); backdrop-filter:blur(8px); display:none; z-index:105; }
+  .vsheet-ov.on { display:block; }
+  /* 语言/性别 筛选下拉 */
+  .vfilter { padding:9px 13px; background:var(--field); border:1px solid var(--line); border-radius:10px; color:var(--t2); font-size:13px; cursor:pointer; font-family:var(--f); }
+  /* .vcard 圆形试听键:复用 .vc-p 视觉,补 44px 触点 + 真按钮 + focus + 禁用态 */
+  #sheet-voices .vc-play { width:44px; height:44px; }
+  #sheet-voices .vc-play:focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
+  #sheet-voices .vc-play[disabled] { opacity:.35; cursor:not-allowed; }
+  #sheet-voices .vcard:focus-visible { outline:2px solid var(--blue); outline-offset:-1px; }
+  #sheet-voices .vcard.on { background:var(--card-hi); border-color:var(--blue); }  /* 选中态(共享 .vcard 无,补) */
+  /* 设计弹窗维度芯片 */
   .vd-dims { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 4px; }
-  .vd-dim { font-size:11px; padding:4px 9px; border-radius:7px; background:var(--field); border:1px solid var(--line); color:var(--t3); cursor:pointer; transition:.15s; }
-  .vd-dim:hover { border-color:var(--blue); color:var(--t1); }
+  .vd-dim { font-size:11px; padding:4px 9px; border-radius:var(--r-sm); background:var(--field); border:1px solid var(--line); color:var(--t3); cursor:pointer; transition:.15s; }
+  .vd-dim:hover { border-color:var(--line-hi); color:var(--t1); }
   .vd-preview { margin-top:12px; }
 
   .sld-row { display:flex; align-items:center; gap:12px; padding:11px 14px; background:var(--field); border:1px solid var(--line); border-radius:var(--r); }
@@ -120,20 +102,24 @@
  </div>
 </div>
 
-<!-- 音色选择 sheet(音色库/我的声音 Tab + 筛选 + 试听 + 复制或设计)-->
+<!-- 音色选择 sheet(复用共享 .sheet-side/.ss-*/.vcard,与 create.html 一致)-->
 <div class="vsheet-ov" id="vsheetOv" onclick="closeVoices()"></div>
-<div class="vsheet" id="vsheet">
-  <div class="vsheet-h"><h3>所有声音</h3><div class="x" onclick="closeVoices()" role="button" tabindex="0" aria-label="关闭" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();closeVoices();}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:22px;height:22px"><path d="M18 6 6 18M6 6l12 12"/></svg></div></div>
-  <div class="vtabs" role="tablist" aria-label="音色来源">
-    <button class="vtab on" data-tab="preset" role="tab" aria-selected="true" onclick="switchVTab('preset')">音色库</button>
-    <button class="vtab" data-tab="mine" role="tab" aria-selected="false" onclick="switchVTab('mine')">我的声音</button>
-    <button class="vdesign-btn" onclick="openDesign()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>复制或设计</button>
+<div class="sheet-side" id="sheet-voices">
+  <div class="ss-head">
+    <h3>所有声音</h3>
+    <div class="sp"></div>
+    <div class="ss-seg" role="tablist" aria-label="音色来源">
+      <button class="active" data-tab="preset" role="tab" aria-selected="true" onclick="switchVTab('preset')">音色库</button>
+      <button data-tab="mine" role="tab" aria-selected="false" onclick="switchVTab('mine')">我的声音</button>
+    </div>
+    <button class="btn btn-dark" onclick="openDesign()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" style="width:15px;height:15px"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>复制或设计</button>
+    <div class="x" onclick="closeVoices()" role="button" tabindex="0" aria-label="关闭" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();closeVoices();}" style="cursor:pointer;color:var(--t3)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:22px;height:22px"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
   </div>
-  <div class="vfilters">
+  <div class="ss-filters">
     <select class="vfilter" id="vfLang" aria-label="按语言筛选" onchange="renderVoices()"><option value="">语言:全部</option><option value="中文">中文</option><option value="英文">英文</option></select>
     <select class="vfilter" id="vfGender" aria-label="按性别筛选" onchange="renderVoices()"><option value="">性别:全部</option><option value="女">女</option><option value="男">男</option></select>
   </div>
-  <div class="vsheet-body" id="vsheetBody"><div style="color:var(--t4);padding:20px">加载音色中…</div></div>
+  <div class="ss-body" id="vsheetBody"><div style="color:var(--t4);padding:20px">加载音色中…</div></div>
 </div>
 
 <!-- 声音设计弹窗 -->
@@ -172,9 +158,9 @@
   function closeModal(id){ document.getElementById('ov-'+id)?.classList.remove('show'); }
   window.openModal=openModal; window.closeModal=closeModal;
 
-  function openVoices(){ document.getElementById('vsheetOv').classList.add('on'); document.getElementById('vsheet').classList.add('on'); loadVoices(); }
-  function closeVoices(){ window.LJAudioPreview.stop(); document.getElementById('vsheetOv').classList.remove('on'); document.getElementById('vsheet').classList.remove('on'); }
-  function switchVTab(t){ vTab=t; document.querySelectorAll('.vtab').forEach(b=>{ const on=b.dataset.tab===t; b.classList.toggle('on',on); b.setAttribute('aria-selected',on?'true':'false'); }); renderVoices(); }
+  function openVoices(){ document.getElementById('vsheetOv').classList.add('on'); document.getElementById('sheet-voices').classList.add('show'); loadVoices(); }
+  function closeVoices(){ window.LJAudioPreview.stop(); document.getElementById('vsheetOv').classList.remove('on'); document.getElementById('sheet-voices').classList.remove('show'); }
+  function switchVTab(t){ vTab=t; document.querySelectorAll('#sheet-voices .ss-seg button').forEach(b=>{ const on=b.dataset.tab===t; b.classList.toggle('active',on); b.setAttribute('aria-selected',on?'true':'false'); }); renderVoices(); }
 
   async function loadVoices(){
     const body=document.getElementById('vsheetBody');
@@ -209,17 +195,18 @@
       const hot=(!isMine)?' <span class="hot">预置</span>':'';
       const on=selectedVoice&&selectedVoice.id===v.id;
       const canPlay=!!v.sample;
-      const play=`<button class="vplay" data-src="${esc(v.sample||'')}" ${canPlay?'':'disabled'} onclick="event.stopPropagation();window.LJAudioPreview.play(this.dataset.src,this)" aria-label="试听">${PLAY_SVG}</button>`;
+      // 复用共享 .vcard/.vc-* + .vc-p.vc-play(圆形试听槽);保留真试听 + 键盘 a11y
+      const play=`<button class="vc-p vc-play" data-src="${esc(v.sample||'')}" ${canPlay?'':'disabled'} onclick="event.stopPropagation();window.LJAudioPreview.play(this.dataset.src,this)" aria-label="试听">${PLAY_SVG}</button>`;
       const pick=`pickVoiceObj(${JSON.stringify({id:v.id,name:v.name,desc}).replace(/'/g,"&#39;")})`;
-      return `<div class="vcard2${on?' on':''}" data-id="${esc(v.id)}" role="button" tabindex="0" aria-pressed="${on?'true':'false'}" aria-label="选择音色 ${esc(v.name)}" onclick='${pick}' onkeydown='if(event.key==="Enter"||event.key===" "){event.preventDefault();${pick};}'>`
-        +`<div class="vmeta"><div class="vn"><span class="flag">🇨🇳</span>${esc(v.name)}${hot}</div><div class="vd">${esc(desc)}</div></div>${play}</div>`;
+      return `<div class="vcard${on?' on':''}" data-id="${esc(v.id)}" role="button" tabindex="0" aria-pressed="${on?'true':'false'}" aria-label="选择音色 ${esc(v.name)}" onclick='${pick}' onkeydown='if(event.key==="Enter"||event.key===" "){event.preventDefault();${pick};}'>`
+        +`<div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>${esc(v.name)}${hot}</div><div class="vc-d">${esc(desc)}</div></div>${play}</div>`;
     }).join('');
   }
   window.pickVoiceObj=(v, silent)=>{
     selectedVoice={id:v.id,name:v.name,desc:v.desc};
     document.getElementById('voiceName').textContent=v.name;
     document.getElementById('voiceDesc').textContent=v.desc||'已选择';
-    document.querySelectorAll('#vsheetBody .vcard2').forEach(c=>c.classList.toggle('on', c.dataset.id===v.id));
+    document.querySelectorAll('#vsheetBody .vcard').forEach(c=>c.classList.toggle('on', c.dataset.id===v.id));
     if(!silent) closeVoices(); refreshBtn();
   };
   window.openVoices=openVoices; window.closeVoices=closeVoices; window.switchVTab=switchVTab; window.renderVoices=renderVoices;
