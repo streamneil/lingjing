@@ -30,7 +30,7 @@
   .ratio-cell.on { background:var(--card-hi); color:var(--t1); border-color:var(--line-hi); }
   .ratio-cell .glyph { width:18px; height:18px; border:1.6px solid currentColor; border-radius:3px; }
   .ratio-cell .lbl { font-size:10.5px; font-family:var(--f-mono); }
-  .cfg-label, .pop-label { font-size:12px; color:var(--t3); margin:14px 0 7px; }
+  .cfg-label { font-size:12px; color:var(--t3); margin:14px 0 7px; }
   /* 模型特有开关(audio / 反向提示词 / 智能改写)固定在参数区底部,切模型只增减这里 */
   .opt-toggle { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:11px 13px; border:1px solid var(--line); border-radius:10px; background:var(--field); margin-top:8px; }
   .opt-toggle .ol { font-size:13px; color:var(--t2); }
@@ -53,30 +53,27 @@
       <div class="f"><span class="h" id="estLabel">预估 — 点</span><span class="c"><b id="cnt">0</b> / <span id="maxChars">5000</span></span></div>
     </div>
 
-    <!-- 解析度 / mode(可灵)-->
-    <div class="cfg-label" id="resLabel">解析度</div>
-    <div class="seg-row" id="resSeg"></div>
-
-    <!-- 比例 -->
-    <div class="cfg-label">比例</div>
-    <div class="ratio-row" id="ratioRow"></div>
-
-    <!-- 时长 -->
-    <div class="cfg-label">长度</div>
-    <div class="seg-row" id="durSeg"></div>
-
-    <!-- 模型特有控件(显隐于参数区底部,切模型上方不跳)-->
-    <div id="modelOpts2"></div>
-
     <div class="cfg-sp"></div>
 
-    <!-- 紧凑配置栏:模型 pill + 配置摘要 pill + seed -->
+    <!-- 紧凑配置栏:模型 pill + 设置 pill(解析度/比例/时长/模型特有 收进 popover)+ seed(贴 AI 图片 DeeVid 参考)-->
     <div class="cfgbar">
       <div class="pop-anchor" style="flex:1">
         <div class="cpill" id="modelPill" onclick="togglePop('model')"><span class="v" id="modelPillV">模型</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
         <div class="pop" id="pop-model"><div class="pop-label">模型</div><div id="modelOpts"></div></div>
       </div>
-      <div class="cpill" id="setPill" style="flex:1.2;cursor:default"><span class="v" id="setPillV">720P · 5秒 · 16:9</span></div>
+      <div class="pop-anchor" style="flex:1.2">
+        <div class="cpill" id="setPill" onclick="togglePop('set')"><span class="v" id="setPillV">720P · 5秒 · 16:9</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+        <div class="pop" id="pop-set">
+          <div class="pop-label" id="resLabel">解析度</div>
+          <div class="seg-row" id="resSeg"></div>
+          <div class="pop-label">比例</div>
+          <div class="ratio-row" id="ratioRow"></div>
+          <div class="pop-label">长度</div>
+          <div class="seg-row" id="durSeg"></div>
+          <!-- 模型特有控件(显隐于 popover 底部,切模型上方不跳)-->
+          <div id="modelOpts2"></div>
+        </div>
+      </div>
       <div class="pop-anchor">
         <div class="cpill fixed" id="seedPill" onclick="togglePop('seed')" title="随机种子 Seed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
         <div class="pop" id="pop-seed" style="left:auto;right:0;width:200px">
@@ -201,7 +198,7 @@
 
   // ── popover 开关(贴 ai-image)──
   function togglePop(which){
-    const map={model:'pop-model',seed:'pop-seed'}; const pillMap={model:'modelPill',seed:'seedPill'};
+    const map={model:'pop-model',set:'pop-set',seed:'pop-seed'}; const pillMap={model:'modelPill',set:'setPill',seed:'seedPill'};
     const el=document.getElementById(map[which]); const isOpen=el.classList.contains('show'); closePops();
     if(!isOpen){ el.classList.add('show'); document.getElementById('popOv').classList.add('show'); document.getElementById(pillMap[which]).classList.add('open'); }
   }
