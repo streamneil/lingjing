@@ -57,7 +57,9 @@
     {
       key: 'ai-avatar', label: 'AI 虚拟人',
       icon: '<circle cx="12" cy="8" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/>',
-      enabled: true, outputKind: 'video', page: 'create.html', tier: 'live',
+      // 入口落形象库(浏览/选形象)→ 形象卡 CTA 带 ?avatar=id 进 create.html 配文案。
+      // avatars.html 的 data-page 也设 'ai-avatar',保证两页都高亮此侧栏项。
+      enabled: true, outputKind: 'video', page: 'avatars.html', tier: 'live',
     },
     {
       key: 'ai-music', label: 'AI 音乐',
