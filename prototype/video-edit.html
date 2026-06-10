@@ -642,14 +642,29 @@
       jobInputs[r.id]={ model:body.model, prompt:body.prompt, videoRef:body.videoRef, imageRefs, inputUrls:thumbs,
         resolution:body.resolution, ratio:body.ratio, truncateDuration:body.truncateDuration, audioSetting:body.audioSetting,
         inputDurationSnapshot:videoMeta?videoMeta.duration:undefined, negativePrompt:body.negativePrompt, promptExtend:body.promptExtend, seed:body.seed };
+      const inputDur=videoMeta?videoMeta.duration:undefined;
+      // 提交成功即清左侧回空态(防误点重复扣费);先于 renderCard/track 执行,
+      // 避免任何下游异常打断清理。thumbs 已算好(reset 不 revoke 它们的 blob URL)。
+      resetAfterSubmit();
       renderCard({ id:r.id, status:'queued', progress:0, prompt:body.prompt, modelLabel:findLabel(model),
-        inputDuration:videoMeta?videoMeta.duration:undefined, truncateDuration:body.truncateDuration, audioSetting:body.audioSetting,
-        ratio:body.ratio, sizeLabel:resolution, inputUrls:thumbs });
+        inputDuration:inputDur, truncateDuration:body.truncateDuration, audioSetting:body.audioSetting,
+        ratio:body.ratio, sizeLabel:body.resolution, inputUrls:thumbs });
       track(r.id, body.prompt, thumbs);
       window.LJToast&&window.LJToast('✓ 已提交生成,可在右侧查看进度');
     }catch(e){ window.LJToast&&window.LJToast('提交失败:'+e.message,'err'); }
     finally{ btn.innerHTML=prev; refreshBtn(); }
   });
+
+  // 提交成功后清空左侧:视频回空态 + 参考图 + 指令 + 取消授权勾(同视频再编走记录卡「重新提示」免重传)。
+  // ⚠ 不 revoke 参考图 blob URL(记录卡 inputUrls 还在用);仅丢数组引用。每步独立 try 防一步抛错挡住后续。
+  function resetAfterSubmit(){
+    try{ resetVideo(); }catch(e){}               // 视频回 empty 态
+    refFiles=[]; clearReuse();
+    try{ renderRefs(); }catch(e){}
+    ta.value=''; cnt.textContent='0';
+    const c=document.getElementById('consentChk'); if(c) c.checked=false;
+    try{ scheduleEstimate(); refreshBtn(); }catch(e){}
+  }
 
   LJ.me().then(()=>{ loadModels(); loadHistory(); }).catch(()=>{});
   renderVidCard(); refreshBtn();
