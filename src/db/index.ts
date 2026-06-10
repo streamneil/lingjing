@@ -238,6 +238,8 @@ function addColumnIfMissing(table: string, column: string, ddl: string): void {
   }
 }
 addColumnIfMissing('audit_log', 'actor_type', `actor_type TEXT NOT NULL DEFAULT 'user'`);
+// T-SETTINGS-AUDIT-DIFF:字段级变更详情(JSON [{field,old,new}]);只设置变更类操作写,其余 null。
+addColumnIfMissing('audit_log', 'detail', `detail TEXT`);
 addColumnIfMissing('avatar', 'orientation', `orientation TEXT DEFAULT 'portrait'`);
 addColumnIfMissing('avatar', 'is_default', `is_default INTEGER NOT NULL DEFAULT 0`);
 addColumnIfMissing('user', 'display_name', `display_name TEXT`);
@@ -388,6 +390,7 @@ export interface AuditRow {
   action: string;
   target: string | null;
   ip: string | null;
+  detail: string | null; // 字段级变更 JSON([{field,old,new}]);仅设置变更类操作有(T-SETTINGS-AUDIT-DIFF)
   created_at: number;
 }
 
