@@ -72,6 +72,55 @@ export function createCloneVoice(p: CreateVoiceParams): VoiceRow {
   return v;
 }
 
+export interface CreateDesignVoiceParams {
+  tenantId: string;
+  name: string;
+  providerVoiceId: string; // Qwen 声音设计返回的 voice id(必有,否则 API 层已拒)
+}
+
+/** 设计音色:纯文本描述生成的合成音色(非真人),无需授权存证(与克隆区别)。
+ *  kind=design → resolveVoice 路由到 Qwen HTTP 合成(designModel)。 */
+export function createDesignVoice(p: CreateDesignVoiceParams): VoiceRow {
+  const v: VoiceRow = {
+    id: randomUUID(),
+    tenant_id: p.tenantId,
+    name: p.name,
+    kind: 'design',
+    status: 'ready', // 设计音色创建即可用(provider_voice_id 必有)
+    source_key: null, // 设计无音频样本
+    provider_voice_id: p.providerVoiceId,
+    authorization_id: null, // 合成音色无真人,无需授权
+    created_at: now(),
+  };
+  db.prepare(
+    `INSERT INTO voice (id,tenant_id,name,kind,status,source_key,provider_voice_id,authorization_id,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    v.id, v.tenant_id, v.name, v.kind, v.status, v.source_key, v.provider_voice_id,
+    v.authorization_id, v.created_at,
+  );
+  return v;
+}
+
+// ── 配额/限流闸(eng-review 张力2:防刷付费 Qwen 预览)──
+/** 某租户自建音色(克隆+设计)总数。用于总数上限闸。 */
+export function countCustomVoices(tenantId: string): number {
+  const row = db
+    .prepare(`SELECT COUNT(*) AS n FROM voice WHERE tenant_id=? AND kind IN ('clone','design')`)
+    .get(tenantId) as { n: number };
+  return row.n;
+}
+/** 某租户近 windowMs 内创建的设计音色数。用于创建频率闸。 */
+export function countRecentDesignVoices(tenantId: string, windowMs: number): number {
+  const since = now() - windowMs;
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM voice WHERE tenant_id=? AND kind='design' AND created_at >= ?`,
+    )
+    .get(tenantId, since) as { n: number };
+  return row.n;
+}
+
 export function listClones(tenantId: string): VoiceRow[] {
   return db
     .prepare(`SELECT * FROM voice WHERE tenant_id=? ORDER BY created_at DESC`)
