@@ -24,13 +24,21 @@
   .in-thumbs { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin:8px 0 2px; }
   .in-thumbs .lbl { font-size:11px; color:var(--t4); margin-right:2px; }
   .in-thumbs img { width:44px; height:44px; object-fit:cover; border-radius:7px; border:1px solid var(--line); cursor:zoom-in; }
+  /* 输入视频缩略方格(③ 记录卡显原片;同参考图尺寸,加「原片」角标 + 播放图标,点开 lightbox 播放)*/
+  .in-thumbs .vthumb { position:relative; width:44px; height:44px; border-radius:7px; border:1px solid var(--line); overflow:hidden; cursor:pointer; background:#000; }
+  .in-thumbs .vthumb video { width:100%; height:100%; object-fit:cover; pointer-events:none; }
+  .in-thumbs .vthumb .pl { position:absolute; inset:0; display:grid; place-items:center; background:rgba(0,0,0,.28); }
+  .in-thumbs .vthumb .pl svg { width:16px; height:16px; color:#fff; }
+  .in-thumbs .vthumb .vb { position:absolute; left:0; right:0; bottom:0; font-size:8px; text-align:center; color:#fff; background:rgba(0,0,0,.55); line-height:1.4; }
 
   /* ── 输入视频卡(img-drop 派生:同卡框同虚线,状态机 空态→上传中→就绪/复用)── */
   .img-tiles-card { border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:14px; }
-  .vid-stage { position:relative; border:1.5px dashed var(--line-hi); border-radius:12px; background:var(--field); min-height:170px; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden; cursor:pointer; transition:.15s; padding:0; }
+  /* ④ 固定 200px:空态/上传中/就绪三态同高,插入视频后不撞高(与图片区插图不变高一致)。*/
+  .vid-stage { position:relative; border:1.5px dashed var(--line-hi); border-radius:12px; background:var(--field); height:200px; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden; cursor:pointer; transition:.15s; padding:0; }
   .vid-stage:hover, .vid-stage.drag { border-color:var(--blue); }
   .vid-stage.invalid { border-color:var(--red); border-style:solid; }
-  .vid-stage video { width:100%; max-height:260px; display:block; background:#000; }
+  /* 视频填进固定盒:contain 保完整(竖屏两侧黑边),不撑高 */
+  .vid-stage video { width:100%; height:100%; object-fit:contain; display:block; background:#000; }
   .vid-stage .ph { display:flex; flex-direction:column; align-items:center; gap:12px; color:var(--t3); padding:24px 16px; text-align:center; }
   .vid-stage .ph svg { width:38px; height:38px; color:var(--t3); }
   .vid-stage .ph .dt { font-size:14px; color:var(--t2); }
@@ -94,7 +102,7 @@
   .lightbox .lb-x svg { width:22px; height:22px; color:#fff; }
 </style>
 </head>
-<body data-page="video-edit" data-crumb="创作工具 > AI 影片编辑器">
+<body data-page="ai-video-edit" data-crumb="创作工具 > AI 影片编辑器">
 <div class="shell" id="shell-mount">
  <div class="main-col">
   <div class="studio">
@@ -106,7 +114,6 @@
     <div class="img-tiles-card">
       <div id="vidArea"></div>
     </div>
-    <div class="fmt-hint">视频:MP4 / MOV,≤ 100MB,选择后立即上传探测。</div>
 
     <!-- 指令卡(参考图缩略在顶部 + 编辑指令 + 底部上传按钮,与 AI 图片编辑器同款)-->
     <div class="instr-card">
@@ -190,6 +197,7 @@
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
   <div class="lb-x" onclick="closeLightbox()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
   <img id="lightboxImg" src="" alt="" onclick="event.stopPropagation()">
+  <video id="lightboxVid" controls playsinline style="display:none;max-width:92vw;max-height:88vh;border-radius:12px;background:#000" onclick="event.stopPropagation()"></video>
 </div>
 
 <script src="shell.js"></script>
@@ -201,6 +209,7 @@
   let model='', allModels=[], resolution='720P', ratio='', truncateDur=0, originAudio=false, negativePrompt='', promptExtend=true, seed='';
   // 输入视频状态机:empty → uploading → ready;重新提示回填 → reuse(复用 videoRef 免重传)
   let vidState='empty', videoRef='', videoMeta=null, videoLocalUrl='', upPct=0, vidName='';
+  let reuseVideoUrl=''; // 重新提示态:原视频签名 URL(供 reuse 态显视频预览)
   // 参考图:本地 File 列表;重新提示回填走 reuseRefs(免重传)
   let refFiles=[], reuseRefs=null, reuseUrls=null;
 
@@ -284,7 +293,7 @@
   }
   function resetVideo(){
     if(videoLocalUrl) URL.revokeObjectURL(videoLocalUrl);
-    vidState='empty'; videoRef=''; videoMeta=null; videoLocalUrl=''; upPct=0; vidName='';
+    vidState='empty'; videoRef=''; videoMeta=null; videoLocalUrl=''; reuseVideoUrl=''; upPct=0; vidName='';
     truncateDur=0; renderVidCard(); renderDur(); syncPills(); scheduleEstimate(); refreshBtn();
   }
   function bindDrop(el, handler){
@@ -309,12 +318,17 @@
         <div class="t">${probing?'探测时长与尺寸中…':('上传中 '+upPct+'%')} · ${esc(vidName)}</div>
       </div></div>`;
     } else if(vidState==='reuse'){
+      // 重新提示态:有签名 URL 则显视频预览(③);无则回落文字(兼容旧记录)。
+      const inner = reuseVideoUrl
+        ? `<video src="${esc(reuseVideoUrl)}" muted playsinline preload="metadata" controls></video>`
+        : `<div class="vid-reuse">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="14" height="14" rx="2"/><path d="m22 7-6 4 6 4V7Z"/></svg>
+            <div class="t">原视频 · ${videoMeta?videoMeta.duration.toFixed(1):'?'} 秒(复用上次,免重传)</div>
+          </div>`;
       area.innerHTML=`<div class="vid-stage${invalid?' invalid':''}" style="cursor:default">
         <button type="button" class="rmx" id="vidRm" aria-label="清除原视频">×</button>
-        <div class="vid-reuse">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="14" height="14" rx="2"/><path d="m22 7-6 4 6 4V7Z"/></svg>
-          <div class="t">原视频 · ${videoMeta?videoMeta.duration.toFixed(1):'?'} 秒(复用上次,免重传)</div>
-        </div></div>
+        ${inner}</div>
+        <div class="vid-meta"><span class="chip">原视频 · ${videoMeta?videoMeta.duration.toFixed(1):'?'} 秒(复用,免重传)</span></div>
         ${invalid?`<div class="vid-err">${esc(invalid)}</div>`:''}`;
       const rm=area.querySelector('#vidRm'); if(rm) rm.onclick=(e)=>{ e.stopPropagation(); resetVideo(); };
       return;
@@ -428,8 +442,18 @@
   }
   function closePops(){ document.querySelectorAll('.pop.show').forEach(p=>p.classList.remove('show')); document.querySelectorAll('.cpill.open').forEach(p=>p.classList.remove('open')); document.getElementById('popOv').classList.remove('show'); }
   window.togglePop=togglePop; window.closePops=closePops;
-  window.openLightbox=(url)=>{ document.getElementById('lightboxImg').src=url; document.getElementById('lightbox').classList.add('on'); };
-  window.closeLightbox=()=>{ document.getElementById('lightbox').classList.remove('on'); document.getElementById('lightboxImg').src=''; };
+  // 大图/大视频查看器:isVideo 时用 <video> 播放,否则用 <img>。
+  window.openLightbox=(url, isVideo)=>{
+    const img=document.getElementById('lightboxImg'), vid=document.getElementById('lightboxVid');
+    if(isVideo){ img.style.display='none'; img.src=''; vid.style.display=''; vid.src=url; vid.play&&vid.play().catch(()=>{}); }
+    else { vid.style.display='none'; vid.pause&&vid.pause(); vid.src=''; img.style.display=''; img.src=url; }
+    document.getElementById('lightbox').classList.add('on');
+  };
+  window.closeLightbox=()=>{
+    document.getElementById('lightbox').classList.remove('on');
+    const img=document.getElementById('lightboxImg'), vid=document.getElementById('lightboxVid');
+    img.src=''; vid.pause&&vid.pause(); vid.src='';
+  };
   document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeLightbox(); closePops(); } });
   document.getElementById('seedInput').addEventListener('input',e=>{ seed=e.target.value.replace(/[^0-9]/g,''); e.target.value=seed; });
 
@@ -507,9 +531,16 @@
     if(!tx||!tg) return;
     tg.classList.toggle('show', tx.scrollHeight - tx.clientHeight > 2);
   }
-  function inThumbs(urls){
-    if(!urls||!urls.length) return '';
-    return `<div class="in-thumbs"><span class="lbl">参考图</span>${urls.map(u=>`<img src="${esc(u)}" onclick="openLightbox('${esc(u)}')" alt="参考图">`).join('')}</div>`;
+  // 输入侧缩略带:原视频方格(③,点开 lightbox 播放)+ 参考图缩略。两者都无则不渲染。
+  function inputStrip(job){
+    const vurl=job.inputVideoUrl, refs=job.inputUrls||[];
+    if(!vurl && !refs.length) return '';
+    const playSvg='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+    const vtile = vurl
+      ? `<div class="vthumb" title="输入原片(点击播放)" onclick="openLightbox('${esc(vurl)}',true)"><video src="${esc(vurl)}#t=0.1" muted preload="metadata"></video><div class="pl">${playSvg}</div><div class="vb">原片</div></div>`
+      : '';
+    const imgs = refs.map(u=>`<img src="${esc(u)}" onclick="openLightbox('${esc(u)}')" alt="参考图">`).join('');
+    return `<div class="in-thumbs"><span class="lbl">输入</span>${vtile}${imgs}</div>`;
   }
   function metaChips(job){
     const c=[]; if(job.modelLabel) c.push(job.modelLabel);
@@ -538,20 +569,25 @@
       const lbl=card.querySelector('.proc-in .lbl'); const bar=card.querySelector('.proc-bar i');
       if(lbl) lbl.textContent=job.progress?('进度 '+job.progress+'%'):'已进入生成队列';
       if(bar) bar.style.width=(job.progress||8)+'%';
+      // 首轮轮询带回输入视频签名 URL → 补插原视频缩略(只更进度分支不重建整卡,故单独补这块,不闪)。
+      if(job.inputVideoUrl && !card.querySelector('.in-thumbs .vthumb')){
+        const old=card.querySelector('.in-thumbs'); const html=inputStrip(job);
+        if(old){ old.outerHTML=html; } else { const b=card.querySelector('.fbubble'); if(b&&html) b.insertAdjacentHTML('afterend',html); }
+      }
       return;
     }
     if(job.status==='queued'||job.status==='running'){
       card.dataset.st='running';
-      card.innerHTML=head('var(--amber)','led-run',job.status==='queued'?'排队中':'生成中')+promptBubble(job.prompt)+inThumbs(job.inputUrls)+metaChips(job)+
+      card.innerHTML=head('var(--amber)','led-run',job.status==='queued'?'排队中':'生成中')+promptBubble(job.prompt)+inputStrip(job)+metaChips(job)+
         `<div class="fvideo proc"><div class="proc-in"><div class="spinner"></div><div class="lbl">${job.progress?('进度 '+job.progress+'%'):'已进入生成队列'}</div><div class="proc-bar"><i style="width:${job.progress||8}%"></i></div><div style="font-size:11px;color:var(--t4);margin-top:8px">视频编辑约需 1-5 分钟,请耐心等待</div></div></div>`;
     } else if(job.status==='done'){
       card.dataset.st='done';
       const u=(job.outputUrls||[])[0];
       const vid=u?`<video class="fvid" src="${u}" controls preload="metadata"></video>`:'<div style="color:var(--t4);padding:20px">已生成</div>';
-      card.innerHTML=head('var(--green)','led-ok','已完成')+promptBubble(job.prompt)+inThumbs(job.inputUrls)+metaChips(job)+vid+cardActs(job,true);
+      card.innerHTML=head('var(--green)','led-ok','已完成')+promptBubble(job.prompt)+inputStrip(job)+metaChips(job)+vid+cardActs(job,true);
     } else {
       card.dataset.st='failed';
-      card.innerHTML=head('var(--red)','led-err','生成失败')+promptBubble(job.prompt)+inThumbs(job.inputUrls)+metaChips(job)+
+      card.innerHTML=head('var(--red)','led-err','生成失败')+promptBubble(job.prompt)+inputStrip(job)+metaChips(job)+
         `<div class="fvideo err"><div class="err-in"><div class="ei">!</div><div class="lbl">${esc(job.error||'生成失败,请重试')}</div></div></div>`+cardActs(job,false);
     }
     requestAnimationFrame(()=>fitBubble(card));
@@ -596,6 +632,7 @@
     if(videoLocalUrl) URL.revokeObjectURL(videoLocalUrl);
     videoLocalUrl=''; refFiles=[];
     videoRef=inp.videoRef||''; videoMeta=inp.inputDurationSnapshot?{duration:inp.inputDurationSnapshot,width:0,height:0,size:0}:null;
+    reuseVideoUrl=inp.inputVideoUrl||''; // 原视频签名 URL(reuse 态显视频预览)
     vidState=videoRef?'reuse':'empty';
     reuseRefs=(inp.imageRefs||[]).slice(); reuseUrls=(inp.inputUrls||[]).slice();
     renderModels(); // 内部 onModelChange 重渲全部
@@ -622,7 +659,7 @@
     if(!mine.length) return;
     document.getElementById('emptyHint').style.display='none';
     for(const j of [...mine].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))){
-      jobInputs[j.id]={ model:j.model, prompt:j.script, videoRef:j.videoRef, imageRefs:j.imageRefs, inputUrls:j.inputUrls,
+      jobInputs[j.id]={ model:j.model, prompt:j.script, videoRef:j.videoRef, inputVideoUrl:j.inputVideoUrl, imageRefs:j.imageRefs, inputUrls:j.inputUrls,
         resolution:j.resolution, ratio:j.ratio, truncateDuration:j.truncateDuration, audioSetting:j.audioSetting,
         inputDurationSnapshot:j.inputDuration, negativePrompt:j.negativePrompt, promptExtend:j.promptExtend, seed:j.seed };
       renderCard({...j, prompt:j.script});

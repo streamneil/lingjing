@@ -899,15 +899,17 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
             imageRefs: inp.imageRefs, inputUrls, // 输入图缩略 + 重新生成回放
           };
         } else if (j.type === 'video_edit') {
-          // 视频编辑卡片:显模型/分辨率/输入时长 chip + 参考图缩略;回放 videoRef/imageRefs(免重传 100MB)。
+          // 视频编辑卡片:显模型/分辨率/输入时长 chip + 输入视频原片 + 参考图缩略;回放 videoRef/imageRefs(免重传 100MB)。
           const edef = getEditModel(inp.model);
           const inputUrls = await signInputUrls(inp.imageRefs);
+          // 输入视频签名 URL(video-inputs key 同桶,复用 getSignedUrl):记录卡显原片 + 重新提示左侧显视频预览。
+          const inputVideoUrl = inp.videoRef ? await getSignedUrl(inp.videoRef).catch(() => null) : null;
           meta = {
             model: inp.model, modelLabel: edef.label, task: 'edit',
             ratio: inp.ratio, resolution: inp.resolution, sizeLabel: inp.resolution || '720P',
             inputDuration: inp.inputDurationSnapshot, truncateDuration: inp.truncateDuration, audioSetting: inp.audioSetting,
             negativePrompt: inp.negativePrompt, promptExtend: inp.promptExtend, seed: inp.seed,
-            videoRef: inp.videoRef, imageRefs: inp.imageRefs, inputUrls,
+            videoRef: inp.videoRef, inputVideoUrl, imageRefs: inp.imageRefs, inputUrls,
           };
         }
       } catch {
@@ -949,8 +951,10 @@ jobsRouter.get('/jobs/:id', requireAuth, async (req: Request, res: Response) => 
   };
 
   // 输入图签名 URL(图生图记录卡显示 + 重新提示回填)。
-  const inp = payload.input as { imageRefs?: string[] } | undefined;
+  const inp = payload.input as { imageRefs?: string[]; videoRef?: string } | undefined;
   if (inp?.imageRefs?.length) payload.inputUrls = await signInputUrls(inp.imageRefs);
+  // 视频编辑:输入视频签名 URL(记录卡显原片 + 重新提示视频预览,video-inputs 同桶)。
+  if (inp?.videoRef) payload.inputVideoUrl = await getSignedUrl(inp.videoRef).catch(() => null);
 
   if (job.status === 'done' && job.output_url) {
     const outputUrls = await signOutputUrls(job.output_url);
