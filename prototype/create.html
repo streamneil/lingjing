@@ -352,7 +352,8 @@
         const detail=await LJ.getJob(j.id);
         const script=(detail.input&&detail.input.script)||'';
         renderCard({ id:detail.id, status:detail.status, progress:detail.progress,
-          videoUrl:detail.videoUrl, aiLabel:detail.aiLabel, error:detail.error }, script);
+          videoUrl:detail.videoUrl, aiLabel:detail.aiLabel, error:detail.error,
+          createdAt:detail.createdAt||j.createdAt }, script);
         // 仍在进行中的任务,继续轮询到终态
         if(detail.status==='queued'||detail.status==='running') track(detail.id, script);
       }catch(e){}
@@ -409,7 +410,7 @@
     const bubble = `<div class="fbubble"><div class="mav" style="${mavStyle}"></div><div class="tx">${esc(scriptText)}</div></div>`;
     if(job.status==='queued' || job.status==='running'){
       card.innerHTML = `
-        <div class="fmeta"><b>AI 虚拟人</b><span class="ts">刚刚</span><span class="sp"></span>
+        <div class="fmeta"><b>AI 虚拟人</b><span class="ts">${(window.LJTimeAgo&&LJTimeAgo(job.createdAt))||'刚刚'}</span><span class="sp"></span>
           <span class="st" style="color:var(--amber)"><span class="led led-run"></span>${job.status==='queued'?'排队中':'生成中'}</span></div>
         ${bubble}
         <div class="fvideo proc"><div class="proc-in"><div class="spinner"></div>
@@ -427,14 +428,14 @@
         <button class="btn btn-white" onclick="dlVideo('${job.videoUrl}','${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>下载</button>
       </div>` : '';
       card.innerHTML = `
-        <div class="fmeta"><b>AI 虚拟人</b><span class="ts">刚刚</span><span class="sp"></span>
+        <div class="fmeta"><b>AI 虚拟人</b><span class="ts">${(window.LJTimeAgo&&LJTimeAgo(job.createdAt))||'刚刚'}</span><span class="sp"></span>
           <span class="st" style="color:var(--green)"><span class="led led-ok"></span>已完成${job.aiLabel==='native'?' · 含AI标识':''}</span></div>
         ${bubble}
         <div class="fvideo" style="aspect-ratio:auto;height:auto;min-height:0">${v}</div>
         ${actions}`;
     } else { // failed
       card.innerHTML = `
-        <div class="fmeta"><b>AI 虚拟人</b><span class="ts">刚刚</span><span class="sp"></span>
+        <div class="fmeta"><b>AI 虚拟人</b><span class="ts">${(window.LJTimeAgo&&LJTimeAgo(job.createdAt))||'刚刚'}</span><span class="sp"></span>
           <span class="st" style="color:var(--red)"><span class="led led-err"></span>生成失败</span></div>
         ${bubble}
         <div class="fvideo err"><div class="err-in"><div class="ei">!</div>

@@ -21,8 +21,8 @@
   /* 展开/收起:排在文字下方一行(align-self flex-start 贴左,不贴右浮动)*/
   .tx-toggle { font-size:12px; color:var(--blue); cursor:pointer; margin-top:4px; display:none; align-self:flex-start; }
   .tx-toggle.show { display:inline-block; }
-  /* 成品视频 */
-  .fvid { width:100%; border-radius:12px; display:block; background:#000; }
+  /* 成品视频:缩略尺度约束盒,按原始比例自适应(16:9→320×180、9:16→157×280),与图片记录缩略一致 */
+  .fvid { display:block; width:auto; height:auto; max-width:min(320px,100%); max-height:280px; border-radius:12px; background:#000; border:1px solid var(--line); }
 
   /* 段选(解析度 / mode / 时长)+ 比例 —— 复用 AI 图片 seg/ratio 样式 */
   .seg-row { display:flex; gap:8px; }
@@ -284,7 +284,7 @@
     if(job.input) jobInputs[job.id]=job.input;
     let card=document.getElementById('job-'+job.id); const existed=!!card;
     if(!card){ card=document.createElement('div'); card.className='fitem'; card.id='job-'+job.id; feedList.insertBefore(card, feedList.firstChild); }
-    const head=(color,led,txt)=>`<div class="fmeta"><b>文字转影片</b><span class="ts">刚刚</span><span class="sp"></span><span class="st" style="color:${color}"><span class="led ${led}"></span>${txt}</span></div>`;
+    const head=(color,led,txt)=>`<div class="fmeta"><b>文字转影片</b><span class="ts">${(window.LJTimeAgo&&LJTimeAgo(job.createdAt))||'刚刚'}</span><span class="sp"></span><span class="st" style="color:${color}"><span class="led ${led}"></span>${txt}</span></div>`;
     // 生成中:卡已在 + 仍 running → 只更进度(不重建,防闪)
     if((job.status==='queued'||job.status==='running') && existed && card.dataset.st==='running'){
       const lbl=card.querySelector('.proc-in .lbl'); const bar=card.querySelector('.proc-bar i');

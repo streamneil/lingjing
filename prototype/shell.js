@@ -316,5 +316,19 @@
       setTimeout(()=>{ input.focus(); input.select(); }, 60);
     });
   };
+  // 相对时间(记录卡时间戳:刚刚/N分钟前/N小时前/N天前/日期)。
+  // 各创作页记录卡 head() 共用;ts 缺省(刚提交的卡没带 createdAt)返回空串,调用方回落「刚刚」。
+  window.LJTimeAgo = function(ts){
+    if(!ts) return '';
+    const d = Date.now() - ts;
+    const m = 60000, h = 3600000, day = 86400000;
+    if(d < m) return '刚刚';
+    if(d < h) return Math.floor(d/m) + ' 分钟前';
+    if(d < day) return Math.floor(d/h) + ' 小时前';
+    if(d < 7*day) return Math.floor(d/day) + ' 天前';
+    const t = new Date(ts); const pad = n => String(n).padStart(2,'0');
+    return t.getFullYear() + '-' + pad(t.getMonth()+1) + '-' + pad(t.getDate());
+  };
+
   bindAuth();
 })();
