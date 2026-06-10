@@ -169,18 +169,18 @@
     if(!card){ card=document.createElement('div'); card.className='fitem'; card.id='job-'+job.id; feedList.insertBefore(card, feedList.firstChild); }
     if(job.status==='queued'||job.status==='running'){
       card.dataset.st='running';
-      card.innerHTML=`<div class="fmeta"><b>文字转语音</b><span class="ts">刚刚</span><span class="sp"></span><span class="st" style="color:var(--amber)"><span class="led led-run"></span>${job.status==='queued'?'排队中':'生成中'}</span></div>
+      card.innerHTML=`<div class="fmeta"><b>文字转语音</b><span class="ts">${(window.LJTimeAgo&&LJTimeAgo(job.createdAt))||'刚刚'}</span><span class="sp"></span><span class="st" style="color:var(--amber)"><span class="led led-run"></span>${job.status==='queued'?'排队中':'生成中'}</span></div>
         <div class="fbubble"><div class="tx">${esc(job.text||'')}</div></div>
         <div class="fvideo proc"><div class="proc-in"><div class="spinner"></div><div class="lbl">${job.progress?('进度 '+job.progress+'%'):'已进入生成队列'}</div><div class="proc-bar"><i style="width:${job.progress||8}%"></i></div></div></div>`;
     } else if(job.status==='done'){
       card.dataset.st='done';
       const url=(job.outputUrls||[])[0];
       const player=url ? `<audio src="${url}" controls preload="metadata" style="width:100%;margin-top:6px"></audio>` : '<div style="color:var(--t4);padding:14px">已生成</div>';
-      card.innerHTML=`<div class="fmeta"><b>文字转语音</b><span class="ts">刚刚</span><span class="sp"></span><span class="st" style="color:var(--green)"><span class="led led-ok"></span>已完成</span></div>
+      card.innerHTML=`<div class="fmeta"><b>文字转语音</b><span class="ts">${(window.LJTimeAgo&&LJTimeAgo(job.createdAt))||'刚刚'}</span><span class="sp"></span><span class="st" style="color:var(--green)"><span class="led led-ok"></span>已完成</span></div>
         <div class="fbubble"><div class="tx">${esc(job.text||'')}</div></div>${player}`;
     } else {
       card.dataset.st='failed';
-      card.innerHTML=`<div class="fmeta"><b>文字转语音</b><span class="ts">刚刚</span><span class="sp"></span><span class="st" style="color:var(--red)"><span class="led led-err"></span>生成失败</span></div>
+      card.innerHTML=`<div class="fmeta"><b>文字转语音</b><span class="ts">${(window.LJTimeAgo&&LJTimeAgo(job.createdAt))||'刚刚'}</span><span class="sp"></span><span class="st" style="color:var(--red)"><span class="led led-err"></span>生成失败</span></div>
         <div class="fbubble"><div class="tx">${esc(job.text||'')}</div></div>
         <div class="fvideo err"><div class="err-in"><div class="ei">!</div><div class="lbl">${esc(job.error||'生成失败,请重试')}</div></div></div>`;
     }

@@ -596,7 +596,7 @@
     if(job.input) jobInputs[job.id]=job.input;
     let card=document.getElementById('job-'+job.id); const existed=!!card;
     if(!card){ card=document.createElement('div'); card.className='fitem'; card.id='job-'+job.id; feedList.insertBefore(card, feedList.firstChild); }
-    const head=(color,led,txt)=>`<div class="fmeta"><b>AI 图片编辑</b><span class="ts">刚刚</span><span class="sp"></span><span class="st" style="color:${color}"><span class="led ${led}"></span>${txt}</span></div>`;
+    const head=(color,led,txt)=>`<div class="fmeta"><b>AI 图片编辑</b><span class="ts">${(window.LJTimeAgo&&LJTimeAgo(job.createdAt))||'刚刚'}</span><span class="sp"></span><span class="st" style="color:${color}"><span class="led ${led}"></span>${txt}</span></div>`;
     // 生成中:卡已在 + 仍 running → 只更进度(不重建,输入图 <img> 不重载→不闪)
     if((job.status==='queued'||job.status==='running') && existed && card.dataset.st==='running'){
       const lbl=card.querySelector('.proc-in .lbl'); const bar=card.querySelector('.proc-bar i');
