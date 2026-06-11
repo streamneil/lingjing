@@ -57,6 +57,20 @@
   #ttsCfg .cpill .v, #sheet-voices .cpill .v { overflow:hidden; text-overflow:ellipsis; }
   #ttsCfg .cpill .chev, #sheet-voices .cpill .chev { width:13px; height:13px; flex-shrink:0; color:var(--t4); transition:transform .2s; }
   #ttsCfg .cpill.open .chev, #sheet-voices .cpill.open .chev { transform:rotate(180deg); }
+  /* 面板/左栏的 popover 向下弹(app.css 默认 bottom:向上,是底部工具栏用的;此处筛选在顶部) */
+  #ttsCfg .pop, #sheet-voices .pop { bottom:auto; top:calc(100% + 6px); min-width:auto; }
+  /* 复制或设计菜单同向下;品质模型选项较多时限高可滚 */
+  #sheet-voices #pop-voiceNew { left:auto; right:0; }
+  #ttsCfg #modelOpts, #sheet-voices [id$="Opts"] { max-height:240px; overflow-y:auto; }
+  /* 标准记录卡:操作行 + 文本气泡展开(对齐 img2video 等)*/
+  .card-acts { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .card-acts button { display:inline-flex; align-items:center; gap:5px; font-size:12.5px; color:var(--t2); background:var(--field); border:1px solid var(--line); border-radius:9px; padding:7px 13px; cursor:pointer; transition:.15s; }
+  .card-acts button:hover { border-color:var(--line-hi); color:var(--t1); }
+  .card-acts button svg { width:14px; height:14px; }
+  .tx-wrap { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .tx.clamp { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+  .tx.clamp.open { -webkit-line-clamp:unset; }
+  .tx-toggle { font-size:12px; color:var(--blue); cursor:pointer; margin-top:4px; align-self:flex-start; }
 </style>
 </head>
 <body data-page="tts" data-crumb="创作工具 > 文字转语音">
@@ -335,6 +349,7 @@
   // ── 声音设计弹窗(E7)──
   const DG_DIMS=['年轻女声','沉稳男声','温柔','活泼','磁性','播音腔','语速偏快','适合有声书'];
   function openDesign(){
+    closeVoices();  // 先关面板,弹框独占屏幕(避免层级/裁切)
     document.getElementById('dgName').value=''; document.getElementById('dgPrompt').value='';
     document.getElementById('dgPreview').style.display='none'; document.getElementById('dgPreview').innerHTML='';
     document.getElementById('dgDims').innerHTML=DG_DIMS.map(d=>`<span class="vd-dim" onclick="addDgDim('${d}')">${d}</span>`).join('');
@@ -374,6 +389,7 @@
   // ── 复制音色(克隆)弹窗 — 复用音色库流程:样本 + 本人授权存证 ──
   let cvConsented=false;
   function openClone(){
+    closeVoices();  // 先关面板,弹框独占屏幕(避免层级/裁切)
     document.getElementById('cvName').value=''; document.getElementById('voiceProof').value=''; document.getElementById('cvProofName').textContent='';
     setCvConsent(false); clearCvUpload(); openModal('clone');
     setTimeout(()=>document.getElementById('cvName').focus(),60);
@@ -433,28 +449,53 @@
     document.querySelectorAll('.feed-list .fitem[id^=job-]').forEach(it=>{ it.style.display=(k==='all'||(it.dataset.st||'')===k)?'':'none'; });
   });
 
+  // 标准记录卡(对齐 img2video 等):head(时间+状态)+ 文本气泡 + 音频/进度/错误 + card-acts。
+  const ttsTexts={};   // jobId → 原文(供重新提示回填)
+  function head(color,led,txt,createdAt){ return `<div class="fmeta"><b>文字转语音</b><span class="ts">${(window.LJTimeAgo&&LJTimeAgo(createdAt))||'刚刚'}</span><span class="sp"></span><span class="st" style="color:${color}"><span class="led ${led}"></span>${txt}</span></div>`; }
+  function txtBubble(t){ return t?`<div class="fbubble"><div class="tx-wrap"><div class="tx clamp">${esc(t)}</div><span class="tx-toggle" onclick="toggleTx(this)">展开</span></div></div>`:''; }
+  function cardActs(job,ok){
+    const url=(job.outputUrls||[])[0];
+    const rp=`<button onclick="repromptTts('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19 7-7 3 3-7 7-3-3z"/><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="m2 2 7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>重新提示</button>`;
+    const dl=ok&&url?`<button onclick="downloadAudio('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg>下载</button>`:'';
+    const del=`<button onclick="delJob('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除</button>`;
+    return `<div class="card-acts">${rp}${dl}${del}</div>`;
+  }
   function renderCard(job){
     document.getElementById('feedEmpty').style.display='none';
-    let card=document.getElementById('job-'+job.id);
+    if(job.text!==undefined) ttsTexts[job.id]=job.text;
+    const t=ttsTexts[job.id]||job.text||'';
+    let card=document.getElementById('job-'+job.id); const existed=!!card;
     if(!card){ card=document.createElement('div'); card.className='fitem'; card.id='job-'+job.id; feedList.insertBefore(card, feedList.firstChild); }
+    // 只更进度(不重建,避免打断音频/展开态)
+    if((job.status==='queued'||job.status==='running') && existed && card.dataset.st==='running'){
+      const lbl=card.querySelector('.proc-in .lbl'); const bar=card.querySelector('.proc-bar i');
+      if(lbl) lbl.textContent=job.progress?('进度 '+job.progress+'%'):'已进入生成队列';
+      if(bar) bar.style.width=(job.progress||8)+'%';
+      return;
+    }
     if(job.status==='queued'||job.status==='running'){
       card.dataset.st='running';
-      card.innerHTML=`<div class="fmeta"><b>文字转语音</b><span class="ts">${(window.LJTimeAgo&&LJTimeAgo(job.createdAt))||'刚刚'}</span><span class="sp"></span><span class="st" style="color:var(--amber)"><span class="led led-run"></span>${job.status==='queued'?'排队中':'生成中'}</span></div>
-        <div class="fbubble"><div class="tx">${esc(job.text||'')}</div></div>
-        <div class="fvideo proc"><div class="proc-in"><div class="spinner"></div><div class="lbl">${job.progress?('进度 '+job.progress+'%'):'已进入生成队列'}</div><div class="proc-bar"><i style="width:${job.progress||8}%"></i></div></div></div>`;
+      card.innerHTML=head('var(--amber)','led-run',job.status==='queued'?'排队中':'生成中',job.createdAt)+txtBubble(t)+
+        `<div class="fvideo proc"><div class="proc-in"><div class="spinner"></div><div class="lbl">${job.progress?('进度 '+job.progress+'%'):'已进入生成队列'}</div><div class="proc-bar"><i style="width:${job.progress||8}%"></i></div></div></div>`;
     } else if(job.status==='done'){
       card.dataset.st='done';
       const url=(job.outputUrls||[])[0];
-      const player=url ? `<audio src="${url}" controls preload="metadata" style="width:100%;margin-top:6px"></audio>` : '<div style="color:var(--t4);padding:14px">已生成</div>';
-      card.innerHTML=`<div class="fmeta"><b>文字转语音</b><span class="ts">${(window.LJTimeAgo&&LJTimeAgo(job.createdAt))||'刚刚'}</span><span class="sp"></span><span class="st" style="color:var(--green)"><span class="led led-ok"></span>已完成</span></div>
-        <div class="fbubble"><div class="tx">${esc(job.text||'')}</div></div>${player}`;
+      const player=url?`<audio src="${url}" controls preload="metadata" style="width:100%;margin-top:6px"></audio>`:'<div style="color:var(--t4);padding:14px">已生成</div>';
+      card.innerHTML=head('var(--green)','led-ok','已完成',job.createdAt)+txtBubble(t)+player+cardActs(job,true);
     } else {
       card.dataset.st='failed';
-      card.innerHTML=`<div class="fmeta"><b>文字转语音</b><span class="ts">${(window.LJTimeAgo&&LJTimeAgo(job.createdAt))||'刚刚'}</span><span class="sp"></span><span class="st" style="color:var(--red)"><span class="led led-err"></span>生成失败</span></div>
-        <div class="fbubble"><div class="tx">${esc(job.text||'')}</div></div>
-        <div class="fvideo err"><div class="err-in"><div class="ei">!</div><div class="lbl">${esc(job.error||'生成失败,请重试')}</div></div></div>`;
+      card.innerHTML=head('var(--red)','led-err','生成失败',job.createdAt)+txtBubble(t)+
+        `<div class="fvideo err"><div class="err-in"><div class="ei">!</div><div class="lbl">${esc(job.error||'生成失败,请重试')}</div></div></div>`+cardActs(job,false);
     }
   }
+  // 文本气泡展开/收起(与标准卡一致)
+  window.toggleTx=(el)=>{ const tx=el.previousElementSibling; const open=tx.classList.toggle('open'); el.textContent=open?'收起':'展开'; };
+  // 下载音频(同源代理端点,与其他工具页一致)
+  window.downloadAudio=async(id)=>{ await window.LJDownload(`/api/jobs/${id}/download/0`,`lingjing-${id}.mp3`); window.LJToast&&window.LJToast('✓ 已开始下载'); };
+  // 重新提示:回填原文到输入框(免重新输入)
+  window.repromptTts=(id)=>{ const t=ttsTexts[id]; if(t==null){ window.LJToast&&window.LJToast('原文丢失','err'); return; } ta.value=t; cnt.textContent=t.length; refreshBtn(); scheduleEstimate(); ta.scrollIntoView({behavior:'smooth',block:'center'}); ta.focus(); };
+  // 删除作品(LJConfirm 二次确认,与其他页一致)
+  window.delJob=async(id)=>{ if(!(await window.LJConfirm({title:'删除作品',body:'确认删除这条配音?删除后不可恢复。',confirmText:'删除',danger:true}))) return; try{ await LJ.del('/jobs/'+id); const c=document.getElementById('job-'+id); if(c) c.remove(); window.LJToast&&window.LJToast('已删除'); }catch(e){ window.LJToast&&window.LJToast(e.message||'删除失败','err'); } };
 
   async function track(id, text){ try{ await LJ.pollJob(id, (job)=>renderCard({...job, text})); }catch(e){} }
   async function loadHistory(){
