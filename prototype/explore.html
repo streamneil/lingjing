@@ -247,7 +247,7 @@
     <div class="pv" id="playerView"></div>
     <div class="pbar">
       <div class="pt"><div class="pn" id="playerName"></div><div class="ps" id="playerSub"></div></div>
-      <a class="puse" id="playerUse" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3Z"/></svg>用这个模板</a>
+      <a class="puse" id="playerUse" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3Z"/></svg><span class="use-label">用这个模板</span></a>
     </div>
   </div>
 </div>
@@ -257,19 +257,22 @@
 <script src="api.js"></script>
 <script>
   // ============ 数据 ============
-  function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  // 同时转义单引号:展示墙 url('...') / 属性多用单引号,SHOWCASE 若将来改为 API 驱动可防 CSS/属性注入
+  function esc(s){ return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function fmt(ts){ const d=new Date(ts); const p=n=>String(n).padStart(2,'0'); return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }
   function svg(inner){ return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`; }
 
   // 案例展示墙(精选样例) — title/sub/tag/poster/video/toolKey/prefill
+  // prefill 必须带真预填参数(?template= 已在 create.html 接收),否则「用此模板」落空 —— 见 ui-exposed-but-not-wired 教训。
+  // 宣传片走 img2video.html:该页暂无参数接收端(P3 TODO),先裸跳并在文案上不承诺预填。
   const F='https://images.unsplash.com/photo-';
   const SHOWCASE = [
-    { title:'晚间新闻 · 数字主播', sub:'数字人视频 · 9:16', tag:'新闻播报', poster:F+'1544005313-94ddf0286df2?w=520&q=85&fit=crop&crop=faces', toolKey:'ai-avatar', prefill:'avatars.html' },
-    { title:'惠民政策 · 系列短片', sub:'数字人视频 · 16:9', tag:'政策解读', poster:F+'1438761681033-6461ffad8d80?w=520&q=85&fit=crop&crop=faces', toolKey:'ai-avatar', prefill:'avatars.html' },
-    { title:'文化节现场 · 记者口播', sub:'数字人视频 · 9:16', tag:'出镜报道', poster:F+'1507003211169-0a1dd7228f2d?w=520&q=85&fit=crop&crop=faces', toolKey:'ai-avatar', prefill:'avatars.html' },
-    { title:'财经观察 · 每日早报', sub:'数字人视频 · 16:9', tag:'财经', poster:F+'1573497019940-1c28c88b4f3e?w=520&q=85&fit=crop&crop=faces', toolKey:'ai-avatar', prefill:'avatars.html' },
-    { title:'城市形象 · 宣传短片', sub:'图片转影片 · 16:9', tag:'宣传片', poster:F+'1531123897727-8f129e1688ce?w=520&q=85&fit=crop&crop=faces', toolKey:'img2video', prefill:'img2video.html' },
-    { title:'科普讲解 · 虚拟讲师', sub:'数字人视频 · 16:9', tag:'教育', poster:F+'1539571696357-5a69c17a67c6?w=520&q=85&fit=crop&crop=faces', toolKey:'ai-avatar', prefill:'avatars.html' },
+    { title:'晚间新闻 · 数字主播', sub:'数字人视频 · 9:16', tag:'新闻播报', poster:F+'1544005313-94ddf0286df2?w=520&q=85&fit=crop&crop=faces', toolKey:'ai-avatar', prefill:'create.html?template=news' },
+    { title:'惠民政策 · 系列短片', sub:'数字人视频 · 16:9', tag:'政策解读', poster:F+'1438761681033-6461ffad8d80?w=520&q=85&fit=crop&crop=faces', toolKey:'ai-avatar', prefill:'create.html?template=policy' },
+    { title:'文化节现场 · 记者口播', sub:'数字人视频 · 9:16', tag:'出镜报道', poster:F+'1507003211169-0a1dd7228f2d?w=520&q=85&fit=crop&crop=faces', toolKey:'ai-avatar', prefill:'create.html?template=field' },
+    { title:'财经观察 · 每日早报', sub:'数字人视频 · 16:9', tag:'财经', poster:F+'1573497019940-1c28c88b4f3e?w=520&q=85&fit=crop&crop=faces', toolKey:'ai-avatar', prefill:'create.html?template=finance' },
+    { title:'城市形象 · 宣传短片', sub:'图片转影片 · 16:9', tag:'宣传片', poster:F+'1531123897727-8f129e1688ce?w=520&q=85&fit=crop&crop=faces', toolKey:'img2video', prefill:'img2video.html', noPrefill:true },
+    { title:'科普讲解 · 虚拟讲师', sub:'数字人视频 · 16:9', tag:'教育', poster:F+'1539571696357-5a69c17a67c6?w=520&q=85&fit=crop&crop=faces', toolKey:'ai-avatar', prefill:'create.html?template=news' },
   ];
 
   // 一键开始(聚合 create/ai-image/ai-music 的发现内容)
@@ -289,7 +292,7 @@
     const el = document.getElementById('showcase');
     el.innerHTML = SHOWCASE.map((s,i)=>`
       <div class="demo" tabindex="0" role="button" aria-label="预览案例：${esc(s.title)}" data-i="${i}">
-        <div class="img" style="background-image:url('${s.poster}')"></div>
+        <div class="img" style="background-image:url('${esc(s.poster)}')"></div>
         <div class="veil"></div>
         <span class="tag">${esc(s.tag)}</span>
         <button class="play" tabindex="-1" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
@@ -310,10 +313,13 @@
     // 样片视频缺省 → 用 poster 占位(运营后续补 sampleVideoUrl)
     view.innerHTML = s.sampleVideoUrl
       ? `<video src="${s.sampleVideoUrl}" controls autoplay playsinline></video>`
-      : `<div class="img" style="position:absolute;inset:0;background-size:cover;background-position:center;background-image:url('${s.poster}')"></div><div class="pph" style="position:relative;z-index:1">${svg('<circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4V8Z"/>')}<span>样片预览</span></div>`;
+      : `<div class="img" style="position:absolute;inset:0;background-size:cover;background-position:center;background-image:url('${esc(s.poster)}')"></div><div class="pph" style="position:relative;z-index:1">${svg('<circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4V8Z"/>')}<span>样片预览</span></div>`;
     document.getElementById('playerName').textContent=s.title;
     document.getElementById('playerSub').textContent=s.sub;
-    document.getElementById('playerUse').href=s.prefill||LJTools.href(LJTools.get(s.toolKey)||{});
+    const useBtn=document.getElementById('playerUse');
+    useBtn.href=s.prefill||LJTools.href(LJTools.get(s.toolKey)||{});
+    // 文案诚实:有真预填参数才说「用这个模板」,裸跳(noPrefill)只说「去创作」
+    useBtn.querySelector('.use-label').textContent = s.noPrefill ? '去创作' : '用这个模板';
     const ov=document.getElementById('player');
     ov.classList.add('show');
     document.getElementById('playerClose').focus();
@@ -387,26 +393,23 @@
       <div class="ed">${canCreate?'从一个模板起步，几分钟就能产出一条合规的数字人内容。':'你当前是查看者，可以先浏览上面的案例与工具。'}</div>
       ${cta}</div>`;
   }
+  // 最近作品渲染:接收已拉好的 jobs(null=请求失败)与角色,消除二次 /jobs 与 __ljRole 时序竞争
+  function renderRecent(jobs, role){
+    const box=document.getElementById('recent');
+    if(jobs===null){ renderRecentErr(); return; }
+    if(!jobs.length){ renderRecentEmpty(role!=='viewer'); return; }
+    box.innerHTML = jobs.slice(0,8).map(jobCard).join('');
+  }
   function renderRecentErr(){
     document.getElementById('recent').innerHTML = `<div class="recent-err">作品加载失败，可能是网络波动。
-      <br><button onclick="loadRecent()">点此重试 ↻</button></div>`;
-  }
-  async function loadRecent(){
-    const box=document.getElementById('recent');
-    try{
-      const jobs=await LJ.get('/jobs');
-      if(!jobs.length){ renderRecentEmpty(window.__ljRole!=='viewer'); return; }
-      box.innerHTML = jobs.slice(0,8).map(jobCard).join('');
-    }catch(e){ renderRecentErr(); }
+      <br><button onclick="reloadAll()">点此重试 ↻</button></div>`;
   }
 
-  // ============ Hero:点数 + 统计(全状态) ============
-  async function loadHero(){
+  // ============ 统一加载:一次 LJ.me() 定角色,一次 /jobs 同时供 Hero 计数 + 最近作品 ============
+  async function loadAll(){
     let me;
     try{ me=await LJ.me(); }catch(e){ return; /* 401 已跳登录 */ }
-    // 角色自适应:viewer 由 shell 的 data-requires-create 兜底隐藏「开始创作」/「一键开始」
-    const hr=new Date().getHours();
-    // 问候随时间(可选,不抢 H1 焦点) — 保留 H1 文案不变
+    const role=me.role;  // 本页自己的角色真相,不依赖 shell.js 的 window.__ljRole 时序
 
     const [bal,warn,jobs,avs,vcs]=await Promise.all([
       LJ.get('/credits/balance').catch(()=>({balance:null})),
@@ -415,6 +418,8 @@
       LJ.get('/avatars').catch(()=>null),
       LJ.get('/voices').catch(()=>null),
     ]);
+
+    // Hero 点数 + 统计
     const balEl=document.getElementById('balVal');
     balEl.textContent = bal.balance==null ? '—' : bal.balance.toLocaleString('en-US');
     if(warn&&warn.low){ balEl.classList.add('low'); document.getElementById('balWarn').style.display='block'; document.getElementById('balMeta').style.display='none'; }
@@ -422,14 +427,17 @@
     set('cWorks', jobs?jobs.length:null);
     set('cAvatars', avs?(avs.custom||[]).length:null);
     set('cVoices', vcs?(vcs.clones||[]).length:null);
+
+    // 最近作品(复用同一份 jobs + 确定的 role)
+    renderRecent(jobs, role);
   }
+  function reloadAll(){ loadAll(); }
 
   // ============ 启动 ============
   renderShowcase();
   renderStarts();
   renderTools();
-  loadHero();
-  loadRecent();
+  loadAll();
 </script>
 </body>
 </html>
