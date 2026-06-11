@@ -23,7 +23,7 @@
   #sheet-voices .ss-filters { padding:0 22px 14px; }
   #sheet-voices .ss-body { grid-template-columns:1fr; padding:0 22px 22px; }  /* 单列 + 收紧 gutter */
   /* 设计弹窗从面板内打开,须盖在面板(.sheet-side z110)之上 */
-  #ov-design { z-index:320; }
+  #ov-design, #ov-clone { z-index:320; }  /* 从面板内打开,须盖在面板之上 */
   /* 面板遮罩(.ov 不带,侧滑面板自配一层):对齐系统 .ov 配方 */
   .vsheet-ov { position:fixed; inset:0; background:rgba(4,4,5,.66); backdrop-filter:blur(8px); display:none; z-index:105; }
   .vsheet-ov.on { display:block; }
@@ -41,11 +41,22 @@
   .vd-dim:hover { border-color:var(--line-hi); color:var(--t1); }
   .vd-preview { margin-top:12px; }
 
-  .sld-row { display:flex; align-items:center; gap:12px; padding:11px 14px; background:var(--field); border:1px solid var(--line); border-radius:var(--r); }
-  .sld-row .lbl { font-size:13px; color:var(--t3); width:36px; }
+  .sld-row { display:flex; align-items:center; gap:10px; padding:8px 12px; background:var(--field); border:1px solid var(--line); border-radius:var(--r); }
+  .sld-row .lbl { font-size:12.5px; color:var(--t3); width:36px; }
   .sld-row input[type=range] { flex:1; }
-  .sld-row .val { font-family:var(--f-mono); font-size:12.5px; color:var(--t2); width:42px; text-align:right; }
-  .cfg-label { font-size:12px; color:var(--t3); margin:14px 0 7px; }
+  .sld-row .val { font-family:var(--f-mono); font-size:12px; color:var(--t2); width:42px; text-align:right; }
+  .cfg-label { font-size:12px; color:var(--t3); margin:10px 0 5px; }
+  /* 左栏紧凑:收紧整列间距/内边距,目标不超一屏(情绪块默认隐藏已省一截) */
+  #ttsCfg { gap:8px; padding:18px 20px; }
+  #ttsCfg .voice-pick { padding:11px 13px; }
+  #ttsCfg .script textarea { min-height:110px; }
+  /* app.css 的 .cpill/.chev 仅作用于 .cfgbar 内;此处面板/左栏的 cpill 自带样式 */
+  #ttsCfg .cpill, #sheet-voices .cpill { display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; padding:9px 13px; background:var(--field); border:1px solid var(--line); border-radius:var(--r); font-size:12.5px; font-weight:600; color:var(--t2); cursor:pointer; transition:border-color .2s; white-space:nowrap; overflow:hidden; }
+  #ttsCfg .cpill:hover, #sheet-voices .cpill:hover { border-color:var(--line-hi); }
+  #ttsCfg .cpill.open, #sheet-voices .cpill.open { border-color:var(--blue); color:var(--t1); }
+  #ttsCfg .cpill .v, #sheet-voices .cpill .v { overflow:hidden; text-overflow:ellipsis; }
+  #ttsCfg .cpill .chev, #sheet-voices .cpill .chev { width:13px; height:13px; flex-shrink:0; color:var(--t4); transition:transform .2s; }
+  #ttsCfg .cpill.open .chev, #sheet-voices .cpill.open .chev { transform:rotate(180deg); }
 </style>
 </head>
 <body data-page="tts" data-crumb="创作工具 > 文字转语音">
@@ -53,7 +64,7 @@
  <div class="main-col">
   <div class="studio">
   <!-- 左:配置 -->
-  <div class="cfg">
+  <div class="cfg" id="ttsCfg">
     <div class="cfg-h"><span class="dot"></span>文字转语音</div>
 
     <div class="script">
@@ -69,15 +80,21 @@
     </div>
 
     <div class="cfg-label">品质</div>
-    <select class="vfilter" id="ttsModel" style="width:100%" onchange="onModelChange()" title="不同模型音质与价格不同;须与所选音色配套">
-      <option value="">默认(随音色)</option>
-    </select>
+    <div class="pop-anchor">
+      <div class="cpill" id="modelPill" onclick="togglePop('model')" title="不同模型音质与价格不同;须与所选音色配套"><span class="v" id="modelPillV">默认(随音色)</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+      <div class="pop" id="pop-model" style="min-width:auto;left:0;right:0"><div class="pop-label">品质模型</div><div id="modelOpts"></div></div>
+    </div>
 
-    <div class="cfg-label" id="emoLabel">情绪 <span id="emoHint" style="color:var(--t4);font-weight:400;font-size:11px"></span></div>
-    <select class="vfilter" id="emotion" style="width:100%"><option value="auto">自动</option></select>
-
-    <div class="cfg-label">音高 <span id="pitchVal" style="color:var(--t4);font-weight:400">0</span></div>
-    <div class="sld-row"><span class="lbl">音高</span><input type="range" id="pitch" min="-12" max="12" step="1" value="0"><span class="val" id="pitchValR">0</span></div>
+    <!-- 情绪 + 音高:仅所选品质模型支持指令时显示(默认隐藏,P4/P5 紧凑) -->
+    <div id="emoBlock" style="display:none">
+      <div class="cfg-label">情绪</div>
+      <div class="pop-anchor">
+        <div class="cpill" id="emoPill" onclick="togglePop('emo')"><span class="v" id="emoPillV">自动</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+        <div class="pop" id="pop-emo" style="min-width:auto;left:0;right:0"><div class="pop-label">情绪</div><div id="emoOpts"></div></div>
+      </div>
+      <div class="cfg-label">音高 <span id="pitchVal" style="color:var(--t4);font-weight:400">0</span></div>
+      <div class="sld-row"><span class="lbl">音高</span><input type="range" id="pitch" min="-12" max="12" step="1" value="0"><span class="val" id="pitchValR">0</span></div>
+    </div>
 
     <div class="cfg-label">语速</div>
     <div class="sld-row"><span class="lbl">速度</span><input type="range" id="rate" min="0.5" max="2" step="0.1" value="1"><span class="val" id="rateVal">1.0×</span></div>
@@ -123,15 +140,26 @@
       <button class="active" data-tab="preset" role="tab" aria-selected="true" onclick="switchVTab('preset')">音色库</button>
       <button data-tab="mine" role="tab" aria-selected="false" onclick="switchVTab('mine')">我的声音</button>
     </div>
-    <button class="btn btn-dark" onclick="openDesign()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" style="width:15px;height:15px"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>复制或设计</button>
+    <div class="pop-anchor">
+      <button class="btn btn-dark" onclick="togglePop('voiceNew')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" style="width:15px;height:15px"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>复制或设计</button>
+      <div class="pop" id="pop-voiceNew" style="min-width:180px;left:auto;right:0"><div class="pop-opt" onclick="closePops();openClone()"><span class="nm">复制音色(克隆)</span></div><div class="pop-opt" onclick="closePops();openDesign()"><span class="nm">设计音色(描述)</span></div></div>
+    </div>
     <div class="x" onclick="closeVoices()" role="button" tabindex="0" aria-label="关闭" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();closeVoices();}" style="cursor:pointer;color:var(--t3)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:22px;height:22px"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
   </div>
   <div class="ss-filters">
-    <select class="vfilter" id="vfLang" aria-label="按语言筛选" onchange="renderVoices()"><option value="">语言:全部</option><option value="中文">中文</option><option value="英文">英文</option></select>
-    <select class="vfilter" id="vfGender" aria-label="按性别筛选" onchange="renderVoices()"><option value="">性别:全部</option><option value="女">女</option><option value="男">男</option></select>
+    <div class="pop-anchor" style="flex:1">
+      <div class="cpill" id="langPill" onclick="togglePop('lang')"><span class="v" id="langPillV">语言:全部</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+      <div class="pop" id="pop-lang" style="min-width:auto;left:0;right:0"><div class="pop-label">语言</div><div id="langOpts"></div></div>
+    </div>
+    <div class="pop-anchor" style="flex:1">
+      <div class="cpill" id="genderPill" onclick="togglePop('gender')"><span class="v" id="genderPillV">性别:全部</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+      <div class="pop" id="pop-gender" style="min-width:auto;left:0;right:0"><div class="pop-label">性别</div><div id="genderOpts"></div></div>
+    </div>
   </div>
   <div class="ss-body" id="vsheetBody"><div style="color:var(--t4);padding:20px">加载音色中…</div></div>
 </div>
+<!-- popover 遮罩(点击关闭所有 .pop)-->
+<div class="pop-ov" id="popOv" onclick="closePops()"></div>
 
 <!-- 声音设计弹窗 -->
 <div class="ov" id="ov-design"><div class="modal">
@@ -145,6 +173,26 @@
     <button class="btn btn-white" id="dgSubmitBtn" style="width:100%;padding:14px;font-size:15px;margin-top:12px" onclick="submitDesign()">生成音色</button>
   </div>
 </div></div>
+
+<!-- 复制音色(克隆)弹窗 — 与 AI虚拟人/音色库一致:上传样本 + 本人授权存证 -->
+<div class="ov" id="ov-clone"><div class="modal">
+  <div class="mh"><h3>复制音色(克隆)</h3><div class="mc" onclick="closeModal('clone')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></div></div>
+  <div class="mb">
+    <div class="iline"><label>音色名称</label><input id="cvName" placeholder="例如:我的克隆音色" maxlength="40" oninput="refreshCvBtn()" onkeydown="if(event.key==='Enter')submitClone()"></div>
+    <div class="uzone" onclick="document.getElementById('voiceSample').click()">
+      <div class="ubox" id="cvUboxEmpty"><div class="u"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>上传 5–30s 语音样本</div></div>
+      <div class="upreview" id="cvPreview" style="display:none"><div class="upreview-bar"><span id="cvSampleName"></span><button type="button" class="upreview-x" onclick="event.stopPropagation();clearCvUpload()">重新选择</button></div></div>
+    </div>
+    <div class="rtitle">样本要求</div><div class="rsub">单人清晰语音,5–30 秒,无背景音乐与噪声;格式 mp3 / wav / m4a。</div>
+    <div class="consent" id="cvConsent" role="checkbox" aria-checked="false" tabindex="0" onclick="toggleCvConsent()" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleCvConsent();}" style="cursor:pointer">
+      <div class="ck" id="cvConsentBox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></div>
+      <div>我确认已获被克隆人<b style="color:var(--t1)">本人授权</b>(年满 18 岁,声音属本人或已书面授权),并接受 <a href="terms.html" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--blue)">服务条款</a> 与 <a href="privacy.html" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--blue)">隐私政策</a>。<a onclick="event.stopPropagation();document.getElementById('voiceProof').click()" style="color:var(--blue);cursor:pointer">上传授权凭证(可选)</a> <span id="cvProofName" style="color:var(--t4);font-size:11px"></span></div>
+    </div>
+    <button class="btn btn-white" id="cvSubmitBtn" style="width:100%;padding:15px;font-size:15px" onclick="submitClone()">克隆音色</button>
+  </div>
+</div></div>
+<input type="file" id="voiceSample" accept="audio/*" style="display:none">
+<input type="file" id="voiceProof" accept="image/*,application/pdf" style="display:none">
 
 <script src="shell.js"></script>
 <script src="tools.js"></script>
@@ -178,6 +226,7 @@
     body.innerHTML='<div style="color:var(--t4);padding:20px">加载音色中…</div>';
     try{
       vsData=await LJ.get('/voices');
+      refreshFilterOpts();
       renderVoices();
       // 默认选中:首个可用音色(优先当前 Tab)
       if(!selectedVoice){ const first=currentList()[0]; if(first) pickVoiceObj(first,true); }
@@ -187,14 +236,22 @@
     if(vTab==='mine') return (vsData.clones||[]).filter(v=>v.status==='ready');
     return vsData.presets||[];
   }
+  let selLang='', selGender='';   // 当前语言/性别筛选('')
+  // 语言/性别筛选项:语言从预置实际 lang 动态生成(预置有方言);性别固定。
+  function refreshFilterOpts(){
+    const langs=[...new Set((vsData.presets||[]).map(p=>p.lang).filter(Boolean))];
+    const langItems=[{value:'',label:'语言:全部'}].concat(langs.map(l=>({value:l,label:l})));
+    renderPopOpts('langOpts', langItems, selLang, (v)=>{ selLang=v; document.getElementById('langPillV').textContent=v||'语言:全部'; renderVoices(); });
+    const genderItems=[{value:'',label:'性别:全部'},{value:'女',label:'女'},{value:'男',label:'男'}];
+    renderPopOpts('genderOpts', genderItems, selGender, (v)=>{ selGender=v; document.getElementById('genderPillV').textContent=v?('性别:'+v):'性别:全部'; renderVoices(); });
+  }
   function renderVoices(){
     window.LJAudioPreview.stop();
     const body=document.getElementById('vsheetBody');
-    const lang=document.getElementById('vfLang').value, gender=document.getElementById('vfGender').value;
     let list=currentList();
     // 筛选(预置有 lang/gender;自建音色无,语言/性别筛选时排除)
-    if(lang) list=list.filter(v=>(v.lang||'')===lang);
-    if(gender) list=list.filter(v=>(v.gender||'')===gender);
+    if(selLang) list=list.filter(v=>(v.lang||'')===selLang);
+    if(selGender) list=list.filter(v=>(v.gender||'')===selGender);
     if(!list.length){
       body.innerHTML=`<div style="color:var(--t4);padding:30px;text-align:center">${vTab==='mine'?'还没有自己的声音,点「复制或设计」创建一个':'没有符合筛选的音色'}</div>`;
       return;
@@ -213,54 +270,67 @@
         +`<div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>${esc(v.name)}${hot}</div><div class="vc-d">${esc(desc)}</div></div>${play}</div>`;
     }).join('');
   }
-  // 音色传输:预置/克隆→ws,设计→http(与后端 voiceTransport 同口径;品质模型须配套)
+  // 音色传输:预置(Qwen)/设计→http,克隆→ws(与后端 voiceTransport 同口径;品质模型须配套)
   function voiceTransportOf(id){
-    if((vsData.presets||[]).some(p=>p.id===id)) return 'ws';
+    if((vsData.presets||[]).some(p=>p.id===id)) return 'http';
     const c=(vsData.clones||[]).find(x=>x.id===id);
-    return c&&c.kind==='design' ? 'http' : 'ws';
+    return c&&c.kind==='clone' ? 'ws' : 'http';
   }
   window.pickVoiceObj=(v, silent)=>{
     selectedVoice={id:v.id,name:v.name,desc:v.desc,transport:voiceTransportOf(v.id)};
     document.getElementById('voiceName').textContent=v.name;
     document.getElementById('voiceDesc').textContent=v.desc||'已选择';
     document.querySelectorAll('#vsheetBody .vcard').forEach(c=>c.classList.toggle('on', c.dataset.id===v.id));
-    refreshModelOptions();  // 品质下拉按所选音色 transport 过滤
+    refreshModelOptions();  // 品质按所选音色 transport 过滤
     if(!silent) closeVoices(); refreshBtn();
   };
   window.openVoices=openVoices; window.closeVoices=closeVoices; window.switchVTab=switchVTab; window.renderVoices=renderVoices;
 
+  // ── 通用 popover(设计系统 .cpill + .pop,替代原生 select)──
+  function togglePop(which){
+    const pop=document.getElementById('pop-'+which); const isOpen=pop.classList.contains('show'); closePops();
+    if(!isOpen){ pop.classList.add('show'); document.getElementById('popOv').classList.add('show'); const pill=document.getElementById(which+'Pill'); if(pill) pill.classList.add('open'); }
+  }
+  function closePops(){ document.querySelectorAll('.pop.show').forEach(p=>p.classList.remove('show')); document.querySelectorAll('.cpill.open').forEach(p=>p.classList.remove('open')); document.getElementById('popOv').classList.remove('show'); }
+  window.togglePop=togglePop; window.closePops=closePops;
+  // 渲染一组 .pop-opt(items:[{value,label}],current=当前值,onPick(value))
+  function renderPopOpts(containerId, items, current, onPick){
+    const box=document.getElementById(containerId);
+    box.innerHTML=items.map(it=>`<div class="pop-opt${it.value===current?' on':''}" data-v="${esc(it.value)}"><span class="nm">${esc(it.label)}</span><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg></div>`).join('');
+    box.querySelectorAll('.pop-opt[data-v]').forEach(el=>el.onclick=()=>{ onPick(el.dataset.v); closePops(); });
+  }
+
   // ── 品质模型(T-TTS-QUALITY-MODEL)+ 情绪/音高(T-TTS-EMOTION)──
   let ttsModels=[], ttsEmotions=[];   // [{key,label,transport,supportsInstruction}] / [{key,label}]
+  let selModel='', selEmo='auto';     // 当前品质模型 key('')/情绪 key
   async function loadModels(){
     try{ const r=await LJ.get('/tts-models'); ttsModels=r.models||[]; ttsEmotions=r.emotions||[];
-      document.getElementById('emotion').innerHTML=ttsEmotions.map(e=>`<option value="${esc(e.key)}">${esc(e.label)}</option>`).join('');
-      updateEmotionEnabled();
+      refreshModelOptions(); refreshEmoOptions();
     }catch(e){}
   }
   function refreshModelOptions(){
-    const sel=document.getElementById('ttsModel');
-    const prev=sel.value;
     const tp=selectedVoice?selectedVoice.transport:null;
-    const opts=['<option value="">默认(随音色)</option>']
-      .concat(ttsModels.filter(m=>!tp||m.transport===tp).map(m=>`<option value="${esc(m.key)}">${esc(m.label)}</option>`));
-    sel.innerHTML=opts.join('');
+    const avail=ttsModels.filter(m=>!tp||m.transport===tp);
     // 切音色后若旧选模型不再兼容,回落默认
-    if(prev && [...sel.options].some(o=>o.value===prev)) sel.value=prev; else sel.value='';
-    updateEmotionEnabled();
+    if(selModel && !avail.some(m=>m.key===selModel)) selModel='';
+    const items=[{value:'',label:'默认(随音色)'}].concat(avail.map(m=>({value:m.key,label:m.label})));
+    renderPopOpts('modelOpts', items, selModel, (v)=>{ selModel=v; document.getElementById('modelPillV').textContent=(items.find(i=>i.value===v)||{}).label; onModelChange(); });
+    document.getElementById('modelPillV').textContent=(items.find(i=>i.value===selModel)||{label:'默认(随音色)'}).label;
+    updateEmotionVisible();
   }
-  // 情绪/音高仅在所选品质模型支持指令时可用;否则灰 + 提示
-  function updateEmotionEnabled(){
-    const mk=document.getElementById('ttsModel').value;
-    const def=ttsModels.find(m=>m.key===mk);
+  function refreshEmoOptions(){
+    renderPopOpts('emoOpts', ttsEmotions.map(e=>({value:e.key,label:e.label})), selEmo, (v)=>{ selEmo=v; document.getElementById('emoPillV').textContent=(ttsEmotions.find(e=>e.key===v)||{}).label; });
+    document.getElementById('emoPillV').textContent=(ttsEmotions.find(e=>e.key===selEmo)||{label:'自动'}).label;
+  }
+  // 情绪/音高仅在所选品质模型支持指令时显示(P4/P5:不支持则整块隐藏,左栏更短)
+  function updateEmotionVisible(){
+    const def=ttsModels.find(m=>m.key===selModel);
     const ok=!!(def&&def.supportsInstruction);
-    const emo=document.getElementById('emotion'), pit=document.getElementById('pitch');
-    emo.disabled=!ok; pit.disabled=!ok;
-    emo.style.opacity=pit.style.opacity=ok?'1':'.45';
-    document.getElementById('emoHint').textContent=ok?'':'(需选支持指令的品质模型)';
-    if(!ok){ emo.value='auto'; pit.value='0'; document.getElementById('pitchVal').textContent='0'; document.getElementById('pitchValR').textContent='0'; }
+    document.getElementById('emoBlock').style.display=ok?'':'none';
+    if(!ok){ selEmo='auto'; document.getElementById('pitch').value='0'; document.getElementById('pitchVal').textContent='0'; document.getElementById('pitchValR').textContent='0'; refreshEmoOptions(); }
   }
   document.getElementById('pitch').oninput=function(){ document.getElementById('pitchVal').textContent=this.value; document.getElementById('pitchValR').textContent=this.value; };
-  window.onModelChange=()=>{ updateEmotionEnabled(); scheduleEstimate(); };
+  window.onModelChange=()=>{ updateEmotionVisible(); scheduleEstimate(); };
 
   // ── 声音设计弹窗(E7)──
   const DG_DIMS=['年轻女声','沉稳男声','温柔','活泼','磁性','播音腔','语速偏快','适合有声书'];
@@ -300,8 +370,43 @@
     finally{ refreshDgBtn(); }
   }
   window.openDesign=openDesign; window.refreshDgBtn=refreshDgBtn; window.submitDesign=submitDesign;
-  // Esc 关设计弹窗
-  document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&document.getElementById('ov-design').classList.contains('show')) closeModal('design'); });
+
+  // ── 复制音色(克隆)弹窗 — 复用音色库流程:样本 + 本人授权存证 ──
+  let cvConsented=false;
+  function openClone(){
+    document.getElementById('cvName').value=''; document.getElementById('voiceProof').value=''; document.getElementById('cvProofName').textContent='';
+    setCvConsent(false); clearCvUpload(); openModal('clone');
+    setTimeout(()=>document.getElementById('cvName').focus(),60);
+  }
+  function setCvConsent(v){ cvConsented=v; document.getElementById('cvConsentBox').classList.toggle('on',v); document.getElementById('cvConsent').setAttribute('aria-checked',v?'true':'false'); refreshCvBtn(); }
+  function toggleCvConsent(){ setCvConsent(!cvConsented); }
+  function clearCvUpload(){ document.getElementById('voiceSample').value=''; document.getElementById('cvPreview').style.display='none'; document.getElementById('cvUboxEmpty').style.display=''; refreshCvBtn(); }
+  function refreshCvBtn(){
+    const btn=document.getElementById('cvSubmitBtn');
+    const name=(document.getElementById('cvName').value||'').trim(), hasFile=!!document.getElementById('voiceSample').files[0];
+    let txt='克隆音色', ok=true;
+    if(!name){ txt='请输入音色名称'; ok=false; } else if(!hasFile){ txt='请上传语音样本'; ok=false; } else if(!cvConsented){ txt='请勾选已获授权'; ok=false; }
+    btn.disabled=!ok; btn.textContent=txt;
+  }
+  document.getElementById('voiceSample').addEventListener('change',function(){ const f=this.files[0]; if(!f) return; document.getElementById('cvUboxEmpty').style.display='none'; document.getElementById('cvPreview').style.display='block'; document.getElementById('cvSampleName').textContent=f.name; refreshCvBtn(); });
+  document.getElementById('voiceProof').addEventListener('change',function(){ const f=this.files[0]; if(f) document.getElementById('cvProofName').textContent='✓ '+f.name; });
+  async function submitClone(){
+    const btn=document.getElementById('cvSubmitBtn'); if(btn.disabled) return;
+    const name=document.getElementById('cvName').value.trim(), sample=document.getElementById('voiceSample').files[0], proof=document.getElementById('voiceProof').files[0];
+    const fd=new FormData(); fd.append('name',name); fd.append('consent','true'); fd.append('sample',sample); if(proof) fd.append('proof',proof);
+    btn.disabled=true; btn.textContent='克隆中…';
+    try{
+      const res=await fetch('/api/voices',{method:'POST',body:fd,credentials:'same-origin'});
+      if(res.status===401){ location.href='login.html'; return; }
+      const d=await res.json().catch(()=>({})); if(!res.ok) throw new Error(d.error||'克隆失败');
+      closeModal('clone'); window.LJToast&&window.LJToast('✓ 音色「'+name+'」已提交克隆');
+      await loadVoices(); switchVTab('mine');
+    }catch(e){ window.LJToast&&window.LJToast(e.message||'克隆失败','err'); refreshCvBtn(); }
+  }
+  window.openClone=openClone; window.toggleCvConsent=toggleCvConsent; window.refreshCvBtn=refreshCvBtn; window.clearCvUpload=clearCvUpload; window.submitClone=submitClone;
+
+  // Esc 关设计/克隆弹窗
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ if(document.getElementById('ov-design').classList.contains('show')) closeModal('design'); if(document.getElementById('ov-clone').classList.contains('show')) closeModal('clone'); } });
 
   // 预估
   let estTimer=null;
@@ -309,7 +414,7 @@
     clearTimeout(estTimer);
     estTimer=setTimeout(async()=>{
       if(!ta.value.trim()){ document.getElementById('estLabel').textContent='预估 — 点'; document.getElementById('estGem').textContent='—'; return; }
-      try{ const r=await LJ.post('/jobs/estimate',{type:'tts',text:ta.value,voiceRef:selectedVoice?selectedVoice.id:'',model:document.getElementById('ttsModel').value||undefined}); document.getElementById('estLabel').textContent='预估 '+r.cost+' 点'; document.getElementById('estGem').textContent=r.cost; }catch(e){}
+      try{ const r=await LJ.post('/jobs/estimate',{type:'tts',text:ta.value,voiceRef:selectedVoice?selectedVoice.id:'',model:selModel||undefined}); document.getElementById('estLabel').textContent='预估 '+r.cost+' 点'; document.getElementById('estGem').textContent=r.cost; }catch(e){}
     },350);
   }
   function refreshBtn(){
@@ -369,8 +474,8 @@
     const text=ta.value.trim(); if(!text||!selectedVoice) return;
     btn.disabled=true; const prev=btn.innerHTML; btn.textContent='提交中…';
     try{
-      const emoV=document.getElementById('emotion').value, pitchV=parseInt(document.getElementById('pitch').value,10);
-      const res=await LJ.createJob({ type:'tts', text, voiceRef:selectedVoice.id, rate:parseFloat(rate.value), volume:parseInt(vol.value,10), model:document.getElementById('ttsModel').value||undefined, emotion:emoV!=='auto'?emoV:undefined, pitch:pitchV!==0?pitchV:undefined });
+      const pitchV=parseInt(document.getElementById('pitch').value,10);
+      const res=await LJ.createJob({ type:'tts', text, voiceRef:selectedVoice.id, rate:parseFloat(rate.value), volume:parseInt(vol.value,10), model:selModel||undefined, emotion:selEmo!=='auto'?selEmo:undefined, pitch:pitchV!==0?pitchV:undefined });
       renderCard({ id:res.id, status:'queued', progress:0, text });
       track(res.id, text);
       ta.value=''; cnt.textContent='0'; scheduleEstimate();
