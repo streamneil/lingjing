@@ -59,6 +59,12 @@
   #ttsCfg .cpill.open .chev, #sheet-voices .cpill.open .chev { transform:rotate(180deg); }
   /* 面板/左栏的 popover 向下弹(app.css 默认 bottom:向上,是底部工具栏用的;此处筛选在顶部) */
   #ttsCfg .pop, #sheet-voices .pop { bottom:auto; top:calc(100% + 6px); min-width:auto; }
+  /* 关键修复(无法选中根因):#ttsCfg 是 sticky+transform 形成的层叠上下文,且嵌在
+     #studio/#shell-mount(z:1)内;而 .pop-ov 遮罩在根层 z:55 → 遮罩盖在整个面板子树之上、
+     拦截选项点击 → closePops 触发、什么也没选中。面板内 popover 不依赖该遮罩(改用
+     document 点击外部关闭,见 togglePop),故这里把面板内遮罩屏蔽掉,避免它拦截选项。
+     侧边音色面板(z:110 > 55)不受影响,仍用遮罩。 */
+  #ttsCfg .pop.show { z-index:61; }
   /* 复制或设计菜单同向下;弹框选项较多时限高可滚 */
   #sheet-voices #pop-voiceNew { left:auto; right:0; }
   #ttsCfg #emoOpts, #ttsCfg #spdOpts, #ttsCfg #langSynOpts, #sheet-voices [id$="Opts"] { max-height:240px; overflow-y:auto; }
@@ -312,11 +318,34 @@
   window.openVoices=openVoices; window.closeVoices=closeVoices; window.switchVTab=switchVTab; window.renderVoices=renderVoices;
 
   // ── 通用 popover(设计系统 .cpill + .pop,替代原生 select)──
+  // 面板内(#ttsCfg)的 popover 不能用 .pop-ov 遮罩:#ttsCfg 是 sticky+transform 层叠上下文、
+  // 又嵌在 #studio/#shell-mount(z:1)内,根层遮罩(z:55)会盖住整个面板子树拦截选项点击 →
+  // 无法选中。故面板内 popover 改用 document 监听外部点击关闭(不显示遮罩);侧边音色面板
+  // (z:110 > 55)不受此限,仍用遮罩。
+  let outsideHandler=null;
   function togglePop(which){
     const pop=document.getElementById('pop-'+which); const isOpen=pop.classList.contains('show'); closePops();
-    if(!isOpen){ pop.classList.add('show'); document.getElementById('popOv').classList.add('show'); const pill=document.getElementById(which+'Pill'); if(pill) pill.classList.add('open'); }
+    if(!isOpen){
+      pop.classList.add('show');
+      const pill=document.getElementById(which+'Pill'); if(pill) pill.classList.add('open');
+      const inPanel=!!pop.closest('#ttsCfg');
+      if(inPanel){
+        // 下一帧起监听:点到 .pop / .cpill 之外即关闭(避开本次打开点击)
+        setTimeout(()=>{
+          outsideHandler=(e)=>{ if(!e.target.closest('.pop')&&!e.target.closest('.cpill')) closePops(); };
+          document.addEventListener('mousedown', outsideHandler, true);
+        },0);
+      } else {
+        document.getElementById('popOv').classList.add('show');
+      }
+    }
   }
-  function closePops(){ document.querySelectorAll('.pop.show').forEach(p=>p.classList.remove('show')); document.querySelectorAll('.cpill.open').forEach(p=>p.classList.remove('open')); document.getElementById('popOv').classList.remove('show'); }
+  function closePops(){
+    document.querySelectorAll('.pop.show').forEach(p=>p.classList.remove('show'));
+    document.querySelectorAll('.cpill.open').forEach(p=>p.classList.remove('open'));
+    document.getElementById('popOv').classList.remove('show');
+    if(outsideHandler){ document.removeEventListener('mousedown', outsideHandler, true); outsideHandler=null; }
+  }
   window.togglePop=togglePop; window.closePops=closePops;
   // 渲染一组 .pop-opt(items:[{value,label}],current=当前值,onPick(value))
   function renderPopOpts(containerId, items, current, onPick){
