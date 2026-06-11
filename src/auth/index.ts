@@ -6,6 +6,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   db,
+  uniqueTenantSlug,
   type Role,
   type UserStatus,
   type TenantRow,
@@ -20,13 +21,21 @@ const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 天
 // ── 机构 ──
 export function createTenant(name: string, delivery: 'hosted' | 'private' = 'hosted'): TenantRow {
   const DEFAULT_SEATS = 10; // 与 DB DEFAULT 一致;新机构默认 10 个创作席位
-  const t: TenantRow = { id: randomUUID(), name, delivery, max_creator_seats: DEFAULT_SEATS, created_at: now() };
-  db.prepare(`INSERT INTO tenant (id,name,delivery,max_creator_seats,created_at) VALUES (?,?,?,?,?)`).run(
+  const t: TenantRow = {
+    id: randomUUID(),
+    name,
+    delivery,
+    max_creator_seats: DEFAULT_SEATS,
+    created_at: now(),
+    slug: uniqueTenantSlug(), // 落地页品牌识别用随机 slug,新建即赋
+  };
+  db.prepare(`INSERT INTO tenant (id,name,delivery,max_creator_seats,created_at,slug) VALUES (?,?,?,?,?,?)`).run(
     t.id,
     t.name,
     t.delivery,
     t.max_creator_seats,
     t.created_at,
+    t.slug,
   );
   return t;
 }
@@ -246,11 +255,17 @@ export function updateTenant(
 }
 
 // ── 登录 / 会话 ──
+// 机构未自定义名称时的默认名(平台开通账号时若没给名,DB 也可能存这个)。
+// 单一真相源:isCustomBranded 的判定只在此处比较,客户端不复制这个串。
+const DEFAULT_TENANT_NAME = '我的机构';
+
 export interface AuthedUser {
   id: string;
   tenantId: string;
   tenantName: string;
   orgLogoKey: string | null; // 机构 logo 存储 key,前端据此拼 /api/org-logo/<tenant>(空则用默认图标)
+  isCustomBranded: boolean; // 是否已自定义品牌(设过 logo 或改过名);前端据此决定换不换侧边栏品牌
+  logoVer: string; // logo 缓存破位符(= logo key 片段);改名/换/恢复后变 → URL ?v= 立即刷新
   username: string;
   displayName: string;
   role: Role;
@@ -309,9 +324,16 @@ export function resolveSession(token: string | undefined): AuthedUser | null {
   const logoRow = db
     .prepare(`SELECT value FROM tenant_setting WHERE tenant_id=? AND key='org_logo_key'`)
     .get(u.tenant_id) as { value: string } | undefined;
+  const tenantName = t?.name || DEFAULT_TENANT_NAME;
+  const orgLogoKey = logoRow?.value ?? null;
+  // 显式品牌哨兵:设过 logo 或名称非平台默认 → 已自定义。判定只在服务端(此处),
+  // 客户端只读布尔,不复制 '我的机构' 魔术串(避免双处同步负担 + 误判真名「我的机构」的租户)。
+  const isCustomBranded = !!orgLogoKey || tenantName !== DEFAULT_TENANT_NAME;
   return {
-    id: u.id, tenantId: u.tenant_id, tenantName: t?.name || '我的机构',
-    orgLogoKey: logoRow?.value ?? null,
+    id: u.id, tenantId: u.tenant_id, tenantName,
+    orgLogoKey,
+    isCustomBranded,
+    logoVer: orgLogoKey ? orgLogoKey.slice(-12) : '0', // 换/恢复 logo 后变 → ?v= 破缓存
     username: u.username, displayName: u.display_name || u.username, role: u.role,
   };
 }

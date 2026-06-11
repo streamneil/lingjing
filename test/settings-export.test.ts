@@ -76,11 +76,12 @@ describe('系统设置', () => {
     expect(put.body.code).toBe('DELIVERY_READONLY');
   });
 
-  it('机构名称只读:admin 传 orgName → 400(平台设定,不可改)', async () => {
+  // 机构名称已改为可改(租户品牌自定义 T1)—— 详尽覆盖见 settings-branding.test.ts。
+  it('机构名称可改:admin 传 orgName → 200 并生效', async () => {
     const c = await loginAs('setadmin');
     const put = await c.put('/api/settings', { orgName: '改名后的台' });
-    expect(put.status).toBe(400);
-    expect(put.body.code).toBe('ORG_NAME_READONLY');
+    expect(put.status).toBe(200);
+    expect((await c.get('/api/settings')).body.orgName).toBe('改名后的台');
   });
 
   it('admin 改默认分辨率 → 读回生效(可改的设置仍生效)', async () => {
