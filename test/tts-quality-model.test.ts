@@ -70,8 +70,9 @@ describe("costFor('tts') 读快照", () => {
 });
 
 describe('POST /api/jobs (tts) 品质模型', () => {
+  // 预置 = Qwen 音色(http);用 'Cherry' 作样例预置
   it('不选模型 → cost 扁价 + input 无 model/快照(byte-identical)', async () => {
-    const r = await client.post('/api/jobs', { type: 'tts', text: '字'.repeat(100), voiceRef: 'longjing' });
+    const r = await client.post('/api/jobs', { type: 'tts', text: '字'.repeat(100), voiceRef: 'Cherry' });
     expect(r.status).toBe(202);
     expect(r.body.cost).toBe(2);
     const inp = JSON.parse(getJob(r.body.id)!.input_json);
@@ -79,25 +80,25 @@ describe('POST /api/jobs (tts) 品质模型', () => {
     expect(inp.pricePerCharSnapshot).toBeUndefined();
   });
 
-  it('选 cosyvoice-v3.5-flash(ws,0.05)→ cost 5 + 快照写入', async () => {
-    const r = await client.post('/api/jobs', { type: 'tts', text: '字'.repeat(100), voiceRef: 'longjing', model: 'cosyvoice-v3.5-flash' });
+  it('选 qwen3-tts-instruct-flash(http,0.06)→ cost 6 + 快照写入', async () => {
+    const r = await client.post('/api/jobs', { type: 'tts', text: '字'.repeat(100), voiceRef: 'Cherry', model: 'qwen3-tts-instruct-flash' });
     expect(r.status).toBe(202);
-    expect(r.body.cost).toBe(5);
+    expect(r.body.cost).toBe(6);
     const inp = JSON.parse(getJob(r.body.id)!.input_json);
-    expect(inp.model).toBe('cosyvoice-v3.5-flash');
-    expect(inp.pricePerCharSnapshot).toBe(0.05);
+    expect(inp.model).toBe('qwen3-tts-instruct-flash');
+    expect(inp.pricePerCharSnapshot).toBe(0.06);
   });
 
   it('estimate ≡ build(reserve==settle):同参 cost 一致', async () => {
-    const body = { type: 'tts', text: '字'.repeat(100), voiceRef: 'longjing', model: 'cosyvoice-v3.5-flash' };
+    const body = { type: 'tts', text: '字'.repeat(100), voiceRef: 'Cherry', model: 'qwen3-tts-instruct-flash' };
     const est = await client.post('/api/jobs/estimate', body);
     const job = await client.post('/api/jobs', body);
     expect(est.body.cost).toBe(job.body.cost);
-    expect(est.body.cost).toBe(5);
+    expect(est.body.cost).toBe(6);
   });
 
-  it('不兼容:预置(ws)+ qwen(http)→ 400', async () => {
-    const r = await client.post('/api/jobs', { type: 'tts', text: '测试', voiceRef: 'longjing', model: 'qwen3-tts-flash' });
+  it('不兼容:预置(http)+ cosyvoice(ws)→ 400', async () => {
+    const r = await client.post('/api/jobs', { type: 'tts', text: '测试', voiceRef: 'Cherry', model: 'cosyvoice-v3.5-flash' });
     expect(r.status).toBe(400);
     expect(r.body.error).toContain('不兼容');
   });
@@ -111,22 +112,22 @@ describe('POST /api/jobs (tts) 品质模型', () => {
   });
 
   it('未知模型 → 400', async () => {
-    const r = await client.post('/api/jobs', { type: 'tts', text: 'x', voiceRef: 'longjing', model: 'no-such-model' });
+    const r = await client.post('/api/jobs', { type: 'tts', text: 'x', voiceRef: 'Cherry', model: 'no-such-model' });
     expect(r.status).toBe(400);
   });
 });
 
 describe('resolveVoice(chosenModel) 覆盖合成 model', () => {
   beforeEach(() => db.prepare('DELETE FROM voice').run());
-  it('预置 + 选 v3.5-flash → model=cosyvoice-v3.5-flash、transport=ws', () => {
-    const r = resolveVoice('longjing', tid, 'cosyvoice-v3.5-flash');
-    expect(r.model).toBe('cosyvoice-v3.5-flash');
-    expect(r.transport).toBe('ws');
+  it('预置 + 选 qwen-instruct → model=qwen3-tts-instruct-flash、transport=http', () => {
+    const r = resolveVoice('Cherry', tid, 'qwen3-tts-instruct-flash');
+    expect(r.model).toBe('qwen3-tts-instruct-flash');
+    expect(r.transport).toBe('http');
   });
-  it('预置 + 不选 → 默认 ttsModel(byte-identical)', () => {
-    const r = resolveVoice('longjing', tid);
-    expect(r.model).toBe(config.baichuan.ttsModel);
-    expect(r.transport).toBe('ws');
+  it('预置 + 不选 → 默认 qwenTtsModel、http(byte-identical)', () => {
+    const r = resolveVoice('Cherry', tid);
+    expect(r.model).toBe(config.baichuan.qwenTtsModel);
+    expect(r.transport).toBe('http');
   });
   it('设计音色 + 选 qwen3-tts-flash → modelId、transport=http', () => {
     const dv = voices.createDesignVoice({ tenantId: tid, name: 'd', providerVoiceId: 'qv' });

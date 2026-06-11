@@ -60,19 +60,20 @@ describe('buildInstruction', () => {
 });
 
 describe('POST /api/jobs (tts) 情绪/音高', () => {
-  it('情绪 + 非指令模型(cosyvoice-v1)→ 400', async () => {
-    const r = await client.post('/api/jobs', { type: 'tts', text: '测试', voiceRef: 'longjing', model: 'cosyvoice-v1', emotion: 'cheerful' });
+  // 预置 = Qwen 音色(http);指令模型 = qwen3-tts-instruct-flash,非指令 = qwen3-tts-flash
+  it('情绪 + 非指令模型(qwen3-tts-flash)→ 400', async () => {
+    const r = await client.post('/api/jobs', { type: 'tts', text: '测试', voiceRef: 'Cherry', model: 'qwen3-tts-flash', emotion: 'cheerful' });
     expect(r.status).toBe(400);
     expect(r.body.error).toContain('指令');
   });
 
   it('音高 + 默认模型(无 model = 无指令能力)→ 400', async () => {
-    const r = await client.post('/api/jobs', { type: 'tts', text: '测试', voiceRef: 'longjing', pitch: 5 });
+    const r = await client.post('/api/jobs', { type: 'tts', text: '测试', voiceRef: 'Cherry', pitch: 5 });
     expect(r.status).toBe(400);
   });
 
-  it('情绪 + 指令模型(v3.5-flash)→ 202 + emotion/pitch 入库', async () => {
-    const r = await client.post('/api/jobs', { type: 'tts', text: '测试', voiceRef: 'longjing', model: 'cosyvoice-v3.5-flash', emotion: 'cheerful', pitch: 3 });
+  it('情绪 + 指令模型(qwen-instruct)→ 202 + emotion/pitch 入库', async () => {
+    const r = await client.post('/api/jobs', { type: 'tts', text: '测试', voiceRef: 'Cherry', model: 'qwen3-tts-instruct-flash', emotion: 'cheerful', pitch: 3 });
     expect(r.status).toBe(202);
     const inp = JSON.parse(getJob(r.body.id)!.input_json);
     expect(inp.emotion).toBe('cheerful');
@@ -80,7 +81,7 @@ describe('POST /api/jobs (tts) 情绪/音高', () => {
   });
 
   it('auto + pitch 0 + 指令模型 → 不入库(byte-identical)', async () => {
-    const r = await client.post('/api/jobs', { type: 'tts', text: '测试', voiceRef: 'longjing', model: 'cosyvoice-v3.5-flash', emotion: 'auto', pitch: 0 });
+    const r = await client.post('/api/jobs', { type: 'tts', text: '测试', voiceRef: 'Cherry', model: 'qwen3-tts-instruct-flash', emotion: 'auto', pitch: 0 });
     expect(r.status).toBe(202);
     const inp = JSON.parse(getJob(r.body.id)!.input_json);
     expect(inp.emotion).toBeUndefined();
@@ -88,12 +89,12 @@ describe('POST /api/jobs (tts) 情绪/音高', () => {
   });
 
   it('非法情绪 → 400', async () => {
-    const r = await client.post('/api/jobs', { type: 'tts', text: 'x', voiceRef: 'longjing', model: 'cosyvoice-v3.5-flash', emotion: 'rage' });
+    const r = await client.post('/api/jobs', { type: 'tts', text: 'x', voiceRef: 'Cherry', model: 'qwen3-tts-instruct-flash', emotion: 'rage' });
     expect(r.status).toBe(400);
   });
 
   it('音高越界(>12)→ 400', async () => {
-    const r = await client.post('/api/jobs', { type: 'tts', text: 'x', voiceRef: 'longjing', model: 'cosyvoice-v3.5-flash', pitch: 20 });
+    const r = await client.post('/api/jobs', { type: 'tts', text: 'x', voiceRef: 'Cherry', model: 'qwen3-tts-instruct-flash', pitch: 20 });
     expect(r.status).toBe(400);
   });
 });

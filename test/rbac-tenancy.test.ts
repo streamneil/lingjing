@@ -63,13 +63,13 @@ describe('认证', () => {
 describe('RBAC 验收第8条', () => {
   it('查看者不能发起生成 → 403', async () => {
     const c = await loginAs(tenantA, 'viewer');
-    const r = await c.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'longjing', script: '文案' });
+    const r = await c.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'Cherry', script: '文案' });
     expect(r.status).toBe(403);
   });
 
   it('创作者能发起生成 → 202', async () => {
     const c = await loginAs(tenantA, 'creator');
-    const r = await c.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'longjing', script: '文案' });
+    const r = await c.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'Cherry', script: '文案' });
     expect(r.status).toBe(202);
   });
 
@@ -96,7 +96,7 @@ describe('RBAC 验收第8条', () => {
 describe('租户隔离', () => {
   it('A 租户的任务,B 租户读不到 → 404', async () => {
     const ca = await loginAs(tenantA, 'creator');
-    const created = await ca.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'longjing', script: 'A 的任务' });
+    const created = await ca.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'Cherry', script: 'A 的任务' });
     expect(created.status).toBe(202);
     const jobId = created.body.id;
 
@@ -149,7 +149,7 @@ describe('积分 + 审计 API', () => {
     createUser(poorTenant, 'poor_creator', 'pw123456', 'creator');
     const c = new Client(app);
     await c.login('poor_creator', 'pw123456');
-    const r = await c.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'longjing', script: '需要扣分的文案' });
+    const r = await c.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'Cherry', script: '需要扣分的文案' });
     expect(r.status).toBe(402);
   });
 
@@ -171,31 +171,31 @@ describe('积分 + 审计 API', () => {
 describe('创作参数 + 作品删除(CEO 审计补齐)', () => {
   it('语速超出 0.5-2 → 400', async () => {
     const c = await loginAs(tenantA, 'creator');
-    const r = await c.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'longjing', script: '文案', speed: 99 });
+    const r = await c.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'Cherry', script: '文案', speed: 99 });
     expect(r.status).toBe(400);
     expect(r.body.error).toContain('语速');
   });
   it('音量超出 0-100 → 400', async () => {
     const c = await loginAs(tenantA, 'creator');
-    const r = await c.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'longjing', script: '文案', volume: 500 });
+    const r = await c.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'Cherry', script: '文案', volume: 500 });
     expect(r.status).toBe(400);
     expect(r.body.error).toContain('音量');
   });
   it('合法语速音量 → 202', async () => {
     const c = await loginAs(tenantA, 'creator');
-    const r = await c.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'longjing', script: '文案', speed: 1.5, volume: 80 });
+    const r = await c.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'Cherry', script: '文案', speed: 1.5, volume: 80 });
     expect(r.status).toBe(202);
   });
   it('GET /jobs/:id 回显 input(供重新编辑回填)', async () => {
     const c = await loginAs(tenantA, 'creator');
-    const created = await c.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'longjing', script: '回填测试', speed: 1.2 });
+    const created = await c.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'Cherry', script: '回填测试', speed: 1.2 });
     const job = await c.get('/api/jobs/' + created.body.id);
     expect(job.body.input.script).toBe('回填测试');
     expect(job.body.input.speed).toBe(1.2);
   });
   it('删除作品:本租户可删,跨租户 409', async () => {
     const ca = await loginAs(tenantA, 'creator');
-    const created = await ca.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'longjing', script: '待删' });
+    const created = await ca.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'Cherry', script: '待删' });
     const id = created.body.id;
     const cb = await loginAs(tenantB, 'admin');
     expect((await cb.del('/api/jobs/' + id)).status).toBe(409); // 跨租户删不了

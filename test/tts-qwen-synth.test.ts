@@ -90,11 +90,11 @@ describe('synthesizeSpeechHttp:双解析', () => {
 });
 
 describe('resolveVoice:transport 路由', () => {
-  it('预置 → ws + ttsModel', () => {
-    const r = resolveVoice('longjing', T);
-    expect(r.transport).toBe('ws');
-    expect(r.model).toBe(config.baichuan.ttsModel);
-    expect(r.voice).toBe('longjing');
+  it('预置(Qwen 音色)→ http + qwenTtsModel', () => {
+    const r = resolveVoice('Cherry', T);
+    expect(r.transport).toBe('http');
+    expect(r.model).toBe(config.baichuan.qwenTtsModel);
+    expect(r.voice).toBe('Cherry');
   });
 
   it('克隆 → ws + cloneModel(用 provider_voice_id)', () => {
@@ -113,10 +113,10 @@ describe('resolveVoice:transport 路由', () => {
     expect(r.voice).toBe('qwen-voice-xyz');
   });
 
-  it('provider_voice_id 空 → 回退预置(ws)', () => {
+  it('provider_voice_id 空 → 回退预置(Qwen,http)', () => {
     const id = insertVoice('design', null);
     const r = resolveVoice(id, T);
-    expect(r.transport).toBe('ws');
-    expect(r.model).toBe(config.baichuan.ttsModel);
+    expect(r.transport).toBe('http');
+    expect(r.model).toBe(config.baichuan.qwenTtsModel);
   });
 });

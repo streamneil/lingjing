@@ -8,15 +8,33 @@ import { TERMS_VERSION } from '../legal/index.js';
 
 const now = () => Date.now();
 
-// 预置人声(PRD 要求 40 个;Slice1 起步给代表性几个,真实接百炼后扩充)
-// id 必须是 cosyvoice-v1 模型的**合法音色名**(传给 TTS 引擎的 voice 参数)。
-// 不能用模型名(如 cosyvoice-v1)当 voice —— 那会让引擎返回 418(音色不匹配)。
-// v1 音色名见 https://help.aliyun.com/zh/model-studio/cosyvoice-voice-list(v2 才带 _v2 后缀)。
+// 预置人声 = Qwen-TTS 系统音色(走 HTTP,支持情绪指令 + 方言 + 多语种)。
+// id 必须是 Qwen-TTS 模型的**合法 voice 参数名**(传给引擎的 voice;见
+// https://help.aliyun.com/zh/model-studio/qwen-tts-voice-list)。预置合成模型 = config.qwenTtsModel。
+// 选 Qwen 而非 CosyVoice:CosyVoice v1 不支持情绪/方言;Qwen 音色原生支持情绪(instruct)+ 多方言。
 const PRESETS: { id: string; name: string; lang: string; gender: string; desc: string }[] = [
-  { id: 'longjing', name: '新闻播报 · 雅琴', lang: '中文', gender: '女', desc: '播音员 · 新闻、纪录片' },
-  { id: 'longshu', name: '沉稳男声 · 子墨', lang: '中文', gender: '男', desc: '沉稳 · 纪录片、教育' },
-  { id: 'longxiaochun', name: '亲切女声 · 思雨', lang: '中文', gender: '女', desc: '亲切 · Vlog、播客' },
-  { id: 'longcheng', name: '磁性男声 · 浩然', lang: '中文', gender: '男', desc: '磁性 · 广告、品牌' },
+  // —— 普通话 · 通用场景 ——
+  { id: 'Cherry', name: '芊悦', lang: '中文', gender: '女', desc: '阳光亲切 · Vlog、短视频' },
+  { id: 'Serena', name: '苏瑶', lang: '中文', gender: '女', desc: '温柔知性 · 有声书、播客' },
+  { id: 'Ethan', name: '晨煦', lang: '中文', gender: '男', desc: '阳光活力 · 广告、宣传' },
+  { id: 'Neil', name: '阿闻', lang: '中文', gender: '男', desc: '专业播音 · 新闻、纪录片' },
+  { id: 'Andre', name: '安德雷', lang: '中文', gender: '男', desc: '磁性沉稳 · 品牌、纪录片' },
+  { id: 'Maia', name: '四月', lang: '中文', gender: '女', desc: '知性温柔 · 有声书' },
+  { id: 'Eldric Sage', name: '沧明子', lang: '中文', gender: '男', desc: '沉稳睿智 · 解说、纪录片' },
+  { id: 'Bellona', name: '燕铮莺', lang: '中文', gender: '女', desc: '字正腔圆 · 播报、配音' },
+  { id: 'Chelsie', name: '千雪', lang: '中文', gender: '女', desc: '二次元 · 动画、游戏' },
+  { id: 'Moon', name: '月白', lang: '中文', gender: '男', desc: '率性帅气 · 角色配音' },
+  { id: 'Seren', name: '小婉', lang: '中文', gender: '女', desc: '温和舒缓 · 助眠、冥想' },
+  { id: 'Vincent', name: '田叔', lang: '中文', gender: '男', desc: '沙哑烟嗓 · 江湖、剧情' },
+  // —— 方言 ——
+  { id: 'Sunny', name: '四川-晴儿', lang: '四川话', gender: '女', desc: '甜美川妹子 · 方言配音' },
+  { id: 'Eric', name: '四川-程川', lang: '四川话', gender: '男', desc: '市井成都男 · 方言配音' },
+  { id: 'Rocky', name: '粤语-阿强', lang: '粤语', gender: '男', desc: '幽默风趣 · 粤语配音' },
+  { id: 'Kiki', name: '粤语-阿清', lang: '粤语', gender: '女', desc: '甜美港妹 · 粤语配音' },
+  { id: 'Dylan', name: '北京-晓东', lang: '北京话', gender: '男', desc: '胡同少年 · 方言配音' },
+  { id: 'Jada', name: '上海-阿珍', lang: '上海话', gender: '女', desc: '沪上阿姐 · 方言配音' },
+  { id: 'Peter', name: '天津-李彼得', lang: '天津话', gender: '男', desc: '天津相声 · 方言配音' },
+  { id: 'Marcus', name: '陕西-秦川', lang: '陕西话', gender: '男', desc: '老陕味道 · 方言配音' },
 ];
 
 /** 预置音色试听样本在 MinIO 的稳定 key(由 preset id 派生)。
@@ -150,11 +168,11 @@ export function isUsableVoice(ref: string, tenantId: string): boolean {
   return !!v && v.status === 'ready';
 }
 
-/** 音色的合成传输:预置/克隆→ws(CosyVoice WebSocket)、设计→http(Qwen)。
+/** 音色的合成传输:预置(Qwen 音色)/设计→http(Qwen);克隆→ws(CosyVoice WebSocket)。
  *  品质模型必须与音色 transport 配套(worker.resolveVoice 同口径)。
- *  未知/回退音色按 ws(回退预置)。 */
+ *  未知/回退音色按 http(回退预置 = Qwen)。 */
 export function voiceTransport(ref: string, tenantId: string): 'ws' | 'http' {
-  if (isPreset(ref)) return 'ws';
+  if (isPreset(ref)) return 'http';
   const v = getVoice(ref, tenantId);
-  return v?.kind === 'design' && v.provider_voice_id ? 'http' : 'ws';
+  return v?.kind === 'clone' && v.provider_voice_id ? 'ws' : 'http';
 }

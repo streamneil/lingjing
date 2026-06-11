@@ -19,7 +19,7 @@ beforeEach(() => {
 describe('音色:预置 + 克隆授权', () => {
   it('有预置人声', () => {
     expect(voices.listPresets().length).toBeGreaterThan(0);
-    expect(voices.isPreset('longjing')).toBe(true);
+    expect(voices.isPreset('Cherry')).toBe(true);
   });
   it('未授权克隆 → 拒绝', () => {
     expect(() =>
@@ -42,7 +42,7 @@ describe('音色:预置 + 克隆授权', () => {
   });
   it('isUsableVoice:预置 + 本租户 ready(复刻成功)可用,跨租户不可用', () => {
     const v = voices.createCloneVoice({ tenantId: T, userId: U, name: 'x', sourceKey: 'k', consent: true, providerVoiceId: 'cosyvoice-v1-y-def' });
-    expect(voices.isUsableVoice('longjing', T)).toBe(true);
+    expect(voices.isUsableVoice('Cherry', T)).toBe(true);
     expect(voices.isUsableVoice(v.id, T)).toBe(true);
     expect(voices.isUsableVoice(v.id, 'other')).toBe(false);
   });

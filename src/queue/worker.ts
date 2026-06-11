@@ -126,7 +126,8 @@ export function resolveVoice(
 ): { voice: string; model: string; transport: Transport } {
   const override = chosenModel ? getTtsModel(chosenModel)?.modelId : undefined;
   if (isPresetVoice(voiceRef))
-    return { voice: voiceRef, model: override ?? config.baichuan.ttsModel, transport: 'ws' };
+    // 预置 = Qwen 系统音色:Qwen 模型(默认 qwen3-tts-flash,或用户选的 Qwen 品质模型)= HTTP
+    return { voice: voiceRef, model: override ?? config.baichuan.qwenTtsModel, transport: 'http' };
   const v = getVoice(voiceRef, tenantId);
   if (v?.provider_voice_id) {
     if (v.kind === 'design')
@@ -135,12 +136,12 @@ export function resolveVoice(
     // 声音复刻:voice_id + CosyVoice 模型(默认 cloneModel,或用户选的 CosyVoice 品质模型)= WS
     return { voice: v.provider_voice_id, model: override ?? config.baichuan.cloneModel, transport: 'ws' };
   }
-  // 克隆/设计未产出 / 解析失败:回退预置音色(v1,ws),避免任务整体失败
-  return { voice: DEFAULT_PRESET_VOICE, model: override ?? config.baichuan.ttsModel, transport: 'ws' };
+  // 克隆/设计未产出 / 解析失败:回退预置音色(Qwen,http),避免任务整体失败
+  return { voice: DEFAULT_PRESET_VOICE, model: override ?? config.baichuan.qwenTtsModel, transport: 'http' };
 }
 
-// 默认回退音色:cosyvoice-v1 合法音色名(新闻播报场景)
-const DEFAULT_PRESET_VOICE = 'longjing';
+// 默认回退音色:Qwen-TTS 合法音色名(专业播音场景)
+const DEFAULT_PRESET_VOICE = 'Neil';
 
 /**
  * 渲染单个文案片段(<20s):文案 → TTS → 落 MinIO → s2v 提交 → 轮询 → 抓成品 Buffer。
