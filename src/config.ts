@@ -56,17 +56,14 @@ export const config = {
     // AI 图片图生图模型(qwen-image-edit,同步,output.choices[0].message.content[].image)。
     imageEditModel: optional('BAICHUAN_IMAGE_EDIT_MODEL', 'qwen-image-edit'),
     // TTS 模型:文案→音频(CosyVoice,WebSocket)。wan2.2-s2v 不做 TTS,需此前置步骤。
-    // 默认 cosyvoice-v1:百炼新账号默认只有 v1 有免费额度(10000),v2/v3 需购买。
-    // 注意:模型版本与音色名必须配套 —— v1 用 longjing 等,v2 用 longxiaochun_v2 等,跨版本混用会 418。
-    ttsModel: optional('BAICHUAN_TTS_MODEL', 'cosyvoice-v1'),
-    // 预置音色(Qwen-TTS 系统音色)默认合成模型,走 HTTP;想要情绪用 qwen3-tts-instruct-flash。
+    // ── TTS 全 Qwen-TTS(走 HTTP MultiModalConversation);零 CosyVoice ──
+    // 系统音色(预置)默认合成模型。无情绪走 flash,有情绪自动切 instruct(见 worker.resolveVoice)。
     qwenTtsModel: optional('BAICHUAN_QWEN_TTS_MODEL', 'qwen3-tts-flash'),
-    // 声音复刻模型:复刻 + 用复刻音色合成都用它。
-    // v1 对复刻支持差(几乎不像本人,官方明说);v2 免费且像很多;v3.5 最像但需付费。
-    // 默认 v3.5-plus(最佳保真);若无付费额度,改为 cosyvoice-v2(免费)。
-    cloneModel: optional('BAICHUAN_CLONE_MODEL', 'cosyvoice-v3.5-plus'),
-    // 声音设计模型(Qwen-TTS-VD):描述→音色。设计 + 用设计音色合成都用它,走 HTTP
-    // MultiModalConversation(非 CosyVoice WebSocket)。VD 创建的音色须用同 target_model 合成。
+    // 指令模型:支持 instructions(情绪/音调),系统音色 + 情绪时用它。
+    qwenInstructModel: optional('BAICHUAN_QWEN_INSTRUCT_MODEL', 'qwen3-tts-instruct-flash'),
+    // 声音复刻(VC):上传样本创建音色 + 用复刻音色合成都用它。target_model 须一致。
+    vcModel: optional('BAICHUAN_VC_MODEL', 'qwen3-tts-vc-2026-01-22'),
+    // 声音设计(VD):描述→音色。设计 + 用设计音色合成都用它。
     designModel: optional('BAICHUAN_DESIGN_MODEL', 'qwen3-tts-vd-2026-01-26'),
     // 任务回收模式:'poll'(私有化兜底,默认) | 'webhook'(托管可选)
     jobMode: optional('BAICHUAN_JOB_MODE', 'poll') as 'poll' | 'webhook',

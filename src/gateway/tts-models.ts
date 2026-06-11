@@ -1,57 +1,11 @@
-// 灵镜 — TTS 品质模型注册表(T-TTS-QUALITY-MODEL)。
+// 灵镜 — TTS 情绪指令(T-TTS-EMOTION)。
 //
-// 文字转语音的「品质」下拉选模型;不同模型音质/价格分层。
-// 关键约束:模型与音色的**传输**必须配套 —— 预置/克隆音色走 CosyVoice WebSocket,
-// 设计音色走 Qwen HTTP(见 worker.resolveVoice)。故品质下拉须按所选音色的 transport 过滤,
-// 跨传输选模型会被 buildTtsJob 拒(400)。
-//
-// 计价:pricePerChar 替代 credits 里的扁价常量(reserve==settle 由 buildTtsJob 快照守)。
-// cosyvoice-v1 = 0.02(与历史扁价一致,默认不选模型时 byte-identical)。
-
-export type TtsTransport = 'ws' | 'http';
-
-export interface TtsModelDef {
-  key: string; // input.model 存它;UI 传它
-  modelId: string; // 传给网关的真实模型名(synthesizeSpeech/synthesizeSpeechHttp 的 model)
-  label: string; // UI 标签
-  transport: TtsTransport; // ws=CosyVoice WebSocket;http=Qwen/MiniMax MultiModalConversation
-  pricePerChar: number; // 每字计价(替代 credits 扁价;reserve==settle 由快照守)
-  supportsInstruction: boolean; // 是否支持指令控制(情绪/音高,T-TTS-EMOTION 用)
-}
-
-export const TTS_MODELS: Record<string, TtsModelDef> = {
-  // —— CosyVoice(ws):克隆音色合成用 ——
-  'cosyvoice-v1': {
-    key: 'cosyvoice-v1', modelId: 'cosyvoice-v1', label: '标准',
-    transport: 'ws', pricePerChar: 0.02, supportsInstruction: false,
-  },
-  'cosyvoice-v3.5-flash': {
-    key: 'cosyvoice-v3.5-flash', modelId: 'cosyvoice-v3.5-flash', label: '高保真(支持情绪)',
-    transport: 'ws', pricePerChar: 0.05, supportsInstruction: true,
-  },
-  // —— Qwen-TTS(http):预置 + 设计音色合成用 ——
-  'qwen3-tts-flash': {
-    key: 'qwen3-tts-flash', modelId: 'qwen3-tts-flash', label: '自然(千问3-TTS)',
-    transport: 'http', pricePerChar: 0.04, supportsInstruction: false,
-  },
-  'qwen3-tts-instruct-flash': {
-    key: 'qwen3-tts-instruct-flash', modelId: 'qwen3-tts-instruct-flash', label: '情绪(千问3-TTS 指令)',
-    transport: 'http', pricePerChar: 0.06, supportsInstruction: true,
-  },
-};
-
-/** 某传输下的可选模型(品质下拉按所选音色 transport 过滤)。 */
-export function listTtsModels(transport: TtsTransport): TtsModelDef[] {
-  return Object.values(TTS_MODELS).filter((m) => m.transport === transport);
-}
-
-/** 按 key 取模型定义;未知 → undefined。 */
-export function getTtsModel(key: string | undefined): TtsModelDef | undefined {
-  return key ? TTS_MODELS[key] : undefined;
-}
+// 全 Qwen-TTS:无「品质」模型选择。系统按是否带情绪自动选合成模型
+// (无情绪 qwen3-tts-flash,有情绪 qwen3-tts-instruct-flash;见 worker.resolveVoice)。
+// 计价扁价(credits.estimateTtsCost 默认 0.02/字),不再按模型分层。
 
 // ── 情绪(T-TTS-EMOTION)──
-// 情绪 key → 自然语言指令短语(透传给 supportsInstruction 模型的 instruction/instructions)。
+// 情绪 key → 自然语言指令短语(透传给 instruct 模型的 instructions)。
 // 'auto' = 不加指令(模型自行判断)。
 export interface EmotionDef {
   key: string;

@@ -167,12 +167,3 @@ export function isUsableVoice(ref: string, tenantId: string): boolean {
   const v = getVoice(ref, tenantId);
   return !!v && v.status === 'ready';
 }
-
-/** 音色的合成传输:预置(Qwen 音色)/设计→http(Qwen);克隆→ws(CosyVoice WebSocket)。
- *  品质模型必须与音色 transport 配套(worker.resolveVoice 同口径)。
- *  未知/回退音色按 http(回退预置 = Qwen)。 */
-export function voiceTransport(ref: string, tenantId: string): 'ws' | 'http' {
-  if (isPreset(ref)) return 'http';
-  const v = getVoice(ref, tenantId);
-  return v?.kind === 'clone' && v.provider_voice_id ? 'ws' : 'http';
-}

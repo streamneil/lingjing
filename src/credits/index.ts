@@ -75,9 +75,9 @@ export function estimateVideoCost(duration: number, priceTier: number, resolutio
 }
 
 // 文转语音(TTS)计价:按字数 × 每字单价(单价随品质模型,T-TTS-QUALITY-MODEL)。
-const TTS_PRICE_PER_CHAR = 0.02; // 默认每字 0.02(= cosyvoice-v1;不选模型时与历史扁价一致)
-/** TTS 费用预估:ceil(字数 × 每字单价)。pricePerChar 缺省回落扁价(老调用/测试逐字节不变)。
- *  品质模型单价由 buildTtsJob 从 TTS_MODELS 取并快照 → costFor 读快照,保 reserve==settle。 */
+const TTS_PRICE_PER_CHAR = 0.02; // 全 Qwen-TTS 扁价每字 0.02(无品质模型分层)
+/** TTS 费用预估:ceil(字数 × 每字单价)。pricePerChar 缺省扁价。
+ *  pricePerChar 形参保留:遗留 job 的 costFor 读旧快照走它,保 reserve==settle(byte-identical)。 */
 export function estimateTtsCost(textLength: number, pricePerChar = TTS_PRICE_PER_CHAR): number {
   return Math.max(MIN_COST, Math.ceil(textLength * pricePerChar));
 }

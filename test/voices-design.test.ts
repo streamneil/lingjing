@@ -19,7 +19,6 @@ vi.mock('../src/gateway/cosyvoice.js', () => ({
   }),
   // 其余被 server import 链间接引用的导出留空 stub(本测试不触发合成)
   createClonedVoice: vi.fn(),
-  synthesizeSpeech: vi.fn(),
   synthesizeSpeechHttp: vi.fn(),
 }));
 
