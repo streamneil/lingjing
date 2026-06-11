@@ -262,9 +262,10 @@ const DEFAULT_TENANT_NAME = '我的机构';
 export interface AuthedUser {
   id: string;
   tenantId: string;
-  tenantName: string;
+  tenantName: string; // 机构名称(tenant.name)= 官方身份,只读
+  brandName: string; // 系统名称(品牌显示名):brand_name ?? tenantName;侧边栏/落地页用此显示
   orgLogoKey: string | null; // 机构 logo 存储 key,前端据此拼 /api/org-logo/<tenant>(空则用默认图标)
-  isCustomBranded: boolean; // 是否已自定义品牌(设过 logo 或改过名);前端据此决定换不换侧边栏品牌
+  isCustomBranded: boolean; // 是否已自定义品牌(设过 logo / 系统名 / 机构名非默认);前端据此决定换不换侧边栏品牌
   logoVer: string; // logo 缓存破位符(= logo key 片段);改名/换/恢复后变 → URL ?v= 立即刷新
   username: string;
   displayName: string;
@@ -326,11 +327,16 @@ export function resolveSession(token: string | undefined): AuthedUser | null {
     .get(u.tenant_id) as { value: string } | undefined;
   const tenantName = t?.name || DEFAULT_TENANT_NAME;
   const orgLogoKey = logoRow?.value ?? null;
-  // 显式品牌哨兵:设过 logo 或名称非平台默认 → 已自定义。判定只在服务端(此处),
+  // 系统名称(品牌显示名):管理员设的 brand_name,未设则回落机构名(行为不变)。
+  const brandRow = db
+    .prepare(`SELECT value FROM tenant_setting WHERE tenant_id=? AND key='brand_name'`)
+    .get(u.tenant_id) as { value: string } | undefined;
+  const brandName = brandRow?.value || tenantName;
+  // 显式品牌哨兵:设过 logo / 系统名,或机构名非平台默认 → 已自定义。判定只在服务端(此处),
   // 客户端只读布尔,不复制 '我的机构' 魔术串(避免双处同步负担 + 误判真名「我的机构」的租户)。
-  const isCustomBranded = !!orgLogoKey || tenantName !== DEFAULT_TENANT_NAME;
+  const isCustomBranded = !!orgLogoKey || !!brandRow?.value || tenantName !== DEFAULT_TENANT_NAME;
   return {
-    id: u.id, tenantId: u.tenant_id, tenantName,
+    id: u.id, tenantId: u.tenant_id, tenantName, brandName,
     orgLogoKey,
     isCustomBranded,
     logoVer: orgLogoKey ? orgLogoKey.slice(-12) : '0', // 换/恢复 logo 后变 → ?v= 破缓存
