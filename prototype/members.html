@@ -30,19 +30,10 @@
         <tbody id="memberBody"></tbody>
       </table>
 
-      <div class="set-card" style="margin-top:24px">
+      <div class="set-card" style="margin-top:24px" id="rolePermCard">
         <h3>角色权限</h3>
-        <div class="h-desc">三种内置角色的能力边界。</div>
-        <table class="tbl" style="box-shadow:none;border:none">
-          <thead><tr><th>权限</th><th style="text-align:center">管理员</th><th style="text-align:center">创作者</th><th style="text-align:center">查看者</th></tr></thead>
-          <tbody>
-            <tr><td>创作数字人视频 / 配音</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center" class="num">—</td></tr>
-            <tr><td>管理形象 / 音色 / 素材</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center" class="num">—</td></tr>
-            <tr><td>查看 / 下载作品</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td><td style="text-align:center">✓</td></tr>
-            <tr><td>成员管理 / 用量查看</td><td style="text-align:center">✓</td><td style="text-align:center" class="num">—</td><td style="text-align:center" class="num">—</td></tr>
-            <tr><td>系统设置 / 能力网关</td><td style="text-align:center">✓</td><td style="text-align:center" class="num">—</td><td style="text-align:center" class="num">—</td></tr>
-          </tbody>
-        </table>
+        <div class="h-desc">三种内置角色的能力边界,权限自左向右递增。</div>
+        <div class="rp-grid" id="rolePerms"></div>
       </div>
     </main>
   </div>
@@ -203,6 +194,40 @@
     body.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--t4);padding:40px">加载失败 <button class="btn btn-dark" style="margin-left:8px;padding:6px 12px;font-size:12px" onclick="load()">重试</button></td></tr>`;
   }
 
+  // ── 角色权限三卡 ──
+  // 内联 SVG 描边图标(24x24,描边风格,非 emoji)。
+  const RP_ICON={
+    viewer:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',         // 眼睛:只读
+    creator:'<path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/>', // 钢笔:创作
+    admin:'<path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/><path d="M9 12l2 2 4-4"/>',                    // 盾:管理最高
+  };
+  const RP_CHECK='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.5 3.5L13 5"/></svg>';
+  // 内置三角色能力边界(与后端 requireRole 口径一致;静态事实,非 API)。
+  // caps 5 行与旧表一致:查看下载 / 创作配音 / 管理素材 / 成员用量 / 系统设置。
+  const ROLE_PERMS=[
+    { role:'viewer',  name:'查看者', tone:'viewer',  essence:'只读浏览,不参与创作',
+      caps:[ {l:'查看 / 下载作品',y:true},{l:'创作视频 / 配音',y:false},{l:'管理形象 / 音色 / 素材',y:false},{l:'成员管理 / 用量查看',y:false},{l:'系统设置 / 能力网关',y:false} ] },
+    { role:'creator', name:'创作者', tone:'creator', essence:'可创作,占用创作席位',
+      caps:[ {l:'查看 / 下载作品',y:true},{l:'创作视频 / 配音',y:true},{l:'管理形象 / 音色 / 素材',y:true},{l:'成员管理 / 用量查看',y:false},{l:'系统设置 / 能力网关',y:false} ] },
+    { role:'admin',   name:'管理员', tone:'admin', star:true, essence:'含创作权 + 全部管理权',
+      caps:[ {l:'查看 / 下载作品',y:true},{l:'创作视频 / 配音',y:true},{l:'管理形象 / 音色 / 素材',y:true},{l:'成员管理 / 用量查看',y:true},{l:'系统设置 / 能力网关',y:true} ] },
+  ];
+  function renderRolePerms(){
+    const wrap=document.getElementById('rolePerms'); if(!wrap) return;
+    wrap.innerHTML = ROLE_PERMS.map(r=>{
+      const n=members.filter(m=>m.role===r.role).length; // 真实成员数
+      const caps=r.caps.map(c=>
+        `<div class="cap ${c.y?'yes':'no'}"><span class="ck">${c.y?RP_CHECK:'—'}</span>${esc(c.l)}</div>`).join('');
+      const star=r.star?'<span class="rp-star">★ 最高</span>':'';
+      return `<div class="rp ${r.role==='admin'?'admin':''} rp-${r.tone}">
+        <span class="rp-count">${n} 人</span>
+        <div class="rp-hd"><div class="rp-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${RP_ICON[r.tone]}</svg></div>
+          <div><div class="rp-name">${esc(r.name)}${star}</div><div class="rp-essence">${esc(r.essence)}</div></div></div>
+        <div class="rp-div"></div>
+        <div class="rp-caps">${caps}</div></div>`;
+    }).join('');
+  }
+
   // 邀请成员弹窗(替代 3 个浏览器 prompt)
   let invRole='creator';
   const ROLE_DESC={
@@ -282,6 +307,7 @@
       if(myRole!=='admin'){
         document.getElementById('inviteBtn').style.display='none';
         document.getElementById('statRow').innerHTML='';
+        const rpc=document.getElementById('rolePermCard'); if(rpc) rpc.style.display='none';
         body.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--t4);padding:40px">仅管理员可查看成员列表</td></tr>`;
         return;
       }
@@ -289,6 +315,7 @@
       members = data.members||[]; seats = data.seats||null;
       renderStats(me.tenantName);
       render(curFilter);
+      renderRolePerms();
     }catch(e){
       if(e && e.status===401) return;  // 已跳转登录
       errorRow();
