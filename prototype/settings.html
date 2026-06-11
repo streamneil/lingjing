@@ -61,8 +61,9 @@
 
       <!-- T8:审计日志(仅 admin)-->
       <div class="set-card" id="auditCard" style="animation-delay:.2s;display:none">
-        <h3>操作审计日志</h3><div class="h-desc">记录谁、何时、做了什么(登录、生成、成员变更、设置修改)。政企合规留存,可追溯。</div>
-        <ul class="audit-feed" id="auditBody"><li class="af-empty">加载中…</li></ul>
+        <div class="audit-hd"><h3>操作审计日志</h3><span class="audit-cnt" id="auditCount"></span></div>
+        <div class="h-desc">记录谁、何时、做了什么(登录、生成、成员变更、设置修改)。政企合规留存,可追溯。</div>
+        <div class="audit-feed" id="auditBody"><div class="af-empty">加载中…</div></div>
       </div>
     </main>
   </div>
@@ -147,37 +148,85 @@
   }
 
   function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-  function fmtT(ts){const d=new Date(ts);const p=n=>String(n).padStart(2,'0');return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;}
-  // 动作 → 一句话谓语。obj=true 表示其后接「对象」(target),false 则只显谓语(无空书名号)。
-  const ACTION_CN={
-    login:{v:'登录了系统'}, padmin_login:{v:'登录了平台后台'},
-    create_job:{v:'发起了一次生成'},
-    grant_credit:{v:'发放了点数',obj:true},
-    member_add:{v:'新增了成员',obj:true}, member_role:{v:'调整了成员角色',obj:true},
-    update_profile:{v:'修改了个人信息',obj:true}, change_password:{v:'修改了登录密码'},
-    update_settings:{v:'修改了系统设置',obj:true},
-    create_avatar:{v:'创建了形象',obj:true}, delete_avatar:{v:'删除了形象',obj:true},
-    clone_voice:{v:'克隆了音色',obj:true}, design_voice:{v:'设计了音色',obj:true}, delete_voice:{v:'删除了音色',obj:true},
-    upload_asset:{v:'上传了素材',obj:true}, delete_asset:{v:'删除了素材',obj:true},
-    upload_image_input:{v:'上传了参考图'},
-    image_model_create:{v:'新增了出图模型',obj:true}, image_model_update:{v:'修改了出图模型',obj:true},
-    image_model_delete:{v:'删除了出图模型',obj:true}, image_model_reorder:{v:'调整了出图模型排序'},
-    tenant_create:{v:'开通了机构',obj:true}, tenant_update:{v:'修改了机构信息',obj:true},
-    tenant_user_create:{v:'创建了机构成员',obj:true}, tenant_user_reset_pw:{v:'重置了成员密码',obj:true},
+  // ── 审计时间线 ──
+  // 内联 SVG 描边图标(16x16 viewBox,与站点风格一致;非 emoji)。
+  const AF_ICON = {
+    login:  '<path d="M14 3H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h9"/><path d="M11 5l3 3-3 3"/><path d="M14 8H6"/>',          // 登录:箭头入框
+    create: '<path d="M8 3v10M3 8h10"/>',                                                                                   // 创建/生成:加号
+    edit:   '<path d="M11 2l3 3-7 7-3.5.5.5-3.5z"/><path d="M9.5 3.5l3 3"/>',                                               // 编辑/设置:笔
+    member: '<circle cx="8" cy="6" r="2.4"/><path d="M3.5 13a4.5 4.5 0 0 1 9 0"/>',                                         // 成员:人
+    credit: '<circle cx="8" cy="8" r="6"/><path d="M8 5v6M6 8h4"/>',                                                        // 点数:币+
+    upload: '<path d="M8 11V4M5 7l3-3 3 3"/><path d="M3 12h10"/>',                                                          // 上传:上箭头
+    danger: '<path d="M6 3h4l.5 1.5h2.5v1.5H3V4.5h2.5z"/><path d="M4 6l.7 7h6.6L12 6"/><path d="M6.5 8.5v3M9.5 8.5v3"/>',   // 危险/删除:垃圾桶
+    lock:   '<rect x="3.5" y="7" width="9" height="6" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/>',                  // 重置密码:锁
+    other:  '<circle cx="8" cy="8" r="6"/><path d="M8 5.5v3M8 10.5v.01"/>',                                                 // 兜底:信息圈
   };
-  // 操作者名:后端 actorName(user→display_name||username;platform_admin→username)。
-  // platform_admin 加「平台·」前缀,租户侧一眼分清是平台方操作;空 → 未知用户。
-  function actorOf(a){
-    const name=a.actorName||'未知用户';
-    return a.actor_type==='platform_admin' ? '平台·'+name : name;
+  // 动作 → {v 谓语, obj 是否接对象, kind 颜色/图标档}。kind∈ login|create|edit|member|credit|upload|danger|other。
+  // 危险类(删除/重置密码)→ danger:红色 + 整行左红描边,审计场景一眼抓到。
+  const ACTION_CN={
+    login:{v:'登录了系统',kind:'login'}, padmin_login:{v:'登录了平台后台',kind:'login'},
+    create_job:{v:'发起了一次生成',kind:'create'},
+    grant_credit:{v:'发放了点数',obj:true,kind:'credit'},
+    member_add:{v:'新增了成员',obj:true,kind:'member'}, member_role:{v:'调整了成员角色',obj:true,kind:'member'},
+    update_profile:{v:'修改了个人信息',obj:true,kind:'edit'}, change_password:{v:'修改了登录密码',kind:'lock'},
+    update_settings:{v:'修改了系统设置',obj:true,kind:'edit'},
+    create_avatar:{v:'创建了形象',obj:true,kind:'create'}, delete_avatar:{v:'删除了形象',obj:true,kind:'danger'},
+    clone_voice:{v:'克隆了音色',obj:true,kind:'create'}, design_voice:{v:'设计了音色',obj:true,kind:'create'}, delete_voice:{v:'删除了音色',obj:true,kind:'danger'},
+    upload_asset:{v:'上传了素材',obj:true,kind:'upload'}, delete_asset:{v:'删除了素材',obj:true,kind:'danger'},
+    upload_image_input:{v:'上传了参考图',kind:'upload'},
+    image_model_create:{v:'新增了出图模型',obj:true,kind:'create'}, image_model_update:{v:'修改了出图模型',obj:true,kind:'edit'},
+    image_model_delete:{v:'删除了出图模型',obj:true,kind:'danger'}, image_model_reorder:{v:'调整了出图模型排序',kind:'edit'},
+    tenant_create:{v:'开通了机构',obj:true,kind:'create'}, tenant_update:{v:'修改了机构信息',obj:true,kind:'edit'},
+    tenant_user_create:{v:'创建了机构成员',obj:true,kind:'member'}, tenant_user_reset_pw:{v:'重置了成员密码',obj:true,kind:'lock'},
+  };
+  // kind → 颜色档(头像底色 + 图标色;lock 走 danger 红)。
+  const KIND_TONE={ login:'blue', create:'green', edit:'amber', member:'blue', credit:'green', upload:'amber', lock:'red', danger:'red', other:'gray' };
+  // kind → 用哪个 SVG(lock/danger 各有专属图标)。
+  const KIND_ICON={ login:'login', create:'create', edit:'edit', member:'member', credit:'credit', upload:'upload', lock:'lock', danger:'danger', other:'other' };
+
+  // 操作者展示名 + 是否平台超管(平台超管单独打「平台」标,不再前缀「平台·」)。
+  function actorName(a){ return a.actorName||'未知用户'; }
+  // 头像首字:取展示名第一个字符(中文取首字,英文取首字母大写);空 → '?'。
+  function actorInitial(a){ const n=a.actorName||''; return n ? [...n][0].toUpperCase() : '?'; }
+  // 时间分组:今天 / 昨天 / 更早(按本地 0 点比较)。
+  function dayGroup(ts){
+    const d=new Date(ts), n=new Date();
+    const d0=new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime();
+    const t0=new Date(n.getFullYear(),n.getMonth(),n.getDate()).getTime();
+    const diff=Math.round((t0-d0)/86400000);
+    return diff<=0 ? '今天' : (diff===1 ? '昨天' : '更早');
   }
-  // 一句话:<谁> <谓语>「<对象>」。未知 action 回退原始串,不吞。
+  function fmtClock(ts){const d=new Date(ts),p=n=>String(n).padStart(2,'0');return `${p(d.getHours())}:${p(d.getMinutes())}`;}
+  // 一句话正文:<谓语>「<对象>」。未知 action 回退原始串,不吞。
   function auditSentence(a){
-    const who=`<span class="af-who">${esc(actorOf(a))}</span>`;
     const act=ACTION_CN[a.action];
-    if(!act) return `${who} 执行了操作「${esc(a.action)}」${a.target?'(对象 '+esc(a.target)+')':''}`;
+    if(!act) return `执行了操作「${esc(a.action)}」${a.target?'(对象 '+esc(a.target)+')':''}`;
     const obj=(act.obj && a.target) ? `「<span class="af-obj">${esc(a.target)}</span>」` : '';
-    return `${who} ${esc(act.v)}${obj}`;
+    return `${esc(act.v)}${obj}`;
+  }
+  // 渲染一条时间线事件。
+  function auditEvent(a){
+    const act=ACTION_CN[a.action]||{kind:'other'};
+    const tone=KIND_TONE[act.kind]||'gray';
+    const icon=AF_ICON[KIND_ICON[act.kind]||'other'];
+    const danger = act.kind==='danger'||act.kind==='lock' ? ' af-danger' : '';
+    const plat = a.actor_type==='platform_admin' ? '<span class="af-plat">平台</span>' : '';
+    const ip = a.ip ? `<span class="af-ip">${esc(a.ip)}</span>` : '';
+    return `<div class="af-ev${danger}">
+      <div class="af-av af-${tone}" aria-hidden="true">${esc(actorInitial(a))}</div>
+      <div class="af-body">
+        <div class="af-r1"><span class="af-who">${esc(actorName(a))}</span>${plat}<span class="af-time">${fmtClock(a.created_at)}</span></div>
+        <div class="af-r2"><span class="af-ic af-${tone}"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${icon}</svg></span><span class="af-txt">${auditSentence(a)}</span>${ip}</div>
+      </div></div>`;
+  }
+  // 整段时间线:按 今天/昨天/更早 分桶,每桶一个 .af-grp(竖轴 + 日期标 + 各事件)。
+  function renderAuditFeed(logs){
+    if(!logs.length) return '<div class="af-empty">暂无操作记录</div>';
+    const order=['今天','昨天','更早'], buckets={};
+    logs.forEach(a=>{ const g=dayGroup(a.created_at); (buckets[g]=buckets[g]||[]).push(a); });
+    return order.filter(g=>buckets[g]).map(g=>
+      `<div class="af-grp"><div class="af-day">${g}</div>${buckets[g].map(auditEvent).join('')}</div>`
+    ).join('');
   }
 
   async function load(){
@@ -210,12 +259,11 @@
         document.getElementById('auditCard').style.display='';
         try{
           const logs=await LJ.get('/audit');
-          const body=document.getElementById('auditBody');
-          body.innerHTML = logs.length ? logs.slice(0,50).map(a=>`<li>
-            <span class="af-time">${fmtT(a.created_at)}</span>
-            <span class="af-text">${auditSentence(a)}</span>
-            ${a.ip?`<span class="af-ip">${esc(a.ip)}</span>`:''}</li>`).join('')
-            : '<li class="af-empty">暂无审计记录</li>';
+          const shown=logs.slice(0,50);
+          document.getElementById('auditBody').innerHTML = renderAuditFeed(shown);
+          // 计数 chip:总量;>50 只展示前 50,标「50+」诚实提示有截断。
+          const cnt=document.getElementById('auditCount');
+          if(cnt) cnt.textContent = logs.length ? ('共 '+(logs.length>50?'50+':logs.length)+' 条') : '';
         }catch(e){}
       }
     }catch(e){}
