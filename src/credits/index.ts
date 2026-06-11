@@ -263,8 +263,18 @@ function outstandingReserved(jobId: string): number {
 }
 
 /** 消费记录(可查询/导出,验收第H3)。 */
+/** 消费明细 + 归属:LEFT JOIN job(取工具 type)+ user(取消费人名)。
+ *  归属经 JOIN 派生,不冗余存 ledger;grant 行无 job_id → toolType/userName 空;
+ *  老 job 的 created_by NULL → userName 空(前端显「—」)。 */
 export function ledger(tenantId: string, limit = 100): LedgerRow[] {
   return db
-    .prepare(`SELECT * FROM credit_ledger WHERE tenant_id=? ORDER BY created_at DESC LIMIT ?`)
+    .prepare(
+      `SELECT l.*, j.type AS toolType, COALESCE(u.display_name, u.username) AS userName
+         FROM credit_ledger l
+         LEFT JOIN job j ON l.job_id = j.id
+         LEFT JOIN user u ON j.created_by = u.id
+        WHERE l.tenant_id = ?
+        ORDER BY l.created_at DESC LIMIT ?`,
+    )
     .all(tenantId, limit) as LedgerRow[];
 }

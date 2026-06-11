@@ -643,7 +643,7 @@ jobsRouter.post('/jobs', requireRole('admin', 'creator'), async (req: Request, r
   if (balance(tid) < cost) {
     return res.status(402).json({ error: '积分余额不足', need: cost, balance: balance(tid) });
   }
-  const id = enqueueJob(built.type, built.input, tid);
+  const id = enqueueJob(built.type, built.input, tid, req.user!.id); // 记创建者(计费归属"谁消费")
   try {
     reserve(tid, id, cost); // 原子:再次校验余额 + 预扣
   } catch (e) {

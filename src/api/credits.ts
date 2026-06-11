@@ -25,12 +25,19 @@ creditsRouter.get('/credits/ledger', requireAuth, (req: Request, res: Response) 
 creditsRouter.get('/credits/ledger.csv', requireAuth, (req: Request, res: Response) => {
   const rows = ledger(req.user!.tenantId, 10000);
   const KIND_CN: Record<string, string> = { grant: '发放', reserve: '预扣', settle: '结算', release: '释放' };
+  // 工具类型 → 中文场景名(与前端 billing.html TOOL_CN 同口径)
+  const TOOL_CN: Record<string, string> = {
+    video: '数字人视频', video_t2v: '文字转影片', video_i2v: '图片转影片', video_edit: '影片编辑',
+    ai_image: 'AI 图片', tts: '文字转语音', ai_music: 'AI 音乐',
+  };
   const esc = (s: string) => `"${String(s).replace(/"/g, '""')}"`;
-  const header = '时间,类型,金额,关联任务,说明';
+  const header = '时间,类型,消费人,工具,金额,关联任务,说明';
   const lines = rows.map((r) =>
     [
       esc(new Date(r.created_at).toISOString()),
       esc(KIND_CN[r.kind] ?? r.kind),
+      esc(r.userName ?? '—'),
+      esc(r.toolType ? (TOOL_CN[r.toolType] ?? r.toolType) : '—'),
       r.amount,
       esc(r.job_id ?? ''),
       esc(r.note ?? ''),

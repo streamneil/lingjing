@@ -17,13 +17,14 @@ export function enqueueJob(
   type: string,
   input: unknown,
   tenantId: string = config.defaultTenantId,
+  createdBy: string | null = null, // 创建者用户 id(计费归属;缺省 null = 老路径/系统)
 ): string {
   const id = randomUUID();
   const t = now();
   db.prepare(
-    `INSERT INTO job (id, tenant_id, type, status, input_json, created_at, updated_at)
-     VALUES (?, ?, ?, 'queued', ?, ?, ?)`,
-  ).run(id, tenantId, type, JSON.stringify(input), t, t);
+    `INSERT INTO job (id, tenant_id, type, status, input_json, created_by, created_at, updated_at)
+     VALUES (?, ?, ?, 'queued', ?, ?, ?, ?)`,
+  ).run(id, tenantId, type, JSON.stringify(input), createdBy, t, t);
   return id;
 }
 
