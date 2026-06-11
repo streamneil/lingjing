@@ -13,6 +13,7 @@ export interface TtsParams {
   voice: string; // Qwen 系统音色名(如 'Cherry')或复刻/设计产出的 voice_id
   model?: string; // qwen3-tts-flash / qwen3-tts-instruct-flash / vc / vd
   instruction?: string; // 指令控制(情绪/音调,自然语言);仅 qwen3-tts-instruct-flash 有效
+  languageType?: string; // 合成语种(input.language_type;Chinese/English/… )。缺省=不下发(模型自判)。
 }
 
 /**
@@ -34,6 +35,7 @@ export async function synthesizeSpeechHttp(params: TtsParams): Promise<Buffer> {
           text: params.text,
           voice: params.voice,
           ...(params.instruction ? { instructions: params.instruction } : {}),
+          ...(params.languageType ? { language_type: params.languageType } : {}),
         },
       }),
     },

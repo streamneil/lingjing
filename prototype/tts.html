@@ -61,7 +61,11 @@
   #ttsCfg .pop, #sheet-voices .pop { bottom:auto; top:calc(100% + 6px); min-width:auto; }
   /* 复制或设计菜单同向下;弹框选项较多时限高可滚 */
   #sheet-voices #pop-voiceNew { left:auto; right:0; }
-  #ttsCfg #emoOpts, #ttsCfg #spdOpts, #sheet-voices [id$="Opts"] { max-height:240px; overflow-y:auto; }
+  #ttsCfg #emoOpts, #ttsCfg #spdOpts, #ttsCfg #langSynOpts, #sheet-voices [id$="Opts"] { max-height:240px; overflow-y:auto; }
+  /* 情绪/语速/语言/音高 2 列紧凑网格(左栏不超屏,P4)*/
+  #ttsCfg .cfg-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px 12px; }
+  #ttsCfg .cf-cell .cfg-label { margin-top:0; }
+  #ttsCfg .cf-cell .cfg-label:first-child { margin-top:0; }
   /* 标准记录卡:操作行 + 文本气泡展开(对齐 img2video 等)*/
   .card-acts { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
   .card-acts button { display:inline-flex; align-items:center; gap:5px; font-size:12.5px; color:var(--t2); background:var(--field); border:1px solid var(--line); border-radius:9px; padding:7px 13px; cursor:pointer; transition:.15s; }
@@ -104,19 +108,34 @@
       <div class="ar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></div>
     </div>
 
-    <!-- 情绪 + 语速 + 音高:全 Qwen-TTS,系统音色经 instruct 模型落地(无需选品质模型) -->
-    <div class="cfg-label">情绪</div>
-    <div class="pop-anchor">
-      <div class="cpill" id="emoPill" onclick="togglePop('emo')"><span class="v" id="emoPillV">自动</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
-      <div class="pop" id="pop-emo" style="min-width:auto;left:0;right:0"><div class="pop-label">情绪</div><div id="emoOpts"></div></div>
+    <!-- 情绪/语速/语言/音高:2 列紧凑网格(左栏不超屏);全 Qwen-TTS,系统音色经 instruct 落地 -->
+    <div class="cfg-grid2">
+      <div class="cf-cell">
+        <div class="cfg-label">情绪</div>
+        <div class="pop-anchor">
+          <div class="cpill" id="emoPill" onclick="togglePop('emo')"><span class="v" id="emoPillV">自动</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+          <div class="pop" id="pop-emo" style="min-width:auto;left:0;right:0"><div class="pop-label">情绪</div><div id="emoOpts"></div></div>
+        </div>
+      </div>
+      <div class="cf-cell">
+        <div class="cfg-label">语速</div>
+        <div class="pop-anchor">
+          <div class="cpill" id="spdPill" onclick="togglePop('spd')"><span class="v" id="spdPillV">中速</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+          <div class="pop" id="pop-spd" style="min-width:auto;left:0;right:0"><div class="pop-label">语速</div><div id="spdOpts"></div></div>
+        </div>
+      </div>
+      <div class="cf-cell">
+        <div class="cfg-label">语言</div>
+        <div class="pop-anchor">
+          <div class="cpill" id="langSynPill" onclick="togglePop('langSyn')"><span class="v" id="langSynPillV">自动</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+          <div class="pop" id="pop-langSyn" style="min-width:auto;left:0;right:0"><div class="pop-label">语言</div><div id="langSynOpts"></div></div>
+        </div>
+      </div>
+      <div class="cf-cell">
+        <div class="cfg-label">音高 <span id="pitchValR" style="color:var(--t4);font-weight:400">0</span></div>
+        <div class="sld-row" style="margin:0"><span class="lbl">低</span><input type="range" id="pitch" min="-12" max="12" step="1" value="0"><span class="lbl">高</span></div>
+      </div>
     </div>
-    <div class="cfg-label">语速</div>
-    <div class="pop-anchor">
-      <div class="cpill" id="spdPill" onclick="togglePop('spd')"><span class="v" id="spdPillV">中速</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
-      <div class="pop" id="pop-spd" style="min-width:auto;left:0;right:0"><div class="pop-label">语速</div><div id="spdOpts"></div></div>
-    </div>
-    <div class="cfg-label">音高</div>
-    <div class="sld-row"><span class="lbl">低</span><input type="range" id="pitch" min="-12" max="12" step="1" value="0"><span class="val" id="pitchValR">0</span></div>
 
     <div class="cfg-sp"></div>
     <div class="cbtn-wrap">
@@ -251,11 +270,12 @@
   let selLang='', selGender='';   // 当前语言/性别筛选('')
   // 语言/性别筛选项:语言从预置实际 lang 动态生成(预置有方言);性别固定。
   function refreshFilterOpts(){
+    // onPick 后须重渲染:否则下拉「✓ 选中态」(.on)停在旧值,用户以为没选上(同情绪/语速修复)
     const langs=[...new Set((vsData.presets||[]).map(p=>p.lang).filter(Boolean))];
     const langItems=[{value:'',label:'语言:全部'}].concat(langs.map(l=>({value:l,label:l})));
-    renderPopOpts('langOpts', langItems, selLang, (v)=>{ selLang=v; document.getElementById('langPillV').textContent=v||'语言:全部'; renderVoices(); });
+    renderPopOpts('langOpts', langItems, selLang, (v)=>{ selLang=v; document.getElementById('langPillV').textContent=v||'语言:全部'; refreshFilterOpts(); renderVoices(); });
     const genderItems=[{value:'',label:'性别:全部'},{value:'女',label:'女'},{value:'男',label:'男'}];
-    renderPopOpts('genderOpts', genderItems, selGender, (v)=>{ selGender=v; document.getElementById('genderPillV').textContent=v?('性别:'+v):'性别:全部'; renderVoices(); });
+    renderPopOpts('genderOpts', genderItems, selGender, (v)=>{ selGender=v; document.getElementById('genderPillV').textContent=v?('性别:'+v):'性别:全部'; refreshFilterOpts(); renderVoices(); });
   }
   function renderVoices(){
     window.LJAudioPreview.stop();
@@ -305,10 +325,10 @@
     box.querySelectorAll('.pop-opt[data-v]').forEach(el=>el.onclick=()=>{ onPick(el.dataset.v); closePops(); });
   }
 
-  // ── 情绪/语速/音高(T-TTS-EMOTION)── 全 Qwen-TTS,系统按是否带指令自动选 flash/instruct(无品质下拉)
-  let ttsEmotions=[], ttsSpeeds=[], selEmo='auto', selSpd='normal';
+  // ── 情绪/语速/语言/音高(T-TTS-EMOTION)── 全 Qwen-TTS,系统按是否带指令自动选 flash/instruct(无品质下拉)
+  let ttsEmotions=[], ttsSpeeds=[], ttsLangs=[], selEmo='auto', selSpd='normal', selLangSyn='Auto';
   async function loadModels(){
-    try{ const r=await LJ.get('/tts-models'); ttsEmotions=r.emotions||[]; ttsSpeeds=r.speeds||[]; refreshEmoOptions(); refreshSpdOptions(); }catch(e){}
+    try{ const r=await LJ.get('/tts-models'); ttsEmotions=r.emotions||[]; ttsSpeeds=r.speeds||[]; ttsLangs=r.languages||[]; refreshEmoOptions(); refreshSpdOptions(); refreshLangSynOptions(); }catch(e){}
   }
   function refreshEmoOptions(){
     // onPick 后必须重渲染:否则下拉里的「✓ 选中态」(.on)仍停在旧值,用户以为没选上(无法选中 bug)
@@ -319,12 +339,16 @@
     renderPopOpts('spdOpts', ttsSpeeds.map(s=>({value:s.key,label:s.label})), selSpd, (v)=>{ selSpd=v; refreshSpdOptions(); });
     document.getElementById('spdPillV').textContent=(ttsSpeeds.find(s=>s.key===selSpd)||{label:'中速'}).label;
   }
+  function refreshLangSynOptions(){
+    renderPopOpts('langSynOpts', ttsLangs.map(l=>({value:l.key,label:l.label})), selLangSyn, (v)=>{ selLangSyn=v; refreshLangSynOptions(); });
+    document.getElementById('langSynPillV').textContent=(ttsLangs.find(l=>l.key===selLangSyn)||{label:'自动'}).label;
+  }
   document.getElementById('pitch').oninput=function(){ document.getElementById('pitchValR').textContent=this.value; };
 
   // ── 声音设计弹窗(E7)──
   const DG_DIMS=['年轻女声','沉稳男声','温柔','活泼','磁性','播音腔','语速偏快','适合有声书'];
   function openDesign(){
-    closeVoices();  // 先关面板,弹框独占屏幕(避免层级/裁切)
+    // 不关音色面板:弹框 z320 + 自带遮罩盖在面板(z110)之上,关弹框即回到面板(免重开,体验连续)
     document.getElementById('dgName').value=''; document.getElementById('dgPrompt').value='';
     document.getElementById('dgPreview').style.display='none'; document.getElementById('dgPreview').innerHTML='';
     document.getElementById('dgDims').innerHTML=DG_DIMS.map(d=>`<span class="vd-dim" onclick="addDgDim('${d}')">${d}</span>`).join('');
@@ -364,7 +388,7 @@
   // ── 复制音色(克隆)弹窗 — 复用音色库流程:样本 + 本人授权存证 ──
   let cvConsented=false;
   function openClone(){
-    closeVoices();  // 先关面板,弹框独占屏幕(避免层级/裁切)
+    // 不关音色面板:弹框 z320 + 自带遮罩盖在面板(z110)之上,关弹框即回到面板(免重开,体验连续)
     document.getElementById('cvName').value=''; document.getElementById('voiceProof').value=''; document.getElementById('cvProofName').textContent='';
     setCvConsent(false); clearCvUpload(); openModal('clone');
     setTimeout(()=>document.getElementById('cvName').focus(),60);
@@ -499,7 +523,7 @@
     btn.disabled=true; const prev=btn.innerHTML; btn.textContent='提交中…';
     try{
       const pitchV=parseInt(document.getElementById('pitch').value,10);
-      const res=await LJ.createJob({ type:'tts', text, voiceRef:selectedVoice.id, emotion:selEmo!=='auto'?selEmo:undefined, rate:selSpd!=='normal'?selSpd:undefined, pitch:pitchV!==0?pitchV:undefined });
+      const res=await LJ.createJob({ type:'tts', text, voiceRef:selectedVoice.id, emotion:selEmo!=='auto'?selEmo:undefined, rate:selSpd!=='normal'?selSpd:undefined, pitch:pitchV!==0?pitchV:undefined, language:selLangSyn!=='Auto'?selLangSyn:undefined });
       renderCard({ id:res.id, status:'queued', progress:0, text });
       track(res.id, text);
       ta.value=''; cnt.textContent='0'; scheduleEstimate();

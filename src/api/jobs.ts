@@ -34,7 +34,7 @@ import {
 import { audit } from '../audit/index.js';
 import { isUsableAvatar } from '../avatars/index.js';
 import { isUsableVoice } from '../voices/index.js';
-import { getEmotion, EMOTIONS, getSpeed, SPEEDS } from '../gateway/tts-models.js';
+import { getEmotion, EMOTIONS, getSpeed, SPEEDS, getLanguage, LANGUAGES } from '../gateway/tts-models.js';
 import { db } from '../db/index.js';
 import type { VideoGenInput, ImageGenInput, TtsGenInput, VideoGenT2VInput } from '../gateway/types.js';
 import { getImageModel, resolutionAllowed, isKnownModel, listEnabledModels, DEFAULT_IMAGE_MODEL, tierFromPixels } from '../gateway/image-models.js';
@@ -271,18 +271,22 @@ function buildTtsJob(body: Record<string, unknown>, tid: string): JobBuildResult
     return { ok: false, status: 400, error: '音色不可用(不存在或非本机构)' };
 
   // 情绪 / 语速 / 音高(T-TTS-EMOTION):Qwen 系统音色经 instruct 模型落地;复刻/设计忽略(worker 处理)。
-  const { emotion, rate, pitch } = body as Partial<TtsGenInput>;
+  // 语言(language_type):对所有音色生效(合成参数,非指令)。
+  const { emotion, rate, pitch, language } = body as Partial<TtsGenInput>;
   if (emotion !== undefined && !getEmotion(emotion))
     return { ok: false, status: 400, error: '情绪非法' };
   if (rate !== undefined && !getSpeed(rate))
     return { ok: false, status: 400, error: '语速档位非法' };
   if (pitch !== undefined && (typeof pitch !== 'number' || pitch < -12 || pitch > 12))
     return { ok: false, status: 400, error: '音高需在 -12~+12 之间' };
+  if (language !== undefined && !getLanguage(language))
+    return { ok: false, status: 400, error: '语言非法' };
 
   const input: TtsGenInput = { text, voiceRef };
   if (emotion !== undefined && emotion !== 'auto') input.emotion = emotion;
   if (rate !== undefined && rate !== 'normal') input.rate = rate;
   if (pitch !== undefined && pitch !== 0) input.pitch = pitch;
+  if (language !== undefined && language !== 'Auto') input.language = language;
   return {
     ok: true,
     type: 'tts',
@@ -810,7 +814,8 @@ jobsRouter.get('/image-models', requireAuth, (_req: Request, res: Response) => {
 jobsRouter.get('/tts-models', requireAuth, (_req: Request, res: Response) => {
   const emotions = Object.values(EMOTIONS).map((e) => ({ key: e.key, label: e.label }));
   const speeds = Object.values(SPEEDS).map((s) => ({ key: s.key, label: s.label }));
-  res.json({ emotions, speeds });
+  const languages = Object.values(LANGUAGES).map((l) => ({ key: l.key, label: l.label }));
+  res.json({ emotions, speeds, languages });
 });
 
 // 文生视频模型清单 — 前端下拉单一真相源(只吐 UI 能力字段,不漏 modelId/priceTier)。

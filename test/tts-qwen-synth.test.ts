@@ -87,6 +87,18 @@ describe('synthesizeSpeechHttp:双解析', () => {
     ) as any;
     await expect(synthesizeSpeechHttp({ text: 'x', voice: 'v', model: 'm' })).rejects.toThrow('无音频');
   });
+
+  it('languageType 设置 → body.input.language_type 透传;缺省 → 不下发', async () => {
+    let body: any;
+    globalThis.fetch = vi.fn(async (_url: any, init: any) => {
+      body = JSON.parse(init.body);
+      return new Response(JSON.stringify({ output: { audio: { data: Buffer.from('a').toString('base64') } } }), { status: 200 });
+    }) as any;
+    await synthesizeSpeechHttp({ text: 'hi', voice: 'Cherry', model: 'm', languageType: 'English' });
+    expect(body.input.language_type).toBe('English');
+    await synthesizeSpeechHttp({ text: 'hi', voice: 'Cherry', model: 'm' });
+    expect(body.input.language_type).toBeUndefined();
+  });
 });
 
 describe('resolveVoice:全 Qwen http 路由(无 transport)', () => {
