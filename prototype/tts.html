@@ -70,6 +70,9 @@
   #ttsCfg #emoOpts, #ttsCfg #spdOpts, #ttsCfg #langSynOpts, #sheet-voices [id$="Opts"] { max-height:240px; overflow-y:auto; }
   /* 情绪/语速/语言/音高 2 列紧凑网格(左栏不超屏,P4)*/
   #ttsCfg .cfg-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px 12px; }
+  /* 复刻/设计音色:禁用情绪/语速/语言/音高(Qwen 不支持),变灰且不可点 */
+  #ttsCfg .cfg-grid2.disabled { opacity:.45; pointer-events:none; filter:grayscale(.3); }
+  #ttsCfg .param-note { font-size:12px; color:var(--amber); background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.25); border-radius:8px; padding:7px 10px; margin-bottom:4px; }
   #ttsCfg .cf-cell .cfg-label { margin-top:0; }
   #ttsCfg .cf-cell .cfg-label:first-child { margin-top:0; }
   /* 标准记录卡:操作行 + 文本气泡展开(对齐 img2video 等)*/
@@ -114,8 +117,10 @@
       <div class="ar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></div>
     </div>
 
-    <!-- 情绪/语速/语言/音高:2 列紧凑网格(左栏不超屏);全 Qwen-TTS,系统音色经 instruct 落地 -->
-    <div class="cfg-grid2">
+    <!-- 情绪/语速/语言/音高:2 列紧凑网格(左栏不超屏);全 Qwen-TTS,系统音色经 instruct 落地。
+         复刻/设计音色不支持这些参数 → applyVoiceConstraints 禁用并提示。 -->
+    <div class="param-note" id="paramNote" style="display:none">复刻/设计音色暂不支持情绪、语速、语言、音高调节</div>
+    <div class="cfg-grid2" id="ttsParamGrid">
       <div class="cf-cell">
         <div class="cfg-label">情绪</div>
         <div class="pop-anchor">
@@ -303,18 +308,28 @@
       const canPlay=!!v.sample;
       // 复用共享 .vcard/.vc-* + .vc-p.vc-play(圆形试听槽);保留真试听 + 键盘 a11y
       const play=`<button class="vc-p vc-play" data-src="${esc(v.sample||'')}" ${canPlay?'':'disabled'} onclick="event.stopPropagation();window.LJAudioPreview.play(this.dataset.src,this)" aria-label="试听">${PLAY_SVG}</button>`;
-      const pick=`pickVoiceObj(${JSON.stringify({id:v.id,name:v.name,desc}).replace(/'/g,"&#39;")})`;
+      const pick=`pickVoiceObj(${JSON.stringify({id:v.id,name:v.name,desc,kind:isMine?(v.kind||'clone'):'preset'}).replace(/'/g,"&#39;")})`;
       return `<div class="vcard${on?' on':''}" data-id="${esc(v.id)}" role="button" tabindex="0" aria-pressed="${on?'true':'false'}" aria-label="选择音色 ${esc(v.name)}" onclick='${pick}' onkeydown='if(event.key==="Enter"||event.key===" "){event.preventDefault();${pick};}'>`
         +`<div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>${esc(v.name)}${hot}</div><div class="vc-d">${esc(desc)}</div></div>${play}</div>`;
     }).join('');
   }
   window.pickVoiceObj=(v, silent)=>{
-    selectedVoice={id:v.id,name:v.name,desc:v.desc};
+    selectedVoice={id:v.id,name:v.name,desc:v.desc,kind:v.kind||'preset'};
     document.getElementById('voiceName').textContent=v.name;
     document.getElementById('voiceDesc').textContent=v.desc||'已选择';
     document.querySelectorAll('#vsheetBody .vcard').forEach(c=>c.classList.toggle('on', c.dataset.id===v.id));
+    applyVoiceConstraints();
     if(!silent) closeVoices(); refreshBtn();
   };
+  // 复刻/设计音色不支持 情绪/语速/语言/音高(Qwen 仅系统音色支持 instructions/language_type)。
+  // 选到此类音色时禁用这些控件并提示,避免用户误以为生效(对齐后端 isSystem 门控)。
+  function applyVoiceConstraints(){
+    const sys = !selectedVoice || selectedVoice.kind==='preset';
+    const grid=document.getElementById('ttsParamGrid'); if(!grid) return;
+    grid.classList.toggle('disabled', !sys);
+    const note=document.getElementById('paramNote'); if(note) note.style.display=sys?'none':'';
+    if(!sys){ closePops(); } // 收起可能打开的下拉
+  }
   window.openVoices=openVoices; window.closeVoices=closeVoices; window.switchVTab=switchVTab; window.renderVoices=renderVoices;
 
   // ── 通用 popover(设计系统 .cpill + .pop,替代原生 select)──
