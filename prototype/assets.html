@@ -53,6 +53,11 @@
   /* 类型徽章(左上)+ 多图角标(右下)*/
   .a-badge { position:absolute; top:8px; left:8px; font-size:10.5px; font-weight:600; color:#fff; background:rgba(0,0,0,.5); backdrop-filter:blur(4px); padding:3px 8px; border-radius:7px; }
   .a-count { position:absolute; bottom:8px; right:9px; font-size:10px; color:#fff; background:rgba(0,0,0,.5); padding:2px 7px; border-radius:6px; }
+  /* 删除按钮:hover 才显(媒体卡 + 自建头像卡)。点它不触发卡片预览。 */
+  .a-del { position:absolute; top:7px; right:7px; width:28px; height:28px; border-radius:8px; display:grid; place-items:center; background:rgba(0,0,0,.55); backdrop-filter:blur(4px); color:#fff; opacity:0; cursor:pointer; transition:.15s; z-index:4; }
+  .acard:hover .a-del, .av:hover .a-del { opacity:1; }
+  .a-del:hover { background:var(--red); }
+  .a-del svg { width:15px; height:15px; }
   .a-b { padding:11px 13px; }
   .a-b h4 { font-size:13px; font-weight:600; color:var(--t1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .a-b .m { font-family:var(--f-mono); font-size:10px; color:var(--t4); margin-top:5px; }
@@ -206,8 +211,17 @@
     }
     const title = (job.script||'').trim().slice(0,18) || (TYPE_LABEL[job.type]||'作品');
     const from = TYPE_LABEL[job.type]||job.type;
-    return `<div class="acard" onclick="openAsset('${job.id}','${kind}')">${thumb}<div class="a-b"><h4 title="${esc(job.script||'')}">${esc(title)}${(job.script||'').length>18?'…':''}</h4><div class="m">${from} · ${fmtTime(job.createdAt)}</div></div></div>`;
+    const del = `<div class="a-del" onclick="event.stopPropagation();delMedia('${job.id}')" title="删除" role="button" aria-label="删除">${DEL_SVG}</div>`;
+    return `<div class="acard" onclick="openAsset('${job.id}','${kind}')">${thumb}${del}<div class="a-b"><h4 title="${esc(job.script||'')}">${esc(title)}${(job.script||'').length>18?'…':''}</h4><div class="m">${from} · ${fmtTime(job.createdAt)}</div></div></div>`;
   }
+
+  // 删除图标(垃圾桶)+ 删媒体(走 DELETE /jobs/:id,与 works.html 同口径)
+  const DEL_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+  window.delMedia = async (id)=>{
+    if(!(await window.LJConfirm({title:'删除作品',body:'确认删除这个作品?删除后不可恢复。',confirmText:'删除',danger:true}))) return;
+    try{ await LJ.del('/jobs/'+id); allJobs = allJobs.filter(j=>j.id!==id); buildFromPop(); renderMedia(); window.LJToast&&window.LJToast('已删除'); }
+    catch(e){ window.LJToast&&window.LJToast(e.message||'删除失败','err'); }
+  };
 
   // 卡点击:预览(懒签名)。video 浮层播 / image 大图 / audio 内联播。
   window.openAsset = async (id, kind)=>{
@@ -237,7 +251,9 @@
         const img = a.thumb ? `<div class="av-img" style="background-image:url('${a.thumb}')"></div>` : `<div class="av-img ph"></div>`;
         const tag = isPreset ? `<span class="av-tag">预置</span>` : (a.isDefault?`<span class="av-tag">主形象</span>`:`<span class="av-tag" style="background:rgba(255,178,62,.22);color:#FFB23E">定制</span>`);
         const status = (!isPreset && a.status && a.status!=='ready') ? `<div class="av-name" style="font-size:13px">${a.status==='processing'?'处理中…':'失败'}</div>` : `<div class="av-name">${esc(a.name||'')}</div>`;
-        return `<div class="av" onclick="location.href='avatars.html'"><div class="av-veil"></div>${img}${tag}${status}</div>`;
+        // 自建形象可删(预置不可);删按钮 hover 显,点它不触发跳转。
+        const del = isPreset ? '' : `<div class="a-del" onclick="event.stopPropagation();delAvatar('${a.id}','${esc(a.name||'')}')" title="删除" role="button" aria-label="删除">${DEL_SVG}</div>`;
+        return `<div class="av" onclick="location.href='avatars.html'"><div class="av-veil"></div>${img}${tag}${status}${del}</div>`;
       };
       const customHtml = custom.length?`<div class="date-h">我的形象</div><div class="grid-av">${custom.map(a=>av(a,false)).join('')}</div>`:'';
       const presetHtml = presets.length?`<div class="date-h">预置形象</div><div class="grid-av tight">${presets.map(a=>av(a,true)).join('')}</div>`:'';
@@ -260,7 +276,11 @@
         const play = `<button class="vc-p vc-play" data-src="${v.sample||''}" ${canPlay?'':'disabled style="opacity:.4;cursor:not-allowed"'} onclick="event.stopPropagation();togglePlay(this)" aria-label="试听">${PLAY}</button>`;
         const tag = isClone?'':' <span class="hot">预置</span>';
         const desc = isClone?(kindLabel+status):(`${v.gender||''}${v.desc?' · '+v.desc:''}`);
-        return `<div class="vcard"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>${esc(v.name)}${tag}</div><div class="vc-d">${esc(desc)}</div></div>${play}</div>`;
+        // 自建音色可删(预置不可):试听 + 删除 操作行(与 voices.html 同口径)
+        const actions = isClone
+          ? `<div class="vc-actions">${play}<button class="btn btn-dark" style="padding:8px 12px;font-size:12.5px" onclick="event.stopPropagation();delVoice('${v.id}','${esc(v.name)}')">删除</button></div>`
+          : play;
+        return `<div class="vcard"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>${esc(v.name)}${tag}</div><div class="vc-d">${esc(desc)}</div></div>${actions}</div>`;
       };
       const cloneHtml = clones.length?`<div class="date-h">我的音色</div><div class="grid-av" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))">${clones.map(v=>vc(v,true)).join('')}</div>`:'';
       const presetHtml = presets.length?`<div class="date-h">预置音色</div><div class="grid-av" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))">${presets.map(v=>vc(v,false)).join('')}</div>`:'';
@@ -269,6 +289,18 @@
   }
   function voiceEmpty(){ return `<div class="a-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg><div class="t">还没有音色</div><div>上传 5–30 秒样本即可克隆 · <a href="voices.html" class="link-btn">去克隆 →</a></div></div>`; }
   window.togglePlay = (btn)=>{ if(window.LJAudioPreview) LJAudioPreview.play(btn.dataset.src, btn); };
+
+  // 删自建形象 / 音色(预置不可删;走各自 DELETE 端点,与 avatars/voices 页同口径)
+  window.delAvatar = async (id, name)=>{
+    if(!(await window.LJConfirm({title:'删除形象',body:`确认删除「<b style="color:var(--t1)">${esc(name)||'该形象'}</b>」?删除后不可恢复。`,confirmText:'删除',danger:true}))) return;
+    try{ await LJ.del('/avatars/'+id); loadAvatars(); window.LJToast&&window.LJToast('已删除形象'); }
+    catch(e){ window.LJToast&&window.LJToast(e.message||'删除失败','err'); }
+  };
+  window.delVoice = async (id, name)=>{
+    if(!(await window.LJConfirm({title:'删除音色',body:`确认删除「<b style="color:var(--t1)">${esc(name)||'该音色'}</b>」?删除后不可恢复。`,confirmText:'删除',danger:true}))) return;
+    try{ await LJ.del('/voices/'+id); loadVoices(); window.LJToast&&window.LJToast('已删除音色'); }
+    catch(e){ window.LJToast&&window.LJToast(e.message||'删除失败','err'); }
+  };
 
   LJ.me().then(()=>{ loadMedia(); loaded.media=true; }).catch(()=>{});
 </script>
