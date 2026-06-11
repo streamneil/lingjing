@@ -416,11 +416,17 @@
     function play(url, btn){
       if(curBtn === btn){ stop(); return; }   // 再点同一个 → 停
       stop();                                  // 切卡 → 先停上一个
-      if(!url) return;
+      if(!url){ window.LJToast && window.LJToast('暂无试听样本','err'); return; }
       const a = ensure();
       a.src = url;
       a.play().then(()=>{ btn.innerHTML = STOP; curBtn = btn; })
-        .catch(()=>{ window.LJToast && window.LJToast('试听失败,样本可能已过期','err'); });
+        .catch((e)=>{
+          // 区分:样本文件不存在/取不到(load 失败)vs 其它。预置样本缺失最常见
+          // (存储里没跑过 seed-preset-samples)→ 给可读且可行动的提示。
+          const loadFailed = a.error && (a.error.code === 4 /*SRC_NOT_SUPPORTED*/ || a.error.code === 2 /*NETWORK*/) || (e && e.name === 'NotSupportedError');
+          const msg = loadFailed ? '试听样本暂不可用(样本未生成或链接失效)' : '试听失败,请稍后重试';
+          window.LJToast && window.LJToast(msg, 'err');
+        });
     }
     return { play, stop, PLAY_SVG: PLAY, STOP_SVG: STOP };
   })();
