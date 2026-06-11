@@ -119,17 +119,19 @@ export function resolveVoice(
   voiceRef: string,
   tenantId: string,
   withEmotion = false,
-): { voice: string; model: string } {
+): { voice: string; model: string; isSystem: boolean } {
   const presetModel = withEmotion ? config.baichuan.qwenInstructModel : config.baichuan.qwenTtsModel;
-  if (isPresetVoice(voiceRef)) return { voice: voiceRef, model: presetModel };
+  // isSystem:系统(预置)音色才支持 instructions(情绪/语速/音高)与 language_type;
+  // 复刻(VC)/设计(VD)音色均不支持(阿里官方),给它们下发会 400(TTS speak request failed)。
+  if (isPresetVoice(voiceRef)) return { voice: voiceRef, model: presetModel, isSystem: true };
   const v = getVoice(voiceRef, tenantId);
   if (v?.provider_voice_id) {
-    if (v.kind === 'design') return { voice: v.provider_voice_id, model: config.baichuan.designModel };
+    if (v.kind === 'design') return { voice: v.provider_voice_id, model: config.baichuan.designModel, isSystem: false };
     // 克隆(VC):voice + 同 target_model 合成
-    return { voice: v.provider_voice_id, model: config.baichuan.vcModel };
+    return { voice: v.provider_voice_id, model: config.baichuan.vcModel, isSystem: false };
   }
-  // 克隆/设计未产出 / 解析失败:回退预置音色(Qwen),避免任务整体失败
-  return { voice: DEFAULT_PRESET_VOICE, model: presetModel };
+  // 克隆/设计未产出 / 解析失败:回退预置音色(Qwen,系统音色),避免任务整体失败
+  return { voice: DEFAULT_PRESET_VOICE, model: presetModel, isSystem: true };
 }
 
 // 默认回退音色:Qwen-TTS 合法音色名(专业播音场景)
@@ -542,7 +544,11 @@ async function runImageJob(job: JobRow): Promise<void> {
 }
 
 // 文转语音单段字数上限(cosyvoice 单次合成,远大于视频的 90 字/段——TTS 无 20s 视频约束)。
-const TTS_MAX_CHARS = 2000;
+// Qwen-TTS 单次合成硬限:input 长度 ∈ [0, 600],单位是 **token**(非字符;API 实测:
+// instruct 模型中文 300 字 OK、350 字 → 400 Range[0,600],即中文 ≈ 1.7-2 token/字)。
+// 故按字符分段须按最坏比(中文 ~2 token/字)留余:280 字 ×2 ≈ 560 token < 600,
+// 再含 instructions 的几十 token 仍安全。英文 token/字符更低,280 字符更宽松。
+const TTS_MAX_CHARS = 280;
 
 /** 处理一个文转语音(TTS,全 Qwen-TTS HTTP)job。抛错由调用方捕获并标 failed(失败隔离)。
  *
@@ -562,13 +568,15 @@ async function runTtsJob(job: JobRow): Promise<void> {
   const instruction = buildInstruction(input.emotion, input.pitch, input.rate);
 
   // 3. 音色解析(预置/克隆/设计,全 http;预置带情绪 → instruct,否则 flash;
-  //    复刻/设计共用各自 target_model,情绪指令仅系统音色支持故忽略)
-  const { voice, model } = resolveVoice(input.voiceRef, job.tenant_id, !!instruction);
+  //    复刻/设计共用各自 target_model;isSystem 标识能否下发 instructions/language_type)
+  const { voice, model, isSystem } = resolveVoice(input.voiceRef, job.tenant_id, !!instruction);
 
-  // 4. 语言(language_type):Auto/缺省 → 不下发(模型自判);其余透传给 Qwen
-  const languageType = input.language && input.language !== 'Auto' ? input.language : undefined;
+  // 4. instructions(情绪/语速/音高)与 language_type 仅系统音色支持(阿里官方):
+  //    复刻(VC)/设计(VD)下发会 400(TTS speak request failed)→ 非系统音色一律不下发。
+  const sysInstruction = isSystem ? (instruction || undefined) : undefined;
+  const languageType = isSystem && input.language && input.language !== 'Auto' ? input.language : undefined;
 
-  // 5. 分段(防 Qwen 单次输入上限)+ job 级 deadline
+  // 5. 分段(防 Qwen 单次 ≤600 上限,见 TTS_MAX_CHARS)+ job 级 deadline
   const segments = segmentScript(input.text, TTS_MAX_CHARS);
   if (segments.length === 0) throw new Error('文本分段为空');
   const deadline = Date.now() + config.baichuan.jobTimeoutMs;
@@ -577,7 +585,7 @@ async function runTtsJob(job: JobRow): Promise<void> {
   for (let i = 0; i < segments.length; i++) {
     if (Date.now() > deadline) throw new Error(`生成超时(>${config.baichuan.jobTimeoutMs}ms),已放弃`);
     updateProgress(job.id, Math.min(99, Math.floor((i / segments.length) * 100)));
-    audioBufs.push(await synthesizeSpeechHttp({ text: segments[i]!, voice, model, instruction: instruction || undefined, languageType }));
+    audioBufs.push(await synthesizeSpeechHttp({ text: segments[i]!, voice, model, instruction: sysInstruction, languageType }));
   }
 
   // 6. 拼接(单段直返不调 ffmpeg)+ 落存储(返 Buffer → putObject,非 putObjectFromUrl)

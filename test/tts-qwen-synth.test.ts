@@ -113,18 +113,26 @@ describe('resolveVoice:全 Qwen http 路由(无 transport)', () => {
     expect(r.model).toBe(config.baichuan.qwenInstructModel);
   });
 
-  it('克隆 → vcModel(用 provider_voice_id)', () => {
+  it('克隆 → vcModel(用 provider_voice_id);isSystem=false(不下发 instructions/language_type)', () => {
     const id = insertVoice('clone', 'qwen-vc-x-abc');
     const r = resolveVoice(id, T, true);
     expect(r.model).toBe(config.baichuan.vcModel);
     expect(r.voice).toBe('qwen-vc-x-abc');
+    expect(r.isSystem).toBe(false);
   });
 
-  it('设计 → designModel(用 provider_voice_id)', () => {
+  it('设计 → designModel(用 provider_voice_id);isSystem=false', () => {
     const id = insertVoice('design', 'qwen-voice-xyz');
     const r = resolveVoice(id, T);
     expect(r.model).toBe(config.baichuan.designModel);
     expect(r.voice).toBe('qwen-voice-xyz');
+    expect(r.isSystem).toBe(false);
+  });
+
+  it('预置/回退 → isSystem=true(可下发 instructions/language_type)', () => {
+    expect(resolveVoice('Cherry', T, false).isSystem).toBe(true);
+    const id = insertVoice('design', null); // provider 空 → 回退预置
+    expect(resolveVoice(id, T, false).isSystem).toBe(true);
   });
 
   it('provider_voice_id 空 → 回退预置(Qwen flash)', () => {
