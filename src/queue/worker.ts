@@ -9,9 +9,10 @@
 import { config } from '../config.js';
 import { getGateway } from '../gateway/baichuan.js';
 import { synthesizeSpeechHttp } from '../gateway/cosyvoice.js';
+import { generateMusic } from '../gateway/fun-music.js';
 import { buildInstruction } from '../gateway/tts-models.js';
 import { getMediaPublisher, tenantDelivery } from '../gateway/media-publisher.js';
-import type { VideoGenInput, VideoSubmitUrls, ImageGenInput, TtsGenInput, VideoGenT2VInput, ProviderJobStatus } from '../gateway/types.js';
+import type { VideoGenInput, VideoSubmitUrls, ImageGenInput, TtsGenInput, VideoGenT2VInput, ProviderJobStatus, AiMusicGenInput } from '../gateway/types.js';
 import { storage } from '../storage/index.js';
 import { listPresets as listAvatarPresets, getAvatar } from '../avatars/index.js';
 import { isPreset as isPresetVoice, getVoice } from '../voices/index.js';
@@ -20,7 +21,7 @@ import { applyAiLabel, probeAudioDuration, concatVideos } from '../pipeline/ai-l
 import { segmentScript } from '../pipeline/segment.js';
 import { concatAudio } from '../pipeline/concat-audio.js';
 import { getImageModel } from '../gateway/image-models.js';
-import { settle, release, estimateCost, costFor } from '../credits/index.js';
+import { settle, release, estimateCost, costFor, reservedFor } from '../credits/index.js';
 import { db } from '../db/index.js';
 
 /** 读租户的 AI 标识设置(默认开启 + "AI 合成")。 */
@@ -597,6 +598,47 @@ async function runTtsJob(job: JobRow): Promise<void> {
   settle(job.tenant_id, job.id, costFor('tts', input as unknown as Record<string, unknown>));
 }
 
+/** 处理一个 AI 音乐(Fun-Music)job。抛错由调用方捕获并标 failed(失败隔离)。
+ *
+ * 管线:送审(prompt/lyrics)→ generateMusic(同步返 url+lyrics+duration)→ putObjectFromUrl
+ *   (Fun-Music 返 24h URL,当场拉进存储)→ 写回 duration/lyrics 快照 → markDone(audio)→
+ *   按实际 duration 结算且封顶 reserved(只退不补,绝不负余额)。
+ */
+async function runAiMusicJob(job: JobRow): Promise<void> {
+  const input = JSON.parse(job.input_json) as AiMusicGenInput;
+
+  // 1. 送审(prompt 与 lyrics 至少一个,送有内容的那个)
+  const moderateText = input.lyrics || input.prompt || '';
+  const pre = await moderatePrompt(moderateText);
+  if (!pre.allowed) throw new Error(`送审拒绝:${pre.reason}`);
+
+  updateProgress(job.id, 8);
+  // 2. 生成(同步;邀测未开通/非北京地域会在此抛可读错误,透传给前端)
+  const result = await generateMusic({
+    model: input.model ?? config.baichuan.funMusicModel,
+    prompt: input.prompt,
+    lyrics: input.lyrics,
+    gender: input.mode === 'song' ? input.gender : undefined,
+  });
+  updateProgress(job.id, 80);
+
+  // 3. 落存储(Fun-Music 返 URL,24h → 拉进本地/OSS 持久化)
+  const ext = 'mp3';
+  const key = `audio/${job.tenant_id}/${job.id}.${ext}`;
+  await storage.putObjectFromUrl(key, result.url);
+
+  // 4. 写回快照(实际 duration 供结算;lyrics 供前端记录卡展示)
+  const finalInput = { ...input, durationSnapshot: result.duration, lyricsResult: result.lyrics };
+  db.prepare('UPDATE job SET input_json=? WHERE id=?').run(JSON.stringify(finalInput), job.id);
+
+  markDone(job.id, JSON.stringify([key]), 'none', 'audio');
+
+  // 5. 结算:按实际秒数,且封顶 reserved(actual ≤ reserve → 只退不补,不击穿负余额)
+  const actual = costFor('ai_music', finalInput as unknown as Record<string, unknown>);
+  const capped = Math.min(actual, reservedFor(job.id));
+  settle(job.tenant_id, job.id, capped);
+}
+
 /** 按 job.type 分发到对应工具的 runner(eng-review E1)。
  *  抛错由调用方捕获并标 failed(失败隔离)。未知 type → 抛错标失败(防御,不崩 worker)。 */
 async function processJob(job: JobRow): Promise<void> {
@@ -613,6 +655,8 @@ async function processJob(job: JobRow): Promise<void> {
       return runImageJob(job);
     case 'tts':
       return runTtsJob(job);
+    case 'ai_music':
+      return runAiMusicJob(job);
     default:
       throw new Error(`未知任务类型:${job.type}`);
   }

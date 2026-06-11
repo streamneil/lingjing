@@ -82,6 +82,18 @@ export function estimateTtsCost(textLength: number, pricePerChar = TTS_PRICE_PER
   return Math.max(MIN_COST, Math.ceil(textLength * pricePerChar));
 }
 
+// ── AI 音乐(Fun-Music)按秒计价 ──
+// Fun-Music 请求体无「时长」参数(模型自定),按返回的 usage.duration 秒计费。故:
+//  - 提交时按慷慨上限 AI_MUSIC_RESERVE_SECONDS 预估并 reserve(估高,留余量);
+//  - 完成后 worker 用实际 duration 结算,且封顶 reserved(actual ≤ reserve → 只退不补,
+//    绝不击穿"不允许负余额");settle() 已支持变额(diff=退/补,见本文件 settle)。
+const AI_MUSIC_PRICE_PER_SECOND = 0.05; // 每秒 0.05 积分(占位值,可配置)
+export const AI_MUSIC_RESERVE_SECONDS = 240; // 预估/reserve 用的慷慨上限(约 4 分钟)
+/** AI 音乐费用预估:ceil(秒数 × 每秒单价)。提交用上限秒,结算用实际秒(worker 封顶 reserved)。 */
+export function estimateAiMusicCost(durationSeconds: number): number {
+  return Math.max(MIN_COST, Math.ceil(durationSeconds * AI_MUSIC_PRICE_PER_SECOND));
+}
+
 /**
  * 按工具类型计价(多工具统一入口)。reserve / settle / estimate 全走这里,保证一致。
  * 决策来源:/plan-ceo-review A2 —— 每工具一个计价分支,不拷贝计价逻辑。
@@ -153,6 +165,13 @@ export function costFor(toolType: string, input: Record<string, unknown>): numbe
         typeof input.pricePerCharSnapshot === 'number' ? input.pricePerCharSnapshot : undefined;
       return estimateTtsCost(typeof input.text === 'string' ? input.text.length : 0, pricePerChar);
     }
+    case 'ai_music': {
+      // 有 durationSnapshot(worker 写入的实际秒)→ 按实际算;无(reserve/estimate 阶段或老 job)
+      // → 按慷慨上限。worker settle 时再 min(本值, reserved) 封顶,保只退不补。
+      const seconds =
+        typeof input.durationSnapshot === 'number' ? input.durationSnapshot : AI_MUSIC_RESERVE_SECONDS;
+      return estimateAiMusicCost(seconds);
+    }
     default:
       throw new Error(`未知工具类型,无法计价:${toolType}`);
   }
@@ -213,8 +232,9 @@ export const release = db.transaction((tenantId: string, jobId: string): void =>
   if (outstanding > 0) insert(tenantId, 'release', outstanding, jobId, '生成失败释放');
 });
 
-/** 某 job 已预扣的绝对额(reserve 是负数,这里返回正值)。 */
-function reservedFor(jobId: string): number {
+/** 某 job 已预扣的绝对额(reserve 是负数,这里返回正值)。
+ *  导出供 worker 做"结算封顶 reserved"(AI 音乐按实际秒结算,actual ≤ reserved → 只退不补)。 */
+export function reservedFor(jobId: string): number {
   const row = db
     .prepare(
       `SELECT COALESCE(SUM(amount),0) AS s FROM credit_ledger WHERE job_id=? AND kind='reserve'`,
