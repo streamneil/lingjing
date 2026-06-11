@@ -14,44 +14,29 @@
 
       <div class="set-card" style="animation-delay:.04s">
         <h3>机构品牌</h3><div class="h-desc">机构名称是平台开通时设定的官方身份（不可自改）；系统名称与 Logo 可由管理员自定义，用于侧边栏顶部与落地页展示。机构内的形象、音色、作品相互隔离。</div>
-        <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
-          <!-- 左:编辑 -->
-          <div style="flex:1;min-width:280px">
-            <!-- 机构名称:只读官方身份(任何人不可改) -->
-            <div class="set-row" style="border-top:none"><div class="info"><div class="k">机构名称</div><div class="v">机构官方身份，如需变更请联系您的平台对接人</div></div>
-              <div class="ctl"><div class="ro-name">
-                <span id="orgNameVal" class="ro-val">—</span>
-                <span class="ro-lock" aria-label="平台设定，不可修改"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>平台设定</span>
-              </div></div>
-            </div>
-            <!-- 系统名称:品牌显示名(管理员可改) -->
-            <div class="set-row"><div class="info"><div class="k">系统名称</div><div class="v">展示在侧边栏顶部、落地页与生成记录中</div></div>
-              <div class="ctl"><div style="display:flex;gap:8px;align-items:center">
-                <input id="brandNameInput" maxlength="30" style="padding:9px 13px;width:200px;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;color:var(--t1);font-size:14px;font-family:var(--f);outline:none" placeholder="系统显示名称">
-                <span id="brandNameCount" aria-live="polite" style="font-size:12px;color:var(--t4);min-width:38px">0/30</span>
-                <button class="btn btn-dark" id="brandNameSave" onclick="saveBrandName()">保存</button>
-              </div></div>
-            </div>
-            <div id="brandNameMsg" style="font-size:12px;color:var(--amber);min-height:16px;margin:-6px 0 4px 0"></div>
-            <div class="set-row"><div class="info"><div class="k">系统 Logo</div><div class="v">建议透明背景 PNG，≤5MB（PNG / JPEG / WEBP）</div></div>
-              <div class="ctl"><div style="display:flex;gap:10px;align-items:center">
-                <div id="logoPreview" style="width:48px;height:48px;border-radius:10px;background:var(--field,#121214);border:1px solid var(--line);background-size:contain;background-position:center;background-repeat:no-repeat"></div>
-                <input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="uploadLogo()">
-                <button class="btn btn-dark" id="logoUploadBtn" onclick="document.getElementById('logoFile').click()">更换 Logo</button>
-                <button id="logoResetBtn" onclick="resetLogo()" style="background:none;border:none;color:var(--t3);font-size:13px;font-family:var(--f);cursor:pointer;text-decoration:underline;text-underline-offset:3px">恢复默认</button>
-              </div></div>
-            </div>
-          </div>
-          <!-- 右:实时预览(侧边栏顶部片段) -->
-          <div style="width:200px">
-            <div style="font-size:12px;color:var(--t4);margin-bottom:8px">实时预览</div>
-            <div style="background:#0E0E0E;border:1px solid var(--line);border-radius:12px;padding:14px 12px;display:flex;align-items:center;gap:9px">
-              <div id="brandPrevMark" style="width:30px;height:30px;border-radius:7px;flex-shrink:0;background-size:contain;background-position:center;background-repeat:no-repeat;display:flex;align-items:center;justify-content:center">
-                <svg viewBox="0 0 100 100" fill="none" style="width:100%;height:100%"><circle cx="37" cy="50" r="29" stroke="#fff" stroke-width="5"/><circle cx="63" cy="50" r="29" stroke="#fff" stroke-width="5"/><path d="M50 24.08 A29 29 0 0 1 50 75.92 A29 29 0 0 1 50 24.08 Z" fill="#fff"/></svg>
-              </div>
-              <span id="brandPrevName" style="font-size:14px;font-weight:600;color:#F5F5F5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Lingjing</span>
-            </div>
-          </div>
+        <!-- 机构名称:只读官方身份(任何人不可改) -->
+        <div class="set-row" style="border-top:none"><div class="info"><div class="k">机构名称</div><div class="v">机构官方身份，如需变更请联系您的平台对接人</div></div>
+          <div class="ctl"><div class="ro-name">
+            <span id="orgNameVal" class="ro-val">—</span>
+            <span class="ro-lock" aria-label="平台设定，不可修改"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>平台设定</span>
+          </div></div>
+        </div>
+        <!-- 系统名称:品牌显示名(管理员可改;保存后刷新即在侧边栏看到) -->
+        <div class="set-row"><div class="info"><div class="k">系统名称</div><div class="v">展示在侧边栏顶部、落地页与生成记录中。保存后刷新页面即生效</div></div>
+          <div class="ctl"><div style="display:flex;gap:8px;align-items:center">
+            <input id="brandNameInput" maxlength="30" style="padding:9px 13px;width:200px;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;color:var(--t1);font-size:14px;font-family:var(--f);outline:none" placeholder="系统显示名称">
+            <span id="brandNameCount" aria-live="polite" style="font-size:12px;color:var(--t4);min-width:38px">0/30</span>
+            <button class="btn btn-dark" id="brandNameSave" onclick="saveBrandName()">保存</button>
+          </div></div>
+        </div>
+        <div id="brandNameMsg" style="font-size:12px;color:var(--amber);min-height:16px;margin:-6px 0 4px 0"></div>
+        <div class="set-row"><div class="info"><div class="k">系统 Logo</div><div class="v">建议透明背景 PNG，≤5MB（PNG / JPEG / WEBP）。保存后刷新页面即生效</div></div>
+          <div class="ctl"><div style="display:flex;gap:10px;align-items:center">
+            <div id="logoPreview" style="width:48px;height:48px;border-radius:10px;background:var(--field,#121214);border:1px solid var(--line);background-size:contain;background-position:center;background-repeat:no-repeat"></div>
+            <input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="uploadLogo()">
+            <button class="btn btn-dark" id="logoUploadBtn" onclick="document.getElementById('logoFile').click()">更换 Logo</button>
+            <button id="logoResetBtn" onclick="resetLogo()" style="background:none;border:none;color:var(--t3);font-size:13px;font-family:var(--f);cursor:pointer;text-decoration:underline;text-underline-offset:3px">恢复默认</button>
+          </div></div>
         </div>
       </div>
 
@@ -95,17 +80,12 @@
   async function saveAiLabel(){ if(!guard()){document.getElementById('aiLabelSwitch').classList.toggle('on');return;} try{await put({aiLabelEnabled:document.getElementById('aiLabelSwitch').classList.contains('on')});}catch(e){window.LJToast(e.message,'err');} }
   async function saveLabelText(){ if(!guard())return; try{ await put({aiLabelText:document.getElementById('aiLabelText').value}); window.LJToast('✓ 已保存'); }catch(e){window.LJToast(e.message,'err');} }
   async function saveResolution(v){ if(!guard())return; try{ await put({defaultResolution:v}); window.LJToast('✓ 默认分辨率已设为 '+v); }catch(e){window.LJToast(e.message,'err');} }
-  // 系统名称:草稿实时预览(防抖)+ 计数。空值允许保存(后端回落机构名,不允许空品牌)。
-  let nameDebounce=null;
-  let orgNameFallback='Lingjing'; // 系统名留空时实时预览回落到机构名
+  // 系统名称:计数。空值允许保存(后端回落机构名,不允许空品牌)。保存后刷新即在侧边栏看到。
   function onBrandInput(){
-    const inp=document.getElementById('brandNameInput'), v=inp.value;
+    const v=document.getElementById('brandNameInput').value;
     document.getElementById('brandNameCount').textContent=v.length+'/30';
     document.getElementById('brandNameCount').style.color = v.length>=30 ? 'var(--amber)' : 'var(--t4)';
     document.getElementById('brandNameMsg').textContent = '';
-    // 草稿实时预览(防抖 200ms):所改即所得;留空回落机构名
-    clearTimeout(nameDebounce);
-    nameDebounce=setTimeout(()=>{ document.getElementById('brandPrevName').textContent = v.trim() || orgNameFallback; }, 200);
   }
   async function saveBrandName(){
     if(!guard())return;
@@ -113,11 +93,10 @@
     const btn=document.getElementById('brandNameSave'); btn.disabled=true;
     try{ const d=await put({brandName:v});
       // 后端清洗 + 空值回落机构名 → 回填真值
-      const clean = (d && typeof d.brandName==='string') ? d.brandName : (v || orgNameFallback);
+      const clean = (d && typeof d.brandName==='string') ? d.brandName : (v || (document.getElementById('orgNameVal').textContent||'').trim());
       document.getElementById('brandNameInput').value=clean;
-      document.getElementById('brandPrevName').textContent=clean;
       onBrandInput();
-      window.LJToast('✓ 系统名称已更新');
+      window.LJToast('✓ 系统名称已更新，刷新后侧边栏生效');
     }catch(e){ document.getElementById('brandNameMsg').style.color='var(--red)'; document.getElementById('brandNameMsg').textContent=e.message; }
     finally{ btn.disabled=false; }
   }
@@ -130,17 +109,15 @@
       const res=await fetch('/api/settings/logo',{method:'POST',body:fd,credentials:'same-origin'});
       const d=await res.json().catch(()=>({}));
       if(!res.ok) throw new Error(d.error||'上传失败');
-      window.LJToast('✓ Logo 已更新');
-      // 刷新预览(设置页 + 右侧实时预览;加时间戳破缓存)
+      window.LJToast('✓ Logo 已更新，刷新后侧边栏生效');
+      // 刷新设置页缩略图(加时间戳破缓存);侧边栏 Logo 下次进页/刷新时由 shell.js 更新
       const me=await LJ.me();
       const url='/api/org-logo/'+me.tenantId+'?t='+Date.now();
       document.getElementById('logoPreview').style.backgroundImage='url('+url+')';
-      const pm=document.getElementById('brandPrevMark'); pm.innerHTML=''; pm.style.backgroundImage='url('+url+')';
     }catch(e){ window.LJToast(e.message,'err'); }
     finally{ document.getElementById('logoFile').value=''; btn.disabled=false; btn.textContent=old; }
   }
-  // 恢复默认 Logo:二次确认 → DELETE → 预览回默认 SVG。
-  const DEFAULT_MARK_SVG='<svg viewBox="0 0 100 100" fill="none" style="width:100%;height:100%"><circle cx="37" cy="50" r="29" stroke="#fff" stroke-width="5"/><circle cx="63" cy="50" r="29" stroke="#fff" stroke-width="5"/><path d="M50 24.08 A29 29 0 0 1 50 75.92 A29 29 0 0 1 50 24.08 Z" fill="#fff"/></svg>';
+  // 恢复默认 Logo:二次确认 → DELETE → 设置页缩略图清空。
   async function resetLogo(){
     if(!guard())return;
     if(!(await window.LJConfirm({title:'恢复默认 Logo',body:'将清除当前机构 Logo，恢复为平台默认图标。确定吗？',confirmText:'恢复默认',danger:true})))return;
@@ -149,8 +126,7 @@
       const d=await res.json().catch(()=>({}));
       if(!res.ok) throw new Error(d.error||'恢复失败');
       document.getElementById('logoPreview').style.backgroundImage='';
-      const pm=document.getElementById('brandPrevMark'); pm.style.backgroundImage=''; pm.innerHTML=DEFAULT_MARK_SVG;
-      window.LJToast('✓ 已恢复默认品牌');
+      window.LJToast('✓ 已恢复默认品牌，刷新后侧边栏生效');
     }catch(e){ window.LJToast(e.message,'err'); }
   }
 
@@ -241,22 +217,19 @@
       const me=await LJ.me(); canEdit=me.role==='admin';
       const s=await LJ.get('/settings');
       // 机构名称(只读身份):纯展示值,无输入框,任何人不可改。
-      orgNameFallback = (s.orgName||'').trim() || 'Lingjing';
       document.getElementById('orgNameVal').textContent = (s.orgName||'').trim() || '—';
-      // 系统名称(可编辑)+ 计数 + 实时预览初始化(预填 brandName,回落机构名)
+      // 系统名称(可编辑)+ 计数初始化(预填 brandName)
       const brandInp=document.getElementById('brandNameInput');
       brandInp.value=s.brandName||'';
       brandInp.addEventListener('input', onBrandInput);
-      document.getElementById('brandPrevName').textContent = (s.brandName||'').trim() || orgNameFallback;
       onBrandInput();
       const sw=document.getElementById('aiLabelSwitch'); sw.classList.toggle('on',!!s.aiLabelEnabled);
       document.getElementById('aiLabelText').value = s.aiLabelText||'';
       document.querySelectorAll('#resSeg button').forEach(b=>b.classList.toggle('active', b.dataset.v===(s.defaultResolution||'720P')));
-      // Logo 预览(设置页缩略 + 右侧实时预览;公开读路径;无 logo 留默认)
+      // Logo 设置页缩略图(公开读路径;无 logo 留默认)
       if(s.orgLogoKey){
         const url='/api/org-logo/'+me.tenantId+'?t='+Date.now();
         document.getElementById('logoPreview').style.backgroundImage='url('+url+')';
-        const pm=document.getElementById('brandPrevMark'); pm.innerHTML=''; pm.style.backgroundImage='url('+url+')';
       }
       // 非 admin:品牌卡控件只读(机构名本就只读;系统名/Logo 控件置灰)
       if(!canEdit){
