@@ -27,11 +27,28 @@ export function getEmotion(key: string | undefined): EmotionDef | undefined {
   return key ? EMOTIONS[key] : undefined;
 }
 
-/** 合成情绪 + 音高 → 一条 instruction 文本(供 gateway 透传)。无情绪无音高 → 空串。 */
-export function buildInstruction(emotionKey?: string, pitch?: number): string {
+// ── 语速(T-TTS-EMOTION 同机制)──
+// Qwen-TTS 无精确倍速参数,语速经自然语言指令(instructions)控制,仅 instruct 模型生效。
+// 故语速做成档位 key(非倍速数值),'normal' = 不加指令(默认)。
+export const SPEEDS: Record<string, EmotionDef> = {
+  slow: { key: 'slow', label: '缓慢', instruction: '请用缓慢的语速朗读。' },
+  slower: { key: 'slower', label: '偏慢', instruction: '请把语速放慢一些。' },
+  normal: { key: 'normal', label: '中速', instruction: '' },
+  faster: { key: 'faster', label: '偏快', instruction: '请把语速加快一些。' },
+  fast: { key: 'fast', label: '快速', instruction: '请用较快的语速朗读。' },
+};
+
+export function getSpeed(key: string | undefined): EmotionDef | undefined {
+  return key ? SPEEDS[key] : undefined;
+}
+
+/** 合成情绪 + 语速 + 音高 → 一条 instruction 文本(供 gateway 透传)。全无 → 空串。 */
+export function buildInstruction(emotionKey?: string, pitch?: number, speedKey?: string): string {
   const parts: string[] = [];
   const emo = getEmotion(emotionKey);
   if (emo && emo.instruction) parts.push(emo.instruction);
+  const spd = getSpeed(speedKey);
+  if (spd && spd.instruction) parts.push(spd.instruction);
   if (typeof pitch === 'number' && pitch !== 0)
     parts.push(pitch > 0 ? '请把音调略微提高。' : '请把音调略微压低。');
   return parts.join('');

@@ -18,7 +18,7 @@ vi.mock('../src/gateway/cosyvoice.js', () => ({
   synthesizeSpeechHttp: vi.fn(),
 }));
 
-const { buildInstruction, getEmotion, EMOTIONS } = await import('../src/gateway/tts-models.js');
+const { buildInstruction, getEmotion, getSpeed, EMOTIONS, SPEEDS } = await import('../src/gateway/tts-models.js');
 const { createApp } = await import('../src/server.js');
 const { createTenant, createUser } = await import('../src/auth/index.js');
 const { grant } = await import('../src/credits/index.js');
@@ -55,6 +55,22 @@ describe('buildInstruction', () => {
   it('getEmotion 未知 → undefined', () => {
     expect(getEmotion('nope')).toBeUndefined();
     expect(getEmotion('cheerful')?.label).toBe('开朗');
+  });
+  it('语速 → 指令短语;normal/未知 → 不加', () => {
+    expect(buildInstruction(undefined, undefined, 'fast')).toContain('较快');
+    expect(buildInstruction(undefined, undefined, 'slow')).toContain('缓慢');
+    expect(buildInstruction(undefined, undefined, 'normal')).toBe('');
+    expect(buildInstruction(undefined, undefined, 'nope')).toBe('');
+  });
+  it('情绪 + 语速 + 音高 → 三段拼接', () => {
+    const s = buildInstruction('calm', 3, 'faster');
+    expect(s).toContain('沉稳');
+    expect(s).toContain('加快');
+    expect(s).toContain('提高');
+  });
+  it('getSpeed 已知/未知', () => {
+    expect(getSpeed('fast')?.label).toBe('快速');
+    expect(getSpeed('nope')).toBeUndefined();
   });
 });
 
@@ -99,13 +115,29 @@ describe('POST /api/jobs (tts) 情绪/音高', () => {
     const r = await client.post('/api/jobs', { type: 'tts', text: 'x', voiceRef: 'Cherry', pitch: 20 });
     expect(r.status).toBe(400);
   });
+
+  it('语速档位 → 202 + rate 入库;normal 不入库', async () => {
+    const r = await client.post('/api/jobs', { type: 'tts', text: '测试', voiceRef: 'Cherry', rate: 'fast' });
+    expect(r.status).toBe(202);
+    expect(JSON.parse(getJob(r.body.id)!.input_json).rate).toBe('fast');
+    const r2 = await client.post('/api/jobs', { type: 'tts', text: '测试', voiceRef: 'Cherry', rate: 'normal' });
+    expect(JSON.parse(getJob(r2.body.id)!.input_json).rate).toBeUndefined();
+  });
+
+  it('非法语速档位 → 400', async () => {
+    const r = await client.post('/api/jobs', { type: 'tts', text: 'x', voiceRef: 'Cherry', rate: '2x' });
+    expect(r.status).toBe(400);
+  });
 });
 
-describe('GET /api/tts-models emotions', () => {
-  it('吐情绪列表(只 key/label,不漏 instruction)', async () => {
+describe('GET /api/tts-models emotions + speeds', () => {
+  it('吐情绪 + 语速列表(只 key/label,不漏 instruction)', async () => {
     const m = await client.get('/api/tts-models');
     expect(m.body.emotions.length).toBe(Object.keys(EMOTIONS).length);
     expect(m.body.emotions[0]).toHaveProperty('label');
     expect(m.body.emotions[0]).not.toHaveProperty('instruction');
+    expect(m.body.speeds.length).toBe(Object.keys(SPEEDS).length);
+    expect(m.body.speeds[0]).toHaveProperty('label');
+    expect(m.body.speeds[0]).not.toHaveProperty('instruction');
   });
 });

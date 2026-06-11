@@ -61,7 +61,7 @@
   #ttsCfg .pop, #sheet-voices .pop { bottom:auto; top:calc(100% + 6px); min-width:auto; }
   /* 复制或设计菜单同向下;弹框选项较多时限高可滚 */
   #sheet-voices #pop-voiceNew { left:auto; right:0; }
-  #ttsCfg #emoOpts, #sheet-voices [id$="Opts"] { max-height:240px; overflow-y:auto; }
+  #ttsCfg #emoOpts, #ttsCfg #spdOpts, #sheet-voices [id$="Opts"] { max-height:240px; overflow-y:auto; }
   /* 标准记录卡:操作行 + 文本气泡展开(对齐 img2video 等)*/
   .card-acts { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
   .card-acts button { display:inline-flex; align-items:center; gap:5px; font-size:12.5px; color:var(--t2); background:var(--field); border:1px solid var(--line); border-radius:9px; padding:7px 13px; cursor:pointer; transition:.15s; }
@@ -73,6 +73,15 @@
   /* 展开按钮默认隐藏,仅当文本溢出 3 行时由 fitBubble() 显示(对齐其他模块) */
   .tx-toggle { display:none; font-size:12px; color:var(--blue); cursor:pointer; margin-top:4px; align-self:flex-start; }
   .tx-toggle.show { display:inline-block; }
+  /* 音频记录卡:把原生 <audio> 收进设计系统外壳(原生灰条不符暗色主题)*/
+  .aud { display:flex; align-items:center; gap:12px; margin-top:8px; padding:12px 14px; background:var(--field); border:1px solid var(--line); border-radius:12px; }
+  .aud-ic { flex-shrink:0; width:38px; height:38px; border-radius:10px; display:grid; place-items:center; color:#fff;
+            background:linear-gradient(135deg,var(--blue),#7c5cff); }
+  .aud-ic svg { width:20px; height:20px; }
+  .aud audio { flex:1; min-width:0; height:38px; }
+  /* 原生播放器在暗色下的轻量适配(Chromium 支持 color-scheme 反色控件) */
+  .aud audio { color-scheme:dark; }
+  .aud-empty { margin-top:8px; padding:14px; color:var(--t4); background:var(--field); border:1px solid var(--line); border-radius:12px; }
 </style>
 </head>
 <body data-page="tts" data-crumb="创作工具 > 文字转语音">
@@ -95,11 +104,16 @@
       <div class="ar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></div>
     </div>
 
-    <!-- 情绪 + 音高:全 Qwen-TTS,系统音色经 instruct 模型落地(无需选品质模型) -->
+    <!-- 情绪 + 语速 + 音高:全 Qwen-TTS,系统音色经 instruct 模型落地(无需选品质模型) -->
     <div class="cfg-label">情绪</div>
     <div class="pop-anchor">
       <div class="cpill" id="emoPill" onclick="togglePop('emo')"><span class="v" id="emoPillV">自动</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
       <div class="pop" id="pop-emo" style="min-width:auto;left:0;right:0"><div class="pop-label">情绪</div><div id="emoOpts"></div></div>
+    </div>
+    <div class="cfg-label">语速</div>
+    <div class="pop-anchor">
+      <div class="cpill" id="spdPill" onclick="togglePop('spd')"><span class="v" id="spdPillV">中速</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+      <div class="pop" id="pop-spd" style="min-width:auto;left:0;right:0"><div class="pop-label">语速</div><div id="spdOpts"></div></div>
     </div>
     <div class="cfg-label">音高</div>
     <div class="sld-row"><span class="lbl">低</span><input type="range" id="pitch" min="-12" max="12" step="1" value="0"><span class="val" id="pitchValR">0</span></div>
@@ -291,14 +305,19 @@
     box.querySelectorAll('.pop-opt[data-v]').forEach(el=>el.onclick=()=>{ onPick(el.dataset.v); closePops(); });
   }
 
-  // ── 情绪/音高(T-TTS-EMOTION)── 全 Qwen-TTS,系统按是否带情绪自动选 flash/instruct(无品质下拉)
-  let ttsEmotions=[], selEmo='auto';
+  // ── 情绪/语速/音高(T-TTS-EMOTION)── 全 Qwen-TTS,系统按是否带指令自动选 flash/instruct(无品质下拉)
+  let ttsEmotions=[], ttsSpeeds=[], selEmo='auto', selSpd='normal';
   async function loadModels(){
-    try{ const r=await LJ.get('/tts-models'); ttsEmotions=r.emotions||[]; refreshEmoOptions(); }catch(e){}
+    try{ const r=await LJ.get('/tts-models'); ttsEmotions=r.emotions||[]; ttsSpeeds=r.speeds||[]; refreshEmoOptions(); refreshSpdOptions(); }catch(e){}
   }
   function refreshEmoOptions(){
-    renderPopOpts('emoOpts', ttsEmotions.map(e=>({value:e.key,label:e.label})), selEmo, (v)=>{ selEmo=v; document.getElementById('emoPillV').textContent=(ttsEmotions.find(e=>e.key===v)||{}).label; });
+    // onPick 后必须重渲染:否则下拉里的「✓ 选中态」(.on)仍停在旧值,用户以为没选上(无法选中 bug)
+    renderPopOpts('emoOpts', ttsEmotions.map(e=>({value:e.key,label:e.label})), selEmo, (v)=>{ selEmo=v; refreshEmoOptions(); });
     document.getElementById('emoPillV').textContent=(ttsEmotions.find(e=>e.key===selEmo)||{label:'自动'}).label;
+  }
+  function refreshSpdOptions(){
+    renderPopOpts('spdOpts', ttsSpeeds.map(s=>({value:s.key,label:s.label})), selSpd, (v)=>{ selSpd=v; refreshSpdOptions(); });
+    document.getElementById('spdPillV').textContent=(ttsSpeeds.find(s=>s.key===selSpd)||{label:'中速'}).label;
   }
   document.getElementById('pitch').oninput=function(){ document.getElementById('pitchValR').textContent=this.value; };
 
@@ -436,7 +455,8 @@
     } else if(job.status==='done'){
       card.dataset.st='done';
       const url=(job.outputUrls||[])[0];
-      const player=url?`<audio src="${url}" controls preload="metadata" style="width:100%;margin-top:6px"></audio>`:'<div style="color:var(--t4);padding:14px">已生成</div>';
+      const wave='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>';
+      const player=url?`<div class="aud"><div class="aud-ic">${wave}</div><audio src="${url}" controls preload="metadata"></audio></div>`:'<div class="aud-empty">已生成</div>';
       card.innerHTML=head('var(--green)','led-ok','已完成',job.createdAt)+txtBubble(t)+player+cardActs(job,true);
     } else {
       card.dataset.st='failed';
@@ -479,7 +499,7 @@
     btn.disabled=true; const prev=btn.innerHTML; btn.textContent='提交中…';
     try{
       const pitchV=parseInt(document.getElementById('pitch').value,10);
-      const res=await LJ.createJob({ type:'tts', text, voiceRef:selectedVoice.id, emotion:selEmo!=='auto'?selEmo:undefined, pitch:pitchV!==0?pitchV:undefined });
+      const res=await LJ.createJob({ type:'tts', text, voiceRef:selectedVoice.id, emotion:selEmo!=='auto'?selEmo:undefined, rate:selSpd!=='normal'?selSpd:undefined, pitch:pitchV!==0?pitchV:undefined });
       renderCard({ id:res.id, status:'queued', progress:0, text });
       track(res.id, text);
       ta.value=''; cnt.textContent='0'; scheduleEstimate();
