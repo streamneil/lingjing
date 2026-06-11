@@ -169,10 +169,12 @@
       if (u.isCustomBranded) {
         const brand = document.querySelector('.sb-brand');
         if (brand) {
-          brand.title = u.tenantName;
+          // 侧边栏显示名优先「系统名称」brandName(管理员可改);回落机构名 tenantName。
+          const showName = u.brandName || u.tenantName;
+          brand.title = showName;
           const nm = brand.querySelector('.nm'), cjk = brand.querySelector('.cjk');
-          // 单名称模型:.nm 放租户名(textContent 防 XSS),隐藏双语 .cjk。
-          if (nm) nm.textContent = u.tenantName;
+          // 单名称模型:.nm 放显示名(textContent 防 XSS),隐藏双语 .cjk。
+          if (nm) nm.textContent = showName;
           if (cjk) cjk.style.display = 'none';
         }
       }

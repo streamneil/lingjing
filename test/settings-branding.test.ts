@@ -51,6 +51,10 @@ async function asUser(username: string) {
 function tenantName(id: string) {
   return (db.prepare(`SELECT name FROM tenant WHERE id=?`).get(id) as { name: string }).name;
 }
+function brandSetting(id: string): string | null {
+  const row = db.prepare(`SELECT value FROM tenant_setting WHERE tenant_id=? AND key='brand_name'`).get(id) as { value: string } | undefined;
+  return row?.value ?? null;
+}
 function latestAuditDetail(id: string) {
   const row = db
     .prepare(`SELECT detail FROM audit_log WHERE tenant_id=? AND action='update_settings' ORDER BY created_at DESC, rowid DESC LIMIT 1`)
@@ -58,82 +62,82 @@ function latestAuditDetail(id: string) {
   return row?.detail ? JSON.parse(row.detail) : null;
 }
 
-describe('机构名称可改(T1)', () => {
-  it('[回归 R1] orgName 不再 400 ORG_NAME_READONLY,且写生效 + 审计 diff', async () => {
+describe('系统名称可改、机构名称只读(T1)', () => {
+  it('brandName 写 tenant_setting.brand_name + 审计 diff;机构名 tenant.name 不变', async () => {
     const c = await asUser('brandadmin');
-    const r = await c.put('/api/settings', { orgName: '杭州融媒体中心' });
-    expect(r.status).toBe(200); // 旧实现这里是 400 ORG_NAME_READONLY
-    expect(tenantName(tenantId)).toBe('杭州融媒体中心');
-    const detail = latestAuditDetail(tenantId);
-    const nameDiff = detail.find((d: any) => d.field === 'name');
-    expect(nameDiff).toBeTruthy();
-    expect(nameDiff.new).toBe('杭州融媒体中心');
+    const before = tenantName(tenantId);
+    const r = await c.put('/api/settings', { brandName: '杭州融媒创作台' });
+    expect(r.status).toBe(200);
+    expect(brandSetting(tenantId)).toBe('杭州融媒创作台');
+    expect(tenantName(tenantId)).toBe(before); // 机构身份不动
+    const nameDiff = latestAuditDetail(tenantId).find((d: any) => d.field === 'brand_name');
+    expect(nameDiff?.new).toBe('杭州融媒创作台');
   });
 
-  it('名称未变 → 不写审计行(空改动无噪声)', async () => {
-    const c = await asUser('brandadmin');
-    await c.put('/api/settings', { orgName: '杭州融媒体中心' }); // 同值
-    const before = (db.prepare(`SELECT COUNT(*) AS n FROM audit_log WHERE tenant_id=? AND action='update_settings'`).get(tenantId) as { n: number }).n;
-    await c.put('/api/settings', { orgName: '杭州融媒体中心' });
-    const after = (db.prepare(`SELECT COUNT(*) AS n FROM audit_log WHERE tenant_id=? AND action='update_settings'`).get(tenantId) as { n: number }).n;
-    expect(after).toBe(before);
+  it('GET /settings 返回 brandName;未设过 → 回落机构名', async () => {
+    // 新建一个没设过 brand_name 的租户,brandName 应回落 tenant.name
+    const freshT = createTenant('未改名台').id;
+    createUser(freshT, 'freshadmin', 'pw123456', 'admin');
+    const c = await asUser('freshadmin');
+    const s = (await c.get('/api/settings')).body;
+    expect(s.brandName).toBe('未改名台'); // 回落机构名
+    expect(s.orgName).toBe('未改名台');
   });
 
-  it('空名称 → 400,不写库', async () => {
+  it('[回归] orgName 不再改写 tenant.name(机构身份租户侧不可改)', async () => {
     const c = await asUser('brandadmin');
-    const r = await c.put('/api/settings', { orgName: '   ' });
-    expect(r.status).toBe(400);
-    expect(tenantName(tenantId)).toBe('杭州融媒体中心'); // 未被清空
+    const before = tenantName(tenantId);
+    const r = await c.put('/api/settings', { orgName: '黑客改的名' });
+    expect(r.status).toBe(200); // 字段被忽略,非报错
+    expect(tenantName(tenantId)).toBe(before); // tenant.name 纹丝不动
   });
 
-  it('超长名称 → 截断到 30 字', async () => {
+  it('系统名留空 → 清 brand_name,回落机构名(不允许空品牌)', async () => {
     const c = await asUser('brandadmin');
-    const long = '中'.repeat(50);
-    await c.put('/api/settings', { orgName: long });
-    expect(tenantName(tenantId).length).toBe(30);
+    await c.put('/api/settings', { brandName: '先设个名' });
+    expect(brandSetting(tenantId)).toBe('先设个名');
+    await c.put('/api/settings', { brandName: '   ' }); // 空 → 清
+    expect(brandSetting(tenantId)).toBeNull();
+    expect((await c.get('/api/settings')).body.brandName).toBe(tenantName(tenantId)); // 回落机构名
+  });
+
+  it('超长系统名 → 截断到 30 字', async () => {
+    const c = await asUser('brandadmin');
+    await c.put('/api/settings', { brandName: '镜'.repeat(50) });
+    expect(brandSetting(tenantId)!.length).toBe(30);
   });
 
   it('XSS payload → 剥 <script>,渲染安全', async () => {
     const c = await asUser('brandadmin');
-    await c.put('/api/settings', { orgName: '<script>alert(1)</script>融媒' });
-    const name = tenantName(tenantId);
-    expect(name).not.toContain('<');
-    expect(name).not.toContain('>');
-    expect(name).toContain('融媒');
+    await c.put('/api/settings', { brandName: '<script>alert(1)</script>创作台' });
+    const v = brandSetting(tenantId)!;
+    expect(v).not.toContain('<');
+    expect(v).not.toContain('>');
+    expect(v).toContain('创作台');
   });
 
-  it('保留品牌常见符 & ( )', async () => {
-    const c = await asUser('brandadmin');
-    await c.put('/api/settings', { orgName: 'ACME & Co (媒体)' });
-    expect(tenantName(tenantId)).toBe('ACME & Co (媒体)');
-  });
-
-  it('delivery 仍只读(只删了 orgName 拦截,保留 delivery 拦截)', async () => {
+  it('delivery 仍只读', async () => {
     const c = await asUser('brandadmin');
     const r = await c.put('/api/settings', { delivery: 'private' });
     expect(r.status).toBe(400);
     expect(r.body.code).toBe('DELIVERY_READONLY');
   });
 
-  it('RBAC:creator 改名 → 403', async () => {
-    const c = await asUser('brandcreator');
-    const r = await c.put('/api/settings', { orgName: '黑客台' });
+  it('RBAC:creator 改系统名 → 403', async () => {
+    const r = await (await asUser('brandcreator')).put('/api/settings', { brandName: '黑客台' });
     expect(r.status).toBe(403);
   });
 
-  it('RBAC:viewer 改名 → 403', async () => {
-    const c = await asUser('brandviewer');
-    const r = await c.put('/api/settings', { orgName: '黑客台' });
+  it('RBAC:viewer 改系统名 → 403', async () => {
+    const r = await (await asUser('brandviewer')).put('/api/settings', { brandName: '黑客台' });
     expect(r.status).toBe(403);
   });
 
-  it('租户隔离:A 租户 admin 改名只动 A,不动 B', async () => {
-    const cB = await asUser('otheradmin');
-    await cB.put('/api/settings', { orgName: 'B 专属名' });
-    const cA = await asUser('brandadmin');
-    await cA.put('/api/settings', { orgName: 'A 专属名' });
-    expect(tenantName(tenantId)).toBe('A 专属名');
-    expect(tenantName(otherTenantId)).toBe('B 专属名');
+  it('租户隔离:A 改系统名只动 A,不动 B', async () => {
+    await (await asUser('otheradmin')).put('/api/settings', { brandName: 'B 系统名' });
+    await (await asUser('brandadmin')).put('/api/settings', { brandName: 'A 系统名' });
+    expect(brandSetting(tenantId)).toBe('A 系统名');
+    expect(brandSetting(otherTenantId)).toBe('B 系统名');
   });
 });
 
