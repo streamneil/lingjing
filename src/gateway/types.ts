@@ -99,17 +99,15 @@ export interface VideoGenT2VInput {
   billableSecondsSnapshot?: number; // 编辑:计费秒快照 = 输入 + 预计输出(贴厂商 in+out)
 }
 
-// ── 文转语音(TTS,cosyvoice)──
-// synthesizeSpeech 已是独立函数(WebSocket→MP3 Buffer);worker tts 分支直接调,不加网关接口。
+// ── 文转语音(TTS,全 Qwen-TTS HTTP)──
+// synthesizeSpeechHttp 独立函数(MultiModalConversation→MP3 Buffer);worker tts 分支直接调。
+// 无「品质」模型选择:系统按是否带情绪自动选 flash/instruct(见 worker.resolveVoice)。
 export interface TtsGenInput {
-  text: string; // 待配音文本(超 cosyvoice 单次上限按句分段)
-  voiceRef: string; // 音色:预置音色名 或 克隆音色 id(经 voices 校验)
-  rate?: number; // 语速 0.5-2,默认 1
-  volume?: number; // 音量 0-100,默认 50
-  model?: string; // 品质模型 key(TTS_MODELS;须与音色 transport 配套)。缺省按音色 kind 默认模型。
-  pricePerCharSnapshot?: number; // 提交时快照每字单价(reserve==settle);worker settle 读它。
-  emotion?: string; // 情绪 key(EMOTIONS;仅 supportsInstruction 模型有效);worker 转 instruction。
-  pitch?: number; // 音高 -12~+12(CosyVoice 原生;仅 supportsInstruction 模型有效)。
+  text: string; // 待配音文本(超 Qwen 单次上限按句分段)
+  voiceRef: string; // 音色:系统音色名 或 复刻/设计 voice id(经 voices 校验)
+  emotion?: string; // 情绪 key(EMOTIONS);worker 转 instructions(系统音色经 instruct 模型落地)。
+  pitch?: number; // 音高 -12~+12;折进 instructions(同上,仅系统音色 instruct 落地)。
+  pricePerCharSnapshot?: number; // 遗留:旧 job 可能带快照单价;credits.costFor 读它保 reserve==settle。
 }
 
 export interface SyncImageGateway {

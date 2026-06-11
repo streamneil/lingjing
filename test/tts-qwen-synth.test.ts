@@ -89,34 +89,35 @@ describe('synthesizeSpeechHttp:双解析', () => {
   });
 });
 
-describe('resolveVoice:transport 路由', () => {
-  it('预置(Qwen 音色)→ http + qwenTtsModel', () => {
-    const r = resolveVoice('Cherry', T);
-    expect(r.transport).toBe('http');
+describe('resolveVoice:全 Qwen http 路由(无 transport)', () => {
+  it('预置 + 无情绪 → qwenTtsModel(flash)', () => {
+    const r = resolveVoice('Cherry', T, false);
     expect(r.model).toBe(config.baichuan.qwenTtsModel);
     expect(r.voice).toBe('Cherry');
   });
 
-  it('克隆 → ws + cloneModel(用 provider_voice_id)', () => {
-    const id = insertVoice('clone', 'cosyvoice-v1-x-abc');
-    const r = resolveVoice(id, T);
-    expect(r.transport).toBe('ws');
-    expect(r.model).toBe(config.baichuan.cloneModel);
-    expect(r.voice).toBe('cosyvoice-v1-x-abc');
+  it('预置 + 带情绪 → qwenInstructModel(instruct)', () => {
+    const r = resolveVoice('Cherry', T, true);
+    expect(r.model).toBe(config.baichuan.qwenInstructModel);
   });
 
-  it('设计 → http + designModel(用 provider_voice_id)', () => {
+  it('克隆 → vcModel(用 provider_voice_id)', () => {
+    const id = insertVoice('clone', 'qwen-vc-x-abc');
+    const r = resolveVoice(id, T, true);
+    expect(r.model).toBe(config.baichuan.vcModel);
+    expect(r.voice).toBe('qwen-vc-x-abc');
+  });
+
+  it('设计 → designModel(用 provider_voice_id)', () => {
     const id = insertVoice('design', 'qwen-voice-xyz');
     const r = resolveVoice(id, T);
-    expect(r.transport).toBe('http');
     expect(r.model).toBe(config.baichuan.designModel);
     expect(r.voice).toBe('qwen-voice-xyz');
   });
 
-  it('provider_voice_id 空 → 回退预置(Qwen,http)', () => {
+  it('provider_voice_id 空 → 回退预置(Qwen flash)', () => {
     const id = insertVoice('design', null);
-    const r = resolveVoice(id, T);
-    expect(r.transport).toBe('http');
+    const r = resolveVoice(id, T, false);
     expect(r.model).toBe(config.baichuan.qwenTtsModel);
   });
 });

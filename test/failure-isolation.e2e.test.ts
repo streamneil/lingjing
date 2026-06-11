@@ -13,7 +13,7 @@ process.env.BAICHUAN_AVATAR_MODEL = 'test-model';
 
 // ── mock TTS:script 含 "BOOM" 的任务在 TTS 阶段抛错(模拟百炼链路某步崩),其它出假音频 ──
 vi.mock('../src/gateway/cosyvoice.js', () => ({
-  synthesizeSpeech: vi.fn(async (p: { text: string }) => {
+  synthesizeSpeechHttp: vi.fn(async (p: { text: string }) => {
     if (p.text.includes('BOOM')) throw new Error('mock 百炼崩溃');
     return Buffer.from('fake-audio');
   }),

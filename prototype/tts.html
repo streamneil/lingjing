@@ -59,9 +59,9 @@
   #ttsCfg .cpill.open .chev, #sheet-voices .cpill.open .chev { transform:rotate(180deg); }
   /* 面板/左栏的 popover 向下弹(app.css 默认 bottom:向上,是底部工具栏用的;此处筛选在顶部) */
   #ttsCfg .pop, #sheet-voices .pop { bottom:auto; top:calc(100% + 6px); min-width:auto; }
-  /* 复制或设计菜单同向下;品质模型选项较多时限高可滚 */
+  /* 复制或设计菜单同向下;弹框选项较多时限高可滚 */
   #sheet-voices #pop-voiceNew { left:auto; right:0; }
-  #ttsCfg #modelOpts, #sheet-voices [id$="Opts"] { max-height:240px; overflow-y:auto; }
+  #ttsCfg #emoOpts, #sheet-voices [id$="Opts"] { max-height:240px; overflow-y:auto; }
   /* 标准记录卡:操作行 + 文本气泡展开(对齐 img2video 等)*/
   .card-acts { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
   .card-acts button { display:inline-flex; align-items:center; gap:5px; font-size:12.5px; color:var(--t2); background:var(--field); border:1px solid var(--line); border-radius:9px; padding:7px 13px; cursor:pointer; transition:.15s; }
@@ -70,7 +70,9 @@
   .tx-wrap { flex:1; min-width:0; display:flex; flex-direction:column; }
   .tx.clamp { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
   .tx.clamp.open { -webkit-line-clamp:unset; }
-  .tx-toggle { font-size:12px; color:var(--blue); cursor:pointer; margin-top:4px; align-self:flex-start; }
+  /* 展开按钮默认隐藏,仅当文本溢出 3 行时由 fitBubble() 显示(对齐其他模块) */
+  .tx-toggle { display:none; font-size:12px; color:var(--blue); cursor:pointer; margin-top:4px; align-self:flex-start; }
+  .tx-toggle.show { display:inline-block; }
 </style>
 </head>
 <body data-page="tts" data-crumb="创作工具 > 文字转语音">
@@ -93,27 +95,14 @@
       <div class="ar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></div>
     </div>
 
-    <div class="cfg-label">品质</div>
+    <!-- 情绪 + 音高:全 Qwen-TTS,系统音色经 instruct 模型落地(无需选品质模型) -->
+    <div class="cfg-label">情绪</div>
     <div class="pop-anchor">
-      <div class="cpill" id="modelPill" onclick="togglePop('model')" title="不同模型音质与价格不同;须与所选音色配套"><span class="v" id="modelPillV">默认(随音色)</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
-      <div class="pop" id="pop-model" style="min-width:auto;left:0;right:0"><div class="pop-label">品质模型</div><div id="modelOpts"></div></div>
+      <div class="cpill" id="emoPill" onclick="togglePop('emo')"><span class="v" id="emoPillV">自动</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+      <div class="pop" id="pop-emo" style="min-width:auto;left:0;right:0"><div class="pop-label">情绪</div><div id="emoOpts"></div></div>
     </div>
-
-    <!-- 情绪 + 音高:仅所选品质模型支持指令时显示(默认隐藏,P4/P5 紧凑) -->
-    <div id="emoBlock" style="display:none">
-      <div class="cfg-label">情绪</div>
-      <div class="pop-anchor">
-        <div class="cpill" id="emoPill" onclick="togglePop('emo')"><span class="v" id="emoPillV">自动</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
-        <div class="pop" id="pop-emo" style="min-width:auto;left:0;right:0"><div class="pop-label">情绪</div><div id="emoOpts"></div></div>
-      </div>
-      <div class="cfg-label">音高 <span id="pitchVal" style="color:var(--t4);font-weight:400">0</span></div>
-      <div class="sld-row"><span class="lbl">音高</span><input type="range" id="pitch" min="-12" max="12" step="1" value="0"><span class="val" id="pitchValR">0</span></div>
-    </div>
-
-    <div class="cfg-label">语速</div>
-    <div class="sld-row"><span class="lbl">速度</span><input type="range" id="rate" min="0.5" max="2" step="0.1" value="1"><span class="val" id="rateVal">1.0×</span></div>
-    <div class="cfg-label">音量</div>
-    <div class="sld-row"><span class="lbl">音量</span><input type="range" id="volume" min="0" max="100" step="5" value="50"><span class="val" id="volVal">50</span></div>
+    <div class="cfg-label">音高</div>
+    <div class="sld-row"><span class="lbl">低</span><input type="range" id="pitch" min="-12" max="12" step="1" value="0"><span class="val" id="pitchValR">0</span></div>
 
     <div class="cfg-sp"></div>
     <div class="cbtn-wrap">
@@ -218,11 +207,6 @@
 
   function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
-  // 语速/音量
-  const rate=document.getElementById('rate'), vol=document.getElementById('volume');
-  rate.oninput=()=>document.getElementById('rateVal').textContent=parseFloat(rate.value).toFixed(1)+'×';
-  vol.oninput=()=>document.getElementById('volVal').textContent=vol.value;
-
   // ── 音色 sheet:音色库/我的声音 Tab + 语言/性别筛选 + 逐音色试听 ──
   const PLAY_SVG=window.LJAudioPreview.PLAY_SVG;
   let vsData={presets:[],clones:[]};   // /voices 原始数据
@@ -284,18 +268,11 @@
         +`<div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>${esc(v.name)}${hot}</div><div class="vc-d">${esc(desc)}</div></div>${play}</div>`;
     }).join('');
   }
-  // 音色传输:预置(Qwen)/设计→http,克隆→ws(与后端 voiceTransport 同口径;品质模型须配套)
-  function voiceTransportOf(id){
-    if((vsData.presets||[]).some(p=>p.id===id)) return 'http';
-    const c=(vsData.clones||[]).find(x=>x.id===id);
-    return c&&c.kind==='clone' ? 'ws' : 'http';
-  }
   window.pickVoiceObj=(v, silent)=>{
-    selectedVoice={id:v.id,name:v.name,desc:v.desc,transport:voiceTransportOf(v.id)};
+    selectedVoice={id:v.id,name:v.name,desc:v.desc};
     document.getElementById('voiceName').textContent=v.name;
     document.getElementById('voiceDesc').textContent=v.desc||'已选择';
     document.querySelectorAll('#vsheetBody .vcard').forEach(c=>c.classList.toggle('on', c.dataset.id===v.id));
-    refreshModelOptions();  // 品质按所选音色 transport 过滤
     if(!silent) closeVoices(); refreshBtn();
   };
   window.openVoices=openVoices; window.closeVoices=closeVoices; window.switchVTab=switchVTab; window.renderVoices=renderVoices;
@@ -314,37 +291,16 @@
     box.querySelectorAll('.pop-opt[data-v]').forEach(el=>el.onclick=()=>{ onPick(el.dataset.v); closePops(); });
   }
 
-  // ── 品质模型(T-TTS-QUALITY-MODEL)+ 情绪/音高(T-TTS-EMOTION)──
-  let ttsModels=[], ttsEmotions=[];   // [{key,label,transport,supportsInstruction}] / [{key,label}]
-  let selModel='', selEmo='auto';     // 当前品质模型 key('')/情绪 key
+  // ── 情绪/音高(T-TTS-EMOTION)── 全 Qwen-TTS,系统按是否带情绪自动选 flash/instruct(无品质下拉)
+  let ttsEmotions=[], selEmo='auto';
   async function loadModels(){
-    try{ const r=await LJ.get('/tts-models'); ttsModels=r.models||[]; ttsEmotions=r.emotions||[];
-      refreshModelOptions(); refreshEmoOptions();
-    }catch(e){}
-  }
-  function refreshModelOptions(){
-    const tp=selectedVoice?selectedVoice.transport:null;
-    const avail=ttsModels.filter(m=>!tp||m.transport===tp);
-    // 切音色后若旧选模型不再兼容,回落默认
-    if(selModel && !avail.some(m=>m.key===selModel)) selModel='';
-    const items=[{value:'',label:'默认(随音色)'}].concat(avail.map(m=>({value:m.key,label:m.label})));
-    renderPopOpts('modelOpts', items, selModel, (v)=>{ selModel=v; document.getElementById('modelPillV').textContent=(items.find(i=>i.value===v)||{}).label; onModelChange(); });
-    document.getElementById('modelPillV').textContent=(items.find(i=>i.value===selModel)||{label:'默认(随音色)'}).label;
-    updateEmotionVisible();
+    try{ const r=await LJ.get('/tts-models'); ttsEmotions=r.emotions||[]; refreshEmoOptions(); }catch(e){}
   }
   function refreshEmoOptions(){
     renderPopOpts('emoOpts', ttsEmotions.map(e=>({value:e.key,label:e.label})), selEmo, (v)=>{ selEmo=v; document.getElementById('emoPillV').textContent=(ttsEmotions.find(e=>e.key===v)||{}).label; });
     document.getElementById('emoPillV').textContent=(ttsEmotions.find(e=>e.key===selEmo)||{label:'自动'}).label;
   }
-  // 情绪/音高仅在所选品质模型支持指令时显示(P4/P5:不支持则整块隐藏,左栏更短)
-  function updateEmotionVisible(){
-    const def=ttsModels.find(m=>m.key===selModel);
-    const ok=!!(def&&def.supportsInstruction);
-    document.getElementById('emoBlock').style.display=ok?'':'none';
-    if(!ok){ selEmo='auto'; document.getElementById('pitch').value='0'; document.getElementById('pitchVal').textContent='0'; document.getElementById('pitchValR').textContent='0'; refreshEmoOptions(); }
-  }
-  document.getElementById('pitch').oninput=function(){ document.getElementById('pitchVal').textContent=this.value; document.getElementById('pitchValR').textContent=this.value; };
-  window.onModelChange=()=>{ updateEmotionVisible(); scheduleEstimate(); };
+  document.getElementById('pitch').oninput=function(){ document.getElementById('pitchValR').textContent=this.value; };
 
   // ── 声音设计弹窗(E7)──
   const DG_DIMS=['年轻女声','沉稳男声','温柔','活泼','磁性','播音腔','语速偏快','适合有声书'];
@@ -430,7 +386,7 @@
     clearTimeout(estTimer);
     estTimer=setTimeout(async()=>{
       if(!ta.value.trim()){ document.getElementById('estLabel').textContent='预估 — 点'; document.getElementById('estGem').textContent='—'; return; }
-      try{ const r=await LJ.post('/jobs/estimate',{type:'tts',text:ta.value,voiceRef:selectedVoice?selectedVoice.id:'',model:selModel||undefined}); document.getElementById('estLabel').textContent='预估 '+r.cost+' 点'; document.getElementById('estGem').textContent=r.cost; }catch(e){}
+      try{ const r=await LJ.post('/jobs/estimate',{type:'tts',text:ta.value,voiceRef:selectedVoice?selectedVoice.id:''}); document.getElementById('estLabel').textContent='预估 '+r.cost+' 点'; document.getElementById('estGem').textContent=r.cost; }catch(e){}
     },350);
   }
   function refreshBtn(){
@@ -487,6 +443,13 @@
       card.innerHTML=head('var(--red)','led-err','生成失败',job.createdAt)+txtBubble(t)+
         `<div class="fvideo err"><div class="err-in"><div class="ei">!</div><div class="lbl">${esc(job.error||'生成失败,请重试')}</div></div></div>`+cardActs(job,false);
     }
+    fitBubble(card);  // 文本超 3 行才显示「展开」按钮(对齐其他模块)
+  }
+  // 文本气泡:仅当 clamp 后内容溢出(scrollHeight>clientHeight)才亮出「展开」按钮
+  function fitBubble(card){
+    const tx=card.querySelector('.tx.clamp'); const tg=card.querySelector('.tx-toggle'); if(!tx||!tg) return;
+    if(tx.classList.contains('open')){ tg.classList.add('show'); return; } // 已展开:保留收起入口
+    tg.classList.toggle('show', tx.scrollHeight - tx.clientHeight > 1);
   }
   // 文本气泡展开/收起(与标准卡一致)
   window.toggleTx=(el)=>{ const tx=el.previousElementSibling; const open=tx.classList.toggle('open'); el.textContent=open?'收起':'展开'; };
@@ -516,7 +479,7 @@
     btn.disabled=true; const prev=btn.innerHTML; btn.textContent='提交中…';
     try{
       const pitchV=parseInt(document.getElementById('pitch').value,10);
-      const res=await LJ.createJob({ type:'tts', text, voiceRef:selectedVoice.id, rate:parseFloat(rate.value), volume:parseInt(vol.value,10), model:selModel||undefined, emotion:selEmo!=='auto'?selEmo:undefined, pitch:pitchV!==0?pitchV:undefined });
+      const res=await LJ.createJob({ type:'tts', text, voiceRef:selectedVoice.id, emotion:selEmo!=='auto'?selEmo:undefined, pitch:pitchV!==0?pitchV:undefined });
       renderCard({ id:res.id, status:'queued', progress:0, text });
       track(res.id, text);
       ta.value=''; cnt.textContent='0'; scheduleEstimate();
