@@ -5,27 +5,272 @@
 <title>我的资产 · 灵镜</title>
 <link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
 <link rel="stylesheet" href="app.css">
+<style>
+  /* tabs(媒体/头像/声音) */
+  .at-tabs { display:flex; gap:26px; border-bottom:1px solid var(--line); margin-bottom:20px; }
+  .at-tab { padding:0 0 12px; font-size:15px; font-weight:600; color:var(--t3); cursor:pointer; position:relative; transition:.15s; background:none; border:none; font-family:var(--f); }
+  .at-tab:hover { color:var(--t2); }
+  .at-tab.active { color:var(--t1); }
+  .at-tab.active::after { content:''; position:absolute; left:0; right:0; bottom:-1px; height:2px; background:var(--blue); border-radius:2px; }
+
+  /* 筛选行:类型 chips + 右侧「来自」下拉 */
+  .at-bar { display:flex; align-items:center; gap:10px; margin-bottom:18px; flex-wrap:wrap; }
+  .at-pop-anchor { position:relative; margin-left:auto; }
+  #fromPill { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:150px; padding:9px 13px; background:var(--field); border:1px solid var(--line); border-radius:var(--r); font-size:13px; font-weight:600; color:var(--t2); cursor:pointer; transition:border-color .2s; }
+  #fromPill:hover { border-color:var(--line-hi); }
+  #fromPill.open { border-color:var(--blue); color:var(--t1); }
+  #fromPill .chev { width:13px; height:13px; color:var(--t4); transition:transform .2s; }
+  #fromPill.open .chev { transform:rotate(180deg); }
+  .at-pop { position:absolute; top:calc(100% + 6px); right:0; min-width:180px; background:var(--card); border:1px solid var(--line); border-radius:var(--r); box-shadow:var(--sh-pop,0 12px 32px rgba(0,0,0,.5)); padding:6px; display:none; z-index:30; }
+  .at-pop.show { display:block; }
+  .at-pop .opt { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:9px 11px; border-radius:9px; font-size:13px; color:var(--t2); cursor:pointer; }
+  .at-pop .opt:hover { background:var(--field); color:var(--t1); }
+  .at-pop .opt.on { color:var(--blue); }
+  .at-pop .opt .ck { width:15px; height:15px; opacity:0; }
+  .at-pop .opt.on .ck { opacity:1; }
+
+  /* 日期分组 */
+  .date-h { font-size:13px; font-weight:600; color:var(--t3); margin:22px 0 12px; font-family:var(--f-mono); }
+  .date-h:first-child { margin-top:0; }
+
+  /* 媒体网格(复用 works 取景框)+ 类型徽章 */
+  .a-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:15px; }
+  .acard { border-radius:var(--r-lg); overflow:hidden; background:var(--card); border:1px solid var(--line-soft); box-shadow:var(--sh-card); cursor:pointer; transition:.2s var(--ease-out); }
+  .acard:hover { transform:translateY(-4px); border-color:var(--line-hi); }
+  .a-thumb { aspect-ratio:1/1; position:relative; background:#0A0A0B; display:grid; place-items:center; overflow:hidden; }
+  .a-thumb video, .a-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+  .a-thumb .ov { position:absolute; inset:0; background:rgba(0,0,0,.18); opacity:0; display:grid; place-items:center; transition:.2s; }
+  .acard:hover .a-thumb .ov { opacity:1; }
+  .a-thumb .pb { width:42px; height:42px; border-radius:50%; background:rgba(255,255,255,.92); display:grid; place-items:center; }
+  .a-thumb .pb svg { width:16px; height:16px; color:#0A0A0B; margin-left:2px; }
+  /* 音频卡:渐变波形(无封面)*/
+  .a-aud { background:linear-gradient(135deg,#1b2540,#2a1d44); }
+  .a-aud .wave { width:46px; height:46px; border-radius:13px; display:grid; place-items:center; color:#fff; background:linear-gradient(135deg,var(--blue),#7c5cff); }
+  .a-aud .wave svg { width:24px; height:24px; }
+  /* 占位(生成中/失败/无成品)*/
+  .a-ph { display:flex; flex-direction:column; align-items:center; gap:7px; color:var(--t4); font-size:11px; }
+  .a-ph svg { width:26px; height:26px; }
+  /* 类型徽章(左上)+ 多图角标(右下)*/
+  .a-badge { position:absolute; top:8px; left:8px; font-size:10.5px; font-weight:600; color:#fff; background:rgba(0,0,0,.5); backdrop-filter:blur(4px); padding:3px 8px; border-radius:7px; }
+  .a-count { position:absolute; bottom:8px; right:9px; font-size:10px; color:#fff; background:rgba(0,0,0,.5); padding:2px 7px; border-radius:6px; }
+  .a-b { padding:11px 13px; }
+  .a-b h4 { font-size:13px; font-weight:600; color:var(--t1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .a-b .m { font-family:var(--f-mono); font-size:10px; color:var(--t4); margin-top:5px; }
+
+  /* 空态 */
+  .a-empty { text-align:center; color:var(--t4); padding:70px 0; }
+  .a-empty svg { width:42px; height:42px; margin-bottom:14px; opacity:.6; }
+  .a-empty .t { font-size:15px; color:var(--t2); margin-bottom:6px; }
+  .a-empty .link-btn { color:var(--blue); }
+  .a-loading { color:var(--t4); padding:50px 0; text-align:center; }
+</style>
 </head>
-<!-- 我的资产:跨工具产物聚合,本轮占位(NOT in scope,留待单独设计)。 -->
 <body data-page="assets" data-crumb="我的资产">
 <div class="shell" id="shell-mount">
- <div class="main-col">
-  <div class="studio" style="grid-template-columns:1fr">
-   <div class="feed">
-     <div class="tool-soon">
-       <div class="soon-pill">即将上线</div>
-       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>
-       <h3>我的资产 · 即将上线</h3>
-       <p>这里将聚合你在各创作工具里生成的影片、图片、音频,统一管理与复用。目前你的数字人作品在「AI 虚拟人」里查看。</p>
-       <a href="create.html" class="btn btn-white" style="margin-top:22px;padding:12px 22px">去 AI 虚拟人</a>
-     </div>
-   </div>
- </div>
- </div>
+  <div class="main-col">
+    <main class="page">
+      <div class="ph"><div><h1 class="t-h1">我的资产</h1><p class="desc">聚合你在各创作工具里生成的影片、图片、音频,以及数字人形象与音色,统一查看与复用。</p></div></div>
+
+      <div class="at-tabs">
+        <button class="at-tab active" data-tab="media" onclick="switchTab('media')">媒体</button>
+        <button class="at-tab" data-tab="avatar" onclick="switchTab('avatar')">头像</button>
+        <button class="at-tab" data-tab="voice" onclick="switchTab('voice')">声音</button>
+      </div>
+
+      <!-- 媒体 tab -->
+      <section id="tab-media">
+        <div class="at-bar">
+          <button class="chip active" data-kind="all" onclick="setKind(this,'all')">全部</button>
+          <button class="chip" data-kind="video" onclick="setKind(this,'video')">影片</button>
+          <button class="chip" data-kind="image" onclick="setKind(this,'image')">图片</button>
+          <button class="chip" data-kind="audio" onclick="setKind(this,'audio')">音频</button>
+          <div class="at-pop-anchor">
+            <div id="fromPill" onclick="toggleFrom()"><span id="fromV">来自:全部</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+            <div class="at-pop" id="fromPop"></div>
+          </div>
+        </div>
+        <div id="mediaBody"><div class="a-loading">加载中…</div></div>
+      </section>
+
+      <!-- 头像 tab -->
+      <section id="tab-avatar" style="display:none">
+        <div id="avatarBody"><div class="a-loading">加载中…</div></div>
+      </section>
+
+      <!-- 声音 tab -->
+      <section id="tab-voice" style="display:none">
+        <div id="voiceBody"><div class="a-loading">加载中…</div></div>
+      </section>
+    </main>
+  </div>
 </div>
+
 <script src="shell.js"></script>
 <script src="tools.js"></script>
 <script src="api.js"></script>
-<script>if(window.LJ) LJ.me().catch(()=>{});</script>
+<script>
+  function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function fmtDate(ts){ const d=new Date(ts); const p=n=>String(n).padStart(2,'0'); return `${p(d.getMonth()+1)}-${p(d.getDate())}, ${d.getFullYear()}`; }
+  function fmtTime(ts){ const d=new Date(ts); const p=n=>String(n).padStart(2,'0'); return `${p(d.getHours())}:${p(d.getMinutes())}`; }
+  const PLAY = (window.LJAudioPreview && LJAudioPreview.PLAY_SVG) || '▶';
+
+  // 工具类型 → 中文标签(「来自」下拉 + 卡片来源)
+  const TYPE_LABEL = { video:'数字人视频', video_t2v:'文字转影片', video_i2v:'图片转影片', video_edit:'影片编辑', ai_image:'AI 图片', tts:'文字转语音', ai_music:'AI 音乐' };
+  const KIND_BADGE = { video:'影片', image:'图片', audio:'音频' };
+
+  // ── tab 切换 ──
+  let loaded = { media:false, avatar:false, voice:false };
+  function switchTab(t){
+    document.querySelectorAll('.at-tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===t));
+    ['media','avatar','voice'].forEach(x=>{ document.getElementById('tab-'+x).style.display = x===t?'':'none'; });
+    if(window.LJAudioPreview) LJAudioPreview.stop();
+    closeFrom();
+    if(!loaded[t]){ loaded[t]=true; if(t==='media') loadMedia(); else if(t==='avatar') loadAvatars(); else loadVoices(); }
+  }
+  window.switchTab = switchTab;
+
+  // ── 媒体:聚合 GET /jobs(全工具产物)──
+  let allJobs = [], curKind = 'all', curFrom = 'all';
+  async function loadMedia(){
+    const body = document.getElementById('mediaBody');
+    try{
+      const jobs = await LJ.listJobs();
+      // 只聚合有产物或在生成中的(失败也展示,让用户看到全量)
+      allJobs = (jobs||[]).filter(j=>['video','video_t2v','video_i2v','video_edit','ai_image','tts','ai_music'].includes(j.type));
+      buildFromPop();
+      renderMedia();
+    }catch(e){ body.innerHTML = `<div class="a-empty"><div class="t">加载失败</div><div>${esc(e.message||'请稍后重试')}</div></div>`; }
+  }
+  function buildFromPop(){
+    const types = [...new Set(allJobs.map(j=>j.type))];
+    const items = [{v:'all',label:'全部'}].concat(types.map(t=>({v:t,label:TYPE_LABEL[t]||t})));
+    const pop = document.getElementById('fromPop');
+    pop.innerHTML = items.map(it=>`<div class="opt${it.v===curFrom?' on':''}" data-v="${it.v}"><span>${esc(it.label)}</span><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg></div>`).join('');
+    pop.querySelectorAll('.opt').forEach(el=>el.onclick=()=>{ curFrom=el.dataset.v; document.getElementById('fromV').textContent='来自:'+(items.find(i=>i.v===curFrom)||{label:'全部'}).label; buildFromPop(); closeFrom(); renderMedia(); });
+  }
+  function setKind(btn, k){ document.querySelectorAll('#tab-media .chip').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); curKind=k; renderMedia(); }
+  window.setKind = setKind;
+
+  // 「来自」下拉(document 外部点击关闭,复用 tts 修复;不用遮罩)
+  let fromHandler = null;
+  function toggleFrom(){
+    const pop = document.getElementById('fromPop'), pill = document.getElementById('fromPill');
+    if(pop.classList.contains('show')){ closeFrom(); return; }
+    pop.classList.add('show'); pill.classList.add('open');
+    setTimeout(()=>{ fromHandler=(e)=>{ if(!e.target.closest('#fromPop')&&!e.target.closest('#fromPill')) closeFrom(); }; document.addEventListener('mousedown', fromHandler, true); },0);
+  }
+  function closeFrom(){ const pop=document.getElementById('fromPop'); if(pop){ pop.classList.remove('show'); document.getElementById('fromPill').classList.remove('open'); } if(fromHandler){ document.removeEventListener('mousedown', fromHandler, true); fromHandler=null; } }
+  window.toggleFrom = toggleFrom;
+
+  function kindOf(job){
+    if(job.outputKind) return job.outputKind;
+    if(job.type==='ai_image') return 'image';
+    if(job.type==='tts'||job.type==='ai_music') return 'audio';
+    return 'video';
+  }
+  function renderMedia(){
+    const body = document.getElementById('mediaBody');
+    let list = allJobs.filter(j=>{
+      if(curFrom!=='all' && j.type!==curFrom) return false;
+      if(curKind!=='all' && kindOf(j)!==curKind) return false;
+      return true;
+    });
+    if(!list.length){ body.innerHTML = `<div class="a-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m9 11 2 2 4-4"/></svg><div class="t">还没有作品</div><div>去创作工具生成第一个作品吧 · <a href="explore.html" class="link-btn">去创作 →</a></div></div>`; return; }
+    // 日期分组(createdAt 当天)
+    list.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    const groups = {};
+    list.forEach(j=>{ const d=fmtDate(j.createdAt); (groups[d]=groups[d]||[]).push(j); });
+    body.innerHTML = Object.keys(groups).map(d=>
+      `<div class="date-h">${d}</div><div class="a-grid">${groups[d].map(acard).join('')}</div>`
+    ).join('');
+  }
+  function acard(job){
+    const kind = kindOf(job);
+    const badge = `<div class="a-badge">${KIND_BADGE[kind]||'作品'}</div>`;
+    const urls = job.outputUrls || (job.videoUrl?[job.videoUrl]:[]);
+    let thumb;
+    if(job.status==='done' && urls.length){
+      if(kind==='video'){
+        thumb = `<div class="a-thumb">${badge}<video src="${urls[0]}#t=0.1" preload="metadata" muted playsinline></video><div class="ov"><div class="pb"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div></div>`;
+      } else if(kind==='image'){
+        const more = urls.length>1?`<div class="a-count">+${urls.length-1}</div>`:'';
+        thumb = `<div class="a-thumb">${badge}<img src="${urls[0]}" alt="作品图片" loading="lazy">${more}</div>`;
+      } else { // audio
+        const wave='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>';
+        thumb = `<div class="a-thumb a-aud">${badge}<div class="wave">${wave}</div></div>`;
+      }
+    } else if(job.status==='running'||job.status==='queued'){
+      thumb = `<div class="a-thumb">${badge}<div class="a-ph"><div class="spinner" style="width:24px;height:24px;border:3px solid var(--line);border-top-color:var(--amber);border-radius:50%;animation:spin 1s linear infinite"></div>${job.status==='queued'?'排队中':'生成中'}${job.progress?' '+job.progress+'%':''}</div></div>`;
+    } else {
+      thumb = `<div class="a-thumb">${badge}<div class="a-ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 9v4M12 17h.01"/><path d="M10.3 4 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 4a2 2 0 0 0-3.4 0Z"/></svg>${job.status==='failed'?'生成失败':'暂无成品'}</div></div>`;
+    }
+    const title = (job.script||'').trim().slice(0,18) || (TYPE_LABEL[job.type]||'作品');
+    const from = TYPE_LABEL[job.type]||job.type;
+    return `<div class="acard" onclick="openAsset('${job.id}','${kind}')">${thumb}<div class="a-b"><h4 title="${esc(job.script||'')}">${esc(title)}${(job.script||'').length>18?'…':''}</h4><div class="m">${from} · ${fmtTime(job.createdAt)}</div></div></div>`;
+  }
+
+  // 卡点击:预览(懒签名)。video 浮层播 / image 大图 / audio 内联播。
+  window.openAsset = async (id, kind)=>{
+    if(window.LJAudioPreview) LJAudioPreview.stop();
+    let url;
+    try{ const j = await LJ.getJob(id); url = (j.outputUrls||[])[0] || j.videoUrl; }catch(e){}
+    if(!url){ window.LJToast && window.LJToast('成品暂不可用','err'); return; }
+    const ov = document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.86);display:grid;place-items:center;z-index:999;padding:20px';
+    ov.onclick=()=>{ ov.remove(); };
+    let inner;
+    if(kind==='video') inner = `<video src="${url}" controls autoplay style="max-width:90vw;max-height:85vh;border-radius:14px"></video>`;
+    else if(kind==='image') inner = `<img src="${url}" style="max-width:90vw;max-height:85vh;border-radius:14px;object-fit:contain">`;
+    else inner = `<div style="background:var(--card);border:1px solid var(--line);border-radius:16px;padding:26px;min-width:320px" onclick="event.stopPropagation()"><audio src="${url}" controls autoplay style="width:100%;color-scheme:dark"></audio></div>`;
+    ov.innerHTML = inner;
+    document.body.appendChild(ov);
+  };
+
+  // ── 头像:GET /avatars ──
+  async function loadAvatars(){
+    const body = document.getElementById('avatarBody');
+    try{
+      const r = await LJ.get('/avatars');
+      const presets = r.presets||[], custom = r.custom||[];
+      if(!presets.length && !custom.length){ body.innerHTML = avatarEmpty(); return; }
+      const av = (a, isPreset)=>{
+        const img = a.thumb ? `<div class="av-img" style="background-image:url('${a.thumb}')"></div>` : `<div class="av-img ph"></div>`;
+        const tag = isPreset ? `<span class="av-tag">预置</span>` : (a.isDefault?`<span class="av-tag">主形象</span>`:`<span class="av-tag" style="background:rgba(255,178,62,.22);color:#FFB23E">定制</span>`);
+        const status = (!isPreset && a.status && a.status!=='ready') ? `<div class="av-name" style="font-size:13px">${a.status==='processing'?'处理中…':'失败'}</div>` : `<div class="av-name">${esc(a.name||'')}</div>`;
+        return `<div class="av" onclick="location.href='avatars.html'"><div class="av-veil"></div>${img}${tag}${status}</div>`;
+      };
+      const customHtml = custom.length?`<div class="date-h">我的形象</div><div class="grid-av">${custom.map(a=>av(a,false)).join('')}</div>`:'';
+      const presetHtml = presets.length?`<div class="date-h">预置形象</div><div class="grid-av tight">${presets.map(a=>av(a,true)).join('')}</div>`:'';
+      body.innerHTML = customHtml + presetHtml;
+    }catch(e){ body.innerHTML = `<div class="a-empty"><div class="t">加载失败</div><div>${esc(e.message||'请稍后重试')}</div></div>`; }
+  }
+  function avatarEmpty(){ return `<div class="a-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><div class="t">还没有数字人形象</div><div>上传一张照片即可生成 · <a href="avatars.html" class="link-btn">去创建 →</a></div></div>`; }
+
+  // ── 声音:GET /voices ──
+  async function loadVoices(){
+    const body = document.getElementById('voiceBody');
+    try{
+      const r = await LJ.get('/voices');
+      const clones = r.clones||[], presets = r.presets||[];
+      if(!clones.length && !presets.length){ body.innerHTML = voiceEmpty(); return; }
+      const vc = (v, isClone)=>{
+        const kindLabel = v.kind==='design'?'设计音色':(isClone?'克隆音色':'预置音色');
+        const status = v.status==='processing'?' · 复刻中':(v.status==='failed'?' · 失败':'');
+        const canPlay = !!v.sample;
+        const play = `<button class="vc-p vc-play" data-src="${v.sample||''}" ${canPlay?'':'disabled style="opacity:.4;cursor:not-allowed"'} onclick="event.stopPropagation();togglePlay(this)" aria-label="试听">${PLAY}</button>`;
+        const tag = isClone?'':' <span class="hot">预置</span>';
+        const desc = isClone?(kindLabel+status):(`${v.gender||''}${v.desc?' · '+v.desc:''}`);
+        return `<div class="vcard"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>${esc(v.name)}${tag}</div><div class="vc-d">${esc(desc)}</div></div>${play}</div>`;
+      };
+      const cloneHtml = clones.length?`<div class="date-h">我的音色</div><div class="grid-av" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))">${clones.map(v=>vc(v,true)).join('')}</div>`:'';
+      const presetHtml = presets.length?`<div class="date-h">预置音色</div><div class="grid-av" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))">${presets.map(v=>vc(v,false)).join('')}</div>`:'';
+      body.innerHTML = cloneHtml + presetHtml;
+    }catch(e){ body.innerHTML = `<div class="a-empty"><div class="t">加载失败</div><div>${esc(e.message||'请稍后重试')}</div></div>`; }
+  }
+  function voiceEmpty(){ return `<div class="a-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg><div class="t">还没有音色</div><div>上传 5–30 秒样本即可克隆 · <a href="voices.html" class="link-btn">去克隆 →</a></div></div>`; }
+  window.togglePlay = (btn)=>{ if(window.LJAudioPreview) LJAudioPreview.play(btn.dataset.src, btn); };
+
+  LJ.me().then(()=>{ loadMedia(); loaded.media=true; }).catch(()=>{});
+</script>
 </body>
 </html>
