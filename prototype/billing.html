@@ -91,6 +91,10 @@
   .bl-amt{ font-family:var(--f-en); font-weight:700; text-align:right; }
   .bl-amt.pos{ color:var(--green); }
   .bl-amt.neg{ color:var(--t1); }
+  /* 「作品」可点链接:文案摘要,hover 下划线提示可预览 */
+  .bl-work{ color:var(--blue); text-decoration:none; cursor:pointer; border-radius:4px; }
+  .bl-work:hover{ text-decoration:underline; }
+  .bl-work:focus-visible{ outline:2px solid var(--blue); outline-offset:2px; }
   .bl-empty{ text-align:center; color:var(--t4); padding:54px 20px; }
   .bl-empty svg{ width:34px; height:34px; color:var(--t5); margin-bottom:12px; }
 </style>
@@ -154,7 +158,7 @@
         </div>
       </div>
       <table class="tbl">
-        <thead><tr><th>时间</th><th>类型</th><th>消费人</th><th>工具·场景</th><th>关联任务</th><th>说明</th><th style="text-align:right">点数</th></tr></thead>
+        <thead><tr><th>时间</th><th>类型</th><th>消费人</th><th>工具·场景</th><th>作品</th><th>说明</th><th style="text-align:right">点数</th></tr></thead>
         <tbody id="ledgerBody">
           <tr><td colspan="7" style="color:var(--t4);padding:32px;text-align:center">加载中…</td></tr>
         </tbody>
@@ -269,6 +273,41 @@
     document.getElementById('statRelease').innerHTML = fmtN(sum('release')) + ' <small>点</small>';
   }
 
+  // ── 「作品」列:UUID 死信息 → 看得懂的文案摘要 + 可点预览 ──
+  // 有产物(有 output_kind=有成品)→ 蓝色可点链接(点开预览浮层);
+  // grant 发放 / 生成中 / 失败 / 老 job 无产物 → 纯文本(文案摘要或工具名),无文案显「—」。
+  function workCell(l){
+    const title = l.taskTitle || (l.toolType ? toolLabel(l.toolType) : '');
+    if(l.job_id && l.outputKind && title){
+      // 可点:job_id + outputKind 双备齐(成品已生成)。aria/键盘可达。
+      return `<td class="strong"><a href="#" class="bl-work" role="button"
+        title="${esc(title)} · 点击预览"
+        onclick="openWork('${esc(l.job_id)}','${esc(l.outputKind)}',event)">${esc(title)}</a></td>`;
+    }
+    // 不可点:有文案显文案,无则「—」。
+    return `<td class="strong">${title?esc(title):'<span style="color:var(--t4)">—</span>'}</td>`;
+  }
+
+  // 点开作品预览浮层(复用 assets.html openAsset:懒签名 → video/image/audio 浮层,点遮罩关闭)。
+  window.openWork = async (id, kind, ev)=>{
+    if(ev){ ev.preventDefault(); ev.stopPropagation(); }
+    if(window.LJAudioPreview) LJAudioPreview.stop();
+    let url;
+    try{ const j = await LJ.getJob(id); url = (j.outputUrls||[])[0] || j.videoUrl; }catch(e){}
+    if(!url){ window.LJToast && window.LJToast('成品已失效或暂不可用','err'); return; }
+    const ov = document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.86);display:grid;place-items:center;z-index:999;padding:20px';
+    ov.onclick=()=>{ ov.remove(); document.removeEventListener('keydown', onEsc); };
+    const onEsc = e=>{ if(e.key==='Escape'){ ov.remove(); document.removeEventListener('keydown', onEsc); } };
+    document.addEventListener('keydown', onEsc);
+    let inner;
+    if(kind==='video') inner = `<video src="${url}" controls autoplay style="max-width:90vw;max-height:85vh;border-radius:14px"></video>`;
+    else if(kind==='image') inner = `<img src="${url}" style="max-width:90vw;max-height:85vh;border-radius:14px;object-fit:contain">`;
+    else inner = `<div style="background:var(--card);border:1px solid var(--line);border-radius:16px;padding:26px;min-width:320px" onclick="event.stopPropagation()"><audio src="${url}" controls autoplay style="width:100%;color-scheme:dark"></audio></div>`;
+    ov.innerHTML = inner;
+    document.body.appendChild(ov);
+  };
+
   // ── 明细表(可筛选:类型 + 消费人 + 工具)──
   function renderTable(){
     const body = document.getElementById('ledgerBody');
@@ -289,7 +328,7 @@
         <td>${KIND_BDG[l.kind]||esc(l.kind)}</td>
         <td>${l.userName?esc(l.userName):'<span style="color:var(--t4)">—</span>'}</td>
         <td>${l.toolType?esc(toolLabel(l.toolType)):'<span style="color:var(--t4)">—</span>'}</td>
-        <td class="strong">${l.job_id?('任务 '+esc(l.job_id).slice(0,8)):'—'}</td>
+        ${workCell(l)}
         <td style="color:var(--t3)">${esc(l.note||'')}</td>
         <td class="bl-amt ${pos?'pos':'neg'}">${pos?'+':''}${fmtN(l.amount)}</td>
       </tr>`;
