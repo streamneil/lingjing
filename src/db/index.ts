@@ -440,6 +440,8 @@ export interface AuditRow {
   ip: string | null;
   detail: string | null; // 字段级变更 JSON([{field,old,new}]);仅设置变更类操作有(T-SETTINGS-AUDIT-DIFF)
   created_at: number;
+  // 操作者名(listAudit() JOIN user/platform_admin 派生;非表列)。user_id 为空 / 用户已删 → 空。
+  actorName?: string | null; // user → display_name||username;platform_admin → username
 }
 
 export interface PlatformAdminRow {
