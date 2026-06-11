@@ -569,6 +569,18 @@ img { display: block; }
 .tbl .num { font-family: var(--f-en); }
 .tbl .neg { color: var(--amber); }
 
+/* 审计日志一句话文字流:谁 · 做了什么(对象)。每条一行,时间小字前导,IP 行尾弱化。 */
+.audit-feed { list-style: none; margin: 8px 0 0; padding: 0; background: var(--card); border: 1px solid var(--line-soft); border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--sh-card); }
+.audit-feed li { display: flex; align-items: baseline; gap: 10px; padding: 12px 18px; font-size: 13.5px; color: var(--t2); border-bottom: 1px solid var(--line-soft); }
+.audit-feed li:last-child { border-bottom: none; }
+.audit-feed li:hover { background: var(--card-hi); }
+.audit-feed .af-time { flex: none; font-family: var(--f-en); font-size: 12.5px; color: var(--t4); min-width: 86px; }
+.audit-feed .af-text { flex: 1; min-width: 0; }
+.audit-feed .af-who { color: var(--t1); font-weight: 600; }
+.audit-feed .af-obj { color: var(--t1); }
+.audit-feed .af-ip { flex: none; font-family: var(--f-en); font-size: 11.5px; color: var(--t4); }
+.audit-feed .af-empty { color: var(--t4); justify-content: center; padding: 20px; }
+
 /* —— 行内徽章 —— */
 .bdg { font-family: var(--f-mono); font-size: 10px; padding: 3px 8px; border-radius: 6px; letter-spacing: .03em; display: inline-flex; align-items: center; gap: 5px; }
 .bdg-ok { background: rgba(52,199,89,.12); color: var(--green); }

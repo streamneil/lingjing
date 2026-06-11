@@ -62,10 +62,7 @@
       <!-- T8:审计日志(仅 admin)-->
       <div class="set-card" id="auditCard" style="animation-delay:.2s;display:none">
         <h3>操作审计日志</h3><div class="h-desc">记录谁、何时、做了什么(登录、生成、成员变更、设置修改)。政企合规留存,可追溯。</div>
-        <table class="tbl" style="margin-top:8px">
-          <thead><tr><th>时间</th><th>操作</th><th>对象</th><th>来源 IP</th></tr></thead>
-          <tbody id="auditBody"><tr><td colspan="4" style="color:var(--t4);padding:20px">加载中…</td></tr></tbody>
-        </table>
+        <ul class="audit-feed" id="auditBody"><li class="af-empty">加载中…</li></ul>
       </div>
     </main>
   </div>
@@ -151,9 +148,37 @@
 
   function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
   function fmtT(ts){const d=new Date(ts);const p=n=>String(n).padStart(2,'0');return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;}
-  const ACTION_CN={login:'登录',create_job:'发起生成',grant_credit:'发放点数',member_add:'新增成员',
-    update_profile:'改个人信息',change_password:'改密码',update_settings:'改设置',
-    create_avatar:'创建形象',clone_voice:'克隆音色',upload_asset:'上传素材',delete_avatar:'删除形象',delete_voice:'删除音色',delete_asset:'删除素材'};
+  // 动作 → 一句话谓语。obj=true 表示其后接「对象」(target),false 则只显谓语(无空书名号)。
+  const ACTION_CN={
+    login:{v:'登录了系统'}, padmin_login:{v:'登录了平台后台'},
+    create_job:{v:'发起了一次生成'},
+    grant_credit:{v:'发放了点数',obj:true},
+    member_add:{v:'新增了成员',obj:true}, member_role:{v:'调整了成员角色',obj:true},
+    update_profile:{v:'修改了个人信息',obj:true}, change_password:{v:'修改了登录密码'},
+    update_settings:{v:'修改了系统设置',obj:true},
+    create_avatar:{v:'创建了形象',obj:true}, delete_avatar:{v:'删除了形象',obj:true},
+    clone_voice:{v:'克隆了音色',obj:true}, design_voice:{v:'设计了音色',obj:true}, delete_voice:{v:'删除了音色',obj:true},
+    upload_asset:{v:'上传了素材',obj:true}, delete_asset:{v:'删除了素材',obj:true},
+    upload_image_input:{v:'上传了参考图'},
+    image_model_create:{v:'新增了出图模型',obj:true}, image_model_update:{v:'修改了出图模型',obj:true},
+    image_model_delete:{v:'删除了出图模型',obj:true}, image_model_reorder:{v:'调整了出图模型排序'},
+    tenant_create:{v:'开通了机构',obj:true}, tenant_update:{v:'修改了机构信息',obj:true},
+    tenant_user_create:{v:'创建了机构成员',obj:true}, tenant_user_reset_pw:{v:'重置了成员密码',obj:true},
+  };
+  // 操作者名:后端 actorName(user→display_name||username;platform_admin→username)。
+  // platform_admin 加「平台·」前缀,租户侧一眼分清是平台方操作;空 → 未知用户。
+  function actorOf(a){
+    const name=a.actorName||'未知用户';
+    return a.actor_type==='platform_admin' ? '平台·'+name : name;
+  }
+  // 一句话:<谁> <谓语>「<对象>」。未知 action 回退原始串,不吞。
+  function auditSentence(a){
+    const who=`<span class="af-who">${esc(actorOf(a))}</span>`;
+    const act=ACTION_CN[a.action];
+    if(!act) return `${who} 执行了操作「${esc(a.action)}」${a.target?'(对象 '+esc(a.target)+')':''}`;
+    const obj=(act.obj && a.target) ? `「<span class="af-obj">${esc(a.target)}</span>」` : '';
+    return `${who} ${esc(act.v)}${obj}`;
+  }
 
   async function load(){
     try{
@@ -186,12 +211,11 @@
         try{
           const logs=await LJ.get('/audit');
           const body=document.getElementById('auditBody');
-          body.innerHTML = logs.length ? logs.slice(0,50).map(a=>`<tr>
-            <td class="num">${fmtT(a.created_at)}</td>
-            <td>${ACTION_CN[a.action]||esc(a.action)}</td>
-            <td class="strong">${esc(a.target||'—')}</td>
-            <td class="num" style="color:var(--t4)">${esc(a.ip||'—')}</td></tr>`).join('')
-            : '<tr><td colspan="4" style="color:var(--t4);padding:20px">暂无审计记录</td></tr>';
+          body.innerHTML = logs.length ? logs.slice(0,50).map(a=>`<li>
+            <span class="af-time">${fmtT(a.created_at)}</span>
+            <span class="af-text">${auditSentence(a)}</span>
+            ${a.ip?`<span class="af-ip">${esc(a.ip)}</span>`:''}</li>`).join('')
+            : '<li class="af-empty">暂无审计记录</li>';
         }catch(e){}
       }
     }catch(e){}

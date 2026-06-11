@@ -61,16 +61,32 @@ export function writePlatformAudit(
   writeAudit(targetTenant, padminId, action, target, ip, 'platform_admin');
 }
 
-/** 查租户审计(admin 可见)。 */
+// 操作者名 JOIN:user_id 语义随 actor_type 变(user.id 或 platform_admin.id),
+// 故两表都 LEFT JOIN,再 COALESCE 合成一列 actorName(与 credits.ledger() 的 userName 同套路)。
+// 经 JOIN 派生,不冗余存 audit_log;user_id 空 / 用户已删 → actorName 空(前端回退「未知用户」)。
+const ACTOR_NAME_SELECT = `COALESCE(uu.display_name, uu.username, pa.username) AS actorName`;
+const ACTOR_NAME_JOIN = `
+   LEFT JOIN user uu ON l.actor_type='user' AND l.user_id = uu.id
+   LEFT JOIN platform_admin pa ON l.actor_type='platform_admin' AND l.user_id = pa.id`;
+
+/** 查租户审计(admin 可见)。带操作者名(actorName)。 */
 export function listAudit(tenantId: string, limit = 200): AuditRow[] {
   return db
-    .prepare(`SELECT * FROM audit_log WHERE tenant_id=? ORDER BY created_at DESC LIMIT ?`)
+    .prepare(
+      `SELECT l.*, ${ACTOR_NAME_SELECT}
+         FROM audit_log l${ACTOR_NAME_JOIN}
+        WHERE l.tenant_id=? ORDER BY l.created_at DESC LIMIT ?`,
+    )
     .all(tenantId, limit) as AuditRow[];
 }
 
-/** 平台级审计:所有超管操作(跨所有目标租户 + 纯平台操作),供 /admin 追溯。 */
+/** 平台级审计:所有超管操作(跨所有目标租户 + 纯平台操作),供 /admin 追溯。带操作者名。 */
 export function listPlatformAudit(limit = 200): AuditRow[] {
   return db
-    .prepare(`SELECT * FROM audit_log WHERE actor_type='platform_admin' ORDER BY created_at DESC LIMIT ?`)
+    .prepare(
+      `SELECT l.*, ${ACTOR_NAME_SELECT}
+         FROM audit_log l${ACTOR_NAME_JOIN}
+        WHERE l.actor_type='platform_admin' ORDER BY l.created_at DESC LIMIT ?`,
+    )
     .all(limit) as AuditRow[];
 }
