@@ -27,6 +27,8 @@ import {
   estimateImageEditCost,
   estimateTtsCost,
   estimateVideoCost,
+  estimateAiMusicCost,
+  AI_MUSIC_RESERVE_SECONDS,
   clampImageCount,
   reserve,
   balance,
@@ -36,7 +38,7 @@ import { isUsableAvatar } from '../avatars/index.js';
 import { isUsableVoice } from '../voices/index.js';
 import { getEmotion, EMOTIONS, getSpeed, SPEEDS, getLanguage, LANGUAGES } from '../gateway/tts-models.js';
 import { db } from '../db/index.js';
-import type { VideoGenInput, ImageGenInput, TtsGenInput, VideoGenT2VInput } from '../gateway/types.js';
+import type { VideoGenInput, ImageGenInput, TtsGenInput, VideoGenT2VInput, AiMusicGenInput } from '../gateway/types.js';
 import { getImageModel, resolutionAllowed, isKnownModel, listEnabledModels, DEFAULT_IMAGE_MODEL, tierFromPixels } from '../gateway/image-models.js';
 import { getVideoModel, isKnownVideoModel, listVideoModels, klingModeToResolution, getI2VModel, listI2VModels, getEditModel, listEditModels, type VideoTask, type VideoModelDef } from '../gateway/video-models.js';
 import { probeVideoMeta, type VideoMeta } from '../pipeline/ai-label.js';
@@ -292,6 +294,51 @@ function buildTtsJob(body: Record<string, unknown>, tid: string): JobBuildResult
     type: 'tts',
     input: input as unknown as Record<string, unknown>,
     cost: estimateTtsCost(text.length),
+  };
+}
+
+// AI 音乐(Fun-Music)合法模型 + 文本上限(官方文档)。
+const AI_MUSIC_MODELS = new Set(['fun-music-preview', 'fun-music-v1']);
+/** 校验并构建 ai_music(AI 音乐)job 入参 + 计价。
+ *  mode=song:prompt 或 lyrics 至少一个(同传仅 lyrics 生效),可带 gender。
+ *  mode=instrumental:仅 prompt(无 lyrics/gender)。
+ *  计价按慷慨上限秒预估(reserve);worker 完成后按实际 usage.duration 结算并封顶 reserved(只退不补)。 */
+function buildAiMusicJob(body: Record<string, unknown>): JobBuildResult {
+  const { mode, prompt, lyrics, gender, model } = body as Partial<AiMusicGenInput>;
+  if (mode !== 'song' && mode !== 'instrumental')
+    return { ok: false, status: 400, error: '缺少 mode(song / instrumental)' };
+
+  const hasPrompt = typeof prompt === 'string' && prompt.trim().length > 0;
+  const hasLyrics = typeof lyrics === 'string' && lyrics.trim().length > 0;
+
+  if (mode === 'instrumental') {
+    if (hasLyrics) return { ok: false, status: 400, error: '纯音乐不支持歌词' };
+    if (gender !== undefined) return { ok: false, status: 400, error: '纯音乐不支持人声性别' };
+    if (!hasPrompt) return { ok: false, status: 400, error: '请输入音乐描述(提示词)' };
+  } else {
+    // song:prompt 或 lyrics 至少一个
+    if (!hasPrompt && !hasLyrics) return { ok: false, status: 400, error: '请输入提示词或歌词' };
+    if (gender !== undefined && gender !== 'male' && gender !== 'female')
+      return { ok: false, status: 400, error: '人声性别非法' };
+  }
+  // 文本长度(官方:prompt 1~2000;lyrics 中文 5~350 / 英文 5~2000 → 取宽松 5~2000)。
+  if (hasPrompt && prompt!.length > 2000) return { ok: false, status: 400, error: '提示词最多 2000 字' };
+  if (hasLyrics && (lyrics!.trim().length < 5 || lyrics!.length > 2000))
+    return { ok: false, status: 400, error: '歌词需 5~2000 字' };
+  if (model !== undefined && !AI_MUSIC_MODELS.has(model))
+    return { ok: false, status: 400, error: '音乐模型非法' };
+
+  const input: AiMusicGenInput = { mode };
+  if (hasPrompt) input.prompt = prompt!.trim();
+  if (hasLyrics) input.lyrics = lyrics!.trim();
+  if (mode === 'song' && (gender === 'male' || gender === 'female')) input.gender = gender;
+  if (model !== undefined) input.model = model;
+  return {
+    ok: true,
+    type: 'ai_music',
+    input: input as unknown as Record<string, unknown>,
+    // 预估按慷慨上限秒(reserve);worker 结算按实际秒并封顶 reserved。estimate≡build 同口径。
+    cost: estimateAiMusicCost(AI_MUSIC_RESERVE_SECONDS),
   };
 }
 
@@ -569,6 +616,7 @@ const JOB_BUILDERS: Record<string, (body: Record<string, unknown>, tid: string) 
     video_i2v: (body: Record<string, unknown>) => buildVideoI2VJob(body),
     video_edit: (body: Record<string, unknown>) => buildVideoEditJob(body),
     tts: buildTtsJob,
+    ai_music: (body: Record<string, unknown>) => buildAiMusicJob(body),
   });
 
 // 提交生成 — 仅 admin/creator(viewer 不能发起生成,验收第8条)
@@ -781,6 +829,10 @@ jobsRouter.post('/jobs/estimate', requireAuth, async (req: Request, res: Respons
     return res.json({
       cost: estimateTtsCost(typeof body.text === 'string' ? body.text.length : 0),
     });
+  }
+  if (type === 'ai_music') {
+    // 按慷慨上限秒预估(与 buildAiMusicJob 同口径);完成后按实际秒结算并封顶 reserved。
+    return res.json({ cost: estimateAiMusicCost(AI_MUSIC_RESERVE_SECONDS) });
   }
   if (typeof body.script !== 'string') return res.status(400).json({ error: '缺少 script' });
   return res.json({

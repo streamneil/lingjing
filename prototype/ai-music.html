@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 音乐 · 灵镜</title>
+<link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
+<link rel="stylesheet" href="app.css">
+<style>
+  /* 左栏紧凑(目标不超一屏),复用 TTS 设计语言 */
+  #musicCfg { gap:8px; padding:18px 20px; }
+  #musicCfg .script textarea { min-height:120px; }
+  .cfg-label { font-size:12px; color:var(--t3); margin:10px 0 5px; }
+  /* 歌曲/纯音乐 分段切换(复用 .ss-seg 视觉) */
+  .mode-seg { display:flex; gap:4px; padding:4px; background:var(--field); border:1px solid var(--line); border-radius:12px; }
+  .mode-seg button { flex:1; padding:9px 0; border:none; border-radius:9px; background:transparent; color:var(--t3); font-size:13.5px; font-weight:600; cursor:pointer; transition:.15s; font-family:var(--f); }
+  .mode-seg button.active { background:var(--card-hi); color:var(--t1); }
+  /* 提示词/歌词文本框底部按钮(复用 TTS 的 + 歌词 风格) */
+  .ta-acts { display:flex; gap:8px; margin-top:8px; }
+  .ta-acts button { display:inline-flex; align-items:center; gap:5px; font-size:12.5px; color:var(--t2); background:var(--field); border:1px solid var(--line); border-radius:9px; padding:7px 12px; cursor:pointer; transition:.15s; }
+  .ta-acts button:hover { border-color:var(--line-hi); color:var(--t1); }
+  .ta-acts button svg { width:14px; height:14px; }
+  /* cpill / pop(复用 TTS 左栏 popover 配方) */
+  #musicCfg .cpill { display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; padding:9px 13px; background:var(--field); border:1px solid var(--line); border-radius:var(--r); font-size:12.5px; font-weight:600; color:var(--t2); cursor:pointer; transition:border-color .2s; white-space:nowrap; overflow:hidden; }
+  #musicCfg .cpill:hover { border-color:var(--line-hi); }
+  #musicCfg .cpill.open { border-color:var(--blue); color:var(--t1); }
+  #musicCfg .cpill .v { overflow:hidden; text-overflow:ellipsis; }
+  #musicCfg .cpill .chev { width:13px; height:13px; flex-shrink:0; color:var(--t4); transition:transform .2s; }
+  #musicCfg .cpill.open .chev { transform:rotate(180deg); }
+  /* 面板内 popover 向下弹 + 抬到层叠遮罩之上(复用 TTS 修复:document 外部点击关闭) */
+  #musicCfg .pop { bottom:auto; top:calc(100% + 6px); min-width:auto; }
+  #musicCfg .pop.show { z-index:61; }
+  #musicCfg #genderOpts, #musicCfg #modelOpts { max-height:240px; overflow-y:auto; }
+  /* 风格 chips 横向滚动 */
+  .style-chips { display:flex; gap:7px; overflow-x:auto; padding-bottom:6px; scrollbar-width:thin; }
+  .style-chip { flex-shrink:0; font-size:12px; padding:6px 12px; border-radius:999px; background:var(--field); border:1px solid var(--line); color:var(--t3); cursor:pointer; transition:.15s; white-space:nowrap; }
+  .style-chip:hover { border-color:var(--line-hi); color:var(--t1); }
+  /* 2 列网格(人声性别 + 模型) */
+  #musicCfg .cfg-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px 12px; }
+  #musicCfg .cf-cell .cfg-label { margin-top:0; }
+
+  /* 记录卡:操作行 + 文本气泡展开 + 音频卡(全部复用 TTS 配方) */
+  .card-acts { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .card-acts button { display:inline-flex; align-items:center; gap:5px; font-size:12.5px; color:var(--t2); background:var(--field); border:1px solid var(--line); border-radius:9px; padding:7px 13px; cursor:pointer; transition:.15s; }
+  .card-acts button:hover { border-color:var(--line-hi); color:var(--t1); }
+  .card-acts button svg { width:14px; height:14px; }
+  .tx-wrap { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .tx-label { font-size:11.5px; color:var(--t4); margin-bottom:4px; }
+  .tx.clamp { display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; white-space:pre-wrap; }
+  .tx.clamp.open { -webkit-line-clamp:unset; }
+  .tx-toggle { display:none; font-size:12px; color:var(--blue); cursor:pointer; margin-top:4px; align-self:flex-start; }
+  .tx-toggle.show { display:inline-block; }
+  /* 音频卡(与 TTS 一致:渐变波形徽章 + 暗色播放器) */
+  .aud { display:flex; align-items:center; gap:12px; margin-top:8px; padding:12px 14px; background:var(--field); border:1px solid var(--line); border-radius:12px; }
+  .aud-ic { flex-shrink:0; width:38px; height:38px; border-radius:10px; display:grid; place-items:center; color:#fff; background:linear-gradient(135deg,var(--blue),#7c5cff); }
+  .aud-ic svg { width:20px; height:20px; }
+  .aud audio { flex:1; min-width:0; height:38px; color-scheme:dark; }
+  .aud-empty { margin-top:8px; padding:14px; color:var(--t4); background:var(--field); border:1px solid var(--line); border-radius:12px; }
+</style>
+</head>
+<body data-page="ai-music" data-crumb="创作工具 > AI 音乐">
+<div class="shell" id="shell-mount">
+ <div class="main-col">
+  <div class="studio">
+  <!-- 左:配置 -->
+  <div class="cfg" id="musicCfg">
+    <div class="cfg-h"><span class="dot"></span>AI 音乐生成器</div>
+
+    <!-- 歌曲 / 纯音乐 -->
+    <div class="mode-seg" role="tablist" aria-label="音乐类型">
+      <button class="active" data-mode="song" role="tab" aria-selected="true" onclick="switchMode('song')">歌曲</button>
+      <button data-mode="instrumental" role="tab" aria-selected="false" onclick="switchMode('instrumental')">纯音乐</button>
+    </div>
+
+    <div class="cfg-label">提示</div>
+    <div class="script">
+      <textarea id="prompt" maxlength="2000" placeholder="描述你想要生成的音乐…（风格、乐器、场景、节奏）"></textarea>
+      <div class="ta-acts">
+        <button id="lyricsBtn" onclick="toggleLyrics()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>歌词</button>
+      </div>
+      <div class="f"><span class="h" id="estLabel">预估 — 点</span><span class="c"><b id="cnt">0</b> / 2000</span></div>
+    </div>
+
+    <!-- 歌词区(默认隐藏,点「+ 歌词」展开;仅歌曲模式) -->
+    <div id="lyricsBlock" style="display:none">
+      <div class="cfg-label" style="display:flex;align-items:center;justify-content:space-between">歌词
+        <span onclick="toggleLyrics()" style="cursor:pointer;color:var(--t4)" aria-label="收起歌词"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M18 6 6 18M6 6l12 12"/></svg></span>
+      </div>
+      <div class="script"><textarea id="lyrics" maxlength="2000" placeholder="在此添加你的歌词（与提示词二选一，同填以歌词为准）。例如：&#10;[verse]&#10;清晨的阳光穿过窗帘&#10;[chorus]&#10;慢慢来不着急"></textarea></div>
+    </div>
+
+    <!-- 更多选项:人声性别 + 模型(纯音乐隐藏人声性别)+ 风格 chips -->
+    <div class="cfg-grid2">
+      <div class="cf-cell" id="genderCell">
+        <div class="cfg-label">人声性别</div>
+        <div class="pop-anchor">
+          <div class="cpill" id="genderPill" onclick="togglePop('gender')"><span class="v" id="genderPillV">女声</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+          <div class="pop" id="pop-gender" style="min-width:auto;left:0;right:0"><div class="pop-label">人声性别</div><div id="genderOpts"></div></div>
+        </div>
+      </div>
+      <div class="cf-cell">
+        <div class="cfg-label">模型</div>
+        <div class="pop-anchor">
+          <div class="cpill" id="modelPill" onclick="togglePop('model')"><span class="v" id="modelPillV">fun-music-v1</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+          <div class="pop" id="pop-model" style="min-width:auto;left:0;right:0"><div class="pop-label">模型</div><div id="modelOpts"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="cfg-label">风格（点击加入提示词）</div>
+    <div class="style-chips" id="styleChips"></div>
+
+    <div class="cfg-sp"></div>
+    <div class="cbtn-wrap">
+      <button class="cbtn" id="createBtn">
+        <span id="cbtnLabel">创建</span> <span class="gem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg> <b id="estGem">—</b></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 右:作品流(音频) -->
+  <div class="feed">
+    <div class="feed-tabs">
+      <button class="ftab active" data-st="all">全部</button>
+      <button class="ftab" data-st="running">生成中</button>
+      <button class="ftab" data-st="done">已完成</button>
+      <button class="ftab" data-st="failed">失败</button>
+    </div>
+    <div class="feed-list">
+      <div class="fitem feed-empty" id="feedEmpty">
+        <div class="feed-empty-in">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>
+          <div class="t">还没有音乐</div>
+          <div class="s">描述风格或写一段歌词,点「创建」就能生成第一首音乐。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+ </div>
+</div>
+<div class="pop-ov" id="popOv" onclick="closePops()"></div>
+
+<script src="shell.js"></script>
+<script src="tools.js"></script>
+<script src="api.js"></script>
+<script>
+  const pa = document.getElementById('prompt'), ly = document.getElementById('lyrics');
+  const cnt = document.getElementById('cnt'), btn = document.getElementById('createBtn');
+  const feedList = document.querySelector('.feed-list');
+  function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+  // ── 模式:歌曲 / 纯音乐 ──
+  let mode = 'song', lyricsOpen = false;
+  function switchMode(m){
+    mode = m;
+    document.querySelectorAll('.mode-seg button').forEach(b=>{ const on=b.dataset.mode===m; b.classList.toggle('active',on); b.setAttribute('aria-selected',on?'true':'false'); });
+    // 纯音乐:隐藏人声性别 + 歌词入口(API 不支持)
+    const instrumental = m==='instrumental';
+    document.getElementById('genderCell').style.display = instrumental ? 'none' : '';
+    document.getElementById('lyricsBtn').style.display = instrumental ? 'none' : '';
+    if(instrumental && lyricsOpen) toggleLyrics();
+    refreshBtn();
+  }
+  function toggleLyrics(){
+    lyricsOpen = !lyricsOpen;
+    document.getElementById('lyricsBlock').style.display = lyricsOpen ? '' : 'none';
+    if(lyricsOpen) setTimeout(()=>ly.focus(),40);
+    refreshBtn(); scheduleEstimate();
+  }
+  window.switchMode = switchMode; window.toggleLyrics = toggleLyrics;
+
+  // ── 风格 chips:点击拼接进提示词 ──
+  const STYLES = ['流行','摇滚','嘻哈/说唱','节奏布鲁斯','爵士','古典','电子','民谣','国风','轻音乐','120bpm','钢琴','吉他','治愈'];
+  document.getElementById('styleChips').innerHTML = STYLES.map(s=>`<span class="style-chip" onclick="addStyle('${s}')">${s}</span>`).join('');
+  window.addStyle = (s)=>{ pa.value = (pa.value ? pa.value.replace(/[，,。]?\s*$/,'，') : '') + s; cnt.textContent = pa.value.length; pa.focus(); refreshBtn(); scheduleEstimate(); };
+
+  // ── 通用 popover(复用 TTS:面板内不用遮罩,document 外部点击关闭)──
+  let outsideHandler = null;
+  function togglePop(which){
+    const pop = document.getElementById('pop-'+which); const isOpen = pop.classList.contains('show'); closePops();
+    if(!isOpen){
+      pop.classList.add('show');
+      const pill = document.getElementById(which+'Pill'); if(pill) pill.classList.add('open');
+      setTimeout(()=>{ outsideHandler = (e)=>{ if(!e.target.closest('.pop')&&!e.target.closest('.cpill')) closePops(); }; document.addEventListener('mousedown', outsideHandler, true); },0);
+    }
+  }
+  function closePops(){
+    document.querySelectorAll('.pop.show').forEach(p=>p.classList.remove('show'));
+    document.querySelectorAll('.cpill.open').forEach(p=>p.classList.remove('open'));
+    document.getElementById('popOv').classList.remove('show');
+    if(outsideHandler){ document.removeEventListener('mousedown', outsideHandler, true); outsideHandler = null; }
+  }
+  window.togglePop = togglePop; window.closePops = closePops;
+  function renderPopOpts(containerId, items, current, onPick){
+    const box = document.getElementById(containerId);
+    box.innerHTML = items.map(it=>`<div class="pop-opt${it.value===current?' on':''}" data-v="${esc(it.value)}"><span class="nm">${esc(it.label)}</span><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg></div>`).join('');
+    box.querySelectorAll('.pop-opt[data-v]').forEach(el=>el.onclick=()=>{ onPick(el.dataset.v); closePops(); });
+  }
+
+  // 人声性别 + 模型(选中态重渲染,避免「无法选中」)
+  let selGender = 'female', selModel = 'fun-music-v1';
+  const GENDERS = [{value:'female',label:'女声'},{value:'male',label:'男声'}];
+  const MODELS = [{value:'fun-music-v1',label:'fun-music-v1'},{value:'fun-music-preview',label:'fun-music-preview（预览）'}];
+  function refreshGender(){ renderPopOpts('genderOpts', GENDERS, selGender, (v)=>{ selGender=v; refreshGender(); }); document.getElementById('genderPillV').textContent = (GENDERS.find(g=>g.value===selGender)||{label:'女声'}).label; }
+  function refreshModel(){ renderPopOpts('modelOpts', MODELS, selModel, (v)=>{ selModel=v; refreshModel(); }); document.getElementById('modelPillV').textContent = (MODELS.find(m=>m.value===selModel)||{label:'fun-music-v1'}).label; }
+  refreshGender(); refreshModel();
+
+  // ── 预估 ──
+  let estTimer = null;
+  function scheduleEstimate(){
+    clearTimeout(estTimer);
+    estTimer = setTimeout(async ()=>{
+      try{ const r = await LJ.post('/jobs/estimate',{type:'ai_music', mode}); document.getElementById('estLabel').textContent='预估 '+r.cost+' 点'; document.getElementById('estGem').textContent=r.cost; }catch(e){}
+    },300);
+  }
+  function refreshBtn(){
+    const hasText = (pa.value.trim().length>0) || (lyricsOpen && ly.value.trim().length>0);
+    let ok = hasText, label = '创建';
+    if(!hasText){ ok=false; label = mode==='instrumental' ? '请输入音乐描述' : '请输入提示词或歌词'; }
+    btn.classList.toggle('ready', ok); btn.disabled = !ok;
+    document.getElementById('cbtnLabel').textContent = label;
+  }
+  pa.addEventListener('input', ()=>{ cnt.textContent = pa.value.length; refreshBtn(); scheduleEstimate(); });
+  ly.addEventListener('input', ()=>{ refreshBtn(); });
+
+  document.querySelectorAll('.ftab').forEach(t=>t.onclick=function(){
+    this.parentNode.querySelectorAll('.ftab').forEach(x=>x.classList.remove('active')); this.classList.add('active');
+    const k=this.dataset.st;
+    document.querySelectorAll('.feed-list .fitem[id^=job-]').forEach(it=>{ it.style.display=(k==='all'||(it.dataset.st||'')===k)?'':'none'; });
+  });
+
+  // ── 记录卡(复用 TTS 标准卡:head + 提示词气泡 + 音频/进度/错误 + 歌词可展开 + card-acts)──
+  const musicMeta = {};  // jobId → {prompt, lyrics}(供重新提示/展示)
+  function head(color,led,txt,createdAt){ return `<div class="fmeta"><b>AI 音乐</b><span class="ts">${(window.LJTimeAgo&&LJTimeAgo(createdAt))||'刚刚'}</span><span class="sp"></span><span class="st" style="color:${color}"><span class="led ${led}"></span>${txt}</span></div>`; }
+  function promptBubble(t){ return t?`<div class="fbubble"><div class="tx-wrap"><div class="tx-label">提示词</div><div class="tx clamp">${esc(t)}</div><span class="tx-toggle" onclick="toggleTx(this)">展开</span></div></div>`:''; }
+  function lyricsBlock(t){ return t?`<div class="fbubble" style="margin-top:8px"><div class="tx-wrap"><div class="tx-label">歌词</div><div class="tx clamp">${esc(t)}</div><span class="tx-toggle" onclick="toggleTx(this)">展开</span></div></div>`:''; }
+  function cardActs(job, ok){
+    const url=(job.outputUrls||[])[0];
+    const dl = ok&&url?`<button onclick="downloadAudio('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg>下载</button>`:'';
+    const del=`<button onclick="delJob('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除</button>`;
+    return `<div class="card-acts">${dl}${del}</div>`;
+  }
+  function renderCard(job){
+    document.getElementById('feedEmpty').style.display='none';
+    if(job.prompt!==undefined||job.lyrics!==undefined) musicMeta[job.id]={prompt:job.prompt||'', lyrics:job.lyrics||''};
+    const meta = musicMeta[job.id]||{}; const pt = meta.prompt||job.prompt||''; const lt = meta.lyrics||job.lyrics||'';
+    let card=document.getElementById('job-'+job.id); const existed=!!card;
+    if(!card){ card=document.createElement('div'); card.className='fitem'; card.id='job-'+job.id; feedList.insertBefore(card, feedList.firstChild); }
+    if((job.status==='queued'||job.status==='running') && existed && card.dataset.st==='running'){
+      const lbl=card.querySelector('.proc-in .lbl'); const bar=card.querySelector('.proc-bar i');
+      if(lbl) lbl.textContent=job.progress?('进度 '+job.progress+'%'):'已进入生成队列';
+      if(bar) bar.style.width=(job.progress||8)+'%';
+      return;
+    }
+    if(job.status==='queued'||job.status==='running'){
+      card.dataset.st='running';
+      card.innerHTML=head('var(--amber)','led-run',job.status==='queued'?'排队中':'生成中',job.createdAt)+promptBubble(pt)+
+        `<div class="fvideo proc"><div class="proc-in"><div class="spinner"></div><div class="lbl">${job.progress?('进度 '+job.progress+'%'):'已进入生成队列'}</div><div class="proc-bar"><i style="width:${job.progress||8}%"></i></div></div></div>`;
+    } else if(job.status==='done'){
+      card.dataset.st='done';
+      const url=(job.outputUrls||[])[0];
+      const wave='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>';
+      const player=url?`<div class="aud"><div class="aud-ic">${wave}</div><audio src="${url}" controls preload="metadata"></audio></div>`:'<div class="aud-empty">已生成</div>';
+      const resultLyrics = job.lyricsResult || lt;
+      card.innerHTML=head('var(--green)','led-ok','已完成',job.createdAt)+promptBubble(pt)+player+lyricsBlock(resultLyrics)+cardActs(job,true);
+    } else {
+      card.dataset.st='failed';
+      card.innerHTML=head('var(--red)','led-err','生成失败',job.createdAt)+promptBubble(pt)+
+        `<div class="fvideo err"><div class="err-in"><div class="ei">!</div><div class="lbl">${esc(job.error||'生成失败,请重试')}</div></div></div>`+cardActs(job,false);
+    }
+    card.querySelectorAll('.fitem .tx.clamp, .tx.clamp').forEach(()=>{}); fitBubbles(card);
+  }
+  // 文本气泡:仅当 clamp 后溢出才显示「展开」(逐个 .tx 判断)
+  function fitBubbles(card){
+    card.querySelectorAll('.tx.clamp').forEach(tx=>{
+      const tg = tx.parentElement.querySelector('.tx-toggle'); if(!tg) return;
+      if(tx.classList.contains('open')){ tg.classList.add('show'); return; }
+      tg.classList.toggle('show', tx.scrollHeight - tx.clientHeight > 1);
+    });
+  }
+  window.toggleTx=(el)=>{ const tx=el.previousElementSibling; const open=tx.classList.toggle('open'); el.textContent=open?'收起':'展开'; };
+  window.downloadAudio=async(id)=>{ await window.LJDownload(`/api/jobs/${id}/download/0`,`lingjing-music-${id}.mp3`); window.LJToast&&window.LJToast('✓ 已开始下载'); };
+  window.delJob=async(id)=>{ if(!(await window.LJConfirm({title:'删除作品',body:'确认删除这首音乐?删除后不可恢复。',confirmText:'删除',danger:true}))) return; try{ await LJ.del('/jobs/'+id); const c=document.getElementById('job-'+id); if(c) c.remove(); window.LJToast&&window.LJToast('已删除'); }catch(e){ window.LJToast&&window.LJToast(e.message||'删除失败','err'); } };
+
+  async function track(id, meta){ try{ await LJ.pollJob(id, (job)=>renderCard({...job, ...meta})); }catch(e){} }
+  async function loadHistory(){
+    let jobs=[]; try{ jobs=await LJ.listJobs(); }catch(e){ return; }
+    const mine=jobs.filter(j=>j.type==='ai_music');
+    if(!mine.length) return;
+    document.getElementById('feedEmpty').style.display='none';
+    for(const j of [...mine].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))){
+      try{ const d=await LJ.getJob(j.id); const inp=d.input||{};
+        renderCard({...d, prompt:inp.prompt||'', lyrics:inp.lyrics||'', lyricsResult:inp.lyricsResult||''});
+        if(d.status==='queued'||d.status==='running') track(d.id,{prompt:inp.prompt||'',lyrics:inp.lyrics||''});
+      }catch(e){}
+    }
+  }
+
+  btn.addEventListener('click', async ()=>{
+    if(btn.disabled) return;
+    const prompt = pa.value.trim(); const lyrics = (lyricsOpen && mode==='song') ? ly.value.trim() : '';
+    if(!prompt && !lyrics) return;
+    btn.disabled=true; const prev=btn.innerHTML; btn.textContent='提交中…';
+    try{
+      const body = { type:'ai_music', mode, model:selModel };
+      if(prompt) body.prompt = prompt;
+      if(lyrics) body.lyrics = lyrics;
+      if(mode==='song') body.gender = selGender;
+      const res = await LJ.createJob(body);
+      renderCard({ id:res.id, status:'queued', progress:0, prompt, lyrics });
+      track(res.id, { prompt, lyrics });
+      window.LJToast&&window.LJToast('✓ 已提交生成,可在右侧查看进度');
+    }catch(e){ window.LJToast&&window.LJToast('提交失败:'+e.message,'err'); }
+    finally{ btn.innerHTML=prev; refreshBtn(); }
+  });
+
+  LJ.me().then(()=>{ loadHistory(); }).catch(()=>{});
+  switchMode('song'); refreshBtn(); scheduleEstimate();
+</script>
+</body>
+</html>

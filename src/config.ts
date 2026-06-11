@@ -65,6 +65,9 @@ export const config = {
     vcModel: optional('BAICHUAN_VC_MODEL', 'qwen3-tts-vc-2026-01-22'),
     // 声音设计(VD):描述→音色。设计 + 用设计音色合成都用它。
     designModel: optional('BAICHUAN_DESIGN_MODEL', 'qwen3-tts-vd-2026-01-26'),
+    // AI 音乐(Fun-Music):描述/歌词→歌曲或纯音乐。同步返 output.audio.url(24h)。
+    // 邀测 + 仅北京地域,需在模型广场申请开通(未开通返 AccessDenied)。baseUrl 复用 DashScope。
+    funMusicModel: optional('BAICHUAN_FUN_MUSIC_MODEL', 'fun-music-v1'),
     // 任务回收模式:'poll'(私有化兜底,默认) | 'webhook'(托管可选)
     jobMode: optional('BAICHUAN_JOB_MODE', 'poll') as 'poll' | 'webhook',
     pollIntervalMs: Number(optional('POLL_INTERVAL_MS', '3000')),

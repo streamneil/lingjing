@@ -112,6 +112,19 @@ export interface TtsGenInput {
   pricePerCharSnapshot?: number; // 遗留:旧 job 可能带快照单价;credits.costFor 读它保 reserve==settle。
 }
 
+// ── AI 音乐(Fun-Music HTTP)──
+// generateMusic 独立函数(同步→audio.url + lyrics + duration);worker ai_music 分支直接调。
+// 模式:song(歌曲,有歌词/人声性别) | instrumental(纯音乐,仅 prompt)。
+export interface AiMusicGenInput {
+  mode: 'song' | 'instrumental';
+  prompt?: string; // 提示词(风格/场景);与 lyrics 二选一
+  lyrics?: string; // 歌词(仅 song);与 prompt 二选一,同传仅 lyrics 生效
+  gender?: 'male' | 'female'; // 人声性别(仅 song)
+  model?: string; // fun-music-preview / fun-music-v1
+  durationSnapshot?: number; // worker 写回的实际 usage.duration(秒);costFor 按它结算(封顶 reserved)。
+  lyricsResult?: string; // worker 写回的 extra_info.lyrics(前端记录卡展示)。
+}
+
 export interface SyncImageGateway {
   /** 同步图生图(S 形状,含图 content)。直返成品图 URL 数组(百炼侧,24h 过期 → worker 须拉进存储)。
    *  传入 AbortSignal 做硬超时(外部声音 P2:同步调无 poll 循环检 deadline,挂连接会冻 worker)。 */
