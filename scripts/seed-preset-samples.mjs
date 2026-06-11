@@ -6,7 +6,7 @@
 // 私有化部署:接好 MinIO + DASHSCOPE_API_KEY 后跑一次即可,预置音色便可在前端试听。
 
 import { listPresets, presetSampleKey } from '../src/voices/index.ts';
-import { synthesizeSpeech } from '../src/gateway/cosyvoice.ts';
+import { synthesizeSpeechHttp } from '../src/gateway/cosyvoice.ts';
 import { putObject, getObject, ensureBucket } from '../src/storage/index.ts';
 import { config } from '../src/config.ts';
 
@@ -39,12 +39,12 @@ async function main() {
       continue;
     }
     try {
-      const buf = await synthesizeSpeech({
+      const buf = await synthesizeSpeechHttp({
         text: SAMPLE_TEXT,
         voice: p.id,
-        model: config.baichuan.ttsModel, // 预置音色名须配套 ttsModel(v1)
+        model: config.baichuan.qwenTtsModel, // 预置 = Qwen 音色,走 HTTP 合成
       });
-      await putObject(key, buf, 'audio/mpeg');
+      await putObject(key, buf, 'audio/wav');
       console.log(`  ✓ ${p.id}(${p.name}):${buf.length} bytes → ${key}`);
       made++;
     } catch (e) {

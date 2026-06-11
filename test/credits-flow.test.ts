@@ -58,7 +58,7 @@ const T = 'flow-tenant';
 function submit(script: string) {
   // 模拟 API 层:入队 + reserve(API 真实路径在 jobs.ts)
   const cost = estimateCost(script.length);
-  const id = enqueueVideo({ avatarRef: 'preset-1', voiceRef: 'longjing', script }, T);
+  const id = enqueueVideo({ avatarRef: 'preset-1', voiceRef: 'Cherry', script }, T);
   reserve(T, id, cost);
   return { id, cost };
 }

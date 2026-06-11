@@ -20,20 +20,22 @@ export interface TtsModelDef {
 }
 
 export const TTS_MODELS: Record<string, TtsModelDef> = {
+  // —— CosyVoice(ws):克隆音色合成用 ——
   'cosyvoice-v1': {
-    key: 'cosyvoice-v1', modelId: 'cosyvoice-v1', label: '标准(免费额度)',
+    key: 'cosyvoice-v1', modelId: 'cosyvoice-v1', label: '标准',
     transport: 'ws', pricePerChar: 0.02, supportsInstruction: false,
   },
   'cosyvoice-v3.5-flash': {
-    key: 'cosyvoice-v3.5-flash', modelId: 'cosyvoice-v3.5-flash', label: '高保真(CosyVoice 3.5)',
+    key: 'cosyvoice-v3.5-flash', modelId: 'cosyvoice-v3.5-flash', label: '高保真(支持情绪)',
     transport: 'ws', pricePerChar: 0.05, supportsInstruction: true,
   },
+  // —— Qwen-TTS(http):预置 + 设计音色合成用 ——
   'qwen3-tts-flash': {
-    key: 'qwen3-tts-flash', modelId: 'qwen3-tts-flash', label: '千问3-TTS(自然)',
+    key: 'qwen3-tts-flash', modelId: 'qwen3-tts-flash', label: '自然(千问3-TTS)',
     transport: 'http', pricePerChar: 0.04, supportsInstruction: false,
   },
   'qwen3-tts-instruct-flash': {
-    key: 'qwen3-tts-instruct-flash', modelId: 'qwen3-tts-instruct-flash', label: '千问3-TTS 指令(情绪)',
+    key: 'qwen3-tts-instruct-flash', modelId: 'qwen3-tts-instruct-flash', label: '情绪(千问3-TTS 指令)',
     transport: 'http', pricePerChar: 0.06, supportsInstruction: true,
   },
 };
