@@ -379,7 +379,12 @@
 
   // ── T5:?from=jobId 回填 ──
   async function prefillFromQuery(){
-    const from=new URLSearchParams(location.search).get('from');
+    const qs=new URLSearchParams(location.search);
+    // 探索页「一键开始」带 ?template=news/policy/finance/field 进来 → 套用示范文案
+    // (复用既有 useTemplate;未知 key 静默忽略,不污染空白创作台)
+    const tpl=qs.get('template');
+    if(tpl && TEMPLATES[tpl]) useTemplate(tpl);
+    const from=qs.get('from');
     if(!from) return;
     try{
       const job=await LJ.getJob(from);

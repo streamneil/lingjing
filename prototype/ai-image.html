@@ -631,7 +631,13 @@
     finally{ btn.innerHTML=prev; refreshBtn(); }
   });
 
-  LJ.me().then(()=>{ loadModels(); loadHistory(); }).catch(()=>{});
+  // 探索页「演播室配图」带 ?sample=studio 进来 → 套用同款示范提示词(复用 useSample;未知 key 忽略)
+  const SAMPLE_PROMPTS={ studio:'新闻主播在现代化演播室,正面，专业演播灯光，4K 高清' };
+  function applySampleFromQuery(){
+    const k=new URLSearchParams(location.search).get('sample');
+    if(k && SAMPLE_PROMPTS[k]) useSample(SAMPLE_PROMPTS[k]);
+  }
+  LJ.me().then(()=>{ loadModels(); loadHistory().then(applySampleFromQuery); }).catch(()=>{});
   refreshBtn();
 </script>
 </body>

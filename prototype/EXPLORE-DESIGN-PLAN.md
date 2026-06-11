@@ -170,16 +170,32 @@ Synthesized from this review's findings. Each task derives from a specific findi
 |----------------|-------------|-----------|-------|
 | 探索页全页 | `~/.gstack/projects/prototype/designs/explore-page-20260611/explore-mockup.html` | 灵感发现首页：Hero + 案例展示墙 + 一键开始 + 工具网格 + 最近作品，全程 app.css v3 token | PNG 生成器不可用(OpenAI key 401)，改用真实 app.css 的 HTML 设计稿——对本项目保真度更高。落地时按 D1–D4 补状态/a11y/自适应/弹窗 |
 
+## Eng Review Findings (2026-06-11)
+
+落地实现评审,4 项发现全部修复:
+
+| # | Sev | 发现 | 修复 |
+|---|-----|------|------|
+| 1 | P1 | 预填契约只建一半:`?template=`/`?sample=`/`?style=` 无接收端,3 个一键开始卡落空(prior learning `ui-exposed-but-not-wired` 命中) | create.html `prefillFromQuery` 读 `?template=` 调 `useTemplate`;ai-image `applySampleFromQuery`;ai-music `applyStyleFromQuery`。复用既有填充函数 |
+| 2 | P1 | `__ljRole` 时序竞争:loadRecent 读 shell.js 异步设的全局,viewer 零作品可能被错诸创作引导 | explore.html 重构为单 `loadAll()`,角色取自本页 `LJ.me().role` |
+| 3 | P2 | `/jobs` 重复请求(loadHero + loadRecent 各拉一次) | `loadAll` 一次 `/jobs` 共享给 Hero 计数与最近作品 |
+| 4 | P2 | (outside voice)SHOWCASE「用此模板」CTA 落裸页无预填(同 `ui-exposed-but-not-wired`) | SHOWCASE 每条 prefill 改带真 `?template=`;宣传片走 img2video 标 `noPrefill` + 文案改「去创作」;`esc()` 补单引号转义 |
+
+P3 余项(列 TODO,本期未做):img2video.html 加 `?prefill` 接收端(宣传片暂裸跳);ai-image sample 预填等 `/jobs` 返回的轻微延迟;ai-music 预填在 `LJ.me()` guard 外。
+
+验证:4 文件 inline JS 全部解析通过;detect_changes LOW risk 零受影响流程;接收端 9/9 钩子在位。
+
 ## GSTACK REVIEW REPORT
 
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
-| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
-| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 0 | — | — |
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | CLEAR | HOLD_SCOPE (2026-06-10) |
+| Codex Review | `/codex review` | Independent 2nd opinion | 1 | issues_found | outside voice via Claude subagent (codex 运行时无输出,已 fallback) |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR (PLAN) | 4 issues, 0 critical gaps — 全部修复 |
 | Design Review | `/plan-design-review` | UI/UX gaps | 1 | CLEAR (FULL) | score: 3/10 → 9/10, 4 decisions |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
 
-- **VERDICT:** DESIGN REVIEW CLEARED (9/10) — 4 design decisions resolved (D1 角色自适应 / D2 全状态 / D3 a11y+触屏 / D4 弹窗+用此模板). Eng Review required before shipping.
+- **CROSS-MODEL:** Outside voice(Claude subagent)独立确认预填接收端全部就位,并新发现 SHOWCASE CTA 落裸页(P2)——已采纳修复。无 cross-model 冲突。
+- **VERDICT:** ENG + DESIGN + CEO CLEARED — 落地实现已修复全部 4 项发现,可 /ship。
 
 NO UNRESOLVED DECISIONS
