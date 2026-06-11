@@ -99,3 +99,15 @@
 
 ### T-WORKS-POLL:作品库轮询自动刷新 — ✅ 漏标补归档
 - 完成证据:works.html:210/214 有列表级自动轮询(schedulePoll,仅 queued/running 才轮、全终态停、离页 visibilitychange 暂停、回页立刷),复用 load() 全量刷新。
+
+### T-BRAND-LOGO-GC:孤儿 Logo 对象回收 — 📋 后续增强
+- What:改 logo / 恢复默认 / 重传时,删除存储里被替换的旧对象(`logos/<tenant>/<uuid>`)。
+- Why:目前只清 `org_logo_key` 不删 blob,每次重传/恢复漏一个对象,长期累积。
+- Depends on:`src/storage/index.ts` 加 `deleteObject`(minio + oss 两后端都要实现,现仅有 put/get)。
+- Context:租户品牌 MVP 接受孤儿对象(logo 5MB 封顶,成本极低)。见 settings.ts:130(重传已覆盖 key 不删旧)。
+
+### T-BRAND-SUBDOMAIN:落地页子域名识别租户 — 📋 后续增强
+- What:落地页支持 `acme.lingjing.com` 子域名识别租户并渲染其品牌(MVP 用路径式 `/t/:slug`)。
+- Why:子域名比 `/t/slug` 更像「租户自己的站」,品牌感更强,适合给政企客户做白标。
+- Depends on:泛域名证书(`*.lingjing.com`)、Caddy 动态签证/通配 host 路由、`tenant.slug` 唯一列(MVP 已加)。
+- Context:租户品牌自定义(Logo/名称)MVP 已落地路径式识别;子域名是同一识别逻辑换入口,后端 `GET /api/public-brand/:slug` 可复用,只需把 slug 来源从 path 改为 Host 头。见 prototype/TENANT-BRANDING-PLAN.md「缺口 3」。

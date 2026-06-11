@@ -164,12 +164,24 @@
       const acc = document.getElementById('lj-account');
       const menu = document.getElementById('lj-menu');
       const display = u.displayName || u.username;
-      // 机构 Logo:有则替换默认品牌图标(公开读路径,onerror 回退默认 SVG)。
+      // 机构品牌:已自定义(设过 logo 或改过名)→ 换侧边栏顶部名称 + Logo。
+      // isCustomBranded 由服务端判定(单一真相源),前端不字符串比 '我的机构'。
+      if (u.isCustomBranded) {
+        const brand = document.querySelector('.sb-brand');
+        if (brand) {
+          brand.title = u.tenantName;
+          const nm = brand.querySelector('.nm'), cjk = brand.querySelector('.cjk');
+          // 单名称模型:.nm 放租户名(textContent 防 XSS),隐藏双语 .cjk。
+          if (nm) nm.textContent = u.tenantName;
+          if (cjk) cjk.style.display = 'none';
+        }
+      }
+      // 机构 Logo:有则替换默认品牌图标(公开读路径,?v= 破缓存,onerror 回退默认 SVG)。
       if (u.orgLogoKey) {
         const mark = document.getElementById('lj-brand-mark');
         if (mark) {
           const img = new Image();
-          img.src = '/api/org-logo/' + u.tenantId;
+          img.src = '/api/org-logo/' + u.tenantId + '?v=' + encodeURIComponent(u.logoVer || '');
           img.alt = u.tenantName || '机构';
           img.style.cssText = 'width:100%;height:100%;object-fit:contain;border-radius:7px';
           img.onload = () => { mark.innerHTML = ''; mark.appendChild(img); };

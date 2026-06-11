@@ -13,9 +13,38 @@
       <div class="ph"><div><h1 class="t-h1">系统设置</h1><p class="desc">机构信息、合规标识与默认创作参数。底层模型与算力由平台统一调度，您无需关心。</p></div></div>
 
       <div class="set-card" style="animation-delay:.04s">
-        <h3>机构信息</h3><div class="h-desc">您的账号所属一个机构（工作空间）。机构内的形象、音色、作品相互隔离。</div>
-        <div class="set-row"><div class="info"><div class="k">机构名称</div><div class="v">开通账号时由平台设定，展示在系统各处与生成记录中（如需变更请联系平台）</div></div><div class="ctl"><span class="strong" id="orgName" style="font-size:15px"></span></div></div>
-        <div class="set-row"><div class="info"><div class="k">机构 Logo</div><div class="v">显示在侧栏品牌区。建议透明背景 PNG，≤5MB（PNG / JPEG / WEBP）</div></div><div class="ctl"><div style="display:flex;gap:10px;align-items:center"><div id="logoPreview" style="width:40px;height:40px;border-radius:9px;background:var(--field,#121214);border:1px solid var(--line);background-size:contain;background-position:center;background-repeat:no-repeat"></div><input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="uploadLogo()"><button class="btn btn-dark" onclick="document.getElementById('logoFile').click()">上传</button></div></div></div>
+        <h3>机构品牌</h3><div class="h-desc">自定义落地页与侧边栏顶部显示的 Logo 与名称（仅管理员）。机构内的形象、音色、作品相互隔离。</div>
+        <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+          <!-- 左:编辑 -->
+          <div style="flex:1;min-width:280px">
+            <div class="set-row"><div class="info"><div class="k">机构名称</div><div class="v">展示在侧边栏顶部、落地页与生成记录中</div></div>
+              <div class="ctl"><div style="display:flex;gap:8px;align-items:center">
+                <input id="orgNameInput" maxlength="30" style="padding:9px 13px;width:200px;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;color:var(--t1);font-size:14px;font-family:var(--f);outline:none" placeholder="机构名称">
+                <span id="orgNameCount" aria-live="polite" style="font-size:12px;color:var(--t4);min-width:38px">0/30</span>
+                <button class="btn btn-dark" id="orgNameSave" onclick="saveOrgName()">保存</button>
+              </div></div>
+            </div>
+            <div id="orgNameMsg" style="font-size:12px;color:var(--amber);min-height:16px;margin:-6px 0 4px 0"></div>
+            <div class="set-row"><div class="info"><div class="k">机构 Logo</div><div class="v">建议透明背景 PNG，≤5MB（PNG / JPEG / WEBP）</div></div>
+              <div class="ctl"><div style="display:flex;gap:10px;align-items:center">
+                <div id="logoPreview" style="width:48px;height:48px;border-radius:10px;background:var(--field,#121214);border:1px solid var(--line);background-size:contain;background-position:center;background-repeat:no-repeat"></div>
+                <input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="uploadLogo()">
+                <button class="btn btn-dark" id="logoUploadBtn" onclick="document.getElementById('logoFile').click()">更换 Logo</button>
+                <button id="logoResetBtn" onclick="resetLogo()" style="background:none;border:none;color:var(--t3);font-size:13px;font-family:var(--f);cursor:pointer;text-decoration:underline;text-underline-offset:3px">恢复默认</button>
+              </div></div>
+            </div>
+          </div>
+          <!-- 右:实时预览(侧边栏顶部片段) -->
+          <div style="width:200px">
+            <div style="font-size:12px;color:var(--t4);margin-bottom:8px">实时预览</div>
+            <div style="background:#0E0E0E;border:1px solid var(--line);border-radius:12px;padding:14px 12px;display:flex;align-items:center;gap:9px">
+              <div id="brandPrevMark" style="width:30px;height:30px;border-radius:7px;flex-shrink:0;background-size:contain;background-position:center;background-repeat:no-repeat;display:flex;align-items:center;justify-content:center">
+                <svg viewBox="0 0 100 100" fill="none" style="width:100%;height:100%"><circle cx="37" cy="50" r="29" stroke="#fff" stroke-width="5"/><circle cx="63" cy="50" r="29" stroke="#fff" stroke-width="5"/><path d="M50 24.08 A29 29 0 0 1 50 75.92 A29 29 0 0 1 50 24.08 Z" fill="#fff"/></svg>
+              </div>
+              <span id="brandPrevName" style="font-size:14px;font-weight:600;color:#F5F5F5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Lingjing</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="set-card" style="animation-delay:.12s">
@@ -48,7 +77,6 @@
   document.querySelectorAll('#resSeg button').forEach(b=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('button').forEach(x=>x.classList.remove('active'));this.classList.add('active');saveResolution(this.dataset.v);}));
 
   let canEdit=false;
-  // 机构名称只读:开通账号时平台设定,用户不可改(无 saveOrgName)。
   // 用 PUT(api.js 没封装 put,直接 fetch)
   async function put(body){
     const res=await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify(body)});
@@ -61,21 +89,64 @@
   async function saveAiLabel(){ if(!guard()){document.getElementById('aiLabelSwitch').classList.toggle('on');return;} try{await put({aiLabelEnabled:document.getElementById('aiLabelSwitch').classList.contains('on')});}catch(e){window.LJToast(e.message,'err');} }
   async function saveLabelText(){ if(!guard())return; try{ await put({aiLabelText:document.getElementById('aiLabelText').value}); window.LJToast('✓ 已保存'); }catch(e){window.LJToast(e.message,'err');} }
   async function saveResolution(v){ if(!guard())return; try{ await put({defaultResolution:v}); window.LJToast('✓ 默认分辨率已设为 '+v); }catch(e){window.LJToast(e.message,'err');} }
+  // 机构名称:草稿实时预览(防抖)+ 计数 + 空值禁存。
+  let nameDebounce=null;
+  function onNameInput(){
+    const inp=document.getElementById('orgNameInput'), v=inp.value;
+    document.getElementById('orgNameCount').textContent=v.length+'/30';
+    document.getElementById('orgNameCount').style.color = v.length>=30 ? 'var(--amber)' : 'var(--t4)';
+    document.getElementById('orgNameSave').disabled = !v.trim();
+    document.getElementById('orgNameMsg').textContent = v.trim() ? '' : '名称不能为空';
+    // 草稿实时预览(防抖 200ms):所改即所得
+    clearTimeout(nameDebounce);
+    nameDebounce=setTimeout(()=>{ document.getElementById('brandPrevName').textContent = v.trim() || 'Lingjing'; }, 200);
+  }
+  async function saveOrgName(){
+    if(!guard())return;
+    const v=document.getElementById('orgNameInput').value.trim();
+    if(!v){ document.getElementById('orgNameMsg').textContent='名称不能为空'; return; }
+    const btn=document.getElementById('orgNameSave'); btn.disabled=true;
+    try{ const d=await put({orgName:v});
+      // 后端清洗后可能与输入不同(剔非法字符)→ 回填清洗后的真值
+      const clean = (d && typeof d.orgName==='string') ? d.orgName : v;
+      document.getElementById('orgNameInput').value=clean;
+      document.getElementById('brandPrevName').textContent=clean;
+      onNameInput();
+      window.LJToast('✓ 机构名称已更新');
+    }catch(e){ document.getElementById('orgNameMsg').style.color='var(--red)'; document.getElementById('orgNameMsg').textContent=e.message; }
+    finally{ btn.disabled=false; }
+  }
   async function uploadLogo(){
     if(!guard())return;
     const f=document.getElementById('logoFile').files[0]; if(!f) return;
     const fd=new FormData(); fd.append('logo', f);
+    const btn=document.getElementById('logoUploadBtn'); btn.disabled=true; const old=btn.textContent; btn.textContent='上传中…';
     try{
       const res=await fetch('/api/settings/logo',{method:'POST',body:fd,credentials:'same-origin'});
       const d=await res.json().catch(()=>({}));
       if(!res.ok) throw new Error(d.error||'上传失败');
       window.LJToast('✓ Logo 已更新');
-      // 刷新预览 + 侧栏(加时间戳破缓存)
+      // 刷新预览(设置页 + 右侧实时预览;加时间戳破缓存)
       const me=await LJ.me();
       const url='/api/org-logo/'+me.tenantId+'?t='+Date.now();
       document.getElementById('logoPreview').style.backgroundImage='url('+url+')';
+      const pm=document.getElementById('brandPrevMark'); pm.innerHTML=''; pm.style.backgroundImage='url('+url+')';
     }catch(e){ window.LJToast(e.message,'err'); }
-    finally{ document.getElementById('logoFile').value=''; }
+    finally{ document.getElementById('logoFile').value=''; btn.disabled=false; btn.textContent=old; }
+  }
+  // 恢复默认 Logo:二次确认 → DELETE → 预览回默认 SVG。
+  const DEFAULT_MARK_SVG='<svg viewBox="0 0 100 100" fill="none" style="width:100%;height:100%"><circle cx="37" cy="50" r="29" stroke="#fff" stroke-width="5"/><circle cx="63" cy="50" r="29" stroke="#fff" stroke-width="5"/><path d="M50 24.08 A29 29 0 0 1 50 75.92 A29 29 0 0 1 50 24.08 Z" fill="#fff"/></svg>';
+  async function resetLogo(){
+    if(!guard())return;
+    if(!(await window.LJConfirm({title:'恢复默认 Logo',body:'将清除当前机构 Logo，恢复为平台默认图标。确定吗？',confirmText:'恢复默认',danger:true})))return;
+    try{
+      const res=await fetch('/api/settings/logo',{method:'DELETE',credentials:'same-origin'});
+      const d=await res.json().catch(()=>({}));
+      if(!res.ok) throw new Error(d.error||'恢复失败');
+      document.getElementById('logoPreview').style.backgroundImage='';
+      const pm=document.getElementById('brandPrevMark'); pm.style.backgroundImage=''; pm.innerHTML=DEFAULT_MARK_SVG;
+      window.LJToast('✓ 已恢复默认品牌');
+    }catch(e){ window.LJToast(e.message,'err'); }
   }
 
   function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
@@ -88,12 +159,26 @@
     try{
       const me=await LJ.me(); canEdit=me.role==='admin';
       const s=await LJ.get('/settings');
-      document.getElementById('orgName').textContent=s.orgName||'—';
+      // 机构名称(可编辑输入框)+ 计数 + 实时预览初始化
+      const nameInp=document.getElementById('orgNameInput');
+      nameInp.value=s.orgName||'';
+      nameInp.addEventListener('input', onNameInput);
+      document.getElementById('brandPrevName').textContent = (s.orgName||'').trim() || 'Lingjing';
+      onNameInput();
       const sw=document.getElementById('aiLabelSwitch'); sw.classList.toggle('on',!!s.aiLabelEnabled);
       document.getElementById('aiLabelText').value = s.aiLabelText||'';
       document.querySelectorAll('#resSeg button').forEach(b=>b.classList.toggle('active', b.dataset.v===(s.defaultResolution||'720P')));
-      // Logo 预览(公开读路径;无 logo 留空,onerror 不触发因为不设 src)
-      if(s.orgLogoKey){ document.getElementById('logoPreview').style.backgroundImage='url(/api/org-logo/'+me.tenantId+'?t='+Date.now()+')'; }
+      // Logo 预览(设置页缩略 + 右侧实时预览;公开读路径;无 logo 留默认)
+      if(s.orgLogoKey){
+        const url='/api/org-logo/'+me.tenantId+'?t='+Date.now();
+        document.getElementById('logoPreview').style.backgroundImage='url('+url+')';
+        const pm=document.getElementById('brandPrevMark'); pm.innerHTML=''; pm.style.backgroundImage='url('+url+')';
+      }
+      // 非 admin:品牌卡控件只读
+      if(!canEdit){
+        nameInp.disabled=true;
+        ['orgNameSave','logoUploadBtn','logoResetBtn'].forEach(id=>{const el=document.getElementById(id); if(el) el.disabled=true;});
+      }
 
       // T8:审计日志(仅 admin 可见+可查)
       if(me.role==='admin'){

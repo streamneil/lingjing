@@ -5,6 +5,7 @@
 // 设计文档 Data Model 是完整骨架;这里只落 Slice 1 子集,避免过度建设。
 
 import Database from 'better-sqlite3';
+import { randomBytes } from 'node:crypto';
 import { config } from '../config.js';
 
 export const db = new Database(config.db.file);
@@ -274,6 +275,42 @@ if (!tenantHadSeats) {
   ).run();
 }
 
+// 租户品牌:tenant.slug —— 落地页按 /landing.html?org=<slug> 识别租户并渲染其品牌。
+//   slug = 随机不可猜短串(8 位 base62),防枚举发现「哪些机构用了平台 + 机构名」(政企/融媒隐私)。
+//   链接由平台/管理员主动分发,不做可读 slug。
+const tenantHadSlug = (db.prepare(`PRAGMA table_info(tenant)`).all() as { name: string }[]).some(
+  (c) => c.name === 'slug',
+);
+addColumnIfMissing('tenant', 'slug', `slug TEXT`);
+
+// 8 位 base62 随机串(~2e14 空间,枚举不可行)。better-sqlite3 同步,循环重试保证唯一。
+function genTenantSlug(): string {
+  const ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const bytes = randomBytes(8);
+  let s = '';
+  for (let i = 0; i < 8; i++) s += ALPHA[bytes[i]! % 62];
+  return s;
+}
+const slugExists = db.prepare(`SELECT 1 FROM tenant WHERE slug=? LIMIT 1`);
+// 创建租户(auth/createTenant)与迁移回填共用,保证唯一。
+export function uniqueTenantSlug(): string {
+  for (let i = 0; i < 20; i++) {
+    const s = genTenantSlug();
+    if (!slugExists.get(s)) return s;
+  }
+  throw new Error('tenant.slug 连续 20 次碰撞,异常');
+}
+
+// 一次性回填(仅刚加列时):给每个现有租户生成唯一随机 slug。
+// 不回填则 /landing.html?org=<slug> 对所有老租户失效(功能静默不可用)—— 同 max_creator_seats 教训。
+if (!tenantHadSlug) {
+  const rows = db.prepare(`SELECT id FROM tenant WHERE slug IS NULL`).all() as { id: string }[];
+  const setSlug = db.prepare(`UPDATE tenant SET slug=? WHERE id=?`);
+  for (const r of rows) setSlug.run(uniqueTenantSlug(), r.id);
+}
+// slug 唯一索引(NULL 不参与唯一约束,SQLite 允许多 NULL —— 新建租户须显式赋 slug)。
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_slug ON tenant(slug) WHERE slug IS NOT NULL`);
+
 // 用户名全局唯一(登录免输机构 ID):在 user.username 上建唯一索引。
 // 旧库若已有重名用户会建索引失败 —— 用 try 包裹并告警,交付时人工清理重名。
 try {
@@ -350,6 +387,7 @@ export interface TenantRow {
   delivery: 'hosted' | 'private';
   max_creator_seats: number;
   created_at: number;
+  slug?: string | null; // 落地页品牌识别用随机 slug(老行可空,新建必赋)
 }
 
 export interface UserRow {
