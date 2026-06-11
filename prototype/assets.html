@@ -53,14 +53,15 @@
   /* 类型徽章(左上)+ 多图角标(右下)*/
   .a-badge { position:absolute; top:8px; left:8px; font-size:10.5px; font-weight:600; color:#fff; background:rgba(0,0,0,.5); backdrop-filter:blur(4px); padding:3px 8px; border-radius:7px; }
   .a-count { position:absolute; bottom:8px; right:9px; font-size:10px; color:#fff; background:rgba(0,0,0,.5); padding:2px 7px; border-radius:6px; }
-  /* 删除按钮:hover 才显(媒体卡 + 自建头像卡)。点它不触发卡片预览。 */
-  /* 删除按钮放缩略图「右下角」:卡片底部永不被顶部 sticky header(.app-bar z:50)遮挡;
-     z-index 也抬到 51(> app-bar)做双保险,避免靠近 header 时点不到。 */
-  .a-del { position:absolute; bottom:8px; right:8px; width:30px; height:30px; border-radius:9px; display:grid; place-items:center; background:rgba(0,0,0,.62); backdrop-filter:blur(4px); color:#fff; opacity:0; cursor:pointer; transition:.15s; z-index:51; }
-  .acard:hover .a-del, .av:hover .a-del { opacity:1; }
-  .a-del:hover { background:var(--red); }
-  .a-del svg { width:15px; height:15px; }
-  /* 多图角标让位给删除按钮(都在右下),角标移到左下 */
+  /* 操作行(下载 + 删除):hover 才显,放缩略图「右下角」—— 卡片底部永不被顶部
+     sticky header(.app-bar z:50)遮挡;z-index 抬到 51(> header)做双保险。 */
+  .a-acts { position:absolute; bottom:8px; right:8px; display:flex; gap:6px; opacity:0; transition:.15s; z-index:51; }
+  .acard:hover .a-acts, .av:hover .a-acts { opacity:1; }
+  .a-iconbtn { width:30px; height:30px; border-radius:9px; display:grid; place-items:center; background:rgba(0,0,0,.62); backdrop-filter:blur(4px); color:#fff; cursor:pointer; transition:background .15s; }
+  .a-iconbtn svg { width:15px; height:15px; }
+  .a-iconbtn.dl:hover { background:var(--blue); }
+  .a-iconbtn.del:hover { background:var(--red); }
+  /* 多图角标让位给操作行(都在右下),角标移到左下 */
   .a-count { left:9px; right:auto; }
   .a-b { padding:11px 13px; }
   .a-b h4 { font-size:13px; font-weight:600; color:var(--t1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -216,8 +217,10 @@
     }
     const title = (job.script||'').trim().slice(0,18) || (TYPE_LABEL[job.type]||'作品');
     const from = TYPE_LABEL[job.type]||job.type;
-    const del = `<div class="a-del" onclick="event.stopPropagation();delMedia('${job.id}')" title="删除" role="button" aria-label="删除">${DEL_SVG}</div>`;
-    return `<div class="acard" onclick="openAsset('${job.id}','${kind}',event)">${thumb}${del}<div class="a-b"><h4 title="${esc(job.script||'')}">${esc(title)}${(job.script||'').length>18?'…':''}</h4><div class="m">${from} · ${fmtTime(job.createdAt)}</div></div></div>`;
+    const canDl = job.status==='done' && urls.length;
+    const dl = canDl ? `<div class="a-iconbtn dl" onclick="event.stopPropagation();dlMedia('${job.id}','${kind}')" title="下载" role="button" aria-label="下载">${DL_SVG}</div>` : '';
+    const del = `<div class="a-iconbtn del" onclick="event.stopPropagation();delMedia('${job.id}')" title="删除" role="button" aria-label="删除">${TRASH_SVG}</div>`;
+    return `<div class="acard" onclick="openAsset('${job.id}','${kind}',event)">${thumb}<div class="a-acts">${dl}${del}</div><div class="a-b"><h4 title="${esc(job.script||'')}">${esc(title)}${(job.script||'').length>18?'…':''}</h4><div class="m">${from} · ${fmtTime(job.createdAt)}</div></div></div>`;
   }
 
   // 成品 URL 失效(OSS 404/过期/防盗链)→ 缩略图降级为「成品已失效」占位,不留全黑;
@@ -229,8 +232,14 @@
     thumb.innerHTML = `${bh}<div class="a-ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 9v4M12 17h.01"/><path d="M10.3 4 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 4a2 2 0 0 0-3.4 0Z"/></svg>成品已失效</div>`;
   };
 
-  // 删除图标(垃圾桶)+ 删媒体(走 DELETE /jobs/:id,与 works.html 同口径)
-  const DEL_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+  // 图标 + 操作(下载走同源代理 /jobs/:id/download/0;删除走 DELETE /jobs/:id,均与现有页同口径)
+  const TRASH_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+  const DL_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg>';
+  const DL_EXT = { video:'mp4', image:'png', audio:'mp3' };
+  window.dlMedia = async (id, kind)=>{
+    try{ const ok = await window.LJDownload(`/api/jobs/${id}/download/0`, `lingjing-${id}.${DL_EXT[kind]||'mp4'}`); if(ok!==false) window.LJToast&&window.LJToast('✓ 已开始下载'); }
+    catch(e){ window.LJToast&&window.LJToast(e.message||'下载失败','err'); }
+  };
   window.delMedia = async (id)=>{
     if(!(await window.LJConfirm({title:'删除作品',body:'确认删除这个作品?删除后不可恢复。',confirmText:'删除',danger:true}))) return;
     try{ await LJ.del('/jobs/'+id); allJobs = allJobs.filter(j=>j.id!==id); buildFromPop(); renderMedia(); window.LJToast&&window.LJToast('已删除'); }
@@ -269,7 +278,7 @@
         const tag = isPreset ? `<span class="av-tag">预置</span>` : (a.isDefault?`<span class="av-tag">主形象</span>`:`<span class="av-tag" style="background:rgba(255,178,62,.22);color:#FFB23E">定制</span>`);
         const status = (!isPreset && a.status && a.status!=='ready') ? `<div class="av-name" style="font-size:13px">${a.status==='processing'?'处理中…':'失败'}</div>` : `<div class="av-name">${esc(a.name||'')}</div>`;
         // 自建形象可删(预置不可);删按钮 hover 显,点它不触发跳转。
-        const del = isPreset ? '' : `<div class="a-del" onclick="event.stopPropagation();delAvatar('${a.id}','${esc(a.name||'')}')" title="删除" role="button" aria-label="删除">${DEL_SVG}</div>`;
+        const del = isPreset ? '' : `<div class="a-acts"><div class="a-iconbtn del" onclick="event.stopPropagation();delAvatar('${a.id}','${esc(a.name||'')}')" title="删除" role="button" aria-label="删除">${TRASH_SVG}</div></div>`;
         return `<div class="av" onclick="location.href='avatars.html'"><div class="av-veil"></div>${img}${tag}${status}${del}</div>`;
       };
       const customHtml = custom.length?`<div class="date-h">我的形象</div><div class="grid-av">${custom.map(a=>av(a,false)).join('')}</div>`:'';
