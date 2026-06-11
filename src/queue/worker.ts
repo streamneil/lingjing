@@ -558,8 +558,8 @@ async function runTtsJob(job: JobRow): Promise<void> {
   const pre = await moderatePrompt(input.text);
   if (!pre.allowed) throw new Error(`送审拒绝:${pre.reason}`);
 
-  // 2. 情绪 + 音高 → instructions(全 Qwen HTTP);有指令 → 系统音色自动用 instruct 模型
-  const instruction = buildInstruction(input.emotion, input.pitch);
+  // 2. 情绪 + 语速 + 音高 → instructions(全 Qwen HTTP);有指令 → 系统音色自动用 instruct 模型
+  const instruction = buildInstruction(input.emotion, input.pitch, input.rate);
 
   // 3. 音色解析(预置/克隆/设计,全 http;预置带情绪 → instruct,否则 flash;
   //    复刻/设计共用各自 target_model,情绪指令仅系统音色支持故忽略)

@@ -106,6 +106,7 @@ export interface TtsGenInput {
   text: string; // 待配音文本(超 Qwen 单次上限按句分段)
   voiceRef: string; // 音色:系统音色名 或 复刻/设计 voice id(经 voices 校验)
   emotion?: string; // 情绪 key(EMOTIONS);worker 转 instructions(系统音色经 instruct 模型落地)。
+  rate?: string; // 语速档位 key(SPEEDS;非倍速);折进 instructions(同上)。'normal'/缺省=不加。
   pitch?: number; // 音高 -12~+12;折进 instructions(同上,仅系统音色 instruct 落地)。
   pricePerCharSnapshot?: number; // 遗留:旧 job 可能带快照单价;credits.costFor 读它保 reserve==settle。
 }

@@ -34,7 +34,7 @@ import {
 import { audit } from '../audit/index.js';
 import { isUsableAvatar } from '../avatars/index.js';
 import { isUsableVoice } from '../voices/index.js';
-import { getEmotion, EMOTIONS } from '../gateway/tts-models.js';
+import { getEmotion, EMOTIONS, getSpeed, SPEEDS } from '../gateway/tts-models.js';
 import { db } from '../db/index.js';
 import type { VideoGenInput, ImageGenInput, TtsGenInput, VideoGenT2VInput } from '../gateway/types.js';
 import { getImageModel, resolutionAllowed, isKnownModel, listEnabledModels, DEFAULT_IMAGE_MODEL, tierFromPixels } from '../gateway/image-models.js';
@@ -270,15 +270,18 @@ function buildTtsJob(body: Record<string, unknown>, tid: string): JobBuildResult
   if (!isUsableVoice(voiceRef, tid))
     return { ok: false, status: 400, error: '音色不可用(不存在或非本机构)' };
 
-  // 情绪 / 音高(T-TTS-EMOTION):Qwen 系统音色经 instruct 模型落地;复刻/设计忽略(worker 处理)。
-  const { emotion, pitch } = body as Partial<TtsGenInput>;
+  // 情绪 / 语速 / 音高(T-TTS-EMOTION):Qwen 系统音色经 instruct 模型落地;复刻/设计忽略(worker 处理)。
+  const { emotion, rate, pitch } = body as Partial<TtsGenInput>;
   if (emotion !== undefined && !getEmotion(emotion))
     return { ok: false, status: 400, error: '情绪非法' };
+  if (rate !== undefined && !getSpeed(rate))
+    return { ok: false, status: 400, error: '语速档位非法' };
   if (pitch !== undefined && (typeof pitch !== 'number' || pitch < -12 || pitch > 12))
     return { ok: false, status: 400, error: '音高需在 -12~+12 之间' };
 
   const input: TtsGenInput = { text, voiceRef };
   if (emotion !== undefined && emotion !== 'auto') input.emotion = emotion;
+  if (rate !== undefined && rate !== 'normal') input.rate = rate;
   if (pitch !== undefined && pitch !== 0) input.pitch = pitch;
   return {
     ok: true,
@@ -801,12 +804,13 @@ jobsRouter.get('/image-models', requireAuth, (_req: Request, res: Response) => {
   res.json({ models, default: def });
 });
 
-// TTS 情绪选项清单(T-TTS-EMOTION)— 前端情绪下拉真相源。
-// 全 Qwen-TTS:无「品质」模型选择(系统按是否带情绪自动选 flash/instruct)。
+// TTS 情绪 + 语速选项清单(T-TTS-EMOTION)— 前端下拉真相源。
+// 全 Qwen-TTS:无「品质」模型选择(系统按是否带指令自动选 flash/instruct)。
 // 只吐 key/label,instruction 文本留后端。
 jobsRouter.get('/tts-models', requireAuth, (_req: Request, res: Response) => {
   const emotions = Object.values(EMOTIONS).map((e) => ({ key: e.key, label: e.label }));
-  res.json({ emotions });
+  const speeds = Object.values(SPEEDS).map((s) => ({ key: s.key, label: s.label }));
+  res.json({ emotions, speeds });
 });
 
 // 文生视频模型清单 — 前端下拉单一真相源(只吐 UI 能力字段,不漏 modelId/priceTier)。
