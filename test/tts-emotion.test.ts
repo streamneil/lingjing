@@ -18,7 +18,7 @@ vi.mock('../src/gateway/cosyvoice.js', () => ({
   synthesizeSpeechHttp: vi.fn(),
 }));
 
-const { buildInstruction, getEmotion, getSpeed, EMOTIONS, SPEEDS } = await import('../src/gateway/tts-models.js');
+const { buildInstruction, getEmotion, getSpeed, getLanguage, EMOTIONS, SPEEDS, LANGUAGES } = await import('../src/gateway/tts-models.js');
 const { createApp } = await import('../src/server.js');
 const { createTenant, createUser } = await import('../src/auth/index.js');
 const { grant } = await import('../src/credits/index.js');
@@ -71,6 +71,10 @@ describe('buildInstruction', () => {
   it('getSpeed 已知/未知', () => {
     expect(getSpeed('fast')?.label).toBe('快速');
     expect(getSpeed('nope')).toBeUndefined();
+  });
+  it('getLanguage 已知/未知(language_type 即 key)', () => {
+    expect(getLanguage('English')?.label).toBe('英语');
+    expect(getLanguage('Klingon')).toBeUndefined();
   });
 });
 
@@ -128,6 +132,19 @@ describe('POST /api/jobs (tts) 情绪/音高', () => {
     const r = await client.post('/api/jobs', { type: 'tts', text: 'x', voiceRef: 'Cherry', rate: '2x' });
     expect(r.status).toBe(400);
   });
+
+  it('语言 → 202 + language 入库;Auto 不入库', async () => {
+    const r = await client.post('/api/jobs', { type: 'tts', text: 'hello', voiceRef: 'Cherry', language: 'English' });
+    expect(r.status).toBe(202);
+    expect(JSON.parse(getJob(r.body.id)!.input_json).language).toBe('English');
+    const r2 = await client.post('/api/jobs', { type: 'tts', text: '你好', voiceRef: 'Cherry', language: 'Auto' });
+    expect(JSON.parse(getJob(r2.body.id)!.input_json).language).toBeUndefined();
+  });
+
+  it('非法语言 → 400', async () => {
+    const r = await client.post('/api/jobs', { type: 'tts', text: 'x', voiceRef: 'Cherry', language: 'Klingon' });
+    expect(r.status).toBe(400);
+  });
 });
 
 describe('GET /api/tts-models emotions + speeds', () => {
@@ -139,5 +156,7 @@ describe('GET /api/tts-models emotions + speeds', () => {
     expect(m.body.speeds.length).toBe(Object.keys(SPEEDS).length);
     expect(m.body.speeds[0]).toHaveProperty('label');
     expect(m.body.speeds[0]).not.toHaveProperty('instruction');
+    expect(m.body.languages.length).toBe(Object.keys(LANGUAGES).length);
+    expect(m.body.languages.find((l: { key: string }) => l.key === 'English').label).toBe('英语');
   });
 });

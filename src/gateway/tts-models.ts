@@ -42,6 +42,34 @@ export function getSpeed(key: string | undefined): EmotionDef | undefined {
   return key ? SPEEDS[key] : undefined;
 }
 
+// ── 语言(language_type)──
+// 查证(2026-06,DashScope 实测):Qwen-TTS 经 input.language_type 指定合成语种,
+// 已实测接受值:Auto / Chinese / English / Japanese / Korean / French / German /
+// Russian / Italian / Spanish / Portuguese(方言绑定音色,非 language_type,不在此列)。
+// 'Auto' = 由模型按文本自动判断(默认,不下发该字段保 byte-identical)。
+export interface LanguageDef {
+  key: string; // = API language_type 值(Auto 例外:表示不下发)
+  label: string; // UI 中文标签
+}
+
+export const LANGUAGES: Record<string, LanguageDef> = {
+  Auto: { key: 'Auto', label: '自动' },
+  Chinese: { key: 'Chinese', label: '中文' },
+  English: { key: 'English', label: '英语' },
+  Japanese: { key: 'Japanese', label: '日语' },
+  Korean: { key: 'Korean', label: '韩语' },
+  French: { key: 'French', label: '法语' },
+  German: { key: 'German', label: '德语' },
+  Russian: { key: 'Russian', label: '俄语' },
+  Italian: { key: 'Italian', label: '意大利语' },
+  Spanish: { key: 'Spanish', label: '西班牙语' },
+  Portuguese: { key: 'Portuguese', label: '葡萄牙语' },
+};
+
+export function getLanguage(key: string | undefined): LanguageDef | undefined {
+  return key ? LANGUAGES[key] : undefined;
+}
+
 /** 合成情绪 + 语速 + 音高 → 一条 instruction 文本(供 gateway 透传)。全无 → 空串。 */
 export function buildInstruction(emotionKey?: string, pitch?: number, speedKey?: string): string {
   const parts: string[] = [];

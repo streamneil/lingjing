@@ -565,7 +565,10 @@ async function runTtsJob(job: JobRow): Promise<void> {
   //    复刻/设计共用各自 target_model,情绪指令仅系统音色支持故忽略)
   const { voice, model } = resolveVoice(input.voiceRef, job.tenant_id, !!instruction);
 
-  // 4. 分段(防 Qwen 单次输入上限)+ job 级 deadline
+  // 4. 语言(language_type):Auto/缺省 → 不下发(模型自判);其余透传给 Qwen
+  const languageType = input.language && input.language !== 'Auto' ? input.language : undefined;
+
+  // 5. 分段(防 Qwen 单次输入上限)+ job 级 deadline
   const segments = segmentScript(input.text, TTS_MAX_CHARS);
   if (segments.length === 0) throw new Error('文本分段为空');
   const deadline = Date.now() + config.baichuan.jobTimeoutMs;
@@ -574,10 +577,10 @@ async function runTtsJob(job: JobRow): Promise<void> {
   for (let i = 0; i < segments.length; i++) {
     if (Date.now() > deadline) throw new Error(`生成超时(>${config.baichuan.jobTimeoutMs}ms),已放弃`);
     updateProgress(job.id, Math.min(99, Math.floor((i / segments.length) * 100)));
-    audioBufs.push(await synthesizeSpeechHttp({ text: segments[i]!, voice, model, instruction: instruction || undefined }));
+    audioBufs.push(await synthesizeSpeechHttp({ text: segments[i]!, voice, model, instruction: instruction || undefined, languageType }));
   }
 
-  // 5. 拼接(单段直返不调 ffmpeg)+ 落存储(返 Buffer → putObject,非 putObjectFromUrl)
+  // 6. 拼接(单段直返不调 ffmpeg)+ 落存储(返 Buffer → putObject,非 putObjectFromUrl)
   const merged = await concatAudio(audioBufs);
   const key = `audio/${job.tenant_id}/${job.id}.mp3`;
   await storage.putObject(key, merged, 'audio/mpeg');
