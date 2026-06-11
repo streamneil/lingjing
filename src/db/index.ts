@@ -249,6 +249,9 @@ addColumnIfMissing('voice', 'provider_voice_id', `provider_voice_id TEXT`);
 // output_url 语义随之改为 JSON 字符串(key 数组)——旧视频行是裸 key 字符串,读路径 JSON.parse
 // 失败时兜底当单 key(向后兼容,见 api/jobs.ts)。默认 'video' 让旧行保持视频语义。
 addColumnIfMissing('job', 'output_kind', `output_kind TEXT NOT NULL DEFAULT 'video'`);
+// 用量计费归属(谁消费):记录创建该任务的用户 id(可空)。老 job 为 NULL → 计费明细显「—」。
+// credit_ledger 不冗余存用户/工具,经 job_id JOIN job(取 created_by + type)还原"谁 + 什么工具"。
+addColumnIfMissing('job', 'created_by', `created_by TEXT`);
 
 // 成员与权限升级:
 //  - tenant.max_creator_seats:创作席位上限(licensing 真相源,默认 10)。
@@ -335,6 +338,7 @@ export interface JobRow {
   created_at: number;
   updated_at: number;
   started_at: number | null;
+  created_by: string | null; // 创建该任务的用户 id(计费归属;老 job 为 NULL)
 }
 
 export type Role = 'admin' | 'creator' | 'viewer';
@@ -378,6 +382,9 @@ export interface LedgerRow {
   job_id: string | null;
   note: string | null;
   created_at: number;
+  // 计费归属(ledger() JOIN job/user 派生;非表列)。grant 行无 job → 两者空;老 job → userName 空。
+  toolType?: string | null; // 工具类型(job.type;前端映射中文场景名)
+  userName?: string | null; // 消费人(display_name 或 username)
 }
 
 export type ActorType = 'user' | 'platform_admin';
