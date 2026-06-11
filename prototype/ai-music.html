@@ -313,8 +313,17 @@
     finally{ btn.innerHTML=prev; refreshBtn(); }
   });
 
+  // 探索页「片头背景乐」带 ?style=intro 进来 → 预填片头风格关键词(复用 addStyle;未知 key 忽略)
+  const STYLE_PRESETS={ intro:['大气','国风','120bpm'] };
+  function applyStyleFromQuery(){
+    const k=new URLSearchParams(location.search).get('style');
+    const arr=STYLE_PRESETS[k]; if(!arr) return;
+    arr.forEach(addStyle);
+    window.LJToast && window.LJToast('✓ 已套用片头风格,可改后生成');
+  }
   LJ.me().then(()=>{ loadHistory(); }).catch(()=>{});
   switchMode('song'); refreshBtn(); scheduleEstimate();
+  applyStyleFromQuery();
 </script>
 </body>
 </html>
