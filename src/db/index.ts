@@ -423,6 +423,9 @@ export interface LedgerRow {
   // 计费归属(ledger() JOIN job/user 派生;非表列)。grant 行无 job → 两者空;老 job → userName 空。
   toolType?: string | null; // 工具类型(job.type;前端映射中文场景名)
   userName?: string | null; // 消费人(display_name 或 username)
+  // 关联作品(ledger() 解析 job.input_json 派生;非表列)。grant 行 / 无文案的老 job → 空。
+  taskTitle?: string | null; // 作品文案摘要(按工具取 script/prompt/text/lyrics,截前 24 字)
+  outputKind?: string | null; // 产物类型(job.output_kind:video/image/audio;决定前端预览渲染)
 }
 
 export type ActorType = 'user' | 'platform_admin';

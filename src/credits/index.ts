@@ -262,19 +262,73 @@ function outstandingReserved(jobId: string): number {
   return row.reserved - row.released; // 未结算:剩余可释放额(重复 release 自然降到 0)
 }
 
+/** 从 job.input_json 解析「作品文案摘要」:按工具类型取主文本字段,trim 后截前 24 字。
+ *  让计费明细的「关联任务」列从一串 UUID 变成看得懂的作品(如配音文本/提示词前几字)。
+ *  字段口径:video=script / ai_image·video_edit·video_*=prompt / tts=text / ai_music=prompt|lyrics。
+ *  坏 JSON、空文案、无 job → 返回 null(前端回退显工具名或「—」)。 */
+const TITLE_MAX = 24;
+function summarizeJobInput(toolType: string | null | undefined, inputJson: string | null | undefined): string | null {
+  if (!toolType || !inputJson) return null;
+  let input: Record<string, unknown>;
+  try {
+    input = JSON.parse(inputJson) as Record<string, unknown>;
+  } catch {
+    return null; // 坏 JSON 不应让计费查询失败 — 安全回退空
+  }
+  const pick = (...keys: string[]): string | null => {
+    for (const k of keys) {
+      const v = input[k];
+      if (typeof v === 'string' && v.trim()) return v.trim();
+    }
+    return null;
+  };
+  let text: string | null;
+  switch (toolType) {
+    case 'video':
+      text = pick('script');
+      break;
+    case 'tts':
+      text = pick('text');
+      break;
+    case 'ai_music':
+      text = pick('prompt', 'lyrics');
+      break;
+    default:
+      // ai_image / video_edit / video_t2v / video_i2v 等都以 prompt 为主文案
+      text = pick('prompt');
+      break;
+  }
+  if (!text) return null;
+  return text.length > TITLE_MAX ? text.slice(0, TITLE_MAX) + '…' : text;
+}
+
 /** 消费记录(可查询/导出,验收第H3)。 */
-/** 消费明细 + 归属:LEFT JOIN job(取工具 type)+ user(取消费人名)。
- *  归属经 JOIN 派生,不冗余存 ledger;grant 行无 job_id → toolType/userName 空;
- *  老 job 的 created_by NULL → userName 空(前端显「—」)。 */
+/** 消费明细 + 归属 + 关联作品:LEFT JOIN job(取工具 type / 文案 / 产物类型)+ user(取消费人名)。
+ *  归属与作品摘要经 JOIN + input_json 解析派生(一次查询,前端不用 N 次 getJob),不冗余存 ledger;
+ *  grant 行无 job_id → toolType/userName/taskTitle 空;老 job 的 created_by NULL → userName 空(前端显「—」)。 */
 export function ledger(tenantId: string, limit = 100): LedgerRow[] {
-  return db
+  const rows = db
     .prepare(
-      `SELECT l.*, j.type AS toolType, COALESCE(u.display_name, u.username) AS userName
+      `SELECT l.*, j.type AS toolType, j.input_json AS jobInput,
+              j.output_kind AS jobOutputKind, j.output_url AS jobOutput,
+              COALESCE(u.display_name, u.username) AS userName
          FROM credit_ledger l
          LEFT JOIN job j ON l.job_id = j.id
          LEFT JOIN user u ON j.created_by = u.id
         WHERE l.tenant_id = ?
         ORDER BY l.created_at DESC LIMIT ?`,
     )
-    .all(tenantId, limit) as LedgerRow[];
+    .all(tenantId, limit) as (LedgerRow & {
+    jobInput?: string | null;
+    jobOutputKind?: string | null;
+    jobOutput?: string | null;
+  })[];
+  // 解析放在 JS 层:SQLite 不便解 JSON,且解析逻辑要与各工具字段口径对齐(summarizeJobInput)。
+  return rows.map(({ jobInput, jobOutputKind, jobOutput, ...r }) => ({
+    ...r,
+    taskTitle: summarizeJobInput(r.toolType, jobInput),
+    // outputKind 只在有成品(output_url 非空)时暴露 → 前端据此判断「可点预览」。
+    // output_kind 列有 DEFAULT 'video',queued/failed 行也非空,故不能用它判产物;以 output_url 为准。
+    outputKind: jobOutput ? jobOutputKind ?? null : null,
+  }));
 }

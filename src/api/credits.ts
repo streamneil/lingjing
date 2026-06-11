@@ -31,7 +31,10 @@ creditsRouter.get('/credits/ledger.csv', requireAuth, (req: Request, res: Respon
     ai_image: 'AI 图片', tts: '文字转语音', ai_music: 'AI 音乐',
   };
   const esc = (s: string) => `"${String(s).replace(/"/g, '""')}"`;
-  const header = '时间,类型,消费人,工具,金额,关联任务,说明';
+  const header = '时间,类型,消费人,工具,金额,作品,说明';
+  // 「作品」列:优先文案摘要 → 回退工具中文名 → grant/无关联行空(与页面同口径)。
+  const workOf = (r: (typeof rows)[number]): string =>
+    r.taskTitle ?? (r.toolType ? (TOOL_CN[r.toolType] ?? r.toolType) : '');
   const lines = rows.map((r) =>
     [
       esc(new Date(r.created_at).toISOString()),
@@ -39,7 +42,7 @@ creditsRouter.get('/credits/ledger.csv', requireAuth, (req: Request, res: Respon
       esc(r.userName ?? '—'),
       esc(r.toolType ? (TOOL_CN[r.toolType] ?? r.toolType) : '—'),
       r.amount,
-      esc(r.job_id ?? ''),
+      esc(workOf(r)),
       esc(r.note ?? ''),
     ].join(','),
   );
