@@ -6,88 +6,430 @@
 <link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
 <link rel="stylesheet" href="app.css">
 <style>
-  .explore{ display:flex; flex-direction:column; gap:26px; padding:26px 32px 56px; position:relative; z-index:1;
+  .explore{ display:flex; flex-direction:column; gap:40px; padding:26px 32px 56px; position:relative; z-index:1;
     animation:rise .5s var(--ease-out) both; }
   @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 
-  .ex-hero{ border-radius:var(--r-lg); border:1px solid var(--line); padding:32px 34px;
-    background: radial-gradient(120% 130% at 100% 0%, rgba(77,141,255,.12) 0%, transparent 55%), var(--card);
-    box-shadow:var(--sh-card); }
-  .ex-hero .hi{ font-family:var(--f-en); font-size:13px; color:var(--t3); letter-spacing:.5px }
-  .ex-hero h1{ font-size:28px; font-weight:800; letter-spacing:-.6px; margin:8px 0 8px }
-  .ex-hero p{ color:var(--t2); font-size:14px; max-width:52ch; line-height:1.7 }
+  /* ===== 1. HERO ===== */
+  .ex-hero{ display:grid; grid-template-columns:1.5fr .9fr; gap:22px; align-items:stretch; }
+  @media(max-width:880px){ .ex-hero{ grid-template-columns:1fr } }
+  .hero-main{ border-radius:var(--r-lg); border:1px solid var(--line); padding:34px 36px;
+    background: radial-gradient(130% 140% at 0% 0%, rgba(77,141,255,.13) 0%, transparent 52%), var(--card);
+    box-shadow:var(--sh-card); display:flex; flex-direction:column; justify-content:center; }
+  .hero-main .hi{ font-family:var(--f-en); font-size:12px; color:var(--t3); letter-spacing:.22em; text-transform:uppercase }
+  .hero-main h1{ font-size:32px; font-weight:800; letter-spacing:-.035em; line-height:1.14; margin:13px 0 11px }
+  .hero-main p{ color:var(--t2); font-size:14.5px; max-width:48ch; line-height:1.7 }
+  .hero-main .cta{ margin-top:24px; display:flex; gap:11px; flex-wrap:wrap }
+  .hero-main .go{ display:inline-flex; align-items:center; gap:8px; background:var(--t1); color:#0A0A0B;
+    border:none; border-radius:var(--r-pill); padding:13px 22px; font-size:14px; font-weight:700; font-family:var(--f);
+    cursor:pointer; box-shadow:var(--sh-white-btn); transition:transform .12s var(--ease); text-decoration:none }
+  .hero-main .go:hover{ transform:translateY(-1px) }
+  .hero-main .go svg{ width:17px; height:17px }
+  .hero-main .ghost{ display:inline-flex; align-items:center; gap:8px; border:1px solid var(--line);
+    border-radius:var(--r-pill); padding:13px 20px; font-size:14px; color:var(--t2); transition:.18s; text-decoration:none }
+  .hero-main .ghost:hover{ border-color:var(--line-hi); color:var(--t1) }
+  .hero-main .ghost svg{ width:16px; height:16px }
 
-  .ex-sec-h{ font-size:15px; font-weight:700; color:var(--t2); margin-bottom:-6px; display:flex; align-items:center; gap:9px }
+  .hero-side{ border-radius:var(--r-lg); border:1px solid var(--line); padding:24px 26px; background:var(--card);
+    box-shadow:var(--sh-card); display:flex; flex-direction:column; gap:16px }
+  .hero-side .lbl{ display:flex; align-items:center; gap:8px; color:var(--t3); font-size:12.5px }
+  .hero-side .lbl svg{ width:15px; height:15px; color:var(--amber) }
+  .hero-side .bal{ font-family:var(--f-mono); font-size:38px; font-weight:700; letter-spacing:-1px; line-height:1; margin:8px 0 2px }
+  .hero-side .bal.low{ color:var(--amber) }
+  .hero-side .meta{ color:var(--t4); font-size:11.5px; font-family:var(--f-mono) }
+  .hero-side .warn{ color:var(--amber); font-size:12px; margin-top:5px; display:none }
+  .hero-side .mini{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; border-top:1px solid var(--line-soft); padding-top:16px; margin-top:auto }
+  .hero-side .mini a{ text-decoration:none; color:inherit }
+  .hero-side .mini .mv{ font-family:var(--f-mono); font-size:20px; font-weight:700; color:var(--t1) }
+  .hero-side .mini .mn{ color:var(--t3); font-size:11px; margin-top:2px }
+
+  /* ===== 通用区块标题 ===== */
+  .ex-sec-h{ display:flex; align-items:baseline; gap:10px; margin-bottom:14px }
+  .ex-sec-h h3{ font-size:16px; font-weight:700; color:var(--t1) }
   .ex-sec-h .c{ font-family:var(--f-mono); font-size:11px; color:var(--t4) }
+  .ex-sec-h .more{ margin-left:auto; color:var(--t3); font-size:12.5px; text-decoration:none; transition:.18s }
+  .ex-sec-h .more:hover{ color:var(--t1) }
 
-  .tool-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px }
+  /* ===== 2. 案例展示墙 ===== */
+  .showcase{ display:flex; gap:15px; overflow-x:auto; padding:6px 2px 12px; scroll-snap-type:x proximity; scrollbar-width:none }
+  .showcase::-webkit-scrollbar{ display:none }
+  .showcase:focus-visible{ outline:2px solid var(--blue); outline-offset:4px; border-radius:14px }
+  .demo{ flex:0 0 214px; scroll-snap-align:start; border-radius:18px; overflow:hidden; position:relative; aspect-ratio:9/13.6;
+    border:1px solid var(--line-soft); box-shadow:var(--sh-card); cursor:pointer; transition:transform .4s var(--ease-out), border-color .3s }
+  .demo:hover{ transform:translateY(-6px); border-color:var(--line-hi) }
+  .demo:focus-visible{ outline:2px solid var(--blue); outline-offset:2px }
+  .demo .img{ position:absolute; inset:0; background-size:cover; background-position:center top; transition:transform 1.1s var(--ease-out) }
+  .demo:hover .img{ transform:scale(1.06) }
+  .demo .veil{ position:absolute; inset:0; background:linear-gradient(180deg,rgba(0,0,0,.25),transparent 30%,transparent 50%,rgba(0,0,0,.86)) }
+  .demo .play{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) scale(.9); width:50px; height:50px; border-radius:50%;
+    background:rgba(255,255,255,.94); display:grid; place-items:center; opacity:0; transition:opacity .28s, transform .28s var(--ease-out);
+    border:none; cursor:pointer; padding:0 }
+  .demo:hover .play, .demo:focus-within .play{ opacity:1; transform:translate(-50%,-50%) scale(1) }
+  .demo .play svg{ width:18px; height:18px; color:#0A0A0B; margin-left:3px }
+  /* 触屏无 hover → 播放按钮常驻 */
+  @media (hover:none){ .demo .play{ opacity:1; transform:translate(-50%,-50%) scale(1) } }
+  .demo .tag{ position:absolute; top:12px; left:12px; font-size:10px; font-weight:700; padding:4px 9px; border-radius:7px;
+    background:rgba(8,8,10,.5); backdrop-filter:blur(10px); color:#fff; letter-spacing:.02em }
+  .demo .cap-t{ position:absolute; left:15px; right:15px; bottom:15px }
+  .demo .cap-t .ttl{ font-size:14px; font-weight:700; color:#fff; letter-spacing:-.01em }
+  .demo .cap-t .sub{ font-size:10.5px; color:rgba(255,255,255,.7); margin-top:4px; font-family:var(--f-mono) }
+  .demo.skel{ background:var(--card); animation:pulse 1.4s ease-in-out infinite }
+
+  /* ===== 3. 一键开始 ===== */
+  .starts{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px }
+  @media(max-width:880px){ .starts{ grid-template-columns:repeat(2,1fr) } }
+  .start{ border:1px solid var(--line-soft); border-radius:var(--r); background:var(--card); padding:18px;
+    cursor:pointer; transition:.2s var(--ease-out); box-shadow:var(--sh-card); display:flex; flex-direction:column; gap:10px;
+    text-align:left; font-family:var(--f); width:100%; min-height:44px }
+  .start:hover{ transform:translateY(-3px); border-color:var(--blue) }
+  .start:focus-visible{ outline:2px solid var(--blue); outline-offset:2px }
+  .start .si{ width:34px; height:34px; border-radius:10px; background:var(--blue-bg); color:var(--blue); display:grid; place-items:center }
+  .start .si svg{ width:18px; height:18px }
+  .start h4{ font-size:14px; font-weight:600; color:var(--t1) }
+  .start .sd{ font-size:12px; color:var(--t4); line-height:1.55 }
+  .start .kind{ font-family:var(--f-mono); font-size:9.5px; color:var(--t3); letter-spacing:.04em; margin-top:2px }
+
+  /* ===== 4. 创作工具 ===== */
+  .tool-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:13px }
   .tool-card{ position:relative; border:1px solid var(--line-soft); border-radius:var(--r-lg); background:var(--card);
-    padding:20px; cursor:pointer; transition:.25s var(--ease-out); box-shadow:var(--sh-card); display:flex; flex-direction:column; gap:11px; }
+    padding:20px; cursor:pointer; transition:.25s var(--ease-out); box-shadow:var(--sh-card); display:flex; flex-direction:column; gap:11px }
   .tool-card:hover{ transform:translateY(-3px); border-color:var(--line-hi) }
-  .tool-card .ti{ width:40px; height:40px; border-radius:11px; background:var(--field); border:1px solid var(--line);
-    display:grid; place-items:center }
+  .tool-card:focus-visible{ outline:2px solid var(--blue); outline-offset:2px }
+  .tool-card .ti{ width:40px; height:40px; border-radius:11px; background:var(--field); border:1px solid var(--line); display:grid; place-items:center }
   .tool-card .ti svg{ width:21px; height:21px; color:var(--t1) }
   .tool-card h4{ font-size:15px; font-weight:600; color:var(--t1); display:flex; align-items:center; gap:7px }
   .tool-card .tdesc{ font-size:12.5px; color:var(--t4); line-height:1.6 }
   .tool-card .nbadge{ font-family:var(--f-en); font-size:9.5px; font-weight:700; color:var(--blue); background:var(--blue-bg); padding:1px 6px; border-radius:5px }
+  .tool-card .nano{ font-family:var(--f-en); font-size:9.5px; font-weight:700; color:var(--t3); border:1px solid var(--line); padding:1px 6px; border-radius:5px }
   .tool-card .soon-corner{ position:absolute; top:14px; right:14px; font-family:var(--f-mono); font-size:8px; color:var(--t4);
     border:1px solid var(--line); padding:2px 6px; border-radius:4px; letter-spacing:.04em }
   .tool-card.is-soon{ opacity:.72 }
   .tool-card.is-soon:hover{ opacity:.9 }
+
+  /* ===== 5. 最近作品 ===== */
+  .recent{ display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:12px }
+  .rcard{ border-radius:var(--r); overflow:hidden; background:var(--card); border:1px solid var(--line-soft); box-shadow:var(--sh-card);
+    text-decoration:none; color:inherit; transition:.2s var(--ease-out); display:block }
+  .rcard:hover{ transform:translateY(-3px); border-color:var(--line-hi) }
+  .rcard:focus-visible{ outline:2px solid var(--blue); outline-offset:2px }
+  .rthumb{ aspect-ratio:4/3; background:#0A0A0B; position:relative; display:grid; place-items:center; overflow:hidden; background-size:cover; background-position:center }
+  .rthumb video{ width:100%; height:100%; object-fit:contain; background:#000 }
+  .rthumb .ph{ color:var(--t4); font-size:11px; display:flex; flex-direction:column; align-items:center; gap:6px }
+  .rthumb .ph svg{ width:22px; height:22px }
+  .rthumb .pb{ position:absolute; width:34px; height:34px; border-radius:50%; background:rgba(0,0,0,.45); display:grid; place-items:center; backdrop-filter:blur(4px) }
+  .rthumb .pb svg{ width:14px; height:14px; color:#fff }
+  .rbadge{ position:absolute; top:8px; left:8px; font-family:var(--f-mono); font-size:10px; padding:3px 7px; border-radius:6px }
+  .rb-ok{ background:rgba(52,199,89,.16); color:var(--green) }
+  .rb-run{ background:rgba(255,178,62,.16); color:var(--amber) }
+  .rb-err{ background:rgba(255,82,71,.16); color:var(--red) }
+  .rb-q{ background:rgba(255,255,255,.08); color:var(--t3) }
+  .rcard .rb{ padding:11px 12px }
+  .rcard .rt{ font-size:12.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+  .rcard .rd{ color:var(--t4); font-size:11px; font-family:var(--f-mono); margin-top:3px }
+  .rskel{ border-radius:var(--r); overflow:hidden; background:var(--card); border:1px solid var(--line-soft) }
+  .rskel .rthumb{ animation:pulse 1.4s ease-in-out infinite }
+  @keyframes pulse{ 0%,100%{opacity:.55} 50%{opacity:.85} }
+
+  /* 暖空状态 / 错误状态 */
+  .recent-empty, .recent-err{ grid-column:1/-1; border:1px dashed var(--line); border-radius:var(--r-lg);
+    padding:38px 24px; text-align:center; background:radial-gradient(120% 130% at 50% 0%, rgba(77,141,255,.06), transparent 60%) }
+  .recent-empty .ei{ width:46px; height:46px; margin:0 auto 14px; border-radius:13px; background:var(--field); border:1px solid var(--line); display:grid; place-items:center; color:var(--t3) }
+  .recent-empty .ei svg{ width:23px; height:23px }
+  .recent-empty .et{ font-size:14.5px; font-weight:600; color:var(--t2) }
+  .recent-empty .ed{ font-size:12.5px; color:var(--t4); margin-top:6px; line-height:1.6 }
+  .recent-empty .ea{ display:inline-flex; align-items:center; gap:7px; margin-top:16px; background:var(--t1); color:#0A0A0B;
+    border-radius:var(--r-pill); padding:10px 18px; font-size:13px; font-weight:700; text-decoration:none; box-shadow:var(--sh-white-btn) }
+  .recent-err{ color:var(--t3); font-size:13px }
+  .recent-err button{ margin-top:12px; background:var(--card); border:1px solid var(--line); color:var(--t2);
+    border-radius:var(--r-pill); padding:8px 16px; font-size:12.5px; font-family:var(--f); cursor:pointer; transition:.18s }
+  .recent-err button:hover{ border-color:var(--line-hi); color:var(--t1) }
+
+  /* ===== 弹窗播放器(复用 .ov/.modal) ===== */
+  .ex-ov{ position:fixed; inset:0; background:rgba(4,4,5,.66); backdrop-filter:blur(8px); z-index:200;
+    display:none; align-items:center; justify-content:center; padding:30px }
+  .ex-ov.show{ display:flex }
+  .player{ width:min(420px,100%); background:var(--modal); border-radius:var(--r-lg); border:1px solid var(--line);
+    overflow:hidden; box-shadow:var(--sh-pop); animation:pop .35s var(--ease-out) }
+  @keyframes pop{ from{transform:scale(.96) translateY(10px);opacity:0} to{transform:scale(1) translateY(0);opacity:1} }
+  .player .pv{ aspect-ratio:9/16; background:#000; position:relative; display:grid; place-items:center; max-height:64vh }
+  .player .pv video, .player .pv img{ width:100%; height:100%; object-fit:contain; background:#000 }
+  .player .pv .pph{ color:var(--t4); font-size:12px; display:flex; flex-direction:column; gap:8px; align-items:center }
+  .player .pv .pph svg{ width:30px; height:30px }
+  .player .pbar{ padding:18px 20px; display:flex; align-items:center; gap:14px }
+  .player .pbar .pt{ flex:1; min-width:0 }
+  .player .pbar .pt .pn{ font-size:14.5px; font-weight:700 }
+  .player .pbar .pt .ps{ font-size:11px; color:var(--t4); font-family:var(--f-mono); margin-top:3px }
+  .player .pbar .puse{ flex:none; display:inline-flex; align-items:center; gap:7px; background:var(--t1); color:#0A0A0B;
+    border:none; border-radius:var(--r-pill); padding:11px 16px; font-size:13px; font-weight:700; font-family:var(--f);
+    cursor:pointer; box-shadow:var(--sh-white-btn); text-decoration:none }
+  .player .pclose{ position:absolute; top:14px; right:14px; width:34px; height:34px; border-radius:10px; z-index:2;
+    background:rgba(8,8,10,.55); backdrop-filter:blur(10px); border:none; color:#fff; cursor:pointer; display:grid; place-items:center }
+  .player .pclose svg{ width:17px; height:17px }
+
+  @media (prefers-reduced-motion: reduce){
+    .explore, .demo, .player{ animation:none !important }
+    .demo, .tool-card, .start, .rcard{ transition:none !important }
+    .demo:hover, .tool-card:hover, .start:hover, .rcard:hover{ transform:none !important }
+    .rskel .rthumb, .demo.skel{ animation:none !important }
+  }
 </style>
 </head>
 <body data-page="explore" data-crumb="探索">
 <div class="shell" id="shell-mount">
  <div class="main-col">
   <div class="explore">
-    <div class="ex-hero">
-      <div class="hi">LINGJING · 灵镜</div>
-      <h1 id="ex-greet">融媒体内容,一站生成</h1>
-      <p>从数字人播报到配音、配图,灵镜把一条合规内容需要的创作工具放在同一处。选一个工具开始,或先看看「AI 虚拟人」能出什么。</p>
-    </div>
 
-    <div class="ex-sec-h">创作工具 <span class="c" id="ex-count"></span></div>
-    <div class="tool-grid" id="toolGrid">
-      <div style="color:var(--t4);padding:20px">加载工具中…</div>
-    </div>
+    <!-- 1. HERO -->
+    <section class="ex-hero" aria-label="欢迎">
+      <div class="hero-main">
+        <div class="hi">LINGJING · 灵镜</div>
+        <h1 id="ex-greet">看见好内容，<br>是怎么生成的</h1>
+        <p>从数字人播报到配音、配图、配乐，灵镜把一条合规融媒体内容需要的工具放在同一处。先看看别人怎么做，再一键开始。</p>
+        <div class="cta">
+          <a class="go" href="create.html" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3Z"/></svg>开始创作</a>
+          <a class="ghost" href="works.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>我的作品</a>
+        </div>
+      </div>
+      <div class="hero-side">
+        <div>
+          <div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg>剩余点数</div>
+          <div class="bal" id="balVal">—</div>
+          <div class="meta" id="balMeta">实时余额 · 按文案计费</div>
+          <div class="warn" id="balWarn">⚠ 余额不足，请及时充值</div>
+        </div>
+        <div class="mini">
+          <a class="mini-stat" href="works.html"><div class="mv" id="cWorks">—</div><div class="mn">作品</div></a>
+          <a class="mini-stat" href="avatars.html"><div class="mv" id="cAvatars">—</div><div class="mn">形象</div></a>
+          <a class="mini-stat" href="voices.html"><div class="mv" id="cVoices">—</div><div class="mn">音色</div></a>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. 案例展示墙 -->
+    <section aria-label="案例展示">
+      <div class="ex-sec-h"><h3>看见可能</h3><span class="c">PRECISION · SHOWCASE</span></div>
+      <div class="showcase" id="showcase" role="region" aria-label="案例展示，可横向滚动" tabindex="0"></div>
+    </section>
+
+    <!-- 3. 一键开始 -->
+    <section aria-label="一键开始" data-requires-create>
+      <div class="ex-sec-h"><h3>一键开始</h3><span class="c" id="startCount"></span></div>
+      <div class="starts" id="starts"></div>
+    </section>
+
+    <!-- 4. 创作工具 -->
+    <section aria-label="创作工具">
+      <div class="ex-sec-h"><h3>创作工具</h3><span class="c" id="ex-count"></span></div>
+      <div class="tool-grid" id="toolGrid">
+        <div style="color:var(--t4);padding:20px">加载工具中…</div>
+      </div>
+    </section>
+
+    <!-- 5. 最近作品 -->
+    <section aria-label="最近作品">
+      <div class="ex-sec-h"><h3 id="recentTitle">最近作品</h3><span class="c">FROM /jobs</span><a class="more" href="works.html">查看全部 →</a></div>
+      <div class="recent" id="recent">
+        <div class="rskel"><div class="rthumb"></div><div class="rb"><div class="rt">&nbsp;</div><div class="rd">&nbsp;</div></div></div>
+        <div class="rskel"><div class="rthumb"></div><div class="rb"><div class="rt">&nbsp;</div><div class="rd">&nbsp;</div></div></div>
+        <div class="rskel"><div class="rthumb"></div><div class="rb"><div class="rt">&nbsp;</div><div class="rd">&nbsp;</div></div></div>
+        <div class="rskel"><div class="rthumb"></div><div class="rb"><div class="rt">&nbsp;</div><div class="rd">&nbsp;</div></div></div>
+      </div>
+    </section>
+
   </div>
  </div>
 </div>
+
+<!-- 弹窗播放器 -->
+<div class="ex-ov" id="player" role="dialog" aria-modal="true" aria-label="案例预览">
+  <div class="player">
+    <button class="pclose" id="playerClose" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    <div class="pv" id="playerView"></div>
+    <div class="pbar">
+      <div class="pt"><div class="pn" id="playerName"></div><div class="ps" id="playerSub"></div></div>
+      <a class="puse" id="playerUse" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3Z"/></svg>用这个模板</a>
+    </div>
+  </div>
+</div>
+
 <script src="shell.js"></script>
 <script src="tools.js"></script>
 <script src="api.js"></script>
 <script>
-  const DESC = {
-    'ai-avatar': '上传照片建数字人,输入文案生成口型自然的播报视频。',
-    'tts': '输入文字,用预置或克隆音色生成配音。',
-    'ai-image': '文字或参考图生成新闻配图、缩略图。',
-    'img2video': '让一张静态图动起来,生成短影片。',
-    'ref-video': '上传参考素材,生成同风格影片。',
-    'text2video': '一句话描述,生成影片。',
-    'ai-image-edit': '局部重绘、替换、扩图,精修图片。',
-    'ai-video-edit': '按描述编辑影片:移除、替换、新增元素。',
-    'ai-music': '描述风格,生成背景音乐或歌曲。',
-  };
+  // ============ 数据 ============
+  function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function fmt(ts){ const d=new Date(ts); const p=n=>String(n).padStart(2,'0'); return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }
   function svg(inner){ return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`; }
+
+  // 案例展示墙(精选样例) — title/sub/tag/poster/video/toolKey/prefill
+  const F='https://images.unsplash.com/photo-';
+  const SHOWCASE = [
+    { title:'晚间新闻 · 数字主播', sub:'数字人视频 · 9:16', tag:'新闻播报', poster:F+'1544005313-94ddf0286df2?w=520&q=85&fit=crop&crop=faces', toolKey:'ai-avatar', prefill:'avatars.html' },
+    { title:'惠民政策 · 系列短片', sub:'数字人视频 · 16:9', tag:'政策解读', poster:F+'1438761681033-6461ffad8d80?w=520&q=85&fit=crop&crop=faces', toolKey:'ai-avatar', prefill:'avatars.html' },
+    { title:'文化节现场 · 记者口播', sub:'数字人视频 · 9:16', tag:'出镜报道', poster:F+'1507003211169-0a1dd7228f2d?w=520&q=85&fit=crop&crop=faces', toolKey:'ai-avatar', prefill:'avatars.html' },
+    { title:'财经观察 · 每日早报', sub:'数字人视频 · 16:9', tag:'财经', poster:F+'1573497019940-1c28c88b4f3e?w=520&q=85&fit=crop&crop=faces', toolKey:'ai-avatar', prefill:'avatars.html' },
+    { title:'城市形象 · 宣传短片', sub:'图片转影片 · 16:9', tag:'宣传片', poster:F+'1531123897727-8f129e1688ce?w=520&q=85&fit=crop&crop=faces', toolKey:'img2video', prefill:'img2video.html' },
+    { title:'科普讲解 · 虚拟讲师', sub:'数字人视频 · 16:9', tag:'教育', poster:F+'1539571696357-5a69c17a67c6?w=520&q=85&fit=crop&crop=faces', toolKey:'ai-avatar', prefill:'avatars.html' },
+  ];
+
+  // 一键开始(聚合 create/ai-image/ai-music 的发现内容)
+  const STARTS = [
+    { title:'新闻播报脚本', sd:'填入演播室口播文案，选主播即可生成。', kind:'数字人视频 · 模板', href:'create.html?template=news',
+      icon:'<path d="M4 6h16M4 12h16M4 18h10"/>' },
+    { title:'政策解读模板', sd:'结构化解读脚本，适合政务新媒体。', kind:'数字人视频 · 模板', href:'create.html?template=policy',
+      icon:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/>' },
+    { title:'演播室配图', sd:'点击即填示例提示词，生成新闻配图。', kind:'AI 图片 · 示例', href:'ai-image.html?sample=studio',
+      icon:'<rect x="4" y="4" width="16" height="16" rx="2"/><path d="m5 17 4-4 3 3 3-3 4 4"/><circle cx="9" cy="9" r="1.5"/>' },
+    { title:'片头背景乐', sd:'国风 / 大气 / 科技感，一键套用风格。', kind:'AI 音乐 · 预置', href:'ai-music.html?style=intro',
+      icon:'<path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/>' },
+  ];
+
+  // ============ 渲染:案例展示墙 ============
+  function renderShowcase(){
+    const el = document.getElementById('showcase');
+    el.innerHTML = SHOWCASE.map((s,i)=>`
+      <div class="demo" tabindex="0" role="button" aria-label="预览案例：${esc(s.title)}" data-i="${i}">
+        <div class="img" style="background-image:url('${s.poster}')"></div>
+        <div class="veil"></div>
+        <span class="tag">${esc(s.tag)}</span>
+        <button class="play" tabindex="-1" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
+        <div class="cap-t"><div class="ttl">${esc(s.title)}</div><div class="sub">${esc(s.sub)}</div></div>
+      </div>`).join('');
+    el.querySelectorAll('.demo').forEach(card=>{
+      const open=()=>openPlayer(SHOWCASE[+card.dataset.i]);
+      card.addEventListener('click', open);
+      card.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); open(); } });
+    });
+  }
+
+  // ============ 弹窗播放器 ============
+  let _lastFocus=null;
+  function openPlayer(s){
+    _lastFocus=document.activeElement;
+    const view=document.getElementById('playerView');
+    // 样片视频缺省 → 用 poster 占位(运营后续补 sampleVideoUrl)
+    view.innerHTML = s.sampleVideoUrl
+      ? `<video src="${s.sampleVideoUrl}" controls autoplay playsinline></video>`
+      : `<div class="img" style="position:absolute;inset:0;background-size:cover;background-position:center;background-image:url('${s.poster}')"></div><div class="pph" style="position:relative;z-index:1">${svg('<circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4V8Z"/>')}<span>样片预览</span></div>`;
+    document.getElementById('playerName').textContent=s.title;
+    document.getElementById('playerSub').textContent=s.sub;
+    document.getElementById('playerUse').href=s.prefill||LJTools.href(LJTools.get(s.toolKey)||{});
+    const ov=document.getElementById('player');
+    ov.classList.add('show');
+    document.getElementById('playerClose').focus();
+  }
+  function closePlayer(){
+    const ov=document.getElementById('player');
+    ov.classList.remove('show');
+    const v=ov.querySelector('video'); if(v){ v.pause(); }
+    if(_lastFocus) _lastFocus.focus();
+  }
+  document.getElementById('playerClose').addEventListener('click', closePlayer);
+  document.getElementById('player').addEventListener('click', e=>{ if(e.target.id==='player') closePlayer(); });
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape' && document.getElementById('player').classList.contains('show')) closePlayer(); });
+
+  // ============ 渲染:一键开始 ============
+  function renderStarts(){
+    document.getElementById('startCount').textContent=`TEMPLATES · ${STARTS.length}`;
+    document.getElementById('starts').innerHTML = STARTS.map(s=>`
+      <button class="start" onclick="location.href='${s.href}'">
+        <div class="si">${svg(s.icon)}</div>
+        <h4>${esc(s.title)}</h4>
+        <div class="sd">${esc(s.sd)}</div>
+        <div class="kind">${esc(s.kind)}</div>
+      </button>`).join('');
+  }
+
+  // ============ 渲染:创作工具 ============
   function renderTools(){
     if(!window.LJTools){ setTimeout(renderTools,30); return; }
-    const grid = document.getElementById('toolGrid');
-    const live = LJTools.list.filter(t=>t.enabled).length;
-    document.getElementById('ex-count').textContent = `${live} 个已上线 · ${LJTools.list.length} 个规划中`;
+    const grid=document.getElementById('toolGrid');
+    const live=LJTools.list.filter(t=>t.enabled).length;
+    document.getElementById('ex-count').textContent=`${live} 个已上线 · ${LJTools.list.length} 个规划中`;
+    const DESC={ 'ai-avatar':'上传照片建数字人，输入文案生成口型自然的播报视频。','tts':'输入文字，用预置或克隆音色生成配音。','ai-image':'文字或参考图生成新闻配图、缩略图。','img2video':'让一张静态图动起来，生成短影片。','ref-video':'上传参考素材，生成同风格影片。','text2video':'一句话描述，生成影片。','ai-image-edit':'局部重绘、替换、扩图，精修图片。','ai-video-edit':'按描述编辑影片：移除、替换、新增元素。','ai-music':'描述风格，生成背景音乐或歌曲。' };
     grid.innerHTML = LJTools.list.map(t=>{
-      const soon = !t.enabled;
-      const badge = t.badge ? `<span class="nbadge">${t.badge.text}</span>` : '';
-      const corner = soon ? `<span class="soon-corner">即将上线</span>` : '';
-      return `<div class="tool-card${soon?' is-soon':''}" onclick="location.href='${LJTools.href(t)}'">
+      const soon=!t.enabled;
+      const badge=t.badge ? `<span class="${t.badge.kind==='nano'?'nano':'nbadge'}">${esc(t.badge.text)}</span>` : '';
+      const corner=soon ? `<span class="soon-corner">即将上线</span>` : '';
+      return `<div class="tool-card${soon?' is-soon':''}" tabindex="0" role="link" aria-label="${esc(t.label)}" onclick="location.href='${LJTools.href(t)}'" onkeydown="if(event.key==='Enter'){location.href='${LJTools.href(t)}'}">
         ${corner}
         <div class="ti">${svg(t.icon)}</div>
-        <h4>${t.label} ${badge}</h4>
+        <h4>${esc(t.label)} ${badge}</h4>
         <div class="tdesc">${DESC[t.key]||''}</div>
       </div>`;
     }).join('');
   }
+
+  // ============ 渲染:最近作品(真实 /jobs + 全状态) ============
+  const BADGE={ done:['rb-ok','已完成'], running:['rb-run','生成中'], queued:['rb-q','排队中'], failed:['rb-err','失败'] };
+  function jobCard(j){
+    const [cls,txt]=BADGE[j.status]||['rb-q',j.status];
+    let inner;
+    if(j.status==='done' && j.videoUrl){
+      inner=`<video src="${j.videoUrl}#t=0.1" preload="metadata" muted playsinline></video><div class="pb"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>`;
+    } else if(j.status==='running'||j.status==='queued'){
+      inner=`<div class="ph"><div class="spinner" style="width:20px;height:20px;border:2.5px solid var(--line);border-top-color:var(--amber);border-radius:50%;animation:spin 1s linear infinite"></div>${j.status==='queued'?'排队中':'生成中'}</div>`;
+    } else {
+      inner=`<div class="ph">${svg('<path d="M12 9v4M12 17h.01"/><path d="M10.3 4 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 4a2 2 0 0 0-3.4 0Z"/>')}${j.status==='failed'?'生成失败':'暂无成品'}</div>`;
+    }
+    const title=(j.script||'').trim().slice(0,12)||'数字人视频';
+    return `<a class="rcard" href="works.html"><div class="rthumb"><span class="rbadge ${cls}">${txt}</span>${inner}</div>
+      <div class="rb"><div class="rt" title="${esc(j.script||'')}">${esc(title)}${(j.script||'').length>12?'…':''}</div><div class="rd">${fmt(j.createdAt)}</div></div></a>`;
+  }
+  function renderRecentEmpty(canCreate){
+    const cta = canCreate
+      ? `<a class="ea" href="create.html">从模板开始 →</a>`
+      : `<a class="ea" href="#" onclick="document.getElementById('showcase').focus();return false;">先看看案例 →</a>`;
+    document.getElementById('recentTitle').textContent = canCreate ? '从这里开始' : '最近作品';
+    document.getElementById('recent').innerHTML = `<div class="recent-empty">
+      <div class="ei">${svg('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>')}</div>
+      <div class="et">你的第一条作品会出现在这里</div>
+      <div class="ed">${canCreate?'从一个模板起步，几分钟就能产出一条合规的数字人内容。':'你当前是查看者，可以先浏览上面的案例与工具。'}</div>
+      ${cta}</div>`;
+  }
+  function renderRecentErr(){
+    document.getElementById('recent').innerHTML = `<div class="recent-err">作品加载失败，可能是网络波动。
+      <br><button onclick="loadRecent()">点此重试 ↻</button></div>`;
+  }
+  async function loadRecent(){
+    const box=document.getElementById('recent');
+    try{
+      const jobs=await LJ.get('/jobs');
+      if(!jobs.length){ renderRecentEmpty(window.__ljRole!=='viewer'); return; }
+      box.innerHTML = jobs.slice(0,8).map(jobCard).join('');
+    }catch(e){ renderRecentErr(); }
+  }
+
+  // ============ Hero:点数 + 统计(全状态) ============
+  async function loadHero(){
+    let me;
+    try{ me=await LJ.me(); }catch(e){ return; /* 401 已跳登录 */ }
+    // 角色自适应:viewer 由 shell 的 data-requires-create 兜底隐藏「开始创作」/「一键开始」
+    const hr=new Date().getHours();
+    // 问候随时间(可选,不抢 H1 焦点) — 保留 H1 文案不变
+
+    const [bal,warn,jobs,avs,vcs]=await Promise.all([
+      LJ.get('/credits/balance').catch(()=>({balance:null})),
+      LJ.get('/credits/warning').catch(()=>null),
+      LJ.get('/jobs').catch(()=>null),
+      LJ.get('/avatars').catch(()=>null),
+      LJ.get('/voices').catch(()=>null),
+    ]);
+    const balEl=document.getElementById('balVal');
+    balEl.textContent = bal.balance==null ? '—' : bal.balance.toLocaleString('en-US');
+    if(warn&&warn.low){ balEl.classList.add('low'); document.getElementById('balWarn').style.display='block'; document.getElementById('balMeta').style.display='none'; }
+    const set=(id,v)=>{ document.getElementById(id).textContent = v==null?'—':v; };
+    set('cWorks', jobs?jobs.length:null);
+    set('cAvatars', avs?(avs.custom||[]).length:null);
+    set('cVoices', vcs?(vcs.clones||[]).length:null);
+  }
+
+  // ============ 启动 ============
+  renderShowcase();
+  renderStarts();
   renderTools();
-  if(window.LJ) LJ.me().catch(()=>{});
+  loadHero();
+  loadRecent();
 </script>
 </body>
 </html>
