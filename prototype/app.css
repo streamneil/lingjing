@@ -483,6 +483,15 @@ img { display: block; }
 
 /* —— 整体外壳 —— */
 .shell { display: grid; grid-template-columns: 248px 1fr; min-height: 100vh; position: relative; z-index: 1; }
+/* 防菜单弹出闪烁:侧边栏由 shell.js 注入。注入前左侧 248px 列只是空背景,
+   会在「空白→菜单弹出」之间闪一帧。注入完成后 shell.js 给 #shell-mount 加 .sb-ready;
+   在此之前用 ::before 铺一层同色背景占位(视觉与 sidebar 背景一致),避免空白闪。
+   sidebar 自身用极短淡入,消除内容突现的生硬感。 */
+#shell-mount:not(.sb-ready)::before {
+  content: ""; grid-row: 1; grid-column: 1; align-self: stretch;
+  background: linear-gradient(180deg, var(--bg-soft) 0%, var(--void) 100%);
+  border-right: 1px solid var(--hairline);
+}
 
 /* —— 左侧导航 —— */
 .sidebar {

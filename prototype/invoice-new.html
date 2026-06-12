@@ -37,6 +37,7 @@
     .in-ord.ro .in-ck{ visibility:hidden; }
     @media (max-width:760px){ .in-grid{ grid-template-columns:1fr; } .in-card{ position:static; } }
   </style>
+<script defer src="shell.js"></script>
 </head>
 
 <body data-page="invoices" data-crumb="财务中心 > 发票管理 > 新建开票">
@@ -51,7 +52,6 @@
     </div>
   </div>
 
-  <script src="shell.js"></script>
   <script src="api.js"></script>
   <script>
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }

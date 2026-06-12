@@ -94,7 +94,10 @@
     <div class="sb-foot"><div class="deploy-tag"><span class="d"></span><span>云端服务 · 运行中</span></div></div>
   </aside>`;
 
-  document.getElementById('shell-mount').insertAdjacentHTML('afterbegin', sb);
+  const __mount = document.getElementById('shell-mount');
+  __mount.insertAdjacentHTML('afterbegin', sb);
+  // 注入完成 → 标记就绪,撤掉 ::before 占位背景(CSS 据此切换),消除「空白→弹出」闪帧。
+  __mount.classList.add('sb-ready');
 
   // 创作工具组延迟填充:tools.js 异步注入,就绪后再渲(首渲为空时兜底)。
   function fillTools(){

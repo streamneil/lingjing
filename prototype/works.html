@@ -24,6 +24,7 @@
   .work-b h4 { font-size:14px; font-weight:600; color:var(--t1); }
   .work-b .m { font-family:var(--f-mono); font-size:10.5px; color:var(--t4); margin-top:6px; }
 </style>
+<script defer src="shell.js"></script>
 </head>
 <body data-page="works" data-crumb="创作 > 作品库">
 <div class="shell" id="shell-mount">
@@ -79,7 +80,6 @@
     </main>
   </div>
 </div>
-<script src="shell.js"></script>
 <script src="api.js"></script>
 <script>
   document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));this.classList.add('active');this.dataset.filter!==undefined&&render(this.dataset.filter);}));

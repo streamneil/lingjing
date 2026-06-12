@@ -26,6 +26,7 @@
     .iv-empty .ee-b{ display:inline-block; background:var(--blue); color:#fff; border-radius:999px; padding:11px 24px; font-size:14px; font-weight:700; text-decoration:none; min-height:44px; }
     .iv-new-btn{ background:var(--blue); color:#fff; border:none; border-radius:999px; padding:10px 20px; font-size:14px; font-weight:700; text-decoration:none; align-self:center; min-height:44px; }
   </style>
+<script defer src="shell.js"></script>
 </head>
 
 <body data-page="invoices" data-crumb="财务中心 > 发票管理">
@@ -41,7 +42,6 @@
     </div>
   </div>
 
-  <script src="shell.js"></script>
   <script src="api.js"></script>
   <script>
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }

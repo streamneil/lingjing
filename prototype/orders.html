@@ -41,6 +41,7 @@
     .od-empty .ee-d{ font-size:13px; color:var(--t3); margin:8px 0 18px; }
     .od-empty .ee-b{ display:inline-block; background:var(--blue); color:#fff; border:none; border-radius:999px; padding:11px 24px; font-size:14px; font-weight:700; cursor:pointer; text-decoration:none; min-height:44px; }
   </style>
+<script defer src="shell.js"></script>
 </head>
 
 <body data-page="orders" data-crumb="财务中心 > 充值订单">
@@ -58,7 +59,6 @@
 
   <!-- 隐藏文件输入(回单上传) -->
 
-  <script src="shell.js"></script>
   <script src="api.js"></script>
   <script>
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }

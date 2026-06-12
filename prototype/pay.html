@@ -59,6 +59,7 @@
       body{ padding-bottom:76px; }
     }
   </style>
+<script defer src="shell.js"></script>
 </head>
 
 <body data-page="orders" data-crumb="账户 > 充值 > 收银台">
@@ -75,7 +76,6 @@
 
   <input type="file" id="receiptInput" accept="image/png,image/jpeg" style="display:none">
 
-  <script src="shell.js"></script>
   <script src="api.js"></script>
   <script>
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
