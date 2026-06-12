@@ -58,54 +58,79 @@
     }).join('');
   }
 
-  const items =
-    link('explore','探索','explore.html') +
-    link('assets','我的资产','assets.html') +
-    `<div class="sb-group">创作工具</div>` +
-    `<div id="sb-tools">${buildToolItems()}</div>` +
-    `<div class="sb-group">财务中心</div>` +
-    link('billing','用量计费','billing.html') +
-    link('orders','充值订单','orders.html') +
-    link('invoices','发票管理','invoices.html') +
-    `<div class="sb-group">经营管理</div>` +
-    link('members','成员与权限','members.html') +
-    link('settings','系统设置','settings.html');
-
-  // 品牌即时渲染:整页重载时先读上次缓存的机构品牌,同步渲进 .sb-brand →
-  // 0 闪烁。无缓存(首次/未登录)才用默认「Lingjing 灵镜」占位。
-  // LJ.me() 返回后(bindAuth)会写回缓存并按需校正,几乎总相同 → 无可见跳变。
-  let __brandCache = null;
-  try { __brandCache = JSON.parse(localStorage.getItem('ljBrand') || 'null'); } catch {}
-  const __defaultBrand = `<span class="nm">Lingjing</span><span class="cjk">灵镜</span>`;
-  const __brandHTML = (__brandCache && __brandCache.showName)
-    ? `<span class="nm">${ljEscapeBrand(__brandCache.showName)}</span>`
-    : __defaultBrand;
-  const __markHTML = (__brandCache && __brandCache.logoUrl)
-    ? `<img src="${ljEscapeBrand(__brandCache.logoUrl)}" alt="" style="width:100%;height:100%;object-fit:contain;border-radius:7px" onerror="this.replaceWith(ljDefaultMark())">`
-    : ljDefaultMarkSVG();
-
-  const sb = `
-  <aside class="sidebar">
-    <a class="sb-brand" href="explore.html" title="${ljEscapeBrand((__brandCache && __brandCache.showName) || '灵镜 · 探索')}">
-      <span class="logo-mark" id="lj-brand-mark">${__markHTML}</span>
-      ${__brandHTML}
-    </a>
-    <nav class="sb-nav">${items}</nav>
-    <div class="sb-foot"><div class="deploy-tag"><span class="d"></span><span>云端服务 · 运行中</span></div></div>
-  </aside>`;
-
   const __mount = document.getElementById('shell-mount');
-  __mount.insertAdjacentHTML('afterbegin', sb);
-  // 注入完成 → 标记就绪,撤掉 ::before 占位背景(CSS 据此切换),消除「空白→弹出」闪帧。
+
+  // 侧边栏现已静态内联进各页 HTML(build-sidebar.mjs 生成)→ 首帧即有菜单,
+  // 所有浏览器 0 闪。shell.js 不再注入侧栏,只「增强」:设 active 高亮 + 品牌覆盖。
+  // 兜底:万一某页没有静态侧栏(漏生成),仍按旧逻辑动态注入,保证不白屏。
+  let __sidebar = __mount.querySelector('.sidebar');
+  if (!__sidebar) {
+    const items =
+      link('explore','探索','explore.html') +
+      link('assets','我的资产','assets.html') +
+      `<div class="sb-group">创作工具</div>` +
+      `<div id="sb-tools">${buildToolItems()}</div>` +
+      `<div class="sb-group">财务中心</div>` +
+      link('billing','用量计费','billing.html') +
+      link('orders','充值订单','orders.html') +
+      link('invoices','发票管理','invoices.html') +
+      `<div class="sb-group">经营管理</div>` +
+      link('members','成员与权限','members.html') +
+      link('settings','系统设置','settings.html');
+    __mount.insertAdjacentHTML('afterbegin', `
+    <aside class="sidebar">
+      <a class="sb-brand" href="explore.html" title="灵镜 · 探索">
+        <span class="logo-mark" id="lj-brand-mark">${ljDefaultMarkSVG()}</span>
+        <span class="nm">Lingjing</span><span class="cjk">灵镜</span>
+      </a>
+      <nav class="sb-nav">${items}</nav>
+      <div class="sb-foot"><div class="deploy-tag"><span class="d"></span><span>云端服务 · 运行中</span></div></div>
+    </aside>`);
+    __sidebar = __mount.querySelector('.sidebar');
+  }
   __mount.classList.add('sb-ready');
 
-  // 创作工具组延迟填充:tools.js 异步注入,就绪后再渲(首渲为空时兜底)。
+  // 当前页高亮:静态侧栏的 .sb-item 不带 active,这里按 data-page 加(工具页用工具 key)。
+  if (cur) {
+    const activeItem = __sidebar.querySelector(`.sb-item[data-page="${cur}"]`);
+    if (activeItem) activeItem.classList.add('active');
+  }
+
+  // 品牌即时渲染:整页重载时先读上次缓存的机构品牌,同步覆盖静态默认「Lingjing 灵镜」
+  // → 缓存命中 0 闪。LJ.me() 返回后(bindAuth)写回缓存并按需校正,几乎总相同。
+  let __brandCache = null;
+  try { __brandCache = JSON.parse(localStorage.getItem('ljBrand') || 'null'); } catch {}
+  if (__brandCache && (__brandCache.showName || __brandCache.logoUrl)) {
+    const brandEl = __sidebar.querySelector('.sb-brand');
+    if (brandEl) {
+      if (__brandCache.showName) {
+        const nm = brandEl.querySelector('.nm'), cjk = brandEl.querySelector('.cjk');
+        if (nm) nm.textContent = __brandCache.showName; // textContent 防 XSS
+        if (cjk) cjk.style.display = 'none';
+        brandEl.title = __brandCache.showName;
+      }
+      if (__brandCache.logoUrl) {
+        const mark = brandEl.querySelector('#lj-brand-mark');
+        if (mark) {
+          const img = new Image();
+          img.src = __brandCache.logoUrl;
+          img.style.cssText = 'width:100%;height:100%;object-fit:contain;border-radius:7px';
+          img.onload = () => { mark.innerHTML = ''; mark.appendChild(img); };
+          // onerror:保留默认 SVG
+        }
+      }
+    }
+  }
+
+  // 创作工具组:现已静态内联(build-sidebar.mjs)→ #sb-tools 首帧即有项,本函数空转返回。
+  // 兜底:仅当静态项缺失(旧页/漏生成)才等 LJTools 动态填充。
   function fillTools(){
-    if (!window.LJTools) { setTimeout(fillTools, 30); return; }
     const host = document.getElementById('sb-tools');
-    if (!host) return;
-    if (!host.children.length) host.innerHTML = buildToolItems(); // 首渲已填则不重复
-    // 角色精简为 管理员/创作者,均可创作 → 不再隐藏创作入口。
+    if (!host || host.children.length) return; // 已有静态工具项 → 无需做事
+    if (!window.LJTools) { setTimeout(fillTools, 30); return; }
+    host.innerHTML = buildToolItems();
+    // 兜底动态渲染的工具项也要按 data-page 高亮当前页。
+    if (cur) { const a = host.querySelector(`.sb-item[data-page="${cur}"]`); if (a) a.classList.add('active'); }
   }
   fillTools();
 
