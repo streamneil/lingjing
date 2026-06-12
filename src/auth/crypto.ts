@@ -30,3 +30,13 @@ export function dummyVerify(plain: string): void {
 export function genToken(): string {
   return randomBytes(32).toString('hex');
 }
+
+// 临时密码字符集:去掉易混淆字符(0/O、1/l/I)+ 安全符号子集,管理员口头/复制传达不歧义。
+const TMP_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789@#%*';
+/** 生成 12 位随机强密码(crypto 随机源,无歧义字符)。管理员重置成员密码用,明文仅回传一次。 */
+export function genTempPassword(len = 12): string {
+  const bytes = randomBytes(len);
+  let out = '';
+  for (let i = 0; i < len; i++) out += TMP_ALPHABET[bytes[i]! % TMP_ALPHABET.length];
+  return out;
+}

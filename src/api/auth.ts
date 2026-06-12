@@ -14,6 +14,7 @@ import {
   seatUsage,
   updateDisplayName,
   changePassword,
+  tenantAdminResetPassword,
 } from '../auth/index.js';
 import {
   setSessionCookie,
@@ -108,14 +109,33 @@ authRouter.get('/members', requireRole('admin'), (req: Request, res: Response) =
 });
 
 authRouter.post('/members', requireRole('admin'), (req: Request, res: Response) => {
-  const { username, password, role } = req.body ?? {};
+  const { username, password, role, displayName } = req.body ?? {};
   if (!username || !password || !role) {
     return res.status(400).json({ error: '缺少 username / password / role' });
   }
   try {
-    const u = createUser(req.user!.tenantId, username, password, role as Role);
-    audit(req, 'member_add', `${u.username}(${u.role})`);
-    return res.status(201).json({ id: u.id, username: u.username, role: u.role });
+    const u = createUser(
+      req.user!.tenantId,
+      username,
+      password,
+      role as Role,
+      typeof displayName === 'string' ? displayName : undefined,
+    );
+    audit(req, 'member_add', `${u.display_name}(${u.username}/${u.role})`);
+    return res.status(201).json({ id: u.id, username: u.username, displayName: u.display_name, role: u.role });
+  } catch (e) {
+    return memberError(res, e);
+  }
+});
+
+// 管理员强制重置成员密码:随机生成 → 作废其 session → 返回 {username, password}(明文仅此次回传)。
+// 自我保护:不能重置自己(auth/index.ts 抛 CANNOT_RESET_SELF)。审计仅记动作,不含密码明文。
+authRouter.post('/members/:id/reset-password', requireRole('admin'), (req: Request, res: Response) => {
+  try {
+    const r = tenantAdminResetPassword(req.user!.tenantId, req.params.id!, req.user!.id);
+    if (!r) return res.status(404).json({ error: '成员不存在' });
+    audit(req, 'member_reset_pw', r.username);
+    return res.json({ ok: true, username: r.username, password: r.password });
   } catch (e) {
     return memberError(res, e);
   }

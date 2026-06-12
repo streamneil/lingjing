@@ -13,7 +13,7 @@ import {
   type UserRow,
   type SessionRow,
 } from '../db/index.js';
-import { hashPassword, verifyPassword, dummyVerify, genToken } from './crypto.js';
+import { hashPassword, verifyPassword, dummyVerify, genToken, genTempPassword } from './crypto.js';
 
 const now = () => Date.now();
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 天
@@ -87,6 +87,7 @@ export function createUser(
   username: string,
   password: string,
   role: Role,
+  displayName?: string, // 昵称(展示名);空则回落用户名(保旧调用兼容)
 ): UserRow {
   if (!['admin', 'creator', 'viewer'].includes(role)) throw memberErr('INVALID_ROLE', '角色非法');
   if (RESERVED_USERNAMES.has(username.trim().toLowerCase())) {
@@ -96,7 +97,7 @@ export function createUser(
     id: randomUUID(),
     tenant_id: tenantId,
     username,
-    display_name: username, // 默认昵称=用户名,可在个人信息里改
+    display_name: (displayName && displayName.trim()) || username, // 昵称优先;空回落用户名
     password_hash: hashPassword(password),
     role,
     status: 'active',
@@ -221,6 +222,26 @@ export function adminResetPassword(tenantId: string, userId: string, newPassword
   });
   tx();
   return true;
+}
+
+/** 租户 admin 强制重置成员密码:生成随机强密码 → adminResetPassword(作废 session)。
+ *  自我保护:不能重置自己(改自己密码走 /me/password,需旧密码)。
+ *  返回 {username, password}(明文仅此次回传,不落库、不写审计);用户不存在 → null。 */
+export function tenantAdminResetPassword(
+  tenantId: string,
+  userId: string,
+  actingUserId: string,
+): { username: string; password: string } | null {
+  if (userId === actingUserId) {
+    throw memberErr('SELF_ACTION', '不能重置自己的密码,请在个人信息中修改');
+  }
+  const u = db
+    .prepare(`SELECT username FROM user WHERE id=? AND tenant_id=?`)
+    .get(userId, tenantId) as { username: string } | undefined;
+  if (!u) return null;
+  const password = genTempPassword();
+  adminResetPassword(tenantId, userId, password); // 复用:写 hash + 作废 session(租户隔离已校验)
+  return { username: u.username, password };
 }
 
 /** 超管改租户配置(name / max_creator_seats / delivery)。只更新传入的字段。返回 false=租户不存在。 */
