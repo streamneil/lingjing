@@ -24,7 +24,9 @@ let tenantId: string;
 beforeAll(() => {
   tenantId = createTenant('设置测试台').id;
   createUser(tenantId, 'set_admin', 'pw123456', 'admin');
-  createUser(tenantId, 'set_viewer', 'pw123456', 'viewer');
+  // 原 set_viewer(viewer):viewer 已废弃 → 建为 creator;该端点 admin-only,creator 同样 403,
+  // "非 admin → 403" 的意图不变。
+  createUser(tenantId, 'set_viewer', 'pw123456', 'creator');
 });
 
 async function loginAs(username: string) {

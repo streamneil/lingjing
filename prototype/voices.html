@@ -95,7 +95,7 @@
   // ── 克隆流程:设计系统弹窗(替代 prompt+confirm)──
   async function cloneVoiceFlow(){
     const me=await LJ.me().catch(()=>null);
-    if(!me||me.role==='viewer'){ window.LJToast('查看者不能克隆音色','err'); return; }
+    if(!me){ window.LJToast('请先登录','err'); return; }
     resetCvForm(); openModal('cloneVoice');
     setTimeout(()=>document.getElementById('cvName').focus(),60);
   }

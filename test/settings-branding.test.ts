@@ -38,7 +38,9 @@ beforeAll(async () => {
   tenantId = t.id;
   createUser(tenantId, 'brandadmin', 'pw123456', 'admin');
   createUser(tenantId, 'brandcreator', 'pw123456', 'creator');
-  createUser(tenantId, 'brandviewer', 'pw123456', 'viewer');
+  // 原 brandviewer(viewer):viewer 已废弃 → 建为 creator;settings 写接口 admin-only,
+  // creator 同样被拒 403,"非 admin 改名 → 403" 的意图不变。
+  createUser(tenantId, 'brandviewer', 'pw123456', 'creator');
   otherTenantId = createTenant('另一个台').id;
   createUser(otherTenantId, 'otheradmin', 'pw123456', 'admin');
 });
@@ -128,7 +130,7 @@ describe('系统名称可改、机构名称只读(T1)', () => {
     expect(r.status).toBe(403);
   });
 
-  it('RBAC:viewer 改系统名 → 403', async () => {
+  it('RBAC:非 admin(另一 creator)改系统名 → 403', async () => {
     const r = await (await asUser('brandviewer')).put('/api/settings', { brandName: '黑客台' });
     expect(r.status).toBe(403);
   });

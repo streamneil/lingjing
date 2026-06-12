@@ -3,7 +3,7 @@
 // 决策来源:/plan-eng-review D10 + 外部声音#6 —— 克隆他人声音同样需"本人授权"凭证。
 
 import { randomUUID } from 'node:crypto';
-import { db, type VoiceRow } from '../db/index.js';
+import { db, scopeByActor, type VoiceRow } from '../db/index.js';
 import { TERMS_VERSION } from '../legal/index.js';
 
 const now = () => Date.now();
@@ -88,14 +88,15 @@ export function createCloneVoice(p: CreateVoiceParams): VoiceRow {
     source_key: p.sourceKey,
     provider_voice_id: p.providerVoiceId ?? null,
     authorization_id: authId,
+    created_by: p.userId, // 账号隔离:创建者
     created_at: now(),
   };
   db.prepare(
-    `INSERT INTO voice (id,tenant_id,name,kind,status,source_key,provider_voice_id,authorization_id,created_at)
-     VALUES (?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO voice (id,tenant_id,name,kind,status,source_key,provider_voice_id,authorization_id,created_by,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
   ).run(
     v.id, v.tenant_id, v.name, v.kind, v.status, v.source_key, v.provider_voice_id,
-    v.authorization_id, v.created_at,
+    v.authorization_id, v.created_by, v.created_at,
   );
   return v;
 }
@@ -104,6 +105,7 @@ export interface CreateDesignVoiceParams {
   tenantId: string;
   name: string;
   providerVoiceId: string; // Qwen 声音设计返回的 voice id(必有,否则 API 层已拒)
+  userId: string; // 账号隔离:创建者(此前缺,导致 design voice created_by=NULL → 创作者自己也看不到)
 }
 
 /** 设计音色:纯文本描述生成的合成音色(非真人),无需授权存证(与克隆区别)。
@@ -118,14 +120,15 @@ export function createDesignVoice(p: CreateDesignVoiceParams): VoiceRow {
     source_key: null, // 设计无音频样本
     provider_voice_id: p.providerVoiceId,
     authorization_id: null, // 合成音色无真人,无需授权
+    created_by: p.userId, // 账号隔离:创建者
     created_at: now(),
   };
   db.prepare(
-    `INSERT INTO voice (id,tenant_id,name,kind,status,source_key,provider_voice_id,authorization_id,created_at)
-     VALUES (?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO voice (id,tenant_id,name,kind,status,source_key,provider_voice_id,authorization_id,created_by,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
   ).run(
     v.id, v.tenant_id, v.name, v.kind, v.status, v.source_key, v.provider_voice_id,
-    v.authorization_id, v.created_at,
+    v.authorization_id, v.created_by, v.created_at,
   );
   return v;
 }
@@ -149,21 +152,27 @@ export function countRecentDesignVoices(tenantId: string, windowMs: number): num
   return row.n;
 }
 
-export function listClones(tenantId: string): VoiceRow[] {
+/** 列自建音色。账号隔离:creator 仅自己建的;admin 全机构(含 NULL 老资产)。 */
+export function listClones(tenantId: string, actingUserId: string, isAdmin: boolean): VoiceRow[] {
+  const scope = scopeByActor(actingUserId, isAdmin);
   return db
-    .prepare(`SELECT * FROM voice WHERE tenant_id=? ORDER BY created_at DESC`)
-    .all(tenantId) as VoiceRow[];
+    .prepare(`SELECT * FROM voice WHERE tenant_id=?${scope.clause} ORDER BY created_at DESC`)
+    .all(tenantId, ...scope.params) as VoiceRow[];
 }
-export function getVoice(id: string, tenantId: string): VoiceRow | undefined {
-  return db.prepare(`SELECT * FROM voice WHERE id=? AND tenant_id=?`).get(id, tenantId) as
+/** 取单个音色(账号隔离)。非本人非 admin → undefined → 路由 404。 */
+export function getVoice(id: string, tenantId: string, actingUserId: string, isAdmin: boolean): VoiceRow | undefined {
+  const scope = scopeByActor(actingUserId, isAdmin);
+  return db.prepare(`SELECT * FROM voice WHERE id=? AND tenant_id=?${scope.clause}`).get(id, tenantId, ...scope.params) as
     | VoiceRow
     | undefined;
 }
-export function deleteVoice(id: string, tenantId: string): boolean {
-  return db.prepare(`DELETE FROM voice WHERE id=? AND tenant_id=?`).run(id, tenantId).changes === 1;
+export function deleteVoice(id: string, tenantId: string, actingUserId: string, isAdmin: boolean): boolean {
+  const scope = scopeByActor(actingUserId, isAdmin);
+  return db.prepare(`DELETE FROM voice WHERE id=? AND tenant_id=?${scope.clause}`).run(id, tenantId, ...scope.params).changes === 1;
 }
-export function isUsableVoice(ref: string, tenantId: string): boolean {
+/** 校验 voiceRef 是否可用于生成。预置全员可用;自定义音色**账号隔离**(用户定:自己的不共享)。 */
+export function isUsableVoice(ref: string, tenantId: string, actingUserId: string, isAdmin: boolean): boolean {
   if (isPreset(ref)) return true;
-  const v = getVoice(ref, tenantId);
+  const v = getVoice(ref, tenantId, actingUserId, isAdmin);
   return !!v && v.status === 'ready';
 }

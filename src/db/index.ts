@@ -254,6 +254,42 @@ addColumnIfMissing('job', 'output_kind', `output_kind TEXT NOT NULL DEFAULT 'vid
 // credit_ledger 不冗余存用户/工具,经 job_id JOIN job(取 created_by + type)还原"谁 + 什么工具"。
 addColumnIfMissing('job', 'created_by', `created_by TEXT`);
 
+// ── 账号级数据隔离(机构共享 → 账号私有)──
+// 形象/音色补 created_by(job 已有上面那列)。NULL = 部署前的老资产/无主,仅 admin 可见。
+// 时序严格:① 先加列 → ② 复合索引 → ③ viewer→creator 迁移 → ④ 老资产回填(UPDATE 引用 created_by,必须在加列后)。
+const avatarHadCreatedBy = (db.prepare(`PRAGMA table_info(avatar)`).all() as { name: string }[]).some((c) => c.name === 'created_by');
+const voiceHadCreatedBy = (db.prepare(`PRAGMA table_info(voice)`).all() as { name: string }[]).some((c) => c.name === 'created_by');
+addColumnIfMissing('avatar', 'created_by', `created_by TEXT`);
+addColumnIfMissing('voice', 'created_by', `created_by TEXT`);
+// ② 复合索引:creator 查询 WHERE tenant_id=? AND created_by=? 走索引(admin 的 tenant-only 查询用现有 idx_*_tenant)。
+db.exec(`CREATE INDEX IF NOT EXISTS idx_job_tenant_creator ON job(tenant_id, created_by);`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_avatar_tenant_creator ON avatar(tenant_id, created_by);`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_voice_tenant_creator ON voice(tenant_id, created_by);`);
+// ③ viewer → creator 迁移(角色精简为 admin/creator)。幂等;零行也安全。
+//   必须在任何 resolveSession 读 role 前跑(import 期天然满足);DB 列无 CHECK,残留 viewer 会处处 403。
+db.prepare(`UPDATE user SET role='creator' WHERE role='viewer'`).run();
+// ④ 老资产回填:从 audit_log(create_avatar / clone_voice / design_voice 行带 user_id + target=assetId)
+//   回填 created_by,让原创作者部署后仍看得到自己部署前建的资产。只在刚加列时跑一次(幂等,只填 NULL)。
+//   回填不到的(audit 无记录)→ 留 NULL = 机构公共,仅 admin 可见。
+if (!avatarHadCreatedBy) {
+  db.prepare(
+    `UPDATE avatar SET created_by = (
+       SELECT a.user_id FROM audit_log a
+       WHERE a.action='create_avatar' AND a.target=avatar.id AND a.user_id IS NOT NULL
+       ORDER BY a.created_at ASC LIMIT 1)
+     WHERE created_by IS NULL`,
+  ).run();
+}
+if (!voiceHadCreatedBy) {
+  db.prepare(
+    `UPDATE voice SET created_by = (
+       SELECT a.user_id FROM audit_log a
+       WHERE a.action IN ('clone_voice','design_voice') AND a.target=voice.id AND a.user_id IS NOT NULL
+       ORDER BY a.created_at ASC LIMIT 1)
+     WHERE created_by IS NULL`,
+  ).run();
+}
+
 // 成员与权限升级:
 //  - tenant.max_creator_seats:创作席位上限(licensing 真相源,默认 10)。
 //    NOT NULL DEFAULT 安全:旧行由 SQLite ALTER 自动回填默认值(同 avatar.is_default)。
@@ -378,7 +414,7 @@ export interface JobRow {
   created_by: string | null; // 创建该任务的用户 id(计费归属;老 job 为 NULL)
 }
 
-export type Role = 'admin' | 'creator' | 'viewer';
+export type Role = 'admin' | 'creator';
 export type UserStatus = 'active' | 'disabled';
 
 export interface TenantRow {
@@ -474,6 +510,7 @@ export interface AvatarRow {
   authorization_id: string | null;
   orientation: string | null;
   is_default: number;
+  created_by: string | null; // 创建者用户 id(账号隔离);老资产/回填不到 → NULL = 机构公共,仅 admin 可见
   created_at: number;
 }
 
@@ -501,6 +538,21 @@ export interface VoiceRow {
   source_key: string | null;
   provider_voice_id: string | null;
   authorization_id: string | null;
+  created_by: string | null; // 创建者用户 id(账号隔离);老资产/回填不到 → NULL = 机构公共,仅 admin 可见
   created_at: number;
+}
+
+// ── 账号级数据隔离 helper ──
+// 在租户隔离(WHERE tenant_id=?)之上叠加账号隔离:
+//   admin → 看全机构(不加 created_by 限制,返回空片段);
+//   creator → 仅看 created_by=自己(NULL 老数据自然不匹配 → 看不到,符合「机构公共仅 admin 可见」)。
+// 用法:`WHERE tenant_id=? ${scope.clause} ORDER BY ... LIMIT ?`,参数按位拼 `.all(tenantId, ...scope.params, limit)`。
+// 关键:scope.params 插在 tenantId 与 limit 之间,绝不追加末尾(会与 LIMIT ? 错位)。
+export function scopeByActor(
+  actingUserId: string,
+  isAdmin: boolean,
+  col = 'created_by',
+): { clause: string; params: string[] } {
+  return isAdmin ? { clause: '', params: [] } : { clause: ` AND ${col} = ?`, params: [actingUserId] };
 }
 
