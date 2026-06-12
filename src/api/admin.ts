@@ -767,12 +767,19 @@ adminRouter.get('/api/recharge-orders', requirePlatformAdmin, (req: Request, res
 });
 
 // 看回单截图(超管,流式)。
+// 回执是 PNG/JPEG 图片(上传时已校验)→ inline 让浏览器直接预览(不下载)。
+// 回执 key 无扩展名 → 按 magic bytes 判图片类型回正确 Content-Type。
 adminRouter.get('/api/recharge-orders/:id/receipt', requirePlatformAdmin, async (req: Request, res: Response) => {
   const o = getOrder(req.params.id!);
   if (!o || !o.receipt_key) return res.status(404).json({ error: '回单不存在' });
   try {
     const buf = await getObject(o.receipt_key);
-    res.setHeader('Content-Disposition', `attachment; filename="receipt-${o.order_no}"`);
+    const mime =
+      buf[0] === 0x89 && buf[1] === 0x50 ? 'image/png'
+      : buf[0] === 0xff && buf[1] === 0xd8 ? 'image/jpeg'
+      : 'application/octet-stream';
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Content-Disposition', 'inline'); // 预览,不强制下载
     res.setHeader('Cache-Control', 'private, no-store');
     res.send(buf);
   } catch {
@@ -835,14 +842,13 @@ adminRouter.post(
     if (!invoiceNo || !invoiceNo.trim()) return res.status(400).json({ error: '请填写发票号' });
     const inv = getInvoice(req.params.id!);
     if (!inv) return res.status(404).json({ error: '发票不存在' });
-    let pdfKey: string | null = null;
+    // 开票必传 PDF(用户决策:已开票要能下载平台上传的发票 PDF)。
     const file = req.file;
-    if (file) {
-      if (file.mimetype !== 'application/pdf')
-        return res.status(400).json({ error: '发票文件仅支持 PDF' });
-      pdfKey = `invoices/${inv.tenant_id}/${inv.id}.pdf`;
-      await putObject(pdfKey, file.buffer, 'application/pdf');
-    }
+    if (!file) return res.status(400).json({ error: '请上传发票 PDF' });
+    if (file.mimetype !== 'application/pdf')
+      return res.status(400).json({ error: '发票文件仅支持 PDF' });
+    const pdfKey = `invoices/${inv.tenant_id}/${inv.id}.pdf`;
+    await putObject(pdfKey, file.buffer, 'application/pdf');
     const ok = issueInvoice(inv.id, invoiceNo.trim(), pdfKey);
     if (!ok) return res.status(409).json({ error: '发票非待开票状态' });
     writePlatformAudit(req.padmin!.id, 'invoice_issue', inv.tenant_id, `${inv.id}/${invoiceNo.trim()}`, padminIp(req));

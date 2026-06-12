@@ -103,9 +103,9 @@
         const note = o.status==='rejected' && o.adminNote ? `<div class="od-note">驳回原因:${esc(o.adminNote)}</div>` : '';
         const pm = o.paymentMethod === 'offline_bank' ? '对公转账' : (o.paymentMethod || '—');
         const who = o.actorName ? ` · 发起人 ${esc(o.actorName)}` : '';
-        // 开票状态徽章(仅已到账订单显):未开票不显徽章(可去开票);开票中/已开票显徽章。
+        // 开票状态徽章 + 右侧「开票信息」小字(开票中/已开票可点查详情)。未开票不显徽章。
         const ivBadge = o.status==='credited' && o.invoiceStatus
-          ? `<span class="od-ivb ${o.invoiceStatus==='issued'?'iv-iss':'iv-req'}">${o.invoiceStatus==='issued'?'已开票':'开票中'}</span>` : '';
+          ? `<span class="od-ivb ${o.invoiceStatus==='issued'?'iv-iss':'iv-req'}">${o.invoiceStatus==='issued'?'已开票':'开票中'}</span><button class="od-ivlink" onclick='showOrderInvoice(${JSON.stringify(o.id)})'>开票信息</button>` : '';
         return `<div class="od-row${hl}" data-id="${esc(o.id)}">
           <div class="od-top">
             <span class="od-plan">${esc(o.planName)}</span>
@@ -128,9 +128,8 @@
       // 已驳回 = 终态:无任何操作按钮(只显驳回原因);用户要重买就重新下单。
       // paid_claimed:核对中,不给取消(竞态守卫);有回执可查看。
       if(o.status==='paid_claimed'){ a.push('<span class="od-act ghost" style="cursor:default">核对中…</span>'); }
-      // 已到账 + 未开票 → 去开票(仅 admin);开票中/已开票 → 查看开票信息。
+      // 已到账 + 未开票 → 去开票(仅 admin)。开票中/已开票的「开票信息」已在状态徽章右侧(行内小字)。
       if(o.status==='credited' && !o.invoiceStatus && IS_ADMIN){ a.push(btn('invoice',o.id,'去开票','')); }
-      if(o.status==='credited' && o.invoiceStatus){ a.push(btn('viewinv',o.id,'查看开票','')); }
       // 发起人上传过回执 → 可查看(打款/已到账阶段都能看)。
       if(o.hasReceipt && (o.status==='paid_claimed' || o.status==='credited')){ a.push(btn('receipt',o.id,'查看回执','ghost')); }
       return a.join('');
@@ -147,14 +146,43 @@
       } else if(act==='invoice'){
         // 去独立开票页(可在那里多选合并;预选不强制,跳过去即可)。
         location.href = 'invoice-new.html';
-      } else if(act==='viewinv'){
-        // 查看本订单的开票信息(跳发票管理)。
-        location.href = 'invoices.html';
       } else if(act==='receipt'){
-        // 查看发起人上传的银行回执(同源下载/预览)。
-        window.open('/api/orders/'+encodeURIComponent(id)+'/receipt', '_blank');
+        // 查看发起人上传的银行回执 → 弹层预览图片(inline,不下载)。
+        previewReceipt(id);
       }
     }
+
+    // 回执预览(图片直显,不下载)。
+    function previewReceipt(id){
+      const ov = document.createElement('div'); ov.className='ivd-ov'; ov.onclick=()=>ov.remove();
+      ov.innerHTML = `<div class="ivd-modal" style="text-align:center;max-width:680px" onclick="event.stopPropagation()">
+        <h3>打款回执</h3>
+        <img src="/api/orders/${encodeURIComponent(id)}/receipt" alt="银行回执" style="max-width:100%;max-height:70vh;border-radius:10px;border:1px solid var(--line)">
+        <div class="ivd-foot" style="justify-content:center"><button class="ivd-close" onclick="this.closest('.ivd-ov').remove()">关闭</button></div></div>`;
+      document.body.appendChild(ov);
+    }
+
+    // 订单的开票信息详情(行内「开票信息」点击)→ 拉 /orders/:id/invoice。
+    window.showOrderInvoice = async (id) => {
+      let iv;
+      try{ iv = (await LJ.get('/orders/'+encodeURIComponent(id)+'/invoice')).invoice; }
+      catch(e){ window.LJToast(e.message||'该订单尚未开票','err'); return; }
+      const issued = iv.status==='issued';
+      const rows = [
+        ['发票抬头', esc(iv.title)],
+        ['纳税人识别号', esc(iv.taxNo)],
+        ['发票类型', esc(iv.kind)],
+        ['开票金额', '¥'+fmtN(iv.amountYuan)],
+        ['所含订单', `${(iv.orderNos||[]).length} 单 · ${(iv.orderNos||[]).map(esc).join('、')||'—'}`],
+        ['开票状态', issued?'已开票':'待开票'],
+        ...(issued&&iv.invoiceNo?[['发票号', esc(iv.invoiceNo)]]:[]),
+      ];
+      const body = rows.map(([k,v])=>`<div class="ivd-row"><span class="ivd-k">${k}</span><span class="ivd-v">${v}</span></div>`).join('');
+      const dl = issued && iv.hasPdf ? `<a class="ivd-dl" href="/api/invoices/${esc(iv.id)}/pdf">下载发票 PDF</a>` : '';
+      const ov = document.createElement('div'); ov.className='ivd-ov'; ov.onclick=()=>ov.remove();
+      ov.innerHTML = `<div class="ivd-modal" onclick="event.stopPropagation()"><h3>开票信息</h3>${body}<div class="ivd-foot">${dl}<button class="ivd-close" onclick="this.closest('.ivd-ov').remove()">关闭</button></div></div>`;
+      document.body.appendChild(ov);
+    };
 
     load();
     // 余额刷新:页面 focus 时重拉(到账后回到本页能看到余额已涨,外部#7)
