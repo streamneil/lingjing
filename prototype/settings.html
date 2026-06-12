@@ -233,6 +233,9 @@
       image_model_delete: { v: '删除出图模型', obj: true }, image_model_reorder: { v: '调整出图模型排序' },
       tenant_create: { v: '开通机构', obj: true }, tenant_update: { v: '修改机构信息', obj: true },
       tenant_user_create: { v: '创建机构成员', obj: true }, tenant_user_reset_pw: { v: '重置成员密码', obj: true },
+      // 对公充值(租户用户自己的操作;平台超管侧的 order_confirm/invoice_issue 等不进租户审计)
+      create_order: { v: '创建充值订单', obj: true }, claim_paid: { v: '提交已打款', obj: true },
+      cancel_order: { v: '取消充值订单', obj: true }, request_invoice: { v: '申请开票', obj: true },
     };
     function actorName(a) { return a.actorName || '未知用户'; }
     // 头像首字:展示名第一个字符(中文首字 / 英文首字母大写);空 → '?'。

@@ -65,7 +65,7 @@ ordersRouter.post('/orders', requireRole('admin', 'creator'), (req: Request, res
   if (!planId) return res.status(400).json({ error: '缺少套餐 planId' });
   try {
     const o = createOrder({ tenantId: req.user!.tenantId, userId: req.user!.id, planId });
-    audit(req, 'create_order', o.id);
+    audit(req, 'create_order', o.order_no);
     res.json({ order: serializeOrder(o) });
   } catch (e) {
     handleOrderError(e, res);
@@ -120,7 +120,7 @@ ordersRouter.post(
 
     const ok = claimPaid(o.id, req.user!.tenantId, receiptKey);
     if (!ok) return res.status(409).json({ error: '订单状态不可提交打款' });
-    audit(req, 'claim_paid', o.id);
+    audit(req, 'claim_paid', o.order_no);
     res.json({ ok: true });
   },
 );
@@ -131,7 +131,7 @@ ordersRouter.post('/orders/:id/cancel', requireRole('admin', 'creator'), (req: R
   if (!o) return res.status(404).json({ error: '订单不存在' });
   const ok = cancelOrder(o.id, req.user!.tenantId);
   if (!ok) return res.status(409).json({ error: '该状态订单不可取消' });
-  audit(req, 'cancel_order', o.id);
+  audit(req, 'cancel_order', o.order_no);
   res.json({ ok: true });
 });
 
@@ -160,7 +160,7 @@ ordersRouter.post('/invoices', requireRole('admin', 'creator'), (req: Request, r
       title: title ?? '',
       taxNo: taxNo ?? '',
     });
-    audit(req, 'request_invoice', inv.id);
+    audit(req, 'request_invoice', inv.title); // 抬头(用户可识别),非 UUID
     res.json({ invoice: serializeInvoice(inv) });
   } catch (e) {
     handleOrderError(e, res);

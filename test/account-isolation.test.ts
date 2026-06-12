@@ -134,6 +134,20 @@ describe('审计日志账号隔离', () => {
     const adminAudit = listAudit(tId, 200, adminId, true);
     expect(adminAudit.some((a) => a.user_id === bobId)).toBe(true); // admin 看得到
   });
+
+  it('信任边界:平台超管操作(target=本租户)绝不进租户审计,连 admin 也看不到', () => {
+    // 模拟平台超管对本租户充值/确认订单(actor_type=platform_admin,落本租户 audit_log)
+    writeAudit(tId, 'padmin-x', 'grant_credit', '+55000', '1.2.3.4', 'platform_admin');
+    writeAudit(tId, 'padmin-x', 'order_confirm', 'LJ-1/+55000', '1.2.3.4', 'platform_admin');
+    // 租户 admin 视角:看不到任何平台操作(只显 actor_type='user')
+    const adminAudit = listAudit(tId, 500, adminId, true);
+    expect(adminAudit.some((a) => a.actor_type === 'platform_admin')).toBe(false);
+    expect(adminAudit.some((a) => a.action === 'grant_credit')).toBe(false);
+    expect(adminAudit.some((a) => a.action === 'order_confirm')).toBe(false);
+    // creator 视角同样看不到
+    const aliceAudit = listAudit(tId, 500, aliceId, false);
+    expect(aliceAudit.some((a) => a.actor_type === 'platform_admin')).toBe(false);
+  });
 });
 
 describe('老资产 backfill(部署前建的资产迁移后原创作者仍可见)', () => {

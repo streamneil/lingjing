@@ -11,7 +11,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 process.env.DB_FILE = ':memory:';
 
 const { db } = await import('../src/db/index.js');
-const { writeAudit, listAudit } = await import('../src/audit/index.js');
+const { writeAudit, listAudit, listPlatformAudit } = await import('../src/audit/index.js');
 const { createTenant, createUser } = await import('../src/auth/index.js');
 const { enqueueJob } = await import('../src/queue/index.js');
 
@@ -38,14 +38,17 @@ describe('listAudit() 带操作者名 actorName', () => {
     expect(row2!.actorName).toBe('运营小张');
   });
 
-  it('platform_admin 操作行 → actorName = platform_admin.username', () => {
+  it('平台超管操作不进租户审计,但在平台审计可见(信任边界 + actorName JOIN)', () => {
     const padminId = 'padmin-1';
     db.prepare(
       `INSERT INTO platform_admin (id, username, password_hash, created_at) VALUES (?,?,?,?)`,
     ).run(padminId, 'superadmin', 'x', Date.now());
-    // 平台超管对本租户的操作(actor_type=platform_admin,user_id 指向 platform_admin.id)
+    // 平台超管对本租户的操作(actor_type=platform_admin,target=本租户)
     writeAudit(tenantId, padminId, 'grant_credit', '5000', '1.2.3.4', 'platform_admin');
-    const row = listAudit(tenantId).find((a) => a.action === 'grant_credit');
+    // 租户审计:看不到平台操作(只显 actor_type='user')
+    expect(listAudit(tenantId).find((a) => a.action === 'grant_credit')).toBeUndefined();
+    // 平台审计:看得到,且 actorName JOIN platform_admin 正确
+    const row = listPlatformAudit().find((a) => a.action === 'grant_credit');
     expect(row!.actor_type).toBe('platform_admin');
     expect(row!.actorName).toBe('superadmin');
   });
@@ -73,8 +76,8 @@ describe('listAudit() 带操作者名 actorName', () => {
       .run(shared, 'collidepadmin', 'x', Date.now());
     writeAudit(tenantId, shared, 'change_password', null, null, 'user');
     writeAudit(tenantId, shared, 'tenant_update', 'org-x', null, 'platform_admin');
-    const asUser = listAudit(tenantId).find((a) => a.action === 'change_password');
-    const asPadmin = listAudit(tenantId).find((a) => a.action === 'tenant_update');
+    const asUser = listAudit(tenantId).find((a) => a.action === 'change_password'); // 租户审计:user 行
+    const asPadmin = listPlatformAudit().find((a) => a.action === 'tenant_update'); // 平台审计:padmin 行
     expect(asUser!.actorName).toBe('collideuser'); // user 行只取 user 表
     expect(asPadmin!.actorName).toBe('collidepadmin'); // padmin 行只取 platform_admin 表
   });

@@ -43,7 +43,7 @@ import type { LeadStatus } from '../db/index.js';
 import { countLeadsByStatus } from '../pricing/index.js';
 import { IMAGE_MODELS } from '../gateway/image-models.js';
 import type { ImageModelOverrideRow } from '../db/index.js';
-import { writePlatformAudit, PLATFORM_TENANT } from '../audit/index.js';
+import { writePlatformAudit, PLATFORM_TENANT, listPlatformAudit } from '../audit/index.js';
 import {
   platformLogin,
   platformLogout,
@@ -866,4 +866,30 @@ adminRouter.post('/api/payee', requirePlatformAdmin, (req: Request, res: Respons
   });
   writePlatformAudit(req.padmin!.id, 'payee_update', PLATFORM_TENANT, payeeName.trim(), padminIp(req));
   res.json({ ok: true });
+});
+
+// ── 平台审计:所有超管操作(跨租户 + 纯平台),供超管追溯 ──
+// 平台操作绝不进租户审计(信任边界,见 audit/index.ts listAudit);这里是唯一查看入口。
+adminRouter.get('/api/audit', requirePlatformAdmin, (req: Request, res: Response) => {
+  const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 200));
+  const rows = listPlatformAudit(limit);
+  // 解析目标租户名(纯平台操作 tenant_id=PLATFORM_TENANT → 显「平台」)。
+  const names = new Map<string, string>();
+  for (const r of rows) {
+    if (r.tenant_id === PLATFORM_TENANT || names.has(r.tenant_id)) continue;
+    const t = db.prepare(`SELECT name FROM tenant WHERE id=?`).get(r.tenant_id) as
+      | { name: string }
+      | undefined;
+    names.set(r.tenant_id, t?.name ?? '(已删租户)');
+  }
+  res.json({
+    audit: rows.map((r) => ({
+      createdAt: r.created_at,
+      actorName: r.actorName ?? '未知超管',
+      action: r.action,
+      target: r.target,
+      tenant: r.tenant_id === PLATFORM_TENANT ? null : names.get(r.tenant_id) ?? null,
+      ip: r.ip,
+    })),
+  });
 });

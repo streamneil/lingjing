@@ -76,7 +76,12 @@ const ACTOR_NAME_JOIN = `
 
 /** 查租户审计(admin 可见)。带操作者名(actorName)+ 模块(module)。 */
 export function listAudit(tenantId: string, limit = 200, actingUserId?: string, isAdmin = false): AuditRow[] {
-  // 账号隔离:creator 只看自己的操作行;admin / 无 actingUserId(内部)→ 看全机构。
+  // 信任边界:租户审计**只显本租户用户操作**(actor_type='user')。
+  //   平台超管(actor_type='platform_admin')的操作 —— 即使 target 是本租户(开户/充值/重置密码/
+  //   订单确认/发票)—— 绝不出现在租户审计页:那是平台内部操作,泄露进租户审计既混淆「谁在管系统」
+  //   又不安全。平台操作只在 /admin 的 listPlatformAudit 可见。
+  //   租户对「平台给我充了多少积分」的知情权由「用量计费」明细(credit_ledger grant 行)承载,不丢信息。
+  // 账号隔离:creator 只看自己的操作行;admin / 无 actingUserId(内部)→ 看全机构(仍限 user 行)。
   const scoped = !isAdmin && actingUserId !== undefined;
   const scopeClause = scoped ? ` AND l.user_id = ?` : '';
   const scopeParams = scoped ? [actingUserId] : [];
@@ -84,7 +89,7 @@ export function listAudit(tenantId: string, limit = 200, actingUserId?: string, 
     .prepare(
       `SELECT l.*, ${ACTOR_NAME_SELECT}, ${MODULE_SELECT}
          FROM audit_log l${ACTOR_NAME_JOIN}
-        WHERE l.tenant_id=?${scopeClause} ORDER BY l.created_at DESC LIMIT ?`,
+        WHERE l.tenant_id=? AND l.actor_type='user'${scopeClause} ORDER BY l.created_at DESC LIMIT ?`,
     )
     .all(tenantId, ...scopeParams, limit) as AuditRow[];
 }

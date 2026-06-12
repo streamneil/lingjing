@@ -233,6 +233,17 @@
         <tbody id="invRows"><tr><td colspan="5" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
+
+    <!-- ── 平台审计日志 ── -->
+    <div class="ph" style="margin-top:34px">
+      <div><h1>平台审计日志</h1><p>所有平台超管操作的追溯台账(开户 / 充值 / 订单确认 / 发票 / 套餐 / 收款配置)。仅平台可见,绝不出现在租户审计页。</p></div>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>时间</th><th>超管</th><th>目标租户</th><th>操作</th><th>来源 IP</th></tr></thead>
+        <tbody id="paudRows"><tr><td colspan="5" class="empty">加载中…</td></tr></tbody>
+      </table>
+    </div>
   </div>
 
   <!-- 对公收款信息配置 -->
@@ -450,6 +461,7 @@
       await loadLeads();
       await loadOrders();
       await loadInvoices();
+      await loadPlatformAudit();
     }catch(e){ /* 401 已跳转 */ }
   }
 
@@ -544,6 +556,37 @@
     if(!body.payeeName||!body.bankName||!body.bankAccount){ toast('户名/开户行/账号必填'); return; }
     try{ await PA('POST','/api/payee',body); closeOv('payeeOv'); toast('✓ 对公信息已保存'); }
     catch(e){ toast(e.message||'保存失败'); }
+  }
+
+  // ── 平台审计日志 ──
+  const PAUD_CN={
+    padmin_login:'登录平台后台', tenant_create:'开通机构', tenant_update:'修改机构信息',
+    tenant_user_create:'创建机构成员', tenant_user_reset_pw:'重置成员密码',
+    tenant_user_disable:'停用成员', tenant_user_enable:'启用成员', grant_credit:'发放点数',
+    order_confirm:'确认充值到账', order_reject:'驳回充值订单', invoice_issue:'开具发票', invoice_reject:'驳回开票',
+    payee_update:'更新对公收款信息', image_model_create:'新增出图模型', image_model_update:'修改出图模型',
+    image_model_delete:'删除出图模型', image_model_reorder:'调整出图模型排序',
+    pricing_plan_create:'新增套餐', pricing_plan_update:'修改套餐', pricing_plan_delete:'删除套餐',
+    pricing_plan_reorder:'调整套餐排序', sales_lead_update:'更新意向线索',
+  };
+  function paudTime(ts){ const d=new Date(ts),p=n=>String(n).padStart(2,'0'); return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }
+  async function loadPlatformAudit(){
+    const tb=document.getElementById('paudRows');
+    try{
+      const { audit }=await PA('GET','/api/audit?limit=200');
+      if(!audit.length){ tb.innerHTML='<tr><td colspan="5" class="empty">暂无平台操作记录</td></tr>'; return; }
+      tb.innerHTML=audit.map(a=>{
+        const label=PAUD_CN[a.action]||a.action;
+        const op=a.target?`${esc(label)}「${esc(a.target)}」`:esc(label);
+        return `<tr>
+          <td style="color:var(--t3);font-family:var(--f-mono);font-size:12px">${paudTime(a.createdAt)}</td>
+          <td class="tn">${esc(a.actorName)}</td>
+          <td>${a.tenant?esc(a.tenant):'<span style="color:var(--t4)">平台</span>'}</td>
+          <td>${op}</td>
+          <td style="color:var(--t4);font-family:var(--f-mono);font-size:12px">${esc(a.ip||'—')}</td>
+        </tr>`;
+      }).join('');
+    }catch(e){ tb.innerHTML='<tr><td colspan="5" class="empty">加载失败</td></tr>'; }
   }
 
   // ── AI 图片模型管理 ──
