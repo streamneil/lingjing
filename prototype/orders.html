@@ -16,6 +16,9 @@
     .od-no{ font-family:var(--f-mono,monospace); font-size:12px; color:var(--t3); }
     .od-plan{ font-size:14px; font-weight:600; }
     .od-pm{ font-size:11px; color:var(--t3); border:1px solid var(--line); border-radius:999px; padding:2px 9px; }
+    .od-ivb{ font-size:11px; font-weight:700; border-radius:999px; padding:2px 9px; border:1px solid; }
+    .od-ivb.iv-req{ color:#9EC1FF; border-color:rgba(77,141,255,.4); background:var(--blue-bg); }
+    .od-ivb.iv-iss{ color:var(--green); border-color:rgba(52,199,89,.4); background:rgba(52,199,89,.1); }
     .od-amt{ margin-left:auto; font-size:18px; font-weight:800; font-family:var(--f-en,'Manrope',sans-serif); }
     .od-amt .cur{ font-size:12px; color:var(--t2); }
     .od-meta{ font-size:12px; color:var(--t3); margin-top:6px; }
@@ -40,7 +43,7 @@
   </style>
 </head>
 
-<body data-page="orders" data-crumb="经营管理 > 充值订单">
+<body data-page="orders" data-crumb="财务中心 > 充值订单">
   <div class="shell" id="shell-mount">
     <div class="main-col">
       <main class="page">
@@ -71,8 +74,11 @@
       try{ const { balance } = await LJ.get('/orders'); const el=document.getElementById('lj-balance'); if(el && balance!=null) el.textContent = fmtN(balance); }catch{}
     }
 
+    let IS_ADMIN = false;
     async function load(){
       try{
+        const me = await LJ.me().catch(()=>({role:''}));
+        IS_ADMIN = me.role === 'admin';
         const { orders, balance } = await LJ.get('/orders');
         const el=document.getElementById('lj-balance'); if(el && balance!=null) el.textContent = fmtN(balance);
         render(orders||[]);
@@ -97,11 +103,14 @@
         const note = o.status==='rejected' && o.adminNote ? `<div class="od-note">驳回原因:${esc(o.adminNote)}</div>` : '';
         const pm = o.paymentMethod === 'offline_bank' ? '对公转账' : (o.paymentMethod || '—');
         const who = o.actorName ? ` · 发起人 ${esc(o.actorName)}` : '';
+        // 开票状态徽章(仅已到账订单显):未开票不显徽章(可去开票);开票中/已开票显徽章。
+        const ivBadge = o.status==='credited' && o.invoiceStatus
+          ? `<span class="od-ivb ${o.invoiceStatus==='issued'?'iv-iss':'iv-req'}">${o.invoiceStatus==='issued'?'已开票':'开票中'}</span>` : '';
         return `<div class="od-row${hl}" data-id="${esc(o.id)}">
           <div class="od-top">
             <span class="od-plan">${esc(o.planName)}</span>
             <span class="od-badge ${cls}">${label}</span>
-            <span class="od-pm">${esc(pm)}</span>
+            <span class="od-pm">${esc(pm)}</span>${ivBadge}
             <span class="od-amt"><span class="cur">¥</span>${fmtN(o.priceYuan)}</span>
           </div>
           <div class="od-meta"><span class="od-no">${esc(o.orderNo)}</span> · 到账 <span class="cr">${fmtN(o.credits + o.bonusCredits)}</span> 积分${who}</div>
@@ -119,7 +128,8 @@
       if(o.status==='rejected'){ a.push(btn('pay',o.id,'重新支付','primary')); a.push(btn('cancel',o.id,'取消','ghost')); }
       // paid_claimed:核对中,不给取消(竞态守卫)
       if(o.status==='paid_claimed'){ a.push('<span class="od-act ghost" style="cursor:default">核对中…</span>'); }
-      if(o.status==='credited'){ a.push(btn('invoice',o.id,'去开票','')); }
+      // 已到账 + 未开票 → 去开票(跳独立开票页,仅 admin 能进);开票中/已开票不显按钮(徽章已表达)。
+      if(o.status==='credited' && !o.invoiceStatus && IS_ADMIN){ a.push(btn('invoice',o.id,'去开票','')); }
       return a.join('');
     }
     function btn(act,id,label,cls){ return `<button class="od-act ${cls}" data-act="${act}" data-id="${esc(id)}">${label}</button>`; }
@@ -132,7 +142,8 @@
         if(!(await window.LJConfirm({ title:'取消订单', body:'确认取消该充值订单?', confirmText:'取消订单', danger:true }))) return;
         try{ await LJ.post('/orders/'+id+'/cancel'); window.LJToast('✓ 订单已取消'); load(); }catch(e){ window.LJToast(e.message,'err'); }
       } else if(act==='invoice'){
-        location.href = 'invoices.html?order=' + encodeURIComponent(id);
+        // 去独立开票页(可在那里多选合并;预选不强制,跳过去即可)。
+        location.href = 'invoice-new.html';
       }
     }
 

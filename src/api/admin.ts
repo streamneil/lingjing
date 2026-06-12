@@ -800,7 +800,8 @@ adminRouter.get('/api/admin-invoices', requirePlatformAdmin, (req: Request, res:
   res.json({
     invoices: listInvoicesByStatus(status as never).map((inv) => ({
       id: inv.id,
-      orderId: inv.order_id,
+      orderNos: inv.orderNos ?? [], // 一票多单展示号(供超管核对入账)
+      orderCount: (inv.orderIds ?? []).length,
       tenantId: inv.tenant_id,
       title: inv.title,
       taxNo: inv.tax_no,

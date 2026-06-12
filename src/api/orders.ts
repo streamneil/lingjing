@@ -22,6 +22,8 @@ import {
   requestInvoice,
   getInvoiceForActor,
   listInvoicesForActor,
+  getInvoiceProfile,
+  upsertInvoiceProfile,
   getPayee,
   OrderError,
 } from '../orders/index.js';
@@ -144,27 +146,61 @@ ordersRouter.get('/orders/:id/receipt', requireAuth, async (req: Request, res: R
 
 // ── 发票 ──
 
-// 去开票(仅 credited 订单;归属/状态/重复校验在服务层)。
-ordersRouter.post('/invoices', requireRole('admin', 'creator'), (req: Request, res: Response) => {
-  const { orderId, title, taxNo } = (req.body ?? {}) as {
-    orderId?: string;
+// 申请开票(一票多单;仅租户 admin)。首次填抬头自动 upsert 到租户开票资料。
+ordersRouter.post('/invoices', requireRole('admin'), (req: Request, res: Response) => {
+  const { orderIds, title, taxNo } = (req.body ?? {}) as {
+    orderIds?: string[];
     title?: string;
     taxNo?: string;
   };
-  if (!orderId) return res.status(400).json({ error: '缺少订单' });
+  if (!Array.isArray(orderIds) || orderIds.length === 0)
+    return res.status(400).json({ error: '请至少选择一个订单' });
   try {
     const inv = requestInvoice({
-      orderId,
+      orderIds,
       tenantId: req.user!.tenantId,
       userId: req.user!.id,
       title: title ?? '',
       taxNo: taxNo ?? '',
     });
-    audit(req, 'request_invoice', inv.title); // 抬头(用户可识别),非 UUID
+    // 抬头资料自动维护到租户(首次填即存;仅 admin 走到这里)。
+    upsertInvoiceProfile({
+      tenantId: req.user!.tenantId,
+      title: (title ?? '').trim(),
+      taxNo: (taxNo ?? '').trim(),
+      updatedBy: req.user!.id,
+    });
+    audit(req, 'request_invoice', inv.title);
     res.json({ invoice: serializeInvoice(inv) });
   } catch (e) {
     handleOrderError(e, res);
   }
+});
+
+// 租户开票抬头资料:GET 所有登录用户可读(预填);PUT 仅 admin 可编辑。
+ordersRouter.get('/invoice-profile', requireAuth, (req: Request, res: Response) => {
+  const p = getInvoiceProfile(req.user!.tenantId);
+  res.json({ profile: p ?? null });
+});
+ordersRouter.put('/invoice-profile', requireRole('admin'), (req: Request, res: Response) => {
+  const { title, taxNo, bankName, bankAccount, address, phone } = (req.body ?? {}) as Record<
+    string,
+    string
+  >;
+  if (!title?.trim() || !taxNo?.trim())
+    return res.status(400).json({ error: '抬头和税号必填' });
+  upsertInvoiceProfile({
+    tenantId: req.user!.tenantId,
+    title: title.trim(),
+    taxNo: taxNo.trim(),
+    bankName: bankName?.trim(),
+    bankAccount: bankAccount?.trim(),
+    address: address?.trim(),
+    phone: phone?.trim(),
+    updatedBy: req.user!.id,
+  });
+  audit(req, 'update_invoice_profile', title.trim());
+  res.json({ ok: true });
 });
 
 // 我的发票台账(账号隔离)。
@@ -206,6 +242,7 @@ function serializeOrder(o: ReturnType<typeof getOrderForActor> & object) {
     status: o!.status,
     paymentMethod: o!.payment_method, // 本轮恒 offline_bank;前端映射「对公账户转账」
     actorName: o!.actorName ?? null, // 发起人(admin 看全机构时显谁下的单;creator 自己的单为自己)
+    invoiceStatus: o!.invoiceStatus ?? null, // 开票状态(未开/requested/issued;派生)
     hasReceipt: !!o!.receipt_key,
     adminNote: o!.admin_note,
     createdAt: o!.created_at,
@@ -215,7 +252,8 @@ function serializeOrder(o: ReturnType<typeof getOrderForActor> & object) {
 function serializeInvoice(inv: ReturnType<typeof getInvoiceForActor> & object) {
   return {
     id: inv!.id,
-    orderId: inv!.order_id,
+    orderIds: inv!.orderIds ?? [], // 一票多单(走 invoice_order)
+    orderNos: inv!.orderNos ?? [],
     title: inv!.title,
     taxNo: inv!.tax_no,
     kind: inv!.kind,
