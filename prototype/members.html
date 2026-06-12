@@ -106,6 +106,8 @@
   .ir-opt{flex:1;padding:9px;border-radius:9px;background:var(--field,#121214);border:1px solid var(--line);color:var(--t2);font-size:13px;font-family:var(--f);cursor:pointer;transition:.15s}
   .ir-opt:hover{border-color:var(--line-hi)}
   .ir-opt.active{background:var(--blue-bg);border-color:var(--blue);color:var(--blue)}
+  /* 成员账号:昵称下小灰字(登录名 = 账号)*/
+  .m-acct{font-family:var(--f-en,monospace);font-size:12px;color:var(--t4);margin-top:2px}
   /* 停用成员整行置灰(头像/名/角色变暗,状态红 badge 仍醒目)*/
   .tbl tr.m-off td:not(:last-child){opacity:.45}
   .tbl tr.m-off .strong{color:var(--t3)}
@@ -176,19 +178,23 @@
       : '<span class="bdg" style="background:rgba(255,82,71,.14);color:var(--red)">已停用</span>';
     // 仅 admin 显示操作按钮(后端也有 403/code 兜底);不渲染针对自己的危险操作。
     const isSelf = m.id===myId;
-    const actBtn = (label, fn) => `<button class="btn btn-dark" style="padding:7px 11px;font-size:12px" aria-label="${label} ${name}" onclick="${fn}">${label}</button>`;
-    const actions = myRole==='admin' ? `<td style="text-align:right;white-space:nowrap">
-      ${isSelf ? '<span style="color:var(--t4);font-size:12px">本人</span>' : `
+    const isAdmin = myRole==='admin';
+    // 非 admin 也能看名单,但操作按钮灰禁(disabled);后端写路由仍 403 双保险。
+    const actBtn = (label, fn) => isAdmin
+      ? `<button class="btn btn-dark" style="padding:7px 11px;font-size:12px" aria-label="${label} ${name}" onclick="${fn}">${label}</button>`
+      : `<button class="btn btn-dark" style="padding:7px 11px;font-size:12px;opacity:.4;cursor:not-allowed" disabled aria-disabled="true">${label}</button>`;
+    const actions = `<td style="text-align:right;white-space:nowrap">
+      ${isAdmin && isSelf ? '<span style="color:var(--t4);font-size:12px">本人</span>' : `
       ${actBtn('改角色', `openRole('${m.id}','${name}','${m.role}')`)}
       ${actBtn('重置密码', `resetPw('${m.id}','${name}')`)}
       ${m.status==='active'
         ? actBtn('停用', `disable('${m.id}','${name}')`)
         : actBtn('启用', `enable('${m.id}')`)}
       ${actBtn('移除', `removeM('${m.id}','${name}')`)}`}
-    </td>` : '<td></td>';
+    </td>`;
     // 停用成员整行置灰(.m-off),与活跃一眼区分。
     return `<tr class="${m.status==='disabled'?'m-off':''}">
-      <td><div style="display:flex;align-items:center;gap:12px"><div class="mini-face" style="background:linear-gradient(150deg,#2C2C32,#161618);display:grid;place-items:center;font-weight:700;font-size:13px;color:var(--t2)">${initial}</div><div><div class="strong">${name}</div></div></div></td>
+      <td><div style="display:flex;align-items:center;gap:12px"><div class="mini-face" style="background:linear-gradient(150deg,#2C2C32,#161618);display:grid;place-items:center;font-weight:700;font-size:13px;color:var(--t2)">${initial}</div><div><div class="strong">${name}</div><div class="m-acct">${esc(m.username)}</div></div></div></td>
       <td><span class="bdg bdg-role">${ROLE_CN[m.role]||m.role}</span></td>
       <td class="num">${seatNo||'—'}</td>
       <td class="num">${fmtActive(m.last_active)}</td>
@@ -366,14 +372,12 @@
     skeleton();
     try{
       const me = await LJ.me(); myRole = me.role; myId = me.id;
+      // 非 admin 也能进来看名单(后端 GET /members 已放宽);仅隐藏「邀请成员」入口。
+      // 操作按钮在 row() 里灰禁;角色权限卡所有人可见(理解角色边界)。
       if(myRole!=='admin'){
-        document.getElementById('inviteBtn').style.display='none';
-        document.getElementById('statRow').innerHTML='';
-        const rpc=document.getElementById('rolePermCard'); if(rpc) rpc.style.display='none';
-        body.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--t4);padding:40px">仅管理员可查看成员列表</td></tr>`;
-        return;
+        const ib=document.getElementById('inviteBtn'); if(ib) ib.style.display='none';
       }
-      const data = await LJ.get('/members');   // { members, seats }
+      const data = await LJ.get('/members');   // { members, seats };非 admin 也能取
       members = data.members||[]; seats = data.seats||null;
       renderStats(me.tenantName);
       render(curFilter);

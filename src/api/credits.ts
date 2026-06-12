@@ -5,7 +5,7 @@
 // 审计日志:仅 admin(政企合规)。
 
 import { Router, type Request, type Response } from 'express';
-import { requireAuth, requireRole } from '../auth/middleware.js';
+import { requireAuth } from '../auth/middleware.js';
 import { balance, ledger } from '../credits/index.js';
 import { listAudit } from '../audit/index.js';
 
@@ -64,7 +64,7 @@ creditsRouter.get('/credits/warning', requireAuth, (req: Request, res: Response)
 // 租户自助充值是 SaaS 收入漏洞(租户 admin 给自己无限充值),已删除(/plan-ceo-review D3)。
 // 余额/消费记录查询保留(租户可看自己),充值入口只在 /admin。
 
-// 审计日志(仅 admin)
-creditsRouter.get('/audit', requireRole('admin'), (req: Request, res: Response) => {
+// 审计日志只读:登录即可看(团队透明,租户隔离);设置等写操作仍 admin-only。
+creditsRouter.get('/audit', requireAuth, (req: Request, res: Response) => {
   return res.json(listAudit(req.user!.tenantId));
 });
