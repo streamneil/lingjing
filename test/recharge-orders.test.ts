@@ -29,6 +29,7 @@ const {
   getInvoiceForActor,
   listInvoicesForActor,
   issueInvoice,
+  setPayee,
   OrderError,
 } = await import('../src/orders/index.js');
 
@@ -53,10 +54,12 @@ beforeAll(() => {
     credits: 1000,
     enabled: false,
   }).id;
+  // payee 已配(createOrder 守卫前置;未配会拒下单)
+  setPayee({ payeeName: '测试公司', taxNo: 'TAX', bankName: '测试行', bankAccount: '6222000000' });
 });
 
 describe('建单 + 快照 + 守卫', () => {
-  it('正常下单:全快照落库 + order_no 格式', () => {
+  it('正常下单:全快照落库 + order_no 格式 + payment_method 默认 offline_bank', () => {
     const o = createOrder({ tenantId: tId, userId: alice, planId });
     expect(o.status).toBe('pending_payment');
     expect(o.plan_name).toBe('专业版');
@@ -64,6 +67,28 @@ describe('建单 + 快照 + 守卫', () => {
     expect(o.credits).toBe(50000);
     expect(o.bonus_credits).toBe(5000);
     expect(o.order_no).toMatch(/^LJ\d{8}-\d{4}$/);
+    expect(o.payment_method).toBe('offline_bank'); // 本轮唯一方式,为未来预留
+  });
+
+  it('复用未付单:同 (user, plan) 已有 pending → 返现有,不新建(外部 #1/#2 防孤儿+双击)', () => {
+    const a = createOrder({ tenantId: tId, userId: bob, planId });
+    const b = createOrder({ tenantId: tId, userId: bob, planId }); // 同套餐再下 → 返同一单
+    expect(b.id).toBe(a.id);
+    expect(b.order_no).toBe(a.order_no);
+    // bob 只有一条 pending 单(没堆积)
+    const pendings = listOrdersForActor(tId, bob, false).filter((o) => o.status === 'pending_payment');
+    expect(pendings.length).toBe(1);
+  });
+
+  it('payee 未配 → 拒下单(外部 #7,不生成付不了的孤儿单)', () => {
+    const t2 = createTenant('未配台').id;
+    const u2 = createUser(t2, 'noConfig', 'pw123456', 'creator').id;
+    const p2 = createPlan({ name: '台2套餐', priceYuan: 100, credits: 1000 }).id;
+    // 注:payee 是单例全局配置,这里已被 beforeAll 配上 → 改成临时清空验证守卫逻辑
+    setPayee({ payeeName: '', taxNo: '', bankName: '', bankAccount: '' });
+    expect(() => createOrder({ tenantId: t2, userId: u2, planId: p2 })).toThrow(/对公收款/);
+    // 恢复,不影响后续用例
+    setPayee({ payeeName: '测试公司', taxNo: 'TAX', bankName: '测试行', bankAccount: '6222000000' });
   });
 
   it('面议套餐(price_yuan=null)→ 拒(外部 #5)', () => {
@@ -80,13 +105,15 @@ describe('建单 + 快照 + 守卫', () => {
     expect(() => createOrder({ tenantId: tId, userId: alice, planId: 'nope' })).toThrow();
   });
 
-  it('order_no 当日递增且唯一(外部 #1)', () => {
+  it('order_no 当日递增且唯一(不同套餐 → 不同单)', () => {
+    // 用不同套餐绕开「复用未付单」(同套餐会返现有);两单 order_no 递增唯一。
+    const plan2 = createPlan({ name: '套餐2', priceYuan: 200, credits: 2000 }).id;
     const a = createOrder({ tenantId: tId, userId: alice, planId });
-    const b = createOrder({ tenantId: tId, userId: alice, planId });
-    expect(a.order_no).not.toBe(b.order_no);
+    const b = createOrder({ tenantId: tId, userId: alice, planId: plan2 });
+    expect(a.order_no).not.toBe(b.order_no); // 唯一
     const seqA = Number(a.order_no.split('-')[1]);
     const seqB = Number(b.order_no.split('-')[1]);
-    expect(seqB).toBe(seqA + 1);
+    expect(seqB).toBeGreaterThan(seqA); // 递增(中间可能有其他用例下的单,不强求 +1)
   });
 });
 

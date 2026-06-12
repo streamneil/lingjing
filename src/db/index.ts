@@ -502,6 +502,10 @@ db.exec(
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_order_grant ON credit_ledger(order_id) WHERE kind='grant' AND order_id IS NOT NULL;`,
 );
 
+// recharge_order 加 payment_method:收银台付款方式(本轮仅对公;为未来支付宝/微信预留枚举)。
+// 老订单加列后默认 offline_bank(下单时唯一方式)。
+addColumnIfMissing('recharge_order', 'payment_method', `payment_method TEXT NOT NULL DEFAULT 'offline_bank'`);
+
 export interface PricingPlanRow {
   id: string;
   name: string;
@@ -553,12 +557,14 @@ export interface RechargeOrderRow {
   bonus_credits: number;
   validity_months: number;
   status: OrderStatus;
+  payment_method: string; // offline_bank(本轮唯一;为未来 alipay/wechat 预留)
   receipt_key: string | null;
   admin_note: string | null;
   confirmed_by: string | null;
   confirmed_at: number | null;
   created_at: number;
   updated_at: number;
+  actorName?: string | null; // 发起人名(listOrdersForActor JOIN user 派生;非表列。admin 看全机构时显谁下的单)
 }
 
 export type InvoiceStatus = 'requested' | 'issued';
