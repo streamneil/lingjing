@@ -68,6 +68,8 @@
   .mbtns .cancel{border:1px solid var(--line);background:none;color:var(--t2)}
   .mbtns .ok{border:none;background:var(--amber);color:#0A0A0B}
   .mbtns .ok:disabled{opacity:.5;cursor:not-allowed}
+  .rcp-close{background:var(--field,#121214);border:1px solid var(--line);color:var(--t1);border-radius:999px;padding:10px 28px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--f);min-height:40px}
+  .rcp-close:hover{border-color:var(--line-hi)}
   /* 租户详情宽弹窗 */
   .modal.mwide{width:540px;max-height:86vh;overflow-y:auto}
   .msec{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
@@ -270,12 +272,12 @@
     </div>
   </div>
 
-  <!-- 回执预览(图片直显)-->
+  <!-- 回执预览(图片直显,自适应竖/横图)-->
   <div class="ov" id="receiptOv" onclick="closeOv('receiptOv')">
-    <div class="modal" style="max-width:680px;text-align:center" onclick="event.stopPropagation()">
-      <h3 id="receiptTitle" style="margin-bottom:12px">打款回执</h3>
-      <img id="receiptImg" alt="银行回执" style="max-width:100%;max-height:70vh;border-radius:10px;border:1px solid var(--line)">
-      <div class="row" style="margin-top:14px;justify-content:center"><button class="cancel" onclick="closeOv('receiptOv')">关闭</button></div>
+    <div class="modal" style="width:auto;max-width:min(92vw,560px);display:flex;flex-direction:column;align-items:center;gap:14px" onclick="event.stopPropagation()">
+      <h3 id="receiptTitle">打款回执</h3>
+      <img id="receiptImg" alt="银行回执" style="max-width:100%;max-height:72vh;border-radius:10px;border:1px solid var(--line);object-fit:contain">
+      <button class="rcp-close" onclick="closeOv('receiptOv')">关闭</button>
     </div>
   </div>
 
