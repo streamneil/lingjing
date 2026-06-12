@@ -4,12 +4,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>对公充值 · 灵镜</title>
+  <title>充值 · 灵镜</title>
   <link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
   <link rel="stylesheet" href="app.css">
   <style>
-    /* ── 对公充值页 ── */
-    .rc-grid{ display:grid; grid-template-columns:1fr 380px; gap:20px; align-items:start; }
+    /* ── 充值页(只选套餐 → 提交订单 → 收银台)── */
+    .rc-grid{ display:grid; grid-template-columns:1fr 320px; gap:20px; align-items:start; }
     .rc-sec{ font-size:12px; color:var(--t3); font-weight:700; text-transform:uppercase; letter-spacing:.6px; font-family:var(--f-en,'Manrope',sans-serif); margin-bottom:12px; }
     .rc-plan{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px 18px; margin-bottom:10px; display:flex; align-items:center; gap:14px; cursor:pointer; transition:border-color .15s,background .15s; }
     .rc-plan:hover{ border-color:var(--line-hi); }
@@ -23,39 +23,28 @@
     .rc-price .rc-cur{ font-size:14px; color:var(--t2); }
     .rc-hint{ font-size:12px; color:var(--t4); margin-top:8px; line-height:1.6; }
     .rc-empty{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:36px; text-align:center; color:var(--t4); font-size:13px; }
-    /* 右栏对公卡 */
-    .rc-pay{ background:var(--card-hi); border:1px solid var(--line); border-radius:16px; padding:22px; position:sticky; top:24px; }
-    .rc-steps{ display:flex; gap:8px; margin-bottom:16px; font-size:11px; }
-    .rc-step{ flex:1; text-align:center; padding:6px 4px; border-radius:8px; background:var(--field); color:var(--t4); }
-    .rc-step.on{ background:var(--blue-bg); color:#9EC1FF; font-weight:700; }
-    .rc-pay h3{ font-size:15px; font-weight:700; margin-bottom:16px; }
-    .rc-row{ display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--line-soft); font-size:13px; gap:12px; }
-    .rc-row .rc-k{ color:var(--t3); flex-shrink:0; }
-    .rc-row .rc-v{ color:var(--t1); font-weight:600; text-align:right; word-break:break-all; }
-    .rc-row .rc-mono{ font-family:var(--f-mono,'SF Mono',Menlo,monospace); font-size:12.5px; }
-    .rc-copy{ margin-left:8px; color:var(--blue); font-size:11px; cursor:pointer; border:1px solid var(--blue); border-radius:6px; padding:1px 6px; background:none; min-height:24px; }
-    .rc-amt{ display:flex; justify-content:space-between; align-items:baseline; margin:16px 0 6px; }
-    .rc-amt .rc-k{ color:var(--t2); font-size:13px; }
-    .rc-amt .rc-v{ font-size:30px; font-weight:800; color:var(--green); font-family:var(--f-en,'Manrope',sans-serif); }
-    .rc-ordno{ font-size:11px; color:var(--t4); font-family:var(--f-mono,monospace); }
-    .rc-tip{ background:var(--blue-bg); border:1px solid rgba(77,141,255,.25); border-radius:10px; padding:10px 12px; font-size:12px; color:#9EC1FF; line-height:1.6; margin:16px 0; }
-    .rc-btn{ width:100%; background:var(--blue); color:#fff; border:none; border-radius:999px; padding:13px; font-size:15px; font-weight:700; font-family:inherit; cursor:pointer; min-height:46px; }
+    /* 右栏:下单摘要 */
+    .rc-cart{ background:var(--card-hi); border:1px solid var(--line); border-radius:16px; padding:22px; position:sticky; top:24px; }
+    .rc-cart h3{ font-size:14px; font-weight:700; margin-bottom:16px; }
+    .rc-crow{ display:flex; justify-content:space-between; align-items:baseline; padding:8px 0; font-size:13px; }
+    .rc-crow .k{ color:var(--t3); }
+    .rc-crow .v{ color:var(--t1); font-weight:600; }
+    .rc-crow .v .cr{ color:var(--green); }
+    .rc-amt{ display:flex; justify-content:space-between; align-items:baseline; margin:14px 0 4px; padding-top:14px; border-top:1px solid var(--line-soft); }
+    .rc-amt .k{ color:var(--t2); font-size:13px; }
+    .rc-amt .v{ font-size:28px; font-weight:800; color:var(--green); font-family:var(--f-en,'Manrope',sans-serif); }
+    .rc-btn{ width:100%; margin-top:16px; background:var(--blue); color:#fff; border:none; border-radius:999px; padding:13px; font-size:15px; font-weight:700; font-family:inherit; cursor:pointer; min-height:46px; }
     .rc-btn:disabled{ opacity:.5; cursor:not-allowed; }
-    .rc-upload{ margin-top:10px; border:1px dashed var(--line-hi); border-radius:12px; padding:14px; text-align:center; color:var(--t3); font-size:12px; cursor:pointer; min-height:44px; background:none; width:100%; font-family:inherit; }
-    .rc-upload b{ color:var(--blue); }
-    .rc-upload.has{ border-color:var(--green); color:var(--green); }
     .rc-muted{ color:var(--t4); font-size:11px; text-align:center; margin-top:10px; line-height:1.6; }
-    .rc-notcfg{ color:var(--t4); font-size:12px; text-align:center; padding:24px; line-height:1.7; }
     @media (max-width:760px){
       .rc-grid{ grid-template-columns:1fr; }
-      .rc-pay{ position:static; }
-      /* 移动端:应付金额 + 我已打款 变底部 sticky 条 */
-      .rc-mobile-bar{ position:fixed; left:0; right:0; bottom:0; background:var(--card-hi); border-top:1px solid var(--line); padding:12px 16px env(safe-area-inset-bottom,12px); display:flex; gap:12px; align-items:center; z-index:30; }
-      .rc-mobile-bar .rc-mb-amt{ font-size:20px; font-weight:800; color:var(--green); }
-      .rc-mobile-bar .rc-btn{ flex:1; width:auto; }
-      body{ padding-bottom:72px; }
+      .rc-cart{ position:fixed; left:0; right:0; bottom:0; top:auto; border-radius:0; border-bottom:none; border-left:none; border-right:none; padding:14px 16px env(safe-area-inset-bottom,14px); display:flex; align-items:center; gap:12px; z-index:30; }
+      .rc-cart h3,.rc-crow,.rc-amt .k{ display:none; }
+      .rc-cart .rc-amt{ margin:0; padding:0; border:none; flex-direction:column; align-items:flex-start; }
+      .rc-cart .rc-amt .v{ font-size:20px; }
+      .rc-btn{ width:auto; flex:1; margin:0; }
+      body{ padding-bottom:80px; }
     }
-    @media (min-width:761px){ .rc-mobile-bar{ display:none; } }
   </style>
 </head>
 
@@ -64,7 +53,7 @@
     <div class="main-col">
       <main class="page">
         <div class="ph">
-          <div><h1 class="t-h1">对公充值</h1><p class="desc">对公采购,积分有效期 1 年,用多少扣多少。线下打款,平台核对到账后积分自动入账。</p></div>
+          <div><h1 class="t-h1">充值</h1><p class="desc">对公采购,积分有效期 1 年,用多少扣多少。选择套餐后提交订单,前往收银台完成支付。</p></div>
         </div>
 
         <div class="rc-grid">
@@ -75,15 +64,10 @@
             <div class="rc-hint">套餐由平台运营在后台配置(名称/价格/积分/赠送)。如需更大额度或私有化,请联系客户成功经理。</div>
           </div>
 
-          <!-- 右:对公转账信息 -->
-          <div class="rc-pay" id="rcPay">
-            <div class="rc-steps">
-              <div class="rc-step on">① 待打款</div>
-              <div class="rc-step">② 待确认</div>
-              <div class="rc-step">③ 已到账</div>
-            </div>
-            <h3>对公转账信息</h3>
-            <div id="rcPayee"><div class="rc-notcfg">对公收款信息加载中…</div></div>
+          <!-- 右:下单摘要 -->
+          <div class="rc-cart" id="rcCart">
+            <h3>订单摘要</h3>
+            <div id="rcSummary"></div>
           </div>
         </div>
       </main>
@@ -96,18 +80,14 @@
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
     function fmtN(n){ return (n||0).toLocaleString('zh-CN'); }
 
-    let PLANS = [];
-    let PAYEE = null;
-    let selectedId = null;
+    let PLANS = [], selectedId = null, submitting = false;
 
     async function load(){
       try{
-        const [{ plans }, payee] = await Promise.all([ LJ.get('/pricing-plans'), LJ.get('/payee-info') ]);
+        const { plans } = await LJ.get('/pricing-plans');
         PLANS = (plans||[]).filter(p => p.priceYuan != null); // 面议套餐不可直接充值
-        PAYEE = payee;
-        if(PLANS.length){ selectedId = PLANS[0].id; }
-        renderPlans();
-        renderPay();
+        if(PLANS.length) selectedId = PLANS[0].id;
+        renderPlans(); renderSummary();
       }catch(e){
         document.getElementById('rcPlans').innerHTML = '<div class="rc-empty">套餐加载失败,请刷新重试。</div>';
       }
@@ -125,44 +105,38 @@
           <div class="rc-price"><span class="rc-cur">¥</span>${fmtN(p.priceYuan)}</div>
         </div>`;
       }).join('');
-      box.querySelectorAll('.rc-plan').forEach(el => el.onclick = () => { selectedId = el.dataset.id; renderPlans(); renderPay(); });
+      box.querySelectorAll('.rc-plan').forEach(el => el.onclick = () => { selectedId = el.dataset.id; renderPlans(); renderSummary(); });
     }
 
     function plan(){ return PLANS.find(p => p.id === selectedId); }
 
-    function renderPay(){
-      const box = document.getElementById('rcPayee');
-      if(!PAYEE || !PAYEE.configured){
-        box.innerHTML = '<div class="rc-notcfg">平台尚未配置对公收款账户,<br>请联系平台运营开通后再充值。</div>';
-        return;
-      }
+    function renderSummary(){
+      const box = document.getElementById('rcSummary');
       const p = plan();
-      const totalCredits = p ? (p.credits + p.bonusCredits) : 0;
+      if(!p){ box.innerHTML = '<div class="rc-muted">请先选择套餐</div>'; return; }
+      const total = p.credits + p.bonusCredits;
       box.innerHTML = `
-        <div class="rc-row"><span class="rc-k">收款户名</span><span class="rc-v">${esc(PAYEE.payeeName)}</span></div>
-        ${PAYEE.taxNo?`<div class="rc-row"><span class="rc-k">税号</span><span class="rc-v rc-mono">${esc(PAYEE.taxNo)}</span></div>`:''}
-        <div class="rc-row"><span class="rc-k">开户银行</span><span class="rc-v">${esc(PAYEE.bankName)}</span></div>
-        <div class="rc-row"><span class="rc-k">银行账号</span><span class="rc-v rc-mono">${esc(PAYEE.bankAccount)}<button class="rc-copy" id="rcCopy" aria-label="复制银行账号">复制</button></span></div>
-        <div class="rc-amt"><span class="rc-k">应付金额</span><span class="rc-v">${p?('¥'+fmtN(p.priceYuan)):'—'}</span></div>
-        <div class="rc-ordno">${p?`到账 ${fmtN(p.credits)}${p.bonusCredits>0?' + '+fmtN(p.bonusCredits)+' 赠':''} = ${fmtN(totalCredits)} 积分`:'请先选择套餐'}</div>
-        <div class="rc-tip">⚠ 请务必使用<b>对公账户</b>转账。到账后点击下方按钮提交,平台核对后积分自动入账(1 个工作日内)。</div>
-        <button class="rc-btn" id="rcGo" ${p?'':'disabled'}>生成订单并打款</button>
-        <div class="rc-muted">生成订单后可在「充值订单」查看进度、上传回单。</div>
-        <div class="rc-mobile-bar"><div class="rc-mb-amt">${p?('¥'+fmtN(p.priceYuan)):'—'}</div><button class="rc-btn" id="rcGoM" ${p?'':'disabled'}>生成订单</button></div>
-      `;
-      const copy = document.getElementById('rcCopy');
-      if(copy) copy.onclick = async () => { try{ await navigator.clipboard.writeText(PAYEE.bankAccount); window.LJToast('✓ 账号已复制'); }catch{ window.LJToast('复制失败,请手动选择','err'); } };
-      const go = document.getElementById('rcGo'); if(go) go.onclick = createOrder;
-      const goM = document.getElementById('rcGoM'); if(goM) goM.onclick = createOrder;
+        <div class="rc-crow"><span class="k">套餐</span><span class="v">${esc(p.name)}</span></div>
+        <div class="rc-crow"><span class="k">到账积分</span><span class="v"><span class="cr">${fmtN(total)}</span></span></div>
+        ${p.bonusCredits>0?`<div class="rc-crow"><span class="k">含赠送</span><span class="v cr">+${fmtN(p.bonusCredits)}</span></div>`:''}
+        <div class="rc-amt"><span class="k">应付金额</span><span class="v">¥${fmtN(p.priceYuan)}</span></div>
+        <button class="rc-btn" id="rcSubmit">提交订单</button>
+        <div class="rc-muted">提交后前往收银台完成对公转账。</div>`;
+      document.getElementById('rcSubmit').onclick = submit;
     }
 
-    async function createOrder(){
-      const p = plan(); if(!p) return;
+    async function submit(){
+      const p = plan(); if(!p || submitting) return;
+      submitting = true;
+      const btn = document.getElementById('rcSubmit'); if(btn){ btn.disabled = true; btn.textContent = '提交中…'; }
       try{
         const { order } = await LJ.post('/orders', { planId: p.id });
-        // 跳订单台账,高亮本单
-        location.href = 'orders.html?new=' + encodeURIComponent(order.id);
-      }catch(e){ window.LJToast(e.message || '下单失败','err'); }
+        location.href = 'pay.html?order=' + encodeURIComponent(order.id);
+      }catch(e){
+        submitting = false;
+        if(btn){ btn.disabled = false; btn.textContent = '提交订单'; }
+        window.LJToast(e.message || '下单失败','err');
+      }
     }
 
     load();

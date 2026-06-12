@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>收银台 · 灵镜</title>
+  <link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .pay-wrap{ max-width:680px; }
+    /* 订单摘要 */
+    .pay-sum{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px; display:flex; align-items:center; gap:16px; margin-bottom:20px; }
+    .pay-sum .pn{ font-size:15px; font-weight:700; }
+    .pay-sum .pc{ font-size:12px; color:var(--t2); margin-top:4px; }
+    .pay-sum .pc .cr{ color:var(--green); }
+    .pay-sum .ono{ font-size:11px; color:var(--t4); font-family:var(--f-mono,monospace); margin-top:4px; }
+    .pay-sum .amt{ margin-left:auto; text-align:right; }
+    .pay-sum .amt .big{ font-size:28px; font-weight:800; color:var(--green); font-family:var(--f-en,'Manrope',sans-serif); }
+    .pay-sum .amt .lbl{ font-size:11px; color:var(--t3); }
+    .pay-sec{ font-size:12px; color:var(--t3); font-weight:700; text-transform:uppercase; letter-spacing:.6px; margin:8px 0 12px; }
+    /* 付款方式(对公唯一可用,其余灰禁占位) */
+    .pm{ display:flex; flex-direction:column; gap:10px; margin-bottom:24px; }
+    .pm-opt{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 18px; display:flex; align-items:center; gap:14px; }
+    .pm-opt.on{ border-color:var(--blue); background:linear-gradient(180deg,rgba(77,141,255,.06),transparent); }
+    .pm-opt.dis{ opacity:.45; }
+    .pm-radio{ width:18px; height:18px; border-radius:999px; border:2px solid var(--line-hi); flex-shrink:0; }
+    .pm-opt.on .pm-radio{ border-color:var(--blue); background:radial-gradient(circle,#fff 3.5px,var(--blue) 4.5px); }
+    .pm-ic{ width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:700; }
+    .pm-name{ font-size:14px; font-weight:600; }
+    .pm-sub{ font-size:11px; color:var(--t3); margin-top:2px; }
+    .pm-tag{ margin-left:auto; font-size:11px; color:var(--t4); border:1px solid var(--line); border-radius:999px; padding:2px 10px; }
+    /* 对公信息 */
+    .bank{ background:var(--card-hi); border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:20px; }
+    .bank h3{ font-size:14px; font-weight:700; margin-bottom:14px; }
+    .brow{ display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--line-soft); font-size:13px; gap:12px; }
+    .brow .k{ color:var(--t3); flex-shrink:0; }
+    .brow .v{ color:var(--t1); font-weight:600; text-align:right; word-break:break-all; }
+    .brow .mono{ font-family:var(--f-mono,'SF Mono',Menlo,monospace); font-size:12.5px; }
+    .copy{ margin-left:8px; color:var(--blue); font-size:11px; cursor:pointer; border:1px solid var(--blue); border-radius:6px; padding:1px 6px; background:none; min-height:24px; }
+    .tip{ background:var(--blue-bg); border:1px solid rgba(77,141,255,.25); border-radius:10px; padding:10px 12px; font-size:12px; color:#9EC1FF; line-height:1.6; margin-top:14px; }
+    /* 底部确认条 */
+    .pay-foot{ display:flex; align-items:center; gap:16px; }
+    .pay-foot .total{ font-size:13px; color:var(--t3); }
+    .pay-foot .total b{ font-size:22px; color:var(--green); font-weight:800; margin-left:6px; font-family:var(--f-en,'Manrope',sans-serif); }
+    .pay-foot .btn{ margin-left:auto; background:var(--blue); color:#fff; border:none; border-radius:999px; padding:13px 32px; font-size:15px; font-weight:700; cursor:pointer; font-family:inherit; min-height:46px; }
+    .pay-foot .ghost{ background:none; color:var(--t3); border:1px solid var(--line); border-radius:999px; padding:13px 24px; font-size:14px; cursor:pointer; font-family:inherit; min-height:46px; }
+    /* 非可付状态(已到账/已取消/核对中) */
+    .pay-state{ background:var(--card); border:1px solid var(--line); border-radius:16px; padding:40px 24px; text-align:center; }
+    .pay-state .st-ic{ font-size:36px; margin-bottom:12px; }
+    .pay-state .st-t{ font-size:16px; font-weight:700; }
+    .pay-state .st-d{ font-size:13px; color:var(--t3); margin:8px 0 18px; }
+    .pay-state .st-b{ display:inline-block; background:var(--blue); color:#fff; border-radius:999px; padding:11px 24px; font-size:14px; font-weight:700; text-decoration:none; min-height:44px; }
+    @media (max-width:760px){
+      .pay-foot{ position:fixed; left:0; right:0; bottom:0; background:var(--card-hi); border-top:1px solid var(--line); padding:12px 16px env(safe-area-inset-bottom,12px); z-index:30; }
+      .pay-foot .ghost{ display:none; }
+      body{ padding-bottom:76px; }
+    }
+  </style>
+</head>
+
+<body data-page="orders" data-crumb="账户 > 充值 > 收银台">
+  <div class="shell" id="shell-mount">
+    <div class="main-col">
+      <main class="page">
+        <div class="ph">
+          <div><h1 class="t-h1">确认支付</h1><p class="desc">订单已生成,完成对公转账后点「我已完成支付」,平台核对到账积分自动入账。</p></div>
+        </div>
+        <div class="pay-wrap" id="payRoot"><div class="pay-state"><div class="st-d">加载中…</div></div></div>
+      </main>
+    </div>
+  </div>
+
+  <input type="file" id="receiptInput" accept="image/png,image/jpeg" style="display:none">
+
+  <script src="shell.js"></script>
+  <script src="api.js"></script>
+  <script>
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+    function fmtN(n){ return (n||0).toLocaleString('zh-CN'); }
+    const ORDER_ID = new URLSearchParams(location.search).get('order');
+
+    let ORDER = null, PAYEE = null;
+
+    async function load(){
+      const root = document.getElementById('payRoot');
+      if(!ORDER_ID){ root.innerHTML = stateCard('🤔','缺少订单','请从充值或定价页发起。','recharge.html','去充值'); return; }
+      try{
+        const [{ order }, payee] = await Promise.all([ LJ.get('/orders/'+ORDER_ID), LJ.get('/payee-info') ]);
+        ORDER = order; PAYEE = payee;
+        render();
+      }catch(e){
+        if(e.status===404) root.innerHTML = stateCard('🚫','订单不存在','该订单不存在或无权访问。','orders.html','返回订单');
+        else root.innerHTML = stateCard('⚠️','加载失败',e.message||'请刷新重试。','orders.html','返回订单');
+      }
+    }
+
+    function stateCard(ic,t,d,href,btn){
+      return `<div class="pay-state"><div class="st-ic">${ic}</div><div class="st-t">${esc(t)}</div><div class="st-d">${esc(d)}</div><a class="st-b" href="${href}">${esc(btn)}</a></div>`;
+    }
+
+    function render(){
+      const root = document.getElementById('payRoot');
+      const o = ORDER;
+      // 状态分支:仅 pending_payment/rejected 可付;其余显状态 + 跳订单(外部 #6)
+      if(o.status==='paid_claimed'){ root.innerHTML = stateCard('⏳','待平台核对','已提交打款申请,平台核对到账后积分自动入账。','orders.html','查看订单'); return; }
+      if(o.status==='credited'){ root.innerHTML = stateCard('✅','已到账',`订单 ${esc(o.orderNo)} 积分已入账。`,'orders.html','查看订单'); return; }
+      if(o.status==='cancelled'){ root.innerHTML = stateCard('🚫','订单已取消','该订单已取消,如需充值请重新下单。','recharge.html','重新充值'); return; }
+
+      const totalCredits = o.credits + o.bonusCredits;
+      const rejected = o.status==='rejected';
+      const payeeReady = PAYEE && PAYEE.configured;
+      root.innerHTML = `
+        <div class="pay-sum">
+          <div>
+            <div class="pn">${esc(o.planName)}</div>
+            <div class="pc">到账 <span class="cr">${fmtN(o.credits)}${o.bonusCredits>0?(' + '+fmtN(o.bonusCredits)+' 赠'):''} = ${fmtN(totalCredits)} 积分</span></div>
+            <div class="ono">订单号 ${esc(o.orderNo)} · ${rejected?'已驳回,可重新支付':'待支付'}</div>
+          </div>
+          <div class="amt"><div class="lbl">应付金额</div><div class="big">¥${fmtN(o.priceYuan)}</div></div>
+        </div>
+        ${rejected && o.adminNote ? `<div class="tip" style="background:rgba(255,107,107,.08);border-color:rgba(255,107,107,.25);color:#FF9B9B;margin-bottom:20px">驳回原因:${esc(o.adminNote)},请核对后重新提交。</div>` : ''}
+
+        <div class="pay-sec">付款方式</div>
+        <div class="pm">
+          <div class="pm-opt on">
+            <div class="pm-radio"></div>
+            <div class="pm-ic" style="background:rgba(52,199,89,.15);color:var(--green)">公</div>
+            <div><div class="pm-name">对公账户转账</div><div class="pm-sub">线下银行转账,平台核对到账后积分自动入账</div></div>
+          </div>
+          <div class="pm-opt dis">
+            <div class="pm-radio"></div>
+            <div class="pm-ic" style="background:rgba(77,141,255,.12);color:#5B9DF9">支</div>
+            <div><div class="pm-name">支付宝</div><div class="pm-sub">即时到账</div></div>
+            <span class="pm-tag">敬请期待</span>
+          </div>
+          <div class="pm-opt dis">
+            <div class="pm-radio"></div>
+            <div class="pm-ic" style="background:rgba(52,199,89,.12);color:var(--green)">微</div>
+            <div><div class="pm-name">微信支付</div><div class="pm-sub">即时到账</div></div>
+            <span class="pm-tag">敬请期待</span>
+          </div>
+        </div>
+
+        ${payeeReady ? `
+        <div class="bank">
+          <h3>对公转账信息</h3>
+          <div class="brow"><span class="k">收款户名</span><span class="v">${esc(PAYEE.payeeName)}</span></div>
+          ${PAYEE.taxNo?`<div class="brow"><span class="k">税号</span><span class="v mono">${esc(PAYEE.taxNo)}</span></div>`:''}
+          <div class="brow"><span class="k">开户银行</span><span class="v">${esc(PAYEE.bankName)}</span></div>
+          <div class="brow"><span class="k">银行账号</span><span class="v mono">${esc(PAYEE.bankAccount)}<button class="copy" id="payCopy" aria-label="复制银行账号">复制</button></span></div>
+          <div class="tip">⚠ 请使用<b>对公账户</b>转账,转账时备注订单号 ${esc(o.orderNo)}。到账后点「我已完成支付」,平台核对后积分自动入账(1 个工作日内)。</div>
+        </div>` : `<div class="tip" style="margin-bottom:20px">平台对公收款信息加载异常,请联系运营或稍后重试。</div>`}
+
+        <div class="pay-foot">
+          <span class="total">应付<b>¥${fmtN(o.priceYuan)}</b></span>
+          <a class="ghost" href="recharge.html">返回</a>
+          <button class="btn" id="payDone" ${payeeReady?'':'disabled'}>我已完成支付</button>
+        </div>
+      `;
+      const copy = document.getElementById('payCopy');
+      if(copy) copy.onclick = async () => { try{ await navigator.clipboard.writeText(PAYEE.bankAccount); window.LJToast('✓ 账号已复制'); }catch{ window.LJToast('复制失败,请手动选择','err'); } };
+      const done = document.getElementById('payDone');
+      if(done) done.onclick = onPayDone;
+    }
+
+    // 我已完成支付 → 询问是否传回单 → claim-paid → 跳 orders 高亮
+    const fileInput = document.getElementById('receiptInput');
+    fileInput.onchange = () => { if(fileInput.files[0]) submit(fileInput.files[0]); fileInput.value=''; };
+
+    async function onPayDone(){
+      const up = await window.LJConfirm({ title:'确认已完成支付', body:'确认已完成对公转账?可选上传银行回单截图加快核对(PNG/JPEG,≤5MB)。', confirmText:'上传回单', cancelText:'直接提交' });
+      if(up) fileInput.click(); else submit(null);
+    }
+
+    async function submit(file){
+      try{
+        const fd = new FormData();
+        if(file){ if(file.size>5*1024*1024){ window.LJToast('回单截图过大(≤5MB)','err'); return; } fd.append('receipt', file); }
+        const res = await fetch('/api/orders/'+ORDER_ID+'/claim-paid', { method:'POST', credentials:'same-origin', body:fd });
+        if(res.status===401){ location.href='login.html'; return; }
+        const data = await res.json().catch(()=>null);
+        if(!res.ok) throw new Error((data&&data.error)||'提交失败');
+        window.LJToast('✓ 已提交,等待平台核对到账');
+        location.href = 'orders.html?new=' + encodeURIComponent(ORDER_ID);
+      }catch(e){ window.LJToast(e.message,'err'); }
+    }
+
+    load();
+  </script>
+</body>
+</html>

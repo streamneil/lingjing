@@ -204,6 +204,8 @@ function serializeOrder(o: ReturnType<typeof getOrderForActor> & object) {
     credits: o!.credits,
     bonusCredits: o!.bonus_credits,
     status: o!.status,
+    paymentMethod: o!.payment_method, // 本轮恒 offline_bank;前端映射「对公账户转账」
+    actorName: o!.actorName ?? null, // 发起人(admin 看全机构时显谁下的单;creator 自己的单为自己)
     hasReceipt: !!o!.receipt_key,
     adminNote: o!.admin_note,
     createdAt: o!.created_at,

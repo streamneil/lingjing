@@ -56,7 +56,12 @@ function genOrderNo(): string {
 }
 
 // ── 建单 ──
-// 校验套餐存在 + enabled + price_yuan 非 NULL(拒面议),全快照落库。包在事务内出号 + 插入。
+// 守卫(eng-review + 外部声音):
+//   ① 套餐存在 + enabled + price_yuan 非 NULL(拒面议,PLAN_NOT_PRICED)。
+//   ② payee 已配(外部 #7):平台没配对公收款账户 → 拒,不生成付不了的孤儿单。
+//   ③ 复用未付单(外部 #1/#2):同 (tenant, user, plan) 已有 pending_payment 单 → 返现有
+//      (不新建),杀掉「跳走/重选/双击」堆积的废弃单。镜 createLead 去重范式。
+// 全快照落库,事务内出号 + 插入。
 export const createOrder = db.transaction(
   (params: { tenantId: string; userId: string; planId: string }): RechargeOrderRow => {
     const plan = getPlan(params.planId);
@@ -64,14 +69,29 @@ export const createOrder = db.transaction(
     if (plan.price_yuan == null)
       throw new OrderError('PLAN_NOT_PRICED', '面议套餐请联系商务,无法直接下单');
 
+    // ② payee 未配 → 拒(否则用户拿到付不了的单)。
+    const payee = getPayee();
+    if (!payee.payee_name || !payee.bank_account)
+      throw new OrderError('PAYEE_NOT_READY', '平台尚未开通对公收款,请联系运营');
+
+    // ③ 复用同套餐的未付单(防孤儿堆积 + 双击重单)。
+    const existing = db
+      .prepare(
+        `SELECT * FROM recharge_order
+         WHERE tenant_id=? AND created_by=? AND plan_id=? AND status='pending_payment'
+         ORDER BY created_at DESC LIMIT 1`,
+      )
+      .get(params.tenantId, params.userId, plan.id) as RechargeOrderRow | undefined;
+    if (existing) return existing;
+
     const id = randomUUID();
     const orderNo = genOrderNo();
     const t = now();
     db.prepare(
       `INSERT INTO recharge_order
          (id, tenant_id, created_by, order_no, plan_id, plan_name, price_yuan, credits, bonus_credits,
-          validity_months, status, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,'pending_payment',?,?)`,
+          validity_months, status, payment_method, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,'pending_payment','offline_bank',?,?)`,
     ).run(
       id,
       params.tenantId,
@@ -117,10 +137,14 @@ export function listOrdersForActor(
   limit = 100,
 ): RechargeOrderRow[] {
   const scope = scopeByActor(actingUserId, isAdmin);
+  // LEFT JOIN user 取发起人名(display_name 优先,回退 username;admin 看全机构时显谁下的单)。
   return db
     .prepare(
-      `SELECT * FROM recharge_order WHERE tenant_id=?${scope.clause}
-       ORDER BY created_at DESC, rowid DESC LIMIT ?`,
+      `SELECT o.*, COALESCE(u.display_name, u.username) AS actorName
+         FROM recharge_order o
+         LEFT JOIN user u ON o.created_by = u.id
+        WHERE o.tenant_id=?${scope.clause.replace(/created_by/g, 'o.created_by')}
+        ORDER BY o.created_at DESC, o.rowid DESC LIMIT ?`,
     )
     .all(tenantId, ...scope.params, limit) as RechargeOrderRow[];
 }

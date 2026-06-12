@@ -15,6 +15,7 @@
     .od-top{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
     .od-no{ font-family:var(--f-mono,monospace); font-size:12px; color:var(--t3); }
     .od-plan{ font-size:14px; font-weight:600; }
+    .od-pm{ font-size:11px; color:var(--t3); border:1px solid var(--line); border-radius:999px; padding:2px 9px; }
     .od-amt{ margin-left:auto; font-size:18px; font-weight:800; font-family:var(--f-en,'Manrope',sans-serif); }
     .od-amt .cur{ font-size:12px; color:var(--t2); }
     .od-meta{ font-size:12px; color:var(--t3); margin-top:6px; }
@@ -53,7 +54,6 @@
   </div>
 
   <!-- 隐藏文件输入(回单上传) -->
-  <input type="file" id="receiptInput" accept="image/png,image/jpeg" style="display:none">
 
   <script src="shell.js"></script>
   <script src="api.js"></script>
@@ -95,13 +95,16 @@
         const [label, cls] = BADGE[o.status] || ['未知','b-pending'];
         const hl = o.id === NEW_ID ? ' hl' : '';
         const note = o.status==='rejected' && o.adminNote ? `<div class="od-note">驳回原因:${esc(o.adminNote)}</div>` : '';
+        const pm = o.paymentMethod === 'offline_bank' ? '对公转账' : (o.paymentMethod || '—');
+        const who = o.actorName ? ` · 发起人 ${esc(o.actorName)}` : '';
         return `<div class="od-row${hl}" data-id="${esc(o.id)}">
           <div class="od-top">
             <span class="od-plan">${esc(o.planName)}</span>
             <span class="od-badge ${cls}">${label}</span>
+            <span class="od-pm">${esc(pm)}</span>
             <span class="od-amt"><span class="cur">¥</span>${fmtN(o.priceYuan)}</span>
           </div>
-          <div class="od-meta"><span class="od-no">${esc(o.orderNo)}</span> · 到账 <span class="cr">${fmtN(o.credits + o.bonusCredits)}</span> 积分</div>
+          <div class="od-meta"><span class="od-no">${esc(o.orderNo)}</span> · 到账 <span class="cr">${fmtN(o.credits + o.bonusCredits)}</span> 积分${who}</div>
           ${note}
           <div class="od-acts">${actions(o)}</div>
         </div>`;
@@ -111,47 +114,26 @@
 
     function actions(o){
       const a = [];
-      if(o.status==='pending_payment'){ a.push(btn('claim',o.id,'我已打款','primary')); a.push(btn('cancel',o.id,'取消','ghost')); }
-      if(o.status==='rejected'){ a.push(btn('claim',o.id,'重新提交打款','primary')); a.push(btn('cancel',o.id,'取消','ghost')); }
-      // paid_claimed:核对中,不给取消(竞态守卫,外部#3)
+      // 待支付/已驳回 → 去收银台支付(支付动作已移到 pay.html);可取消。
+      if(o.status==='pending_payment'){ a.push(btn('pay',o.id,'去支付','primary')); a.push(btn('cancel',o.id,'取消','ghost')); }
+      if(o.status==='rejected'){ a.push(btn('pay',o.id,'重新支付','primary')); a.push(btn('cancel',o.id,'取消','ghost')); }
+      // paid_claimed:核对中,不给取消(竞态守卫)
       if(o.status==='paid_claimed'){ a.push('<span class="od-act ghost" style="cursor:default">核对中…</span>'); }
       if(o.status==='credited'){ a.push(btn('invoice',o.id,'去开票','')); }
       return a.join('');
     }
     function btn(act,id,label,cls){ return `<button class="od-act ${cls}" data-act="${act}" data-id="${esc(id)}">${label}</button>`; }
 
-    let claimTargetId = null;
-    const fileInput = document.getElementById('receiptInput');
-    fileInput.onchange = () => { if(fileInput.files[0]) submitClaim(claimTargetId, fileInput.files[0]); fileInput.value=''; };
-
     async function handle(act, id){
-      if(act==='claim'){
-        // 询问是否上传回单
-        const up = await window.LJConfirm({ title:'确认已打款', body:'确认已完成对公转账?可选上传银行回单截图加快核对(PNG/JPEG,≤5MB)。', confirmText:'上传回单', cancelText:'直接提交' });
-        if(up){ claimTargetId = id; fileInput.click(); }
-        else submitClaim(id, null);
+      if(act==='pay'){
+        // 去收银台支付(查对公信息 / 我已支付 / 传回单都在 pay.html)
+        location.href = 'pay.html?order=' + encodeURIComponent(id);
       } else if(act==='cancel'){
         if(!(await window.LJConfirm({ title:'取消订单', body:'确认取消该充值订单?', confirmText:'取消订单', danger:true }))) return;
         try{ await LJ.post('/orders/'+id+'/cancel'); window.LJToast('✓ 订单已取消'); load(); }catch(e){ window.LJToast(e.message,'err'); }
       } else if(act==='invoice'){
         location.href = 'invoices.html?order=' + encodeURIComponent(id);
       }
-    }
-
-    async function submitClaim(id, file){
-      try{
-        const fd = new FormData();
-        if(file){
-          if(file.size > 5*1024*1024){ window.LJToast('回单截图过大(≤5MB)','err'); return; }
-          fd.append('receipt', file);
-        }
-        const res = await fetch('/api/orders/'+id+'/claim-paid', { method:'POST', credentials:'same-origin', body:fd });
-        if(res.status===401){ location.href='login.html'; return; }
-        const data = await res.json().catch(()=>null);
-        if(!res.ok) throw new Error((data&&data.error)||'提交失败');
-        window.LJToast('✓ 已提交,等待平台核对到账');
-        load();
-      }catch(e){ window.LJToast(e.message,'err'); }
     }
 
     load();

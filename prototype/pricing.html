@@ -109,7 +109,9 @@
             <div class="pr-price">${price}</div>
             <div class="pr-credits">◆ ${fmtN(p.credits)} 积分${bonus}</div>
             <div class="pr-feats">${feats}</div>
-            <button class="pr-btn" onclick='buyPlan(${JSON.stringify(p.id)},${JSON.stringify(p.name)})'>购买</button>
+            ${p.priceYuan==null
+              ? `<button class="pr-btn" onclick='leadEnterprise()'>联系销售</button>`
+              : `<button class="pr-btn" onclick='buyPlan(${JSON.stringify(p.id)})'>购买</button>`}
           </div>`;
         }).join('');
       }catch(e){ box.innerHTML='<div class="pr-empty">套餐加载失败,请刷新重试。</div>'; }
@@ -121,7 +123,16 @@
         window.LJToast('✓ '+(r.contact||okMsg||'已记录意向,平台对接人会联系你'));
       }catch(e){ window.LJToast(e.message||'提交失败','err'); }
     }
-    window.buyPlan=(id,name)=>postLead({kind:'plan',planId:id}, `已记录「${name}」购买意向`);
+    // 有价套餐「购买」→ 走统一下单流程(createOrder → 收银台);防双击。
+    let buying=false;
+    window.buyPlan=async(id)=>{
+      if(buying) return; buying=true;
+      try{
+        const { order }=await LJ.post('/orders', { planId:id });
+        location.href='pay.html?order='+encodeURIComponent(order.id);
+      }catch(e){ buying=false; window.LJToast(e.message||'下单失败','err'); }
+    };
+    // 面议/企业定制 → 仍走联系销售(sales_lead enterprise)。
     window.leadEnterprise=async()=>{
       const note=await window.LJPrompt({title:'企业定制咨询',label:'简述你的需求(额度/私有化/合规等)',placeholder:'例:需私有化部署 + 50 万积分'});
       if(note==null||!note.trim()) return;
