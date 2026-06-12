@@ -6,19 +6,30 @@
 
 import { Router, type Request, type Response } from 'express';
 import { requireAuth } from '../auth/middleware.js';
-import { balance, ledger } from '../credits/index.js';
-import { listAudit } from '../audit/index.js';
+import { balance, ledger, countLedger } from '../credits/index.js';
+import { listAudit, countAudit } from '../audit/index.js';
 
 export const creditsRouter = Router();
+
+// 分页参数解析:page≥1,pageSize 1..100(默认 20)。返回 {page, pageSize, offset}。
+function parsePage(req: Request, defaultSize = 20): { page: number; pageSize: number; offset: number } {
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || defaultSize));
+  return { page, pageSize, offset: (page - 1) * pageSize };
+}
 
 // 余额(顶栏展示)
 creditsRouter.get('/credits/balance', requireAuth, (req: Request, res: Response) => {
   return res.json({ balance: balance(req.user!.tenantId) });
 });
 
-// 消费记录(可查询,验收 H3)
+// 消费记录(分页:page/pageSize → {rows, total, page, pageSize})。
 creditsRouter.get('/credits/ledger', requireAuth, (req: Request, res: Response) => {
-  return res.json(ledger(req.user!.tenantId, 100, req.user!.id, req.user!.role === 'admin'));
+  const { page, pageSize, offset } = parsePage(req);
+  const isAdmin = req.user!.role === 'admin';
+  const rows = ledger(req.user!.tenantId, pageSize, req.user!.id, isAdmin, offset);
+  const total = countLedger(req.user!.tenantId, req.user!.id, isAdmin);
+  return res.json({ rows, total, page, pageSize });
 });
 
 // 消费记录 CSV 导出(验收 H3:可导出)
@@ -64,7 +75,11 @@ creditsRouter.get('/credits/warning', requireAuth, (req: Request, res: Response)
 // 租户自助充值是 SaaS 收入漏洞(租户 admin 给自己无限充值),已删除(/plan-ceo-review D3)。
 // 余额/消费记录查询保留(租户可看自己),充值入口只在 /admin。
 
-// 审计日志只读:登录即可看(团队透明,租户隔离);设置等写操作仍 admin-only。
+// 审计日志只读(分页:page/pageSize → {rows, total, page, pageSize})。
 creditsRouter.get('/audit', requireAuth, (req: Request, res: Response) => {
-  return res.json(listAudit(req.user!.tenantId, 200, req.user!.id, req.user!.role === 'admin'));
+  const { page, pageSize, offset } = parsePage(req);
+  const isAdmin = req.user!.role === 'admin';
+  const rows = listAudit(req.user!.tenantId, pageSize, req.user!.id, isAdmin, offset);
+  const total = countAudit(req.user!.tenantId, req.user!.id, isAdmin);
+  return res.json({ rows, total, page, pageSize });
 });

@@ -218,8 +218,8 @@
     </div>
     <div class="tbl">
       <table>
-        <thead><tr><th>订单号</th><th>套餐</th><th>金额</th><th>到账积分</th><th>回单</th><th style="text-align:right">操作</th></tr></thead>
-        <tbody id="orderRows"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody>
+        <thead><tr><th>租户</th><th>订单号</th><th>套餐</th><th>金额</th><th>到账积分</th><th>回单</th><th style="text-align:right">操作</th></tr></thead>
+        <tbody id="orderRows"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
 
@@ -470,8 +470,9 @@
     const tb=document.getElementById('orderRows');
     try{
       const { orders }=await PA('GET','/api/recharge-orders?status=paid_claimed');
-      if(!orders.length){ tb.innerHTML='<tr><td colspan="6" class="empty">暂无待核对的打款</td></tr>'; return; }
+      if(!orders.length){ tb.innerHTML='<tr><td colspan="7" class="empty">暂无待核对的打款</td></tr>'; return; }
       tb.innerHTML=orders.map(o=>`<tr>
+        <td><div class="tn">${esc(o.tenantName||'—')}</div><div class="tid" style="font-size:11px;color:var(--t4)">${esc(o.tenantId)}</div></td>
         <td style="font-family:var(--f-mono);font-size:12px">${esc(o.orderNo)}</td>
         <td>${esc(o.planName)}</td>
         <td class="bal">¥${fmtN(o.priceYuan)}</td>
@@ -482,7 +483,7 @@
           <button class="act" onclick='rejectOrder(${JSON.stringify(o.id)})'>驳回</button>
         </div></td>
       </tr>`).join('');
-    }catch(e){ tb.innerHTML='<tr><td colspan="6" class="empty">加载失败</td></tr>'; }
+    }catch(e){ tb.innerHTML='<tr><td colspan="7" class="empty">加载失败</td></tr>'; }
   }
   async function confirmOrder(id, no){
     if(!confirm(`确认订单 ${no} 已到账?积分将自动入账(不可撤销)。`)) return;

@@ -81,7 +81,7 @@ describe('PUT /api/settings 字段级审计', () => {
     await c.put('/api/settings', { aiLabelText: '换个文案' });
     const list = await c.get('/api/audit');
     expect(list.status).toBe(200);
-    const hit = list.body.find((a: any) => a.action === 'update_settings' && a.detail);
+    const hit = list.body.rows.find((a: any) => a.action === 'update_settings' && a.detail);
     expect(hit).toBeTruthy();
     expect(typeof hit.detail).toBe('string');
     expect(JSON.parse(hit.detail)[0]).toHaveProperty('old');

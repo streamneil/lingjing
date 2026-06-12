@@ -162,19 +162,20 @@ describe('★钱路★ 确认到账只 grant 一次', () => {
 });
 
 describe('状态机:驳回 / 重提 / 取消', () => {
-  it('驳回 → rejected + 备注;用户重提 → paid_claimed', () => {
+  it('驳回 → rejected 终态:不可重提、不可取消(用户决策:驳回无需重新支付)', () => {
     const o = createOrder({ tenantId: tId, userId: alice, planId });
     claimPaid(o.id, tId, null);
     expect(rejectOrder(o.id, admin, '未查到到账')).toBe(true);
     const r = getOrderForActor(o.id, tId, alice, false)!;
     expect(r.status).toBe('rejected');
     expect(r.admin_note).toBe('未查到到账');
-    // 重提
-    expect(claimPaid(o.id, tId, 'receipt-key-1')).toBe(true);
-    expect(getOrderForActor(o.id, tId, alice, false)!.status).toBe('paid_claimed');
+    // 终态:重提无效(驳回不可逆),取消也无效
+    expect(claimPaid(o.id, tId, 'receipt-key-1')).toBe(false);
+    expect(cancelOrder(o.id, tId)).toBe(false);
+    expect(getOrderForActor(o.id, tId, alice, false)!.status).toBe('rejected'); // 仍是 rejected
   });
 
-  it('取消仅 pending/rejected;paid_claimed 取消 → false(守卫兑底,外部 #3)', () => {
+  it('取消仅 pending_payment;paid_claimed 取消 → false(守卫兑底)', () => {
     const o = createOrder({ tenantId: tId, userId: alice, planId });
     claimPaid(o.id, tId, null); // → paid_claimed
     expect(cancelOrder(o.id, tId)).toBe(false); // 守卫拦

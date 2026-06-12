@@ -156,15 +156,16 @@ describe('积分 + 审计 API', () => {
     const c = await loginAs(tenantA, 'admin');
     const r = await c.get('/api/audit');
     expect(r.status).toBe(200);
-    expect(Array.isArray(r.body)).toBe(true);
-    expect(r.body.some((a: any) => a.action === 'login')).toBe(true);
+    expect(Array.isArray(r.body.rows)).toBe(true); // 分页:{rows,total,page,pageSize}
+    expect(typeof r.body.total).toBe('number');
+    expect(r.body.rows.some((a: any) => a.action === 'login')).toBe(true);
   });
 
   it('非 admin 也能看审计(只读放宽:团队透明)→ 200', async () => {
     const c = await loginAs(tenantA, 'viewer');
     const r = await c.get('/api/audit');
     expect(r.status).toBe(200);
-    expect(Array.isArray(r.body)).toBe(true);
+    expect(Array.isArray(r.body.rows)).toBe(true);
   });
 
   it('非 admin 能看成员名单(只读放宽)→ 200,但写仍 403', async () => {

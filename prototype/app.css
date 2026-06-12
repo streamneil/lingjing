@@ -710,3 +710,10 @@ img { display: block; }
 .dchip .dp { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,.92); display: grid; place-items: center; opacity: 0; transition: opacity .25s; }
 .dchip:hover .dp { opacity: 1; }
 .dchip .dp svg { width: 15px; height: 15px; color: #0A0A0B; margin-left: 2px; }
+
+/* 经典页码条(审计日志 / 消费明细共用)*/
+.ld-pager { display: flex; align-items: center; justify-content: flex-end; gap: 14px; padding: 14px 4px 4px; }
+.ld-pginfo { font-size: 12px; color: var(--t3); }
+.ld-pg { background: var(--field); border: 1px solid var(--line); color: var(--t1); border-radius: 8px; padding: 7px 14px; font-size: 13px; cursor: pointer; font-family: inherit; min-height: 34px; }
+.ld-pg:hover:not(:disabled) { border-color: var(--line-hi); }
+.ld-pg:disabled { opacity: .4; cursor: not-allowed; }

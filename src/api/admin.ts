@@ -731,11 +731,12 @@ adminRouter.put('/api/sales-leads/:id', requirePlatformAdmin, (req: Request, res
 
 // ── 对公充值:收款核对工作台 ──
 
-function serializeAdminOrder(o: ReturnType<typeof getOrder> & object) {
+function serializeAdminOrder(o: ReturnType<typeof getOrder> & object, tenantName: string) {
   return {
     id: o!.id,
     orderNo: o!.order_no,
     tenantId: o!.tenant_id,
+    tenantName, // 哪个租户提交的(超管核对/处理用;JOIN tenant 解析)
     planName: o!.plan_name,
     priceYuan: o!.price_yuan,
     credits: o!.credits,
@@ -747,12 +748,22 @@ function serializeAdminOrder(o: ReturnType<typeof getOrder> & object) {
   };
 }
 
-// 列待核对(paid_claimed)订单。
+// 列待核对(paid_claimed)订单。带租户名供超管识别是哪个机构提交的。
 adminRouter.get('/api/recharge-orders', requirePlatformAdmin, (req: Request, res: Response) => {
   const status = (req.query.status as string) || 'paid_claimed';
   const valid = ['pending_payment', 'paid_claimed', 'credited', 'rejected', 'cancelled'];
   if (!valid.includes(status)) return res.status(400).json({ error: '无效状态' });
-  res.json({ orders: listOrdersByStatus(status as never).map(serializeAdminOrder) });
+  const orders = listOrdersByStatus(status as never);
+  // 批量解析租户名(避免 N 次单查)。
+  const names = new Map<string, string>();
+  for (const o of orders) {
+    if (names.has(o.tenant_id)) continue;
+    const t = db.prepare(`SELECT name FROM tenant WHERE id=?`).get(o.tenant_id) as
+      | { name: string }
+      | undefined;
+    names.set(o.tenant_id, t?.name ?? '(已删租户)');
+  }
+  res.json({ orders: orders.map((o) => serializeAdminOrder(o, names.get(o.tenant_id) ?? '')) });
 });
 
 // 看回单截图(超管,流式)。

@@ -123,13 +123,16 @@
 
     function actions(o){
       const a = [];
-      // 待支付/已驳回 → 去收银台支付(支付动作已移到 pay.html);可取消。
+      // 待支付 → 去收银台支付;可取消。
       if(o.status==='pending_payment'){ a.push(btn('pay',o.id,'去支付','primary')); a.push(btn('cancel',o.id,'取消','ghost')); }
-      if(o.status==='rejected'){ a.push(btn('pay',o.id,'重新支付','primary')); a.push(btn('cancel',o.id,'取消','ghost')); }
-      // paid_claimed:核对中,不给取消(竞态守卫)
+      // 已驳回 = 终态:无任何操作按钮(只显驳回原因);用户要重买就重新下单。
+      // paid_claimed:核对中,不给取消(竞态守卫);有回执可查看。
       if(o.status==='paid_claimed'){ a.push('<span class="od-act ghost" style="cursor:default">核对中…</span>'); }
-      // 已到账 + 未开票 → 去开票(跳独立开票页,仅 admin 能进);开票中/已开票不显按钮(徽章已表达)。
+      // 已到账 + 未开票 → 去开票(仅 admin);开票中/已开票 → 查看开票信息。
       if(o.status==='credited' && !o.invoiceStatus && IS_ADMIN){ a.push(btn('invoice',o.id,'去开票','')); }
+      if(o.status==='credited' && o.invoiceStatus){ a.push(btn('viewinv',o.id,'查看开票','')); }
+      // 发起人上传过回执 → 可查看(打款/已到账阶段都能看)。
+      if(o.hasReceipt && (o.status==='paid_claimed' || o.status==='credited')){ a.push(btn('receipt',o.id,'查看回执','ghost')); }
       return a.join('');
     }
     function btn(act,id,label,cls){ return `<button class="od-act ${cls}" data-act="${act}" data-id="${esc(id)}">${label}</button>`; }
@@ -144,6 +147,12 @@
       } else if(act==='invoice'){
         // 去独立开票页(可在那里多选合并;预选不强制,跳过去即可)。
         location.href = 'invoice-new.html';
+      } else if(act==='viewinv'){
+        // 查看本订单的开票信息(跳发票管理)。
+        location.href = 'invoices.html';
+      } else if(act==='receipt'){
+        // 查看发起人上传的银行回执(同源下载/预览)。
+        window.open('/api/orders/'+encodeURIComponent(id)+'/receipt', '_blank');
       }
     }
 

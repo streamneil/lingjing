@@ -307,7 +307,13 @@ function summarizeJobInput(toolType: string | null | undefined, inputJson: strin
 /** 消费明细 + 归属 + 关联作品:LEFT JOIN job(取工具 type / 文案 / 产物类型)+ user(取消费人名)。
  *  归属与作品摘要经 JOIN + input_json 解析派生(一次查询,前端不用 N 次 getJob),不冗余存 ledger;
  *  grant 行无 job_id → toolType/userName/taskTitle 空;老 job 的 created_by NULL → userName 空(前端显「—」)。 */
-export function ledger(tenantId: string, limit = 100, actingUserId?: string, isAdmin = false): LedgerRow[] {
+export function ledger(
+  tenantId: string,
+  limit = 100,
+  actingUserId?: string,
+  isAdmin = false,
+  offset = 0,
+): LedgerRow[] {
   // 账号隔离:creator 只看自己消费的行 + 机构发放(grant)行(发放是机构钱包入账,与「余额共享」一致)。
   // grant 行 job_id=NULL → JOIN 后 j.created_by 也 NULL,故必须 OR l.kind='grant' 才不把发放对 creator 隐藏(eng-review 1B)。
   // admin / 无 actingUserId(内部调用)→ 看全机构。
@@ -323,9 +329,9 @@ export function ledger(tenantId: string, limit = 100, actingUserId?: string, isA
          LEFT JOIN job j ON l.job_id = j.id
          LEFT JOIN user u ON j.created_by = u.id
         WHERE l.tenant_id = ?${scopeClause}
-        ORDER BY l.created_at DESC LIMIT ?`,
+        ORDER BY l.created_at DESC LIMIT ? OFFSET ?`,
     )
-    .all(tenantId, ...scopeParams, limit) as (LedgerRow & {
+    .all(tenantId, ...scopeParams, limit, offset) as (LedgerRow & {
     jobInput?: string | null;
     jobOutputKind?: string | null;
     jobOutput?: string | null;
@@ -338,4 +344,20 @@ export function ledger(tenantId: string, limit = 100, actingUserId?: string, isA
     // output_kind 列有 DEFAULT 'video',queued/failed 行也非空,故不能用它判产物;以 output_url 为准。
     outputKind: jobOutput ? jobOutputKind ?? null : null,
   }));
+}
+
+/** 消费明细总条数(分页用;与 ledger() 同隔离口径)。 */
+export function countLedger(tenantId: string, actingUserId?: string, isAdmin = false): number {
+  const scoped = !isAdmin && actingUserId !== undefined;
+  // 注:与 ledger() 同口径需 JOIN job 才能按 created_by 隔离;COUNT 也走同 JOIN。
+  const scopeClause = scoped ? ` AND (j.created_by = ? OR l.kind = 'grant')` : '';
+  const scopeParams = scoped ? [actingUserId] : [];
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM credit_ledger l
+         LEFT JOIN job j ON l.job_id = j.id
+        WHERE l.tenant_id = ?${scopeClause}`,
+    )
+    .get(tenantId, ...scopeParams) as { n: number };
+  return row.n;
 }
