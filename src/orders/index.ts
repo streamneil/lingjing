@@ -191,22 +191,23 @@ function transitionOrder(
   return res.changes === 1;
 }
 
-// 用户「我已打款」:pending_payment | rejected → paid_claimed(可选回单 key)。
-// rejected 也可重提(驳回后再传)。账号隔离:tenantId+本人 created_by 由 API 先 getOrderForActor 校验。
+// 用户「我已打款」:仅 pending_payment → paid_claimed(可选回单 key)。
+// 驳回(rejected)是**终态**:平台驳回即不可再提交,用户需重新下单(用户决策:驳回无需重新支付)。
+// 账号隔离:tenantId+本人 created_by 由 API 先 getOrderForActor 校验。
 export function claimPaid(id: string, tenantId: string, receiptKey: string | null): boolean {
-  // 两个起点状态都允许 → 先试 pending,再试 rejected。条件 UPDATE 保证只命中一条。
-  return (
-    transitionOrder(id, 'pending_payment', 'paid_claimed', { receipt_key: receiptKey }, tenantId) ||
-    transitionOrder(id, 'rejected', 'paid_claimed', { receipt_key: receiptKey }, tenantId)
+  return transitionOrder(
+    id,
+    'pending_payment',
+    'paid_claimed',
+    { receipt_key: receiptKey },
+    tenantId,
   );
 }
 
-// 用户取消:仅 pending_payment | rejected(≥paid_claimed 前端已隐藏,这里守卫兑底)。
+// 用户取消:仅 pending_payment(≥paid_claimed 前端已隐藏,这里守卫兑底)。
+// rejected 是终态(不可取消也不可重提);用户要重买就重新下单。
 export function cancelOrder(id: string, tenantId: string): boolean {
-  return (
-    transitionOrder(id, 'pending_payment', 'cancelled', {}, tenantId) ||
-    transitionOrder(id, 'rejected', 'cancelled', {}, tenantId)
-  );
+  return transitionOrder(id, 'pending_payment', 'cancelled', {}, tenantId);
 }
 
 // 超管驳回:paid_claimed → rejected(带原因)。

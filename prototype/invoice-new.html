@@ -31,6 +31,10 @@
     .in-btn{ width:100%; margin-top:14px; background:var(--blue); color:#fff; border:none; border-radius:999px; padding:13px; font-size:15px; font-weight:700; font-family:inherit; cursor:pointer; min-height:46px; }
     .in-btn:disabled{ opacity:.5; cursor:not-allowed; }
     .in-hint{ font-size:11px; color:var(--t4); margin-top:10px; line-height:1.6; }
+    .in-ro-banner{ background:rgba(255,179,64,.1); border:1px solid rgba(255,179,64,.3); color:#FFCB7D; border-radius:12px; padding:12px 16px; font-size:13px; margin-bottom:18px; }
+    .in-card input:disabled{ opacity:.6; cursor:not-allowed; }
+    .in-ord.ro{ cursor:default; opacity:.85; }
+    .in-ord.ro .in-ck{ visibility:hidden; }
     @media (max-width:760px){ .in-grid{ grid-template-columns:1fr; } .in-card{ position:static; } }
   </style>
 </head>
@@ -57,12 +61,14 @@
     const selected = new Set();
     let PROFILE = null;
     let submitting = false;
+    let READONLY = false;   // 非 admin:只读(看得到但改不了/提交不了)
 
     async function load(){
       const root = document.getElementById('inRoot');
       try{
         const me = await LJ.me();
-        if(me.role !== 'admin'){ root.innerHTML = '<div class="in-empty">开票由管理员发起,你没有权限。<br><a href="invoices.html" style="color:var(--blue)">返回发票管理</a></div>'; return; }
+        // 非 admin:进得去但只读(编辑框 disabled + 提交禁用 + 不可勾选);后端 403 兜底。
+        READONLY = me.role !== 'admin';
         const [{ orders }, { profile }] = await Promise.all([ LJ.get('/orders'), LJ.get('/invoice-profile') ]);
         // 可开票 = credited 且 invoiceStatus 空(未开票)
         ORDERS = (orders||[]).filter(o => o.status === 'credited' && !o.invoiceStatus);
@@ -73,22 +79,24 @@
 
     function render(){
       const root = document.getElementById('inRoot');
-      root.innerHTML = `<div class="in-grid">
+      const dis = READONLY ? 'disabled' : '';
+      const banner = READONLY ? '<div class="in-ro-banner">仅管理员可开票。你可查看可开票订单与开票资料,但不能修改或提交。</div>' : '';
+      root.innerHTML = `${banner}<div class="in-grid">
         <div>
           <div class="in-sec">选择订单(已到账·未开票)</div>
           <div id="inOrders"></div>
         </div>
         <div class="in-card">
           <h3>开票资料</h3>
-          <label>发票抬头(公司名称)</label><input id="inTitle" placeholder="例:某某科技有限公司" value="${esc(PROFILE&&PROFILE.title||'')}">
-          <label>纳税人识别号(税号)</label><input id="inTax" placeholder="例:91320114MAEGND5180" value="${esc(PROFILE&&PROFILE.tax_no||'')}">
+          <label>发票抬头(公司名称)</label><input id="inTitle" placeholder="例:某某科技有限公司" value="${esc(PROFILE&&PROFILE.title||'')}" ${dis}>
+          <label>纳税人识别号(税号)</label><input id="inTax" placeholder="例:91320114MAEGND5180" value="${esc(PROFILE&&PROFILE.tax_no||'')}" ${dis}>
           <div class="in-sum"><span class="k">合计金额</span><span class="v" id="inTotal">¥0</span></div>
-          <button class="in-btn" id="inSubmit" disabled>提交开票申请</button>
-          <div class="in-hint">${PROFILE?'抬头资料已自动带入,可修改。':'首次开票将自动保存抬头资料到机构,后续自动带入。'}提交后平台核对入账并开具,可在发票管理下载。</div>
+          <button class="in-btn" id="inSubmit" disabled>${READONLY?'仅管理员可开票':'提交开票申请'}</button>
+          <div class="in-hint">${READONLY?'开票由管理员发起。':(PROFILE?'抬头资料已自动带入,可修改。':'首次开票将自动保存抬头资料到机构,后续自动带入。')}提交后平台核对入账并开具,可在发票管理下载。</div>
         </div>
       </div>`;
       renderOrders();
-      document.getElementById('inSubmit').onclick = submit;
+      if(!READONLY) document.getElementById('inSubmit').onclick = submit;
     }
 
     function renderOrders(){
@@ -96,12 +104,13 @@
       if(!ORDERS.length){ box.innerHTML = '<div class="in-empty">暂无可开票订单。<br>已到账且未开票的充值订单会出现在这里。</div>'; return; }
       box.innerHTML = ORDERS.map(o => {
         const sel = selected.has(o.id) ? ' sel' : '';
-        return `<div class="in-ord${sel}" data-id="${esc(o.id)}">
+        return `<div class="in-ord${sel}${READONLY?' ro':''}" data-id="${esc(o.id)}">
           <div class="in-ck"></div>
           <div><div class="in-on">${esc(o.planName)}</div><div class="in-om">${esc(o.orderNo)}</div></div>
           <div class="in-oa"><span style="font-size:12px;color:var(--t2)">¥</span>${fmtN(o.priceYuan)}</div>
         </div>`;
       }).join('');
+      if(READONLY) return; // 只读:不绑勾选
       box.querySelectorAll('.in-ord').forEach(el => el.onclick = () => {
         const id = el.dataset.id;
         if(selected.has(id)) selected.delete(id); else selected.add(id);

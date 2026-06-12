@@ -75,7 +75,13 @@ const ACTOR_NAME_JOIN = `
    LEFT JOIN job jt ON l.action='create_job' AND l.target = jt.id`;
 
 /** 查租户审计(admin 可见)。带操作者名(actorName)+ 模块(module)。 */
-export function listAudit(tenantId: string, limit = 200, actingUserId?: string, isAdmin = false): AuditRow[] {
+export function listAudit(
+  tenantId: string,
+  limit = 200,
+  actingUserId?: string,
+  isAdmin = false,
+  offset = 0,
+): AuditRow[] {
   // 信任边界:租户审计**只显本租户用户操作**(actor_type='user')。
   //   平台超管(actor_type='platform_admin')的操作 —— 即使 target 是本租户(开户/充值/重置密码/
   //   订单确认/发票)—— 绝不出现在租户审计页:那是平台内部操作,泄露进租户审计既混淆「谁在管系统」
@@ -89,9 +95,23 @@ export function listAudit(tenantId: string, limit = 200, actingUserId?: string, 
     .prepare(
       `SELECT l.*, ${ACTOR_NAME_SELECT}, ${MODULE_SELECT}
          FROM audit_log l${ACTOR_NAME_JOIN}
-        WHERE l.tenant_id=? AND l.actor_type='user'${scopeClause} ORDER BY l.created_at DESC LIMIT ?`,
+        WHERE l.tenant_id=? AND l.actor_type='user'${scopeClause}
+        ORDER BY l.created_at DESC LIMIT ? OFFSET ?`,
     )
-    .all(tenantId, ...scopeParams, limit) as AuditRow[];
+    .all(tenantId, ...scopeParams, limit, offset) as AuditRow[];
+}
+
+/** 租户审计总条数(分页用;与 listAudit 同口径:仅 user 行 + 账号隔离)。 */
+export function countAudit(tenantId: string, actingUserId?: string, isAdmin = false): number {
+  const scoped = !isAdmin && actingUserId !== undefined;
+  const scopeClause = scoped ? ` AND user_id = ?` : '';
+  const scopeParams = scoped ? [actingUserId] : [];
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM audit_log WHERE tenant_id=? AND actor_type='user'${scopeClause}`,
+    )
+    .get(tenantId, ...scopeParams) as { n: number };
+  return row.n;
 }
 
 /** 平台级审计:所有超管操作(跨所有目标租户 + 纯平台操作),供 /admin 追溯。带操作者名 + 模块。 */

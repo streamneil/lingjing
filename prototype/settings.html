@@ -302,17 +302,37 @@
           document.querySelectorAll('.set-card .btn-dark').forEach(b => { if (/保存/.test(b.textContent)) b.disabled = true; });
         }
 
-        // T8:审计日志 —— 所有登录成员可见可查(后端 GET /audit 已放宽);仅展示,不可改设置。
+        // T8:审计日志 —— 所有登录成员可见可查(分页:page/pageSize → {rows,total})。
         document.getElementById('auditCard').style.display = '';
-        try {
-          const logs = await LJ.get('/audit');
-          const shown = logs.slice(0, 50);
-          document.getElementById('auditBody').innerHTML = renderAuditFeed(shown);
-          // 计数 chip:总量;>50 只展示前 50,标「50+」诚实提示有截断。
-          const cnt = document.getElementById('auditCount');
-          if (cnt) cnt.textContent = logs.length ? ('共 ' + (logs.length > 50 ? '50+' : logs.length) + ' 条') : '';
-        } catch (e) { }
+        loadAuditPage(1);
       } catch (e) { }
+    }
+
+    // 审计日志分页(经典页码)。
+    let audPage = 1, audTotal = 0; const AUD_PAGE_SIZE = 20;
+    async function loadAuditPage(page) {
+      audPage = page;
+      try {
+        const res = await LJ.get('/audit?page=' + page + '&pageSize=' + AUD_PAGE_SIZE);
+        const rows = res.rows || [];
+        audTotal = res.total ?? rows.length;
+        document.getElementById('auditBody').innerHTML = rows.length ? renderAuditFeed(rows)
+          : '<tr><td colspan="5" class="af-empty">暂无审计记录</td></tr>';
+        const cnt = document.getElementById('auditCount');
+        if (cnt) cnt.textContent = audTotal ? ('共 ' + audTotal + ' 条') : '';
+        renderAudPager();
+      } catch (e) { }
+    }
+    function renderAudPager() {
+      let bar = document.getElementById('audPager');
+      if (!bar) { bar = document.createElement('div'); bar.id = 'audPager'; bar.className = 'ld-pager';
+        const t = document.querySelector('.audit'); if (t) t.after(bar); }
+      const pages = Math.max(1, Math.ceil(audTotal / AUD_PAGE_SIZE));
+      if (audTotal <= AUD_PAGE_SIZE) { bar.innerHTML = ''; return; }
+      bar.innerHTML = `<button class="ld-pg" ${audPage <= 1 ? 'disabled' : ''} data-p="${audPage - 1}">上一页</button>
+        <span class="ld-pginfo">第 ${audPage}/${pages} 页 · 共 ${audTotal} 条</span>
+        <button class="ld-pg" ${audPage >= pages ? 'disabled' : ''} data-p="${audPage + 1}">下一页</button>`;
+      bar.querySelectorAll('.ld-pg').forEach(b => b.onclick = () => { if (!b.disabled) loadAuditPage(Number(b.dataset.p)); });
     }
     load();
   </script>

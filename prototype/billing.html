@@ -97,6 +97,7 @@
   .bl-work:focus-visible{ outline:2px solid var(--blue); outline-offset:2px; }
   .bl-empty{ text-align:center; color:var(--t4); padding:54px 20px; }
   .bl-empty svg{ width:34px; height:34px; color:var(--t5); margin-bottom:12px; }
+  /* .ld-pager/.ld-pg 页码条样式在 app.css(审计/消费明细共用)*/
 </style>
 </head>
 <body data-page="billing" data-crumb="财务中心 > 用量计费">
@@ -195,6 +196,7 @@
   const TOOL_CN = { video:'数字人视频', video_t2v:'文字转影片', video_i2v:'图片转影片', video_edit:'影片编辑', ai_image:'AI 图片', tts:'文字转语音', ai_music:'AI 音乐' };
   const toolLabel = t => t ? (TOOL_CN[t]||t) : '—';
   let LEDGER = [], curFilter = 'all', selUser = 'all', selTool = 'all', isAdmin = false;
+  let ledPage = 1, ledTotal = 0; const LED_PAGE_SIZE = 20; // 消费明细分页(当页数据驱动筛选/统计/图表)
 
   const esc = s => (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const fmtTime = ts => { const d=new Date(ts),p=n=>String(n).padStart(2,'0'); return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
@@ -375,18 +377,37 @@
         const r=document.getElementById('renewBtn'); if(r) r.style.display='none';
         document.getElementById('renewHint').textContent='点数不足时,请联系您的机构管理员申请扩容。';
       }
-      const [bal, warn, led] = await Promise.all([
+      const [bal, warn] = await Promise.all([
         LJ.get('/credits/balance'),
         LJ.get('/credits/warning').catch(()=>null),
-        LJ.get('/credits/ledger').catch(()=>[]),
       ]);
-      LEDGER = Array.isArray(led) ? led : [];
       renderDeck(bal.balance ?? 0, warn);
-      renderSpark();
-      renderStats();
-      buildPops();
-      renderTable();
+      await loadLedgerPage(1);
     }catch(e){ /* 401 已由 api.js 跳转 */ }
+  }
+
+  // 拉某页消费明细;LEDGER = 当页行,筛选/统计/图表/下拉都基于当页。
+  async function loadLedgerPage(page){
+    ledPage = page;
+    try{
+      const res = await LJ.get('/credits/ledger?page='+page+'&pageSize='+LED_PAGE_SIZE).catch(()=>({rows:[],total:0}));
+      LEDGER = Array.isArray(res.rows) ? res.rows : [];
+      ledTotal = res.total ?? LEDGER.length;
+    }catch{ LEDGER=[]; ledTotal=0; }
+    renderSpark(); renderStats(); buildPops(); renderTable(); renderLedPager();
+  }
+
+  // 明细表页码条。
+  function renderLedPager(){
+    let bar = document.getElementById('ledPager');
+    if(!bar){ bar = document.createElement('div'); bar.id='ledPager'; bar.className='ld-pager';
+      const tbl=document.getElementById('ledgerBody'); if(tbl&&tbl.closest('table')) tbl.closest('table').after(bar); }
+    const pages = Math.max(1, Math.ceil(ledTotal/LED_PAGE_SIZE));
+    if(ledTotal<=LED_PAGE_SIZE){ bar.innerHTML=''; return; }
+    bar.innerHTML = `<button class="ld-pg" ${ledPage<=1?'disabled':''} data-p="${ledPage-1}">上一页</button>
+      <span class="ld-pginfo">第 ${ledPage}/${pages} 页 · 共 ${ledTotal} 条</span>
+      <button class="ld-pg" ${ledPage>=pages?'disabled':''} data-p="${ledPage+1}">下一页</button>`;
+    bar.querySelectorAll('.ld-pg').forEach(b=>b.onclick=()=>{ if(!b.disabled) loadLedgerPage(Number(b.dataset.p)); });
   }
   load();
 </script>
