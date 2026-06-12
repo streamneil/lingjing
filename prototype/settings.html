@@ -35,7 +35,7 @@
 
         <div class="set-card" style="animation-delay:.04s">
           <h3>机构品牌</h3>
-          <div class="h-desc">机构名称是平台开通时设定的官方身份（不可自改）；系统名称与 Logo 可由管理员自定义，用于侧边栏顶部与落地页展示。机构内的形象、音色、作品相互隔离。</div>
+          <div class="h-desc">机构名称是平台开通时设定的官方身份（不可自改）；系统名称与 Logo 可由管理员自定义，用于侧边栏顶部与落地页展示。</div>
           <!-- 机构名称:只读官方身份(任何人不可改) -->
           <div class="set-row" style="border-top:none">
             <div class="info">
@@ -144,10 +144,22 @@
           <div class="audit-hd">
             <h3>操作审计日志</h3><span class="audit-cnt" id="auditCount"></span>
           </div>
-          <div class="h-desc">记录谁、何时、在哪个模块做了什么。政企合规留存,可追溯。</div>
+          <div class="h-desc">记录谁、何时、在哪个模块做了什么。</div>
           <table class="tbl audit">
-            <thead><tr><th scope="col">时间</th><th scope="col">操作人</th><th scope="col">模块</th><th scope="col">操作</th><th scope="col">来源 IP</th></tr></thead>
-            <tbody id="auditBody"><tr><td colspan="5" class="af-empty">加载中…</td></tr></tbody>
+            <thead>
+              <tr>
+                <th scope="col">时间</th>
+                <th scope="col">操作人</th>
+                <th scope="col">模块</th>
+                <th scope="col">操作</th>
+                <th scope="col">来源 IP</th>
+              </tr>
+            </thead>
+            <tbody id="auditBody">
+              <tr>
+                <td colspan="5" class="af-empty">加载中…</td>
+              </tr>
+            </tbody>
           </table>
         </div>
       </main>

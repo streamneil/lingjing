@@ -1,16 +1,19 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>成员与权限 · 灵镜</title>
-<link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
-<link rel="stylesheet" href="app.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>成员与权限 · 灵镜</title>
+  <link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
+  <link rel="stylesheet" href="app.css">
 <script defer src="tools.js"></script>
 <script defer src="shell.js"></script>
 </head>
+
 <body data-page="members" data-crumb="经营管理 > 成员与权限">
-<div class="shell" id="shell-mount">
-  
+  <div class="shell" id="shell-mount">
+    
 <!--SIDEBAR:START 由 build-sidebar.mjs 生成,勿手改-->
 <aside class="sidebar">
 <a class="sb-brand" href="explore.html" title="灵镜 · 探索">
@@ -22,377 +25,571 @@
 </aside>
 <!--SIDEBAR:END-->
 <div class="main-col">
-    <main class="page">
-      <div class="ph">
-        <div><h1 class="t-h1">成员与权限</h1><p class="desc">按「机构 → 成员 → 角色」三级管理团队。管理员可邀请成员、分配角色、停用账号;创作席位决定可同时创作的成员数。各机构的形象、音色、作品相互隔离。</p></div>
-        <button class="btn btn-white" id="inviteBtn" onclick="invite()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>邀请成员</button>
-      </div>
+      <main class="page">
+        <div class="ph">
+          <div>
+            <h1 class="t-h1">成员与权限</h1>
+            <p class="desc">按「机构 → 成员 → 角色」三级管理团队。管理员可邀请成员、分配角色、停用账号;创作席位决定可同时创作的成员数。</p>
+          </div>
+          <button class="btn btn-white" id="inviteBtn" onclick="invite()"><svg viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M19 8v6M22 11h-6" />
+            </svg>邀请成员</button>
+        </div>
 
-      <div class="stat-row" id="statRow">
-        <!-- 统计卡由 renderStats() 用真实数据填充(机构/创作席位/成员总数/角色分布) -->
-      </div>
+        <div class="stat-row" id="statRow">
+          <!-- 统计卡由 renderStats() 用真实数据填充(机构/创作席位/成员总数/角色分布) -->
+        </div>
 
-      <div class="bar">
-        <div class="search-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input id="searchIn" placeholder="搜索成员…"></div>
-        <div class="sp"></div>
-        <button class="chip active" data-role="all">全部</button><button class="chip" data-role="admin">管理员</button><button class="chip" data-role="creator">创作者</button><button class="chip" data-role="disabled">已停用</button>
-      </div>
+        <div class="bar">
+          <div class="search-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m21 21-4.3-4.3" />
+            </svg><input id="searchIn" placeholder="搜索成员…"></div>
+          <div class="sp"></div>
+          <button class="chip active" data-role="all">全部</button><button class="chip"
+            data-role="admin">管理员</button><button class="chip" data-role="creator">创作者</button><button class="chip"
+            data-role="disabled">已停用</button>
+        </div>
 
-      <table class="tbl">
-        <thead><tr><th>成员</th><th>角色</th><th>占用席位</th><th>最近活跃</th><th>状态</th><th></th></tr></thead>
-        <tbody id="memberBody"></tbody>
-      </table>
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>成员</th>
+              <th>角色</th>
+              <th>占用席位</th>
+              <th>最近活跃</th>
+              <th>状态</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="memberBody"></tbody>
+        </table>
 
-      <div class="set-card" style="margin-top:24px" id="rolePermCard">
-        <h3>角色权限</h3>
-        <div class="h-desc">三种内置角色的能力边界,权限自左向右递增。</div>
-        <div class="rp-grid" id="rolePerms"></div>
-      </div>
-    </main>
-  </div>
-</div>
-
-<!-- 邀请成员弹窗(替代 3 个 prompt)-->
-<div class="ov" id="ov-invite" style="position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:none;place-items:center;z-index:300">
-  <div style="width:440px;max-width:92vw;background:var(--modal,#161618);border:1px solid var(--line);border-radius:18px;padding:28px">
-    <h3 style="font-size:19px;font-weight:700;margin-bottom:6px">邀请成员</h3>
-    <div style="color:var(--t3);font-size:12.5px;margin-bottom:22px">为机构添加成员并分配角色。账号全平台唯一。</div>
-    <label style="display:block;font-size:12px;color:var(--t3);margin-bottom:7px">昵称</label>
-    <input id="invName" maxlength="30" placeholder="成员昵称(展示名,如 张三)" style="width:100%;box-sizing:border-box;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--t1);font-size:14px;outline:none;margin-bottom:16px">
-    <label style="display:block;font-size:12px;color:var(--t3);margin-bottom:7px">账号</label>
-    <input id="invUser" placeholder="建议填手机号" style="width:100%;box-sizing:border-box;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--t1);font-size:14px;outline:none">
-    <div style="font-size:11.5px;color:var(--t4);margin:6px 0 16px">建议用手机号作账号,成员登录用;系统不验证手机号,仅作登录名</div>
-    <label style="display:block;font-size:12px;color:var(--t3);margin-bottom:7px">初始密码(≥6 位)</label>
-    <input id="invPass" type="password" placeholder="成员首次登录用,可后续自行修改" style="width:100%;box-sizing:border-box;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--t1);font-size:14px;outline:none;margin-bottom:16px">
-    <label style="display:block;font-size:12px;color:var(--t3);margin-bottom:9px">角色</label>
-    <div id="invRoleSeg" style="display:flex;gap:8px;margin-bottom:6px">
-      <button type="button" data-r="creator" class="ir-opt" onclick="pickRole(this)">创作者</button>
-      <button type="button" data-r="admin" class="ir-opt" onclick="pickRole(this)">管理员</button>
-    </div>
-    <div id="invRoleDesc" style="font-size:11.5px;color:var(--t4);min-height:30px;line-height:1.6">创作者:可创建形象/音色/作品、发起生成,但不能管理成员。</div>
-    <div id="invMsg" style="color:var(--red);font-size:12.5px;min-height:16px;margin-bottom:4px"></div>
-    <div style="display:flex;gap:10px;margin-top:8px">
-      <button class="btn btn-dark" style="flex:1" onclick="document.getElementById('ov-invite').style.display='none'">取消</button>
-      <button class="btn btn-white" style="flex:1" id="invSubmit" onclick="submitInvite()">邀请</button>
+        <div class="set-card" style="margin-top:24px" id="rolePermCard">
+          <h3>角色权限</h3>
+          <div class="h-desc">三种内置角色的能力边界,权限自左向右递增。</div>
+          <div class="rp-grid" id="rolePerms"></div>
+        </div>
+      </main>
     </div>
   </div>
-</div>
 
-<!-- 改角色弹窗(清晰单选,复用 .ir-opt 分段控件)-->
-<div class="ov" id="ov-role" style="position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:none;place-items:center;z-index:300">
-  <div style="width:380px;max-width:92vw;background:var(--modal,#161618);border:1px solid var(--line);border-radius:18px;padding:26px">
-    <h3 style="font-size:18px;font-weight:700;margin-bottom:4px">修改角色</h3>
-    <div id="roleWho" style="color:var(--t3);font-size:12.5px;margin-bottom:20px"></div>
-    <label style="display:block;font-size:12px;color:var(--t3);margin-bottom:9px">新角色</label>
-    <div id="roleSeg" style="display:flex;gap:8px;margin-bottom:6px">
-      <button type="button" data-r="creator" class="ir-opt" onclick="pickNewRole(this)">创作者</button>
-      <button type="button" data-r="admin" class="ir-opt" onclick="pickNewRole(this)">管理员</button>
-    </div>
-    <div id="roleDesc" style="font-size:11.5px;color:var(--t4);min-height:30px;line-height:1.6"></div>
-    <div id="roleMsg" style="color:var(--red);font-size:12.5px;min-height:16px;margin-bottom:4px"></div>
-    <div style="display:flex;gap:10px;margin-top:8px">
-      <button class="btn btn-dark" style="flex:1" onclick="document.getElementById('ov-role').style.display='none'">取消</button>
-      <button class="btn btn-white" style="flex:1" id="roleSubmit" onclick="submitRole()">保存</button>
-    </div>
-  </div>
-</div>
-
-<!-- 重置密码结果弹窗:账号+密码 一键复制,仅显一次 -->
-<div class="ov" id="ov-reset" style="position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:none;place-items:center;z-index:300">
-  <div style="width:440px;max-width:92vw;background:var(--modal,#161618);border:1px solid var(--line);border-radius:18px;padding:28px">
-    <div class="reset-ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 6"/></svg></div>
-    <h3 style="font-size:19px;font-weight:700;margin-bottom:6px">密码已重置</h3>
-    <div class="reset-warn"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17v.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>请复制发给成员,此密码仅显示一次</div>
-    <div class="cred">
-      <div class="cred-r"><span class="cred-k">账号</span><span class="cred-v" id="resetAcct">—</span></div>
-      <div class="cred-r"><span class="cred-k">密码</span><span class="cred-v" id="resetPass">—</span></div>
-    </div>
-    <div style="display:flex;gap:10px;margin-top:6px">
-      <button class="btn copy-btn" style="flex:2" id="resetCopy" onclick="copyResetCred()"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制账号和密码</button>
-      <button class="btn btn-dark" style="flex:1" onclick="document.getElementById('ov-reset').style.display='none'">完成</button>
+  <!-- 邀请成员弹窗(替代 3 个 prompt)-->
+  <div class="ov" id="ov-invite"
+    style="position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:none;place-items:center;z-index:300">
+    <div
+      style="width:440px;max-width:92vw;background:var(--modal,#161618);border:1px solid var(--line);border-radius:18px;padding:28px">
+      <h3 style="font-size:19px;font-weight:700;margin-bottom:6px">邀请成员</h3>
+      <div style="color:var(--t3);font-size:12.5px;margin-bottom:22px">为机构添加成员并分配角色。账号全平台唯一。</div>
+      <label style="display:block;font-size:12px;color:var(--t3);margin-bottom:7px">昵称</label>
+      <input id="invName" maxlength="30" placeholder="成员昵称(展示名,如 张三)"
+        style="width:100%;box-sizing:border-box;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--t1);font-size:14px;outline:none;margin-bottom:16px">
+      <label style="display:block;font-size:12px;color:var(--t3);margin-bottom:7px">账号</label>
+      <input id="invUser" placeholder="建议填手机号"
+        style="width:100%;box-sizing:border-box;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--t1);font-size:14px;outline:none">
+      <div style="font-size:11.5px;color:var(--t4);margin:6px 0 16px">建议用手机号作账号,成员登录用;系统不验证手机号,仅作登录名</div>
+      <label style="display:block;font-size:12px;color:var(--t3);margin-bottom:7px">初始密码(≥6 位)</label>
+      <input id="invPass" type="password" placeholder="成员首次登录用,可后续自行修改"
+        style="width:100%;box-sizing:border-box;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--t1);font-size:14px;outline:none;margin-bottom:16px">
+      <label style="display:block;font-size:12px;color:var(--t3);margin-bottom:9px">角色</label>
+      <div id="invRoleSeg" style="display:flex;gap:8px;margin-bottom:6px">
+        <button type="button" data-r="creator" class="ir-opt" onclick="pickRole(this)">创作者</button>
+        <button type="button" data-r="admin" class="ir-opt" onclick="pickRole(this)">管理员</button>
+      </div>
+      <div id="invRoleDesc" style="font-size:11.5px;color:var(--t4);min-height:30px;line-height:1.6">
+        创作者:可创建形象/音色/作品、发起生成,但不能管理成员。</div>
+      <div id="invMsg" style="color:var(--red);font-size:12.5px;min-height:16px;margin-bottom:4px"></div>
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <button class="btn btn-dark" style="flex:1"
+          onclick="document.getElementById('ov-invite').style.display='none'">取消</button>
+        <button class="btn btn-white" style="flex:1" id="invSubmit" onclick="submitInvite()">邀请</button>
+      </div>
     </div>
   </div>
-</div>
-<style>
-  .ir-opt{flex:1;padding:9px;border-radius:9px;background:var(--field,#121214);border:1px solid var(--line);color:var(--t2);font-size:13px;font-family:var(--f);cursor:pointer;transition:.15s}
-  .ir-opt:hover{border-color:var(--line-hi)}
-  .ir-opt.active{background:var(--blue-bg);border-color:var(--blue);color:var(--blue)}
-  /* 成员账号:昵称下小灰字(登录名 = 账号)*/
-  .m-acct{font-family:var(--f-en,monospace);font-size:12px;color:var(--t4);margin-top:2px}
-  /* 停用成员整行置灰(头像/名/角色变暗,状态红 badge 仍醒目)*/
-  .tbl tr.m-off td:not(:last-child){opacity:.45}
-  .tbl tr.m-off .strong{color:var(--t3)}
-  /* 重置密码结果弹窗 */
-  .reset-ok{width:40px;height:40px;border-radius:50%;background:rgba(52,199,89,.14);color:var(--green);display:grid;place-items:center;margin-bottom:14px}
-  .reset-ok svg{width:22px;height:22px}
-  .reset-warn{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--amber);margin-bottom:2px}
-  .cred{background:var(--field,#121214);border:1px solid var(--line);border-radius:12px;margin:14px 0}
-  .cred-r{display:flex;align-items:center;gap:14px;padding:11px 16px;border-bottom:1px solid var(--line-soft)}
-  .cred-r:last-child{border-bottom:none}
-  .cred-k{font-size:12px;color:var(--t4);width:36px;flex:none}
-  .cred-v{font-family:var(--f-en,monospace);font-size:15px;color:var(--t1);letter-spacing:.02em;user-select:all}
-  .copy-btn{background:var(--blue);color:#fff;border:none;font-weight:600;display:flex;align-items:center;justify-content:center;gap:7px}
-  .copy-btn.done{background:var(--green)}
-  /* 骨架屏:加载占位灰条 */
-  .skel-bar{height:18px;border-radius:6px;background:linear-gradient(90deg,var(--card-2,#1c1c20) 25%,var(--line,#2a2a30) 37%,var(--card-2,#1c1c20) 63%);background-size:400% 100%;animation:skel 1.3s ease infinite}
-  @keyframes skel{0%{background-position:100% 50%}100%{background-position:0 50%}}
-  /* 移动端:≤640px 表格转卡片(每成员一卡,不横向溢出)*/
-  @media (max-width:640px){
-    .tbl thead{display:none}
-    .tbl,.tbl tbody,.tbl tr,.tbl td{display:block;width:100%;box-sizing:border-box}
-    .tbl tr{margin-bottom:12px;border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--card,#141418)}
-    .tbl td{border:none;padding:6px 4px;text-align:left!important}
-    .tbl td.num{color:var(--t3)}
-    .tbl td[style*="text-align:right"]{text-align:left!important}
-    .skel-row td{padding:6px 4px}
-  }
-</style>
-<script src="api.js"></script>
-<script>
-  // chip data-role 已在 HTML 静态写死(全部/管理员/创作者/查看者),不依赖 load() 赋值 —— 加载前点也有效。
-  let curFilter='all';
-  document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',function(){
-    this.parentNode.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));
-    this.classList.add('active'); curFilter=this.dataset.role; render(curFilter);
-  }));
 
-  const body = document.getElementById('memberBody');
-  let members = [], seats = null, myId = null, myRole = null;
-  const ROLE_CN = {admin:'管理员',creator:'创作者'};
-  function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+  <!-- 改角色弹窗(清晰单选,复用 .ir-opt 分段控件)-->
+  <div class="ov" id="ov-role"
+    style="position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:none;place-items:center;z-index:300">
+    <div
+      style="width:380px;max-width:92vw;background:var(--modal,#161618);border:1px solid var(--line);border-radius:18px;padding:26px">
+      <h3 style="font-size:18px;font-weight:700;margin-bottom:4px">修改角色</h3>
+      <div id="roleWho" style="color:var(--t3);font-size:12.5px;margin-bottom:20px"></div>
+      <label style="display:block;font-size:12px;color:var(--t3);margin-bottom:9px">新角色</label>
+      <div id="roleSeg" style="display:flex;gap:8px;margin-bottom:6px">
+        <button type="button" data-r="creator" class="ir-opt" onclick="pickNewRole(this)">创作者</button>
+        <button type="button" data-r="admin" class="ir-opt" onclick="pickNewRole(this)">管理员</button>
+      </div>
+      <div id="roleDesc" style="font-size:11.5px;color:var(--t4);min-height:30px;line-height:1.6"></div>
+      <div id="roleMsg" style="color:var(--red);font-size:12.5px;min-height:16px;margin-bottom:4px"></div>
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <button class="btn btn-dark" style="flex:1"
+          onclick="document.getElementById('ov-role').style.display='none'">取消</button>
+        <button class="btn btn-white" style="flex:1" id="roleSubmit" onclick="submitRole()">保存</button>
+      </div>
+    </div>
+  </div>
 
-  // 相对时间:真实 last_active(null=从未登录)。
-  function fmtActive(ts){
-    if(!ts) return '从未登录';
-    const diff=Date.now()-ts, m=60000, h=3600000, d=86400000;
-    if(diff<m) return '刚刚';
-    if(diff<h) return Math.floor(diff/m)+' 分钟前';
-    if(diff<d) return Math.floor(diff/h)+' 小时前';
-    if(diff<7*d) return Math.floor(diff/d)+' 天前';
-    const dt=new Date(ts), p=n=>String(n).padStart(2,'0');
-    return `${dt.getFullYear()}-${p(dt.getMonth()+1)}-${p(dt.getDate())}`;
-  }
+  <!-- 重置密码结果弹窗:账号+密码 一键复制,仅显一次 -->
+  <div class="ov" id="ov-reset"
+    style="position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:none;place-items:center;z-index:300">
+    <div
+      style="width:440px;max-width:92vw;background:var(--modal,#161618);border:1px solid var(--line);border-radius:18px;padding:28px">
+      <div class="reset-ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 12l5 5L20 6" />
+        </svg></div>
+      <h3 style="font-size:19px;font-weight:700;margin-bottom:6px">密码已重置</h3>
+      <div class="reset-warn"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+          stroke-width="2">
+          <path d="M12 9v4M12 17v.01" />
+          <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
+        </svg>请复制发给成员,此密码仅显示一次</div>
+      <div class="cred">
+        <div class="cred-r"><span class="cred-k">账号</span><span class="cred-v" id="resetAcct">—</span></div>
+        <div class="cred-r"><span class="cred-k">密码</span><span class="cred-v" id="resetPass">—</span></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:6px">
+        <button class="btn copy-btn" style="flex:2" id="resetCopy" onclick="copyResetCred()"><svg viewBox="0 0 24 24"
+            width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </svg>复制账号和密码</button>
+        <button class="btn btn-dark" style="flex:1"
+          onclick="document.getElementById('ov-reset').style.display='none'">完成</button>
+      </div>
+    </div>
+  </div>
+  <style>
+    .ir-opt {
+      flex: 1;
+      padding: 9px;
+      border-radius: 9px;
+      background: var(--field, #121214);
+      border: 1px solid var(--line);
+      color: var(--t2);
+      font-size: 13px;
+      font-family: var(--f);
+      cursor: pointer;
+      transition: .15s
+    }
 
-  // 席位占用号:creator 按 created_at 升序(列表已按此序),第 N 个 creator 显示「席位 #N」。
-  function seatNoMap(){
-    const map={}; let n=0;
-    members.forEach(m=>{ if(m.role==='creator'){ n++; map[m.id]='席位 #'+n; } });
-    return map;
-  }
+    .ir-opt:hover {
+      border-color: var(--line-hi)
+    }
 
-  function row(m, seatNo){
-    const name = esc(m.display_name||m.username);
-    const initial = (m.display_name||m.username||'?').slice(0,1).toUpperCase();
-    const statusBdg = m.status==='active'
-      ? '<span class="bdg bdg-ok">活跃</span>'
-      : '<span class="bdg" style="background:rgba(255,82,71,.14);color:var(--red)">已停用</span>';
-    // 仅 admin 显示操作按钮(后端也有 403/code 兜底);不渲染针对自己的危险操作。
-    const isSelf = m.id===myId;
-    const isAdmin = myRole==='admin';
-    // 非 admin 也能看名单,但操作按钮灰禁(disabled);后端写路由仍 403 双保险。
-    const actBtn = (label, fn) => isAdmin
-      ? `<button class="btn btn-dark" style="padding:7px 11px;font-size:12px" aria-label="${label} ${name}" onclick="${fn}">${label}</button>`
-      : `<button class="btn btn-dark" style="padding:7px 11px;font-size:12px;opacity:.4;cursor:not-allowed" disabled aria-disabled="true">${label}</button>`;
-    const actions = `<td style="text-align:right;white-space:nowrap">
+    .ir-opt.active {
+      background: var(--blue-bg);
+      border-color: var(--blue);
+      color: var(--blue)
+    }
+
+    /* 成员账号:昵称下小灰字(登录名 = 账号)*/
+    .m-acct {
+      font-family: var(--f-en, monospace);
+      font-size: 12px;
+      color: var(--t4);
+      margin-top: 2px
+    }
+
+    /* 停用成员整行置灰(头像/名/角色变暗,状态红 badge 仍醒目)*/
+    .tbl tr.m-off td:not(:last-child) {
+      opacity: .45
+    }
+
+    .tbl tr.m-off .strong {
+      color: var(--t3)
+    }
+
+    /* 重置密码结果弹窗 */
+    .reset-ok {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: rgba(52, 199, 89, .14);
+      color: var(--green);
+      display: grid;
+      place-items: center;
+      margin-bottom: 14px
+    }
+
+    .reset-ok svg {
+      width: 22px;
+      height: 22px
+    }
+
+    .reset-warn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--amber);
+      margin-bottom: 2px
+    }
+
+    .cred {
+      background: var(--field, #121214);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      margin: 14px 0
+    }
+
+    .cred-r {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--line-soft)
+    }
+
+    .cred-r:last-child {
+      border-bottom: none
+    }
+
+    .cred-k {
+      font-size: 12px;
+      color: var(--t4);
+      width: 36px;
+      flex: none
+    }
+
+    .cred-v {
+      font-family: var(--f-en, monospace);
+      font-size: 15px;
+      color: var(--t1);
+      letter-spacing: .02em;
+      user-select: all
+    }
+
+    .copy-btn {
+      background: var(--blue);
+      color: #fff;
+      border: none;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px
+    }
+
+    .copy-btn.done {
+      background: var(--green)
+    }
+
+    /* 骨架屏:加载占位灰条 */
+    .skel-bar {
+      height: 18px;
+      border-radius: 6px;
+      background: linear-gradient(90deg, var(--card-2, #1c1c20) 25%, var(--line, #2a2a30) 37%, var(--card-2, #1c1c20) 63%);
+      background-size: 400% 100%;
+      animation: skel 1.3s ease infinite
+    }
+
+    @keyframes skel {
+      0% {
+        background-position: 100% 50%
+      }
+
+      100% {
+        background-position: 0 50%
+      }
+    }
+
+    /* 移动端:≤640px 表格转卡片(每成员一卡,不横向溢出)*/
+    @media (max-width:640px) {
+      .tbl thead {
+        display: none
+      }
+
+      .tbl,
+      .tbl tbody,
+      .tbl tr,
+      .tbl td {
+        display: block;
+        width: 100%;
+        box-sizing: border-box
+      }
+
+      .tbl tr {
+        margin-bottom: 12px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 10px;
+        background: var(--card, #141418)
+      }
+
+      .tbl td {
+        border: none;
+        padding: 6px 4px;
+        text-align: left !important
+      }
+
+      .tbl td.num {
+        color: var(--t3)
+      }
+
+      .tbl td[style*="text-align:right"] {
+        text-align: left !important
+      }
+
+      .skel-row td {
+        padding: 6px 4px
+      }
+    }
+  </style>
+  <script src="api.js"></script>
+  <script>
+    // chip data-role 已在 HTML 静态写死(全部/管理员/创作者/查看者),不依赖 load() 赋值 —— 加载前点也有效。
+    let curFilter = 'all';
+    document.querySelectorAll('.chip').forEach(b => b.addEventListener('click', function () {
+      this.parentNode.querySelectorAll('.chip').forEach(x => x.classList.remove('active'));
+      this.classList.add('active'); curFilter = this.dataset.role; render(curFilter);
+    }));
+
+    const body = document.getElementById('memberBody');
+    let members = [], seats = null, myId = null, myRole = null;
+    const ROLE_CN = { admin: '管理员', creator: '创作者' };
+    function esc(s) { return (s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+    // 相对时间:真实 last_active(null=从未登录)。
+    function fmtActive(ts) {
+      if (!ts) return '从未登录';
+      const diff = Date.now() - ts, m = 60000, h = 3600000, d = 86400000;
+      if (diff < m) return '刚刚';
+      if (diff < h) return Math.floor(diff / m) + ' 分钟前';
+      if (diff < d) return Math.floor(diff / h) + ' 小时前';
+      if (diff < 7 * d) return Math.floor(diff / d) + ' 天前';
+      const dt = new Date(ts), p = n => String(n).padStart(2, '0');
+      return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`;
+    }
+
+    // 席位占用号:creator 按 created_at 升序(列表已按此序),第 N 个 creator 显示「席位 #N」。
+    function seatNoMap() {
+      const map = {}; let n = 0;
+      members.forEach(m => { if (m.role === 'creator') { n++; map[m.id] = '席位 #' + n; } });
+      return map;
+    }
+
+    function row(m, seatNo) {
+      const name = esc(m.display_name || m.username);
+      const initial = (m.display_name || m.username || '?').slice(0, 1).toUpperCase();
+      const statusBdg = m.status === 'active'
+        ? '<span class="bdg bdg-ok">活跃</span>'
+        : '<span class="bdg" style="background:rgba(255,82,71,.14);color:var(--red)">已停用</span>';
+      // 仅 admin 显示操作按钮(后端也有 403/code 兜底);不渲染针对自己的危险操作。
+      const isSelf = m.id === myId;
+      const isAdmin = myRole === 'admin';
+      // 非 admin 也能看名单,但操作按钮灰禁(disabled);后端写路由仍 403 双保险。
+      const actBtn = (label, fn) => isAdmin
+        ? `<button class="btn btn-dark" style="padding:7px 11px;font-size:12px" aria-label="${label} ${name}" onclick="${fn}">${label}</button>`
+        : `<button class="btn btn-dark" style="padding:7px 11px;font-size:12px;opacity:.4;cursor:not-allowed" disabled aria-disabled="true">${label}</button>`;
+      const actions = `<td style="text-align:right;white-space:nowrap">
       ${isAdmin && isSelf ? '<span style="color:var(--t4);font-size:12px">本人</span>' : `
       ${actBtn('改角色', `openRole('${m.id}','${name}','${m.role}')`)}
       ${actBtn('重置密码', `resetPw('${m.id}','${name}')`)}
-      ${m.status==='active'
-        ? actBtn('停用', `disable('${m.id}','${name}')`)
-        : actBtn('启用', `enable('${m.id}')`)}
+      ${m.status === 'active'
+            ? actBtn('停用', `disable('${m.id}','${name}')`)
+            : actBtn('启用', `enable('${m.id}')`)}
       ${actBtn('移除', `removeM('${m.id}','${name}')`)}`}
     </td>`;
-    // 停用成员整行置灰(.m-off),与活跃一眼区分。
-    return `<tr class="${m.status==='disabled'?'m-off':''}">
+      // 停用成员整行置灰(.m-off),与活跃一眼区分。
+      return `<tr class="${m.status === 'disabled' ? 'm-off' : ''}">
       <td><div style="display:flex;align-items:center;gap:12px"><div class="mini-face" style="background:linear-gradient(150deg,#2C2C32,#161618);display:grid;place-items:center;font-weight:700;font-size:13px;color:var(--t2)">${initial}</div><div><div class="strong">${name}</div><div class="m-acct">${esc(m.username)}</div></div></div></td>
-      <td><span class="bdg bdg-role">${ROLE_CN[m.role]||m.role}</span></td>
-      <td class="num">${seatNo||'—'}</td>
+      <td><span class="bdg bdg-role">${ROLE_CN[m.role] || m.role}</span></td>
+      <td class="num">${seatNo || '—'}</td>
       <td class="num">${fmtActive(m.last_active)}</td>
       <td>${statusBdg}</td>
       ${actions}
     </tr>`;
-  }
+    }
 
-  function render(roleFilter){
-    const sn = seatNoMap();
-    let list = members;
-    if(roleFilter==='disabled') list = members.filter(m=>m.status==='disabled');
-    else if(['admin','creator'].includes(roleFilter)) list = members.filter(m=>m.role===roleFilter);
-    const empty = roleFilter==='disabled' ? '暂无停用成员' : '暂无成员';
-    body.innerHTML = list.length ? list.map(m=>row(m, sn[m.id])).join('')
-      : `<tr><td colspan="6" style="text-align:center;color:var(--t4);padding:40px">${empty}</td></tr>`;
-  }
+    function render(roleFilter) {
+      const sn = seatNoMap();
+      let list = members;
+      if (roleFilter === 'disabled') list = members.filter(m => m.status === 'disabled');
+      else if (['admin', 'creator'].includes(roleFilter)) list = members.filter(m => m.role === roleFilter);
+      const empty = roleFilter === 'disabled' ? '暂无停用成员' : '暂无成员';
+      body.innerHTML = list.length ? list.map(m => row(m, sn[m.id])).join('')
+        : `<tr><td colspan="6" style="text-align:center;color:var(--t4);padding:40px">${empty}</td></tr>`;
+    }
 
-  // 真实统计卡:机构名 / 创作席位(已用/上限) / 成员总数 / 角色分布。
-  function renderStats(orgName){
-    const total=members.length;
-    const nDisabled=members.filter(m=>m.status==='disabled').length;
-    const nAdmin=members.filter(m=>m.role==='admin').length;
-    const nCreator=members.filter(m=>m.role==='creator').length;
-    const used=seats?seats.used:nCreator, limit=seats?seats.limit:10;
-    const pct=limit>0?Math.min(100,Math.round(used/limit*100)):0;
-    document.getElementById('statRow').innerHTML = `
-      <div class="stat" style="animation-delay:.04s"><div class="lbl">机构</div><div class="val" style="font-size:22px">${esc(orgName||'我的机构')}</div></div>
-      <div class="stat" style="animation-delay:.08s"><div class="lbl">创作席位</div><div class="val">${used} <small>/ ${limit}</small></div><div class="bar"><i style="width:${pct}%"></i></div><div class="sub">已用 ${used}，余 ${Math.max(0,limit-used)}</div></div>
-      <div class="stat" style="animation-delay:.12s"><div class="lbl">成员总数</div><div class="val">${total}</div><div class="sub">管理员 ${nAdmin} · 创作者 ${nCreator}${nDisabled?' · 已停用 '+nDisabled:''}</div></div>`;
-  }
+    // 真实统计卡:机构名 / 创作席位(已用/上限) / 成员总数 / 角色分布。
+    function renderStats(orgName) {
+      const total = members.length;
+      const nDisabled = members.filter(m => m.status === 'disabled').length;
+      const nAdmin = members.filter(m => m.role === 'admin').length;
+      const nCreator = members.filter(m => m.role === 'creator').length;
+      const used = seats ? seats.used : nCreator, limit = seats ? seats.limit : 10;
+      const pct = limit > 0 ? Math.min(100, Math.round(used / limit * 100)) : 0;
+      document.getElementById('statRow').innerHTML = `
+      <div class="stat" style="animation-delay:.04s"><div class="lbl">机构</div><div class="val" style="font-size:22px">${esc(orgName || '我的机构')}</div></div>
+      <div class="stat" style="animation-delay:.08s"><div class="lbl">创作席位</div><div class="val">${used} <small>/ ${limit}</small></div><div class="bar"><i style="width:${pct}%"></i></div><div class="sub">已用 ${used}，余 ${Math.max(0, limit - used)}</div></div>
+      <div class="stat" style="animation-delay:.12s"><div class="lbl">成员总数</div><div class="val">${total}</div><div class="sub">管理员 ${nAdmin} · 创作者 ${nCreator}${nDisabled ? ' · 已停用 ' + nDisabled : ''}</div></div>`;
+    }
 
-  // 错误码 → 用户文案兜底(后端已带中文 message,这里仅作 code 分支判断的语义来源)。
-  function isSeatsFull(e){ return e && e.code==='SEATS_FULL'; }
+    // 错误码 → 用户文案兜底(后端已带中文 message,这里仅作 code 分支判断的语义来源)。
+    function isSeatsFull(e) { return e && e.code === 'SEATS_FULL'; }
 
-  // 骨架屏:加载期 3 行灰色闪动占位(与作品库/创作台一致),不闪假数据。
-  function skeleton(){
-    body.innerHTML = Array.from({length:3}).map(()=>
-      `<tr class="skel-row"><td colspan="6"><div class="skel-bar"></div></td></tr>`).join('');
-  }
-  function errorRow(){
-    body.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--t4);padding:40px">加载失败 <button class="btn btn-dark" style="margin-left:8px;padding:6px 12px;font-size:12px" onclick="load()">重试</button></td></tr>`;
-  }
+    // 骨架屏:加载期 3 行灰色闪动占位(与作品库/创作台一致),不闪假数据。
+    function skeleton() {
+      body.innerHTML = Array.from({ length: 3 }).map(() =>
+        `<tr class="skel-row"><td colspan="6"><div class="skel-bar"></div></td></tr>`).join('');
+    }
+    function errorRow() {
+      body.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--t4);padding:40px">加载失败 <button class="btn btn-dark" style="margin-left:8px;padding:6px 12px;font-size:12px" onclick="load()">重试</button></td></tr>`;
+    }
 
-  // ── 角色权限两卡(创作者 / 管理员;viewer 已下线) ──
-  // 内联 SVG 描边图标(24x24,描边风格,非 emoji)。
-  const RP_ICON={
-    creator:'<path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/>', // 钢笔:创作
-    admin:'<path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/><path d="M9 12l2 2 4-4"/>',                    // 盾:管理最高
-  };
-  const RP_CHECK='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.5 3.5L13 5"/></svg>';
-  // 内置两角色能力边界(与后端 requireRole 口径一致;静态事实,非 API)。
-  // caps 5 行与旧表一致:查看下载 / 创作配音 / 管理素材 / 成员用量 / 系统设置。
-  const ROLE_PERMS=[
-    { role:'creator', name:'创作者', tone:'creator', essence:'可创作,占用创作席位',
-      caps:[ {l:'查看 / 下载作品',y:true},{l:'创作视频 / 配音',y:true},{l:'管理形象 / 音色 / 素材',y:true},{l:'成员管理 / 用量查看',y:false},{l:'系统设置 / 能力网关',y:false} ] },
-    { role:'admin',   name:'管理员', tone:'admin', star:true, essence:'含创作权 + 全部管理权',
-      caps:[ {l:'查看 / 下载作品',y:true},{l:'创作视频 / 配音',y:true},{l:'管理形象 / 音色 / 素材',y:true},{l:'成员管理 / 用量查看',y:true},{l:'系统设置 / 能力网关',y:true} ] },
-  ];
-  function renderRolePerms(){
-    const wrap=document.getElementById('rolePerms'); if(!wrap) return;
-    wrap.innerHTML = ROLE_PERMS.map(r=>{
-      const n=members.filter(m=>m.role===r.role).length; // 真实成员数
-      const caps=r.caps.map(c=>
-        `<div class="cap ${c.y?'yes':'no'}"><span class="ck">${c.y?RP_CHECK:'—'}</span>${esc(c.l)}</div>`).join('');
-      const star=r.star?'<span class="rp-star">★ 最高</span>':'';
-      return `<div class="rp ${r.role==='admin'?'admin':''} rp-${r.tone}">
+    // ── 角色权限两卡(创作者 / 管理员;viewer 已下线) ──
+    // 内联 SVG 描边图标(24x24,描边风格,非 emoji)。
+    const RP_ICON = {
+      creator: '<path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/>', // 钢笔:创作
+      admin: '<path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/><path d="M9 12l2 2 4-4"/>',                    // 盾:管理最高
+    };
+    const RP_CHECK = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.5 3.5L13 5"/></svg>';
+    // 内置两角色能力边界(与后端 requireRole 口径一致;静态事实,非 API)。
+    // caps 5 行与旧表一致:查看下载 / 创作配音 / 管理素材 / 成员用量 / 系统设置。
+    const ROLE_PERMS = [
+      {
+        role: 'creator', name: '创作者', tone: 'creator', essence: '可创作,占用创作席位',
+        caps: [{ l: '查看 / 下载作品', y: true }, { l: '创作视频 / 配音', y: true }, { l: '管理形象 / 音色 / 素材', y: true }, { l: '成员管理 / 用量查看', y: false }, { l: '系统设置 / 能力网关', y: false }]
+      },
+      {
+        role: 'admin', name: '管理员', tone: 'admin', star: true, essence: '含创作权 + 全部管理权',
+        caps: [{ l: '查看 / 下载作品', y: true }, { l: '创作视频 / 配音', y: true }, { l: '管理形象 / 音色 / 素材', y: true }, { l: '成员管理 / 用量查看', y: true }, { l: '系统设置 / 能力网关', y: true }]
+      },
+    ];
+    function renderRolePerms() {
+      const wrap = document.getElementById('rolePerms'); if (!wrap) return;
+      wrap.innerHTML = ROLE_PERMS.map(r => {
+        const n = members.filter(m => m.role === r.role).length; // 真实成员数
+        const caps = r.caps.map(c =>
+          `<div class="cap ${c.y ? 'yes' : 'no'}"><span class="ck">${c.y ? RP_CHECK : '—'}</span>${esc(c.l)}</div>`).join('');
+        const star = r.star ? '<span class="rp-star">★ 最高</span>' : '';
+        return `<div class="rp ${r.role === 'admin' ? 'admin' : ''} rp-${r.tone}">
         <span class="rp-count">${n} 人</span>
         <div class="rp-hd"><div class="rp-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${RP_ICON[r.tone]}</svg></div>
           <div><div class="rp-name">${esc(r.name)}${star}</div><div class="rp-essence">${esc(r.essence)}</div></div></div>
         <div class="rp-div"></div>
         <div class="rp-caps">${caps}</div></div>`;
-    }).join('');
-  }
-
-  // 邀请成员弹窗(替代 3 个浏览器 prompt)
-  let invRole='creator';
-  const ROLE_DESC={
-    creator:'创作者:可创建形象/音色/作品、发起生成,但不能管理成员。',
-    admin:'管理员:成员管理、用量查看、系统配置,权限最高。',
-  };
-  function pickRole(b){ invRole=b.dataset.r; b.parentNode.querySelectorAll('.ir-opt').forEach(x=>{x.classList.remove('active');x.setAttribute('aria-pressed','false');}); b.classList.add('active'); b.setAttribute('aria-pressed','true'); document.getElementById('invRoleDesc').textContent=ROLE_DESC[invRole]; }
-  function invite(){
-    if(myRole!=='admin'){ window.LJToast('仅管理员可邀请成员','err'); return; }
-    document.getElementById('invName').value=''; document.getElementById('invUser').value=''; document.getElementById('invPass').value='';
-    document.getElementById('invMsg').textContent=''; invRole='creator';
-    document.querySelectorAll('#invRoleSeg .ir-opt').forEach(b=>{const on=b.dataset.r==='creator';b.classList.toggle('active',on);b.setAttribute('aria-pressed',String(on));});
-    document.getElementById('invRoleDesc').textContent=ROLE_DESC.creator;
-    document.getElementById('ov-invite').style.display='grid';
-    document.getElementById('invName').focus();
-  }
-  async function submitInvite(){
-    const displayName=document.getElementById('invName').value.trim();
-    const username=document.getElementById('invUser').value.trim();
-    const password=document.getElementById('invPass').value;
-    const msg=document.getElementById('invMsg'); msg.style.color='var(--red)';
-    if(!displayName){ msg.textContent='请输入昵称'; return; }
-    if(!username){ msg.textContent='请输入账号'; return; }
-    if(password.length<6){ msg.textContent='初始密码至少 6 位'; return; }
-    const btn=document.getElementById('invSubmit'); btn.disabled=true; btn.textContent='邀请中…';
-    try{
-      await LJ.post('/members',{username,password,role:invRole,displayName});
-      document.getElementById('ov-invite').style.display='none';
-      window.LJToast('已邀请「'+displayName+'」');
-      await load();
-    }catch(e){ msg.textContent=e.message; }  // 含席位满 SEATS_FULL 文案
-    finally{ btn.disabled=false; btn.textContent='邀请'; }
-  }
-  async function disable(id,name){ if(!(await window.LJConfirm({title:'停用成员',body:`停用「<b style="color:var(--t1)">${esc(name)}</b>」?其登录将立即失效。`,confirmText:'停用',danger:true})))return; try{await LJ.post('/members/'+id+'/disable');await load();window.LJToast('已停用成员');}catch(e){window.LJToast(e.message,'err');} }
-  async function enable(id){ try{await LJ.post('/members/'+id+'/enable');await load();window.LJToast('已启用成员');}catch(e){window.LJToast(e.message,'err');} }
-  async function removeM(id,name){ if(!(await window.LJConfirm({title:'移除成员',body:`移除「<b style="color:var(--t1)">${esc(name)}</b>」?此操作不可恢复,并释放其创作席位。`,confirmText:'移除',danger:true})))return; try{await LJ.del('/members/'+id);await load();window.LJToast('已移除成员');}catch(e){window.LJToast(e.message,'err');} }
-
-  // 重置密码:二次确认 → 后端随机生成 + 作废 session → 弹账号+密码(仅显一次,一键复制)。
-  async function resetPw(id,name){
-    if(!(await window.LJConfirm({title:'重置密码',body:`重置「<b style="color:var(--t1)">${esc(name)}</b>」的密码?<br>原密码将立即失效,该成员需用新密码重新登录。`,confirmText:'重置密码',danger:true})))return;
-    try{
-      const r=await LJ.post('/members/'+id+'/reset-password',{});
-      document.getElementById('resetAcct').textContent=r.username;
-      document.getElementById('resetPass').textContent=r.password;
-      const cb=document.getElementById('resetCopy'); cb.disabled=false; cb.classList.remove('done');
-      cb.innerHTML='<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制账号和密码';
-      document.getElementById('ov-reset').style.display='grid';
-    }catch(e){ window.LJToast(e.message||'重置失败','err'); }
-  }
-  async function copyResetCred(){
-    const acct=document.getElementById('resetAcct').textContent;
-    const pass=document.getElementById('resetPass').textContent;
-    const text=`账号:${acct}\n密码:${pass}`;
-    try{ await navigator.clipboard.writeText(text); const cb=document.getElementById('resetCopy'); cb.textContent='✓ 已复制'; cb.classList.add('done'); window.LJToast('已复制账号和密码'); }
-    catch(e){ window.LJToast('复制失败,请手动选中复制','err'); }
-  }
-
-  // 改角色:清晰单选弹窗(复用 .ir-opt 分段控件,与邀请一致)。
-  let roleTargetId=null, roleNewRole=null, roleCur=null;
-  function pickNewRole(b){
-    roleNewRole=b.dataset.r;
-    b.parentNode.querySelectorAll('.ir-opt').forEach(x=>{x.classList.remove('active');x.setAttribute('aria-pressed','false');});
-    b.classList.add('active'); b.setAttribute('aria-pressed','true');
-    document.getElementById('roleDesc').textContent=ROLE_DESC[roleNewRole]
-      + (roleNewRole==='creator' ? ' 升为创作者会占用一个创作席位。' : '');
-  }
-  function openRole(id,name,cur){
-    roleTargetId=id; roleCur=cur; roleNewRole=null;
-    document.getElementById('roleWho').innerHTML=`成员「<b style="color:var(--t1)">${esc(name)}</b>」当前为 <b style="color:var(--t1)">${ROLE_CN[cur]}</b>,选择新角色:`;
-    document.getElementById('roleMsg').textContent='';
-    document.getElementById('roleDesc').textContent='';
-    // 当前角色按钮置灰(选它无意义),其余可选,初始不选中
-    document.querySelectorAll('#roleSeg .ir-opt').forEach(b=>{
-      const isCur=b.dataset.r===cur;
-      b.classList.remove('active'); b.setAttribute('aria-pressed','false');
-      b.disabled=isCur; b.style.opacity=isCur?'.4':''; b.style.cursor=isCur?'not-allowed':'pointer';
-    });
-    document.getElementById('ov-role').style.display='grid';
-  }
-  async function submitRole(){
-    const msg=document.getElementById('roleMsg'); msg.style.color='var(--red)';
-    if(!roleNewRole){ msg.textContent='请选择新角色'; return; }
-    if(roleNewRole===roleCur){ msg.textContent='与当前角色相同'; return; }
-    const btn=document.getElementById('roleSubmit'); btn.disabled=true; btn.textContent='保存中…';
-    try{
-      await LJ.put('/members/'+roleTargetId+'/role',{role:roleNewRole});
-      document.getElementById('ov-role').style.display='none';
-      window.LJToast('已改为'+ROLE_CN[roleNewRole]);
-      await load();
-    }catch(e){ msg.textContent=e.message; }  // 含 SEATS_FULL / LAST_ADMIN 文案(后端带 code)
-    finally{ btn.disabled=false; btn.textContent='保存'; }
-  }
-
-  async function load(){
-    skeleton();
-    try{
-      const me = await LJ.me(); myRole = me.role; myId = me.id;
-      // 非 admin 也能进来看名单(后端 GET /members 已放宽);仅隐藏「邀请成员」入口。
-      // 操作按钮在 row() 里灰禁;角色权限卡所有人可见(理解角色边界)。
-      if(myRole!=='admin'){
-        const ib=document.getElementById('inviteBtn'); if(ib) ib.style.display='none';
-      }
-      const data = await LJ.get('/members');   // { members, seats };非 admin 也能取
-      members = data.members||[]; seats = data.seats||null;
-      renderStats(me.tenantName);
-      render(curFilter);
-      renderRolePerms();
-    }catch(e){
-      if(e && e.status===401) return;  // 已跳转登录
-      errorRow();
+      }).join('');
     }
-  }
-  load();
-</script>
+
+    // 邀请成员弹窗(替代 3 个浏览器 prompt)
+    let invRole = 'creator';
+    const ROLE_DESC = {
+      creator: '创作者:可创建形象/音色/作品、发起生成,但不能管理成员。',
+      admin: '管理员:成员管理、用量查看、系统配置,权限最高。',
+    };
+    function pickRole(b) { invRole = b.dataset.r; b.parentNode.querySelectorAll('.ir-opt').forEach(x => { x.classList.remove('active'); x.setAttribute('aria-pressed', 'false'); }); b.classList.add('active'); b.setAttribute('aria-pressed', 'true'); document.getElementById('invRoleDesc').textContent = ROLE_DESC[invRole]; }
+    function invite() {
+      if (myRole !== 'admin') { window.LJToast('仅管理员可邀请成员', 'err'); return; }
+      document.getElementById('invName').value = ''; document.getElementById('invUser').value = ''; document.getElementById('invPass').value = '';
+      document.getElementById('invMsg').textContent = ''; invRole = 'creator';
+      document.querySelectorAll('#invRoleSeg .ir-opt').forEach(b => { const on = b.dataset.r === 'creator'; b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); });
+      document.getElementById('invRoleDesc').textContent = ROLE_DESC.creator;
+      document.getElementById('ov-invite').style.display = 'grid';
+      document.getElementById('invName').focus();
+    }
+    async function submitInvite() {
+      const displayName = document.getElementById('invName').value.trim();
+      const username = document.getElementById('invUser').value.trim();
+      const password = document.getElementById('invPass').value;
+      const msg = document.getElementById('invMsg'); msg.style.color = 'var(--red)';
+      if (!displayName) { msg.textContent = '请输入昵称'; return; }
+      if (!username) { msg.textContent = '请输入账号'; return; }
+      if (password.length < 6) { msg.textContent = '初始密码至少 6 位'; return; }
+      const btn = document.getElementById('invSubmit'); btn.disabled = true; btn.textContent = '邀请中…';
+      try {
+        await LJ.post('/members', { username, password, role: invRole, displayName });
+        document.getElementById('ov-invite').style.display = 'none';
+        window.LJToast('已邀请「' + displayName + '」');
+        await load();
+      } catch (e) { msg.textContent = e.message; }  // 含席位满 SEATS_FULL 文案
+      finally { btn.disabled = false; btn.textContent = '邀请'; }
+    }
+    async function disable(id, name) { if (!(await window.LJConfirm({ title: '停用成员', body: `停用「<b style="color:var(--t1)">${esc(name)}</b>」?其登录将立即失效。`, confirmText: '停用', danger: true }))) return; try { await LJ.post('/members/' + id + '/disable'); await load(); window.LJToast('已停用成员'); } catch (e) { window.LJToast(e.message, 'err'); } }
+    async function enable(id) { try { await LJ.post('/members/' + id + '/enable'); await load(); window.LJToast('已启用成员'); } catch (e) { window.LJToast(e.message, 'err'); } }
+    async function removeM(id, name) { if (!(await window.LJConfirm({ title: '移除成员', body: `移除「<b style="color:var(--t1)">${esc(name)}</b>」?此操作不可恢复,并释放其创作席位。`, confirmText: '移除', danger: true }))) return; try { await LJ.del('/members/' + id); await load(); window.LJToast('已移除成员'); } catch (e) { window.LJToast(e.message, 'err'); } }
+
+    // 重置密码:二次确认 → 后端随机生成 + 作废 session → 弹账号+密码(仅显一次,一键复制)。
+    async function resetPw(id, name) {
+      if (!(await window.LJConfirm({ title: '重置密码', body: `重置「<b style="color:var(--t1)">${esc(name)}</b>」的密码?<br>原密码将立即失效,该成员需用新密码重新登录。`, confirmText: '重置密码', danger: true }))) return;
+      try {
+        const r = await LJ.post('/members/' + id + '/reset-password', {});
+        document.getElementById('resetAcct').textContent = r.username;
+        document.getElementById('resetPass').textContent = r.password;
+        const cb = document.getElementById('resetCopy'); cb.disabled = false; cb.classList.remove('done');
+        cb.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制账号和密码';
+        document.getElementById('ov-reset').style.display = 'grid';
+      } catch (e) { window.LJToast(e.message || '重置失败', 'err'); }
+    }
+    async function copyResetCred() {
+      const acct = document.getElementById('resetAcct').textContent;
+      const pass = document.getElementById('resetPass').textContent;
+      const text = `账号:${acct}\n密码:${pass}`;
+      try { await navigator.clipboard.writeText(text); const cb = document.getElementById('resetCopy'); cb.textContent = '✓ 已复制'; cb.classList.add('done'); window.LJToast('已复制账号和密码'); }
+      catch (e) { window.LJToast('复制失败,请手动选中复制', 'err'); }
+    }
+
+    // 改角色:清晰单选弹窗(复用 .ir-opt 分段控件,与邀请一致)。
+    let roleTargetId = null, roleNewRole = null, roleCur = null;
+    function pickNewRole(b) {
+      roleNewRole = b.dataset.r;
+      b.parentNode.querySelectorAll('.ir-opt').forEach(x => { x.classList.remove('active'); x.setAttribute('aria-pressed', 'false'); });
+      b.classList.add('active'); b.setAttribute('aria-pressed', 'true');
+      document.getElementById('roleDesc').textContent = ROLE_DESC[roleNewRole]
+        + (roleNewRole === 'creator' ? ' 升为创作者会占用一个创作席位。' : '');
+    }
+    function openRole(id, name, cur) {
+      roleTargetId = id; roleCur = cur; roleNewRole = null;
+      document.getElementById('roleWho').innerHTML = `成员「<b style="color:var(--t1)">${esc(name)}</b>」当前为 <b style="color:var(--t1)">${ROLE_CN[cur]}</b>,选择新角色:`;
+      document.getElementById('roleMsg').textContent = '';
+      document.getElementById('roleDesc').textContent = '';
+      // 当前角色按钮置灰(选它无意义),其余可选,初始不选中
+      document.querySelectorAll('#roleSeg .ir-opt').forEach(b => {
+        const isCur = b.dataset.r === cur;
+        b.classList.remove('active'); b.setAttribute('aria-pressed', 'false');
+        b.disabled = isCur; b.style.opacity = isCur ? '.4' : ''; b.style.cursor = isCur ? 'not-allowed' : 'pointer';
+      });
+      document.getElementById('ov-role').style.display = 'grid';
+    }
+    async function submitRole() {
+      const msg = document.getElementById('roleMsg'); msg.style.color = 'var(--red)';
+      if (!roleNewRole) { msg.textContent = '请选择新角色'; return; }
+      if (roleNewRole === roleCur) { msg.textContent = '与当前角色相同'; return; }
+      const btn = document.getElementById('roleSubmit'); btn.disabled = true; btn.textContent = '保存中…';
+      try {
+        await LJ.put('/members/' + roleTargetId + '/role', { role: roleNewRole });
+        document.getElementById('ov-role').style.display = 'none';
+        window.LJToast('已改为' + ROLE_CN[roleNewRole]);
+        await load();
+      } catch (e) { msg.textContent = e.message; }  // 含 SEATS_FULL / LAST_ADMIN 文案(后端带 code)
+      finally { btn.disabled = false; btn.textContent = '保存'; }
+    }
+
+    async function load() {
+      skeleton();
+      try {
+        const me = await LJ.me(); myRole = me.role; myId = me.id;
+        // 非 admin 也能进来看名单(后端 GET /members 已放宽);仅隐藏「邀请成员」入口。
+        // 操作按钮在 row() 里灰禁;角色权限卡所有人可见(理解角色边界)。
+        if (myRole !== 'admin') {
+          const ib = document.getElementById('inviteBtn'); if (ib) ib.style.display = 'none';
+        }
+        const data = await LJ.get('/members');   // { members, seats };非 admin 也能取
+        members = data.members || []; seats = data.seats || null;
+        renderStats(me.tenantName);
+        render(curFilter);
+        renderRolePerms();
+      } catch (e) {
+        if (e && e.status === 401) return;  // 已跳转登录
+        errorRow();
+      }
+    }
+    load();
+  </script>
 </body>
+
 </html>
