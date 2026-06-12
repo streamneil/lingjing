@@ -431,6 +431,77 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_leads_status ON sales_leads(status);
 `);
 
+// ── 对公充值闭环:订单 + 发票 ──
+// ┌─ 订单状态机(transitionOrder 单一原子迁移,WHERE status=from + changes===1 守卫)──┐
+// │  pending_payment ──「我已打款」(+可选回单)──▶ paid_claimed                          │
+// │  paid_claimed    ── 超管确认到账 ──▶ credited(同事务 grant credits+bonus 一次)      │
+// │  paid_claimed    ── 超管驳回 ──▶ rejected(带 admin_note)                            │
+// │  rejected        ── 用户重新提交打款 ──▶ paid_claimed                                │
+// │  pending/rejected ── 用户取消 ──▶ cancelled(≥paid_claimed 前端隐藏取消,守卫兑底)   │
+// │  credited 为终态。退款追回本轮无 UI(手工 runbook,见计划)。                          │
+// └────────────────────────────────────────────────────────────────────────────────────┘
+// 金额/积分以 order 行**全快照**为准(套餐改/删不影响已下单);order_no 事务内日计数 + UNIQUE 兜底。
+db.exec(`
+  CREATE TABLE IF NOT EXISTS recharge_order (
+    id              TEXT PRIMARY KEY,
+    tenant_id       TEXT NOT NULL,
+    created_by      TEXT NOT NULL,              -- 下单人(账号隔离;充值必有登录用户)
+    order_no        TEXT NOT NULL UNIQUE,       -- 展示号 LJyyyymmdd-seq(事务内生成,UNIQUE 兜底)
+    plan_id         TEXT,                       -- 快照来源(套餐可能后续被删,仅留痕)
+    plan_name       TEXT NOT NULL,              -- ↓ 下单时全快照,grant/发票只读这些,与 pricing_plan 后续改动无关
+    price_yuan      INTEGER NOT NULL,           -- 应付金额(建单已拒 NULL 面议套餐)
+    credits         INTEGER NOT NULL,
+    bonus_credits   INTEGER NOT NULL DEFAULT 0,
+    validity_months INTEGER NOT NULL DEFAULT 12,
+    status          TEXT NOT NULL DEFAULT 'pending_payment',
+    receipt_key     TEXT,                       -- 银行回单截图 storage key(可空)
+    admin_note      TEXT,                       -- 驳回原因(超管填)
+    confirmed_by    TEXT,                       -- 确认/驳回的超管 id
+    confirmed_at    INTEGER,
+    created_at      INTEGER NOT NULL,
+    updated_at      INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_order_tenant_creator ON recharge_order(tenant_id, created_by);
+  CREATE INDEX IF NOT EXISTS idx_order_status ON recharge_order(status);
+
+  CREATE TABLE IF NOT EXISTS invoice (
+    id          TEXT PRIMARY KEY,
+    order_id    TEXT NOT NULL,                  -- 仅 credited 订单可申请
+    tenant_id   TEXT NOT NULL,
+    created_by  TEXT NOT NULL,
+    title       TEXT NOT NULL,                  -- 抬头
+    tax_no      TEXT NOT NULL,                  -- 税号
+    kind        TEXT NOT NULL DEFAULT '普票',    -- 本轮仅普票(专票字段留下轮)
+    amount_yuan INTEGER NOT NULL,               -- 申请时金额快照(= order.price_yuan)
+    status      TEXT NOT NULL DEFAULT 'requested', -- requested | issued(none 即未申请,无行)
+    invoice_no  TEXT,                           -- 超管回填发票号
+    pdf_key     TEXT,                           -- 超管上传 PDF storage key
+    admin_note  TEXT,                           -- 驳回原因
+    created_at  INTEGER NOT NULL,
+    issued_at   INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_invoice_tenant_creator ON invoice(tenant_id, created_by);
+  CREATE INDEX IF NOT EXISTS idx_invoice_order ON invoice(order_id);
+  CREATE INDEX IF NOT EXISTS idx_invoice_status ON invoice(status);
+
+  -- 对公收款信息(单行平台配置,超管后台填;真实银行账号不进代码/git)。
+  CREATE TABLE IF NOT EXISTS payee_setting (
+    id           INTEGER PRIMARY KEY CHECK (id = 1),  -- 单例行
+    payee_name   TEXT,
+    tax_no       TEXT,
+    bank_name    TEXT,
+    bank_account TEXT,
+    updated_at   INTEGER
+  );
+`);
+
+// credit_ledger 加 order_id:充值 grant 写入,部分唯一索引做 grant 幂等双保险(外部声音 #8)。
+// 即使确认守卫漏了,同一 order 第二次 grant 也被唯一索引拦下。
+addColumnIfMissing('credit_ledger', 'order_id', `order_id TEXT`);
+db.exec(
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_order_grant ON credit_ledger(order_id) WHERE kind='grant' AND order_id IS NOT NULL;`,
+);
+
 export interface PricingPlanRow {
   id: string;
   name: string;
@@ -461,6 +532,61 @@ export interface SalesLeadRow {
   note: string | null;
   status: LeadStatus;
   created_at: number;
+}
+
+export type OrderStatus =
+  | 'pending_payment'
+  | 'paid_claimed'
+  | 'credited'
+  | 'rejected'
+  | 'cancelled';
+
+export interface RechargeOrderRow {
+  id: string;
+  tenant_id: string;
+  created_by: string;
+  order_no: string;
+  plan_id: string | null;
+  plan_name: string;
+  price_yuan: number;
+  credits: number;
+  bonus_credits: number;
+  validity_months: number;
+  status: OrderStatus;
+  receipt_key: string | null;
+  admin_note: string | null;
+  confirmed_by: string | null;
+  confirmed_at: number | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export type InvoiceStatus = 'requested' | 'issued';
+
+export interface InvoiceRow {
+  id: string;
+  order_id: string;
+  tenant_id: string;
+  created_by: string;
+  title: string;
+  tax_no: string;
+  kind: string;
+  amount_yuan: number;
+  status: InvoiceStatus;
+  invoice_no: string | null;
+  pdf_key: string | null;
+  admin_note: string | null;
+  created_at: number;
+  issued_at: number | null;
+}
+
+export interface PayeeSettingRow {
+  id: number;
+  payee_name: string | null;
+  tax_no: string | null;
+  bank_name: string | null;
+  bank_account: string | null;
+  updated_at: number | null;
 }
 
 export type JobStatus = 'queued' | 'running' | 'done' | 'failed';
@@ -524,6 +650,7 @@ export interface LedgerRow {
   kind: LedgerKind;
   amount: number;
   job_id: string | null;
+  order_id: string | null; // 充值到账 grant 关联订单(幂等 + 审计);非充值行为空
   note: string | null;
   created_at: number;
   // 计费归属(ledger() JOIN job/user 派生;非表列)。grant 行无 job → 两者空;老 job → userName 空。

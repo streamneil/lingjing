@@ -56,6 +56,8 @@
     `<div id="sb-tools">${buildToolItems()}</div>` +
     `<div class="sb-group">经营管理</div>` +
     link('billing','用量计费','billing.html') +
+    link('orders','充值订单','orders.html') +
+    link('invoices','发票管理','invoices.html') +
     link('members','成员与权限','members.html') +
     link('settings','系统设置','settings.html');
 
@@ -91,7 +93,7 @@
       <div class="sp"></div>
       <div class="credits">
         <span class="gem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/><path d="M2 9h20M9 3 6.5 9 12 21M15 3l2.5 6L12 21"/></svg></span>
-        剩余 <b class="num" id="lj-balance">—</b><a href="billing.html" class="topup">充值</a>
+        剩余 <b class="num" id="lj-balance">—</b><a href="recharge.html" class="topup">充值</a>
       </div>
       <div class="lj-acc-wrap" style="position:relative">
         <div class="avatar-btn" id="lj-account" title="账号">融</div>

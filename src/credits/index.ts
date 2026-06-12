@@ -183,11 +183,12 @@ function insert(
   amount: number,
   jobId: string | null,
   note: string | null,
+  orderId: string | null = null,
 ): void {
   db.prepare(
-    `INSERT INTO credit_ledger (id,tenant_id,kind,amount,job_id,note,created_at)
-     VALUES (?,?,?,?,?,?,?)`,
-  ).run(randomUUID(), tenantId, kind, amount, jobId, note, now());
+    `INSERT INTO credit_ledger (id,tenant_id,kind,amount,job_id,order_id,note,created_at)
+     VALUES (?,?,?,?,?,?,?,?)`,
+  ).run(randomUUID(), tenantId, kind, amount, jobId, orderId, note, now());
 }
 
 /** 当前余额 = 所有流水之和。 */
@@ -198,10 +199,10 @@ export function balance(tenantId: string): number {
   return row.bal;
 }
 
-/** 后台发放(admin)。 */
-export function grant(tenantId: string, amount: number, note = '后台发放'): void {
+/** 后台发放(admin)。orderId 关联充值订单(幂等部分唯一索引 + 审计);后台手动发放传 null。 */
+export function grant(tenantId: string, amount: number, note = '后台发放', orderId: string | null = null): void {
   if (amount <= 0) throw new Error('发放积分必须为正');
-  insert(tenantId, 'grant', amount, null, note);
+  insert(tenantId, 'grant', amount, null, note, orderId);
 }
 
 /**

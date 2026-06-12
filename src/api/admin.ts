@@ -54,11 +54,31 @@ import {
   consumeCaptchaToken,
 } from '../auth/platform.js';
 import type { Role } from '../db/index.js';
+import multer from 'multer';
+import { putObject, getObject } from '../storage/index.js';
+import {
+  listOrdersByStatus,
+  getOrder,
+  confirmAndCredit,
+  rejectOrder,
+  listInvoicesByStatus,
+  getInvoice,
+  issueInvoice,
+  rejectInvoice,
+  getPayee,
+  setPayee,
+} from '../orders/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const adminPagesDir = resolve(__dirname, '..', '..', 'prototype', 'admin');
 
 export const adminRouter = Router();
+
+// 发票 PDF 上传(超管):内存 + ≤10MB + 仅 PDF。
+const invoicePdfUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
 function padminIp(req: Request): string | null {
   return req.socket?.remoteAddress ?? null;
@@ -707,4 +727,143 @@ adminRouter.put('/api/sales-leads/:id', requirePlatformAdmin, (req: Request, res
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : '更新失败' });
   }
+});
+
+// ── 对公充值:收款核对工作台 ──
+
+function serializeAdminOrder(o: ReturnType<typeof getOrder> & object) {
+  return {
+    id: o!.id,
+    orderNo: o!.order_no,
+    tenantId: o!.tenant_id,
+    planName: o!.plan_name,
+    priceYuan: o!.price_yuan,
+    credits: o!.credits,
+    bonusCredits: o!.bonus_credits,
+    status: o!.status,
+    hasReceipt: !!o!.receipt_key,
+    adminNote: o!.admin_note,
+    createdAt: o!.created_at,
+  };
+}
+
+// 列待核对(paid_claimed)订单。
+adminRouter.get('/api/recharge-orders', requirePlatformAdmin, (req: Request, res: Response) => {
+  const status = (req.query.status as string) || 'paid_claimed';
+  const valid = ['pending_payment', 'paid_claimed', 'credited', 'rejected', 'cancelled'];
+  if (!valid.includes(status)) return res.status(400).json({ error: '无效状态' });
+  res.json({ orders: listOrdersByStatus(status as never).map(serializeAdminOrder) });
+});
+
+// 看回单截图(超管,流式)。
+adminRouter.get('/api/recharge-orders/:id/receipt', requirePlatformAdmin, async (req: Request, res: Response) => {
+  const o = getOrder(req.params.id!);
+  if (!o || !o.receipt_key) return res.status(404).json({ error: '回单不存在' });
+  try {
+    const buf = await getObject(o.receipt_key);
+    res.setHeader('Content-Disposition', `attachment; filename="receipt-${o.order_no}"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.send(buf);
+  } catch {
+    res.status(404).json({ error: '回单文件不存在' });
+  }
+});
+
+// ★钱路★ 确认到账:paid_claimed → credited + grant(原子,只一次)。
+adminRouter.post('/api/recharge-orders/:id/confirm', requirePlatformAdmin, (req: Request, res: Response) => {
+  const o = getOrder(req.params.id!);
+  if (!o) return res.status(404).json({ error: '订单不存在' });
+  const ok = confirmAndCredit(o.id, req.padmin!.id);
+  if (!ok) return res.status(409).json({ error: '订单非待确认状态(可能已处理)' });
+  writePlatformAudit(req.padmin!.id, 'order_confirm', o.tenant_id, `${o.order_no}/+${o.credits + o.bonus_credits}`, padminIp(req));
+  res.json({ ok: true });
+});
+
+// 驳回:paid_claimed → rejected(带原因)。
+adminRouter.post('/api/recharge-orders/:id/reject', requirePlatformAdmin, (req: Request, res: Response) => {
+  const { note } = (req.body ?? {}) as { note?: string };
+  if (!note || !note.trim()) return res.status(400).json({ error: '请填写驳回原因' });
+  const o = getOrder(req.params.id!);
+  if (!o) return res.status(404).json({ error: '订单不存在' });
+  const ok = rejectOrder(o.id, req.padmin!.id, note.trim());
+  if (!ok) return res.status(409).json({ error: '订单非待确认状态' });
+  writePlatformAudit(req.padmin!.id, 'order_reject', o.tenant_id, o.order_no, padminIp(req));
+  res.json({ ok: true });
+});
+
+// ── 发票开具工作台 ──
+
+// 列待开票(requested)发票。
+adminRouter.get('/api/admin-invoices', requirePlatformAdmin, (req: Request, res: Response) => {
+  const status = (req.query.status as string) || 'requested';
+  if (status !== 'requested' && status !== 'issued') return res.status(400).json({ error: '无效状态' });
+  res.json({
+    invoices: listInvoicesByStatus(status as never).map((inv) => ({
+      id: inv.id,
+      orderId: inv.order_id,
+      tenantId: inv.tenant_id,
+      title: inv.title,
+      taxNo: inv.tax_no,
+      kind: inv.kind,
+      amountYuan: inv.amount_yuan,
+      status: inv.status,
+      invoiceNo: inv.invoice_no,
+      createdAt: inv.created_at,
+    })),
+  });
+});
+
+// 回填发票号 + 上传 PDF → issued。
+adminRouter.post(
+  '/api/admin-invoices/:id/issue',
+  requirePlatformAdmin,
+  invoicePdfUpload.single('pdf'),
+  async (req: Request, res: Response) => {
+    const { invoiceNo } = (req.body ?? {}) as { invoiceNo?: string };
+    if (!invoiceNo || !invoiceNo.trim()) return res.status(400).json({ error: '请填写发票号' });
+    const inv = getInvoice(req.params.id!);
+    if (!inv) return res.status(404).json({ error: '发票不存在' });
+    let pdfKey: string | null = null;
+    const file = req.file;
+    if (file) {
+      if (file.mimetype !== 'application/pdf')
+        return res.status(400).json({ error: '发票文件仅支持 PDF' });
+      pdfKey = `invoices/${inv.tenant_id}/${inv.id}.pdf`;
+      await putObject(pdfKey, file.buffer, 'application/pdf');
+    }
+    const ok = issueInvoice(inv.id, invoiceNo.trim(), pdfKey);
+    if (!ok) return res.status(409).json({ error: '发票非待开票状态' });
+    writePlatformAudit(req.padmin!.id, 'invoice_issue', inv.tenant_id, `${inv.id}/${invoiceNo.trim()}`, padminIp(req));
+    res.json({ ok: true });
+  },
+);
+
+// 驳回开票:requested → 删行(退回,用户可重申)。
+adminRouter.post('/api/admin-invoices/:id/reject', requirePlatformAdmin, (req: Request, res: Response) => {
+  const inv = getInvoice(req.params.id!);
+  if (!inv) return res.status(404).json({ error: '发票不存在' });
+  const ok = rejectInvoice(inv.id);
+  if (!ok) return res.status(409).json({ error: '发票非待开票状态' });
+  writePlatformAudit(req.padmin!.id, 'invoice_reject', inv.tenant_id, inv.id, padminIp(req));
+  res.json({ ok: true });
+});
+
+// ── 对公收款信息配置(真实银行账号存这里,不进代码/git)──
+adminRouter.get('/api/payee', requirePlatformAdmin, (_req: Request, res: Response) => {
+  const p = getPayee();
+  res.json({ payeeName: p.payee_name, taxNo: p.tax_no, bankName: p.bank_name, bankAccount: p.bank_account });
+});
+
+adminRouter.post('/api/payee', requirePlatformAdmin, (req: Request, res: Response) => {
+  const { payeeName, taxNo, bankName, bankAccount } = (req.body ?? {}) as Record<string, string>;
+  if (!payeeName?.trim() || !bankName?.trim() || !bankAccount?.trim())
+    return res.status(400).json({ error: '户名/开户行/账号必填' });
+  setPayee({
+    payeeName: payeeName.trim(),
+    taxNo: (taxNo ?? '').trim(),
+    bankName: bankName.trim(),
+    bankAccount: bankAccount.trim(),
+  });
+  writePlatformAudit(req.padmin!.id, 'payee_update', PLATFORM_TENANT, payeeName.trim(), padminIp(req));
+  res.json({ ok: true });
 });

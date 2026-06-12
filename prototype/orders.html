@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>充值订单 · 灵镜</title>
+  <link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
+  <link rel="stylesheet" href="app.css">
+  <style>
+    /* ── 充值订单台账 ── */
+    .od-list{ display:flex; flex-direction:column; gap:10px; }
+    .od-row{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px 18px; }
+    .od-row.hl{ border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-bg); }
+    .od-top{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+    .od-no{ font-family:var(--f-mono,monospace); font-size:12px; color:var(--t3); }
+    .od-plan{ font-size:14px; font-weight:600; }
+    .od-amt{ margin-left:auto; font-size:18px; font-weight:800; font-family:var(--f-en,'Manrope',sans-serif); }
+    .od-amt .cur{ font-size:12px; color:var(--t2); }
+    .od-meta{ font-size:12px; color:var(--t3); margin-top:6px; }
+    .od-meta .cr{ color:var(--green); }
+    /* 状态徽章(文字+色双编码,色盲可读)*/
+    .od-badge{ font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; border:1px solid; }
+    .b-pending{ color:var(--t2); border-color:var(--line-hi); background:var(--field); }
+    .b-claimed{ color:#9EC1FF; border-color:rgba(77,141,255,.4); background:var(--blue-bg); }
+    .b-credited{ color:var(--green); border-color:rgba(52,199,89,.4); background:rgba(52,199,89,.1); }
+    .b-rejected{ color:#FF6B6B; border-color:rgba(255,107,107,.4); background:rgba(255,107,107,.1); }
+    .b-cancelled{ color:var(--t4); border-color:var(--line); background:transparent; }
+    .od-note{ margin-top:10px; font-size:12px; color:#FF9B9B; background:rgba(255,107,107,.08); border:1px solid rgba(255,107,107,.25); border-radius:8px; padding:8px 10px; }
+    .od-acts{ margin-top:12px; display:flex; gap:8px; flex-wrap:wrap; }
+    .od-act{ font-size:13px; font-weight:600; padding:8px 16px; border-radius:999px; border:1px solid var(--line); background:var(--field); color:var(--t1); cursor:pointer; font-family:inherit; min-height:40px; }
+    .od-act:hover{ border-color:var(--line-hi); }
+    .od-act.primary{ background:var(--blue); color:#fff; border:none; }
+    .od-act.ghost{ background:none; color:var(--t3); }
+    .od-empty{ background:var(--card); border:1px solid var(--line); border-radius:16px; padding:48px 24px; text-align:center; }
+    .od-empty .ee-t{ font-size:15px; font-weight:600; }
+    .od-empty .ee-d{ font-size:13px; color:var(--t3); margin:8px 0 18px; }
+    .od-empty .ee-b{ display:inline-block; background:var(--blue); color:#fff; border:none; border-radius:999px; padding:11px 24px; font-size:14px; font-weight:700; cursor:pointer; text-decoration:none; min-height:44px; }
+  </style>
+</head>
+
+<body data-page="orders" data-crumb="经营管理 > 充值订单">
+  <div class="shell" id="shell-mount">
+    <div class="main-col">
+      <main class="page">
+        <div class="ph">
+          <div><h1 class="t-h1">充值订单</h1><p class="desc">对公充值订单台账。打款后点「我已打款」,平台核对到账后积分自动入账。</p></div>
+          <a href="recharge.html" class="ee-b" style="background:var(--blue);color:#fff;border:none;border-radius:999px;padding:10px 20px;font-size:14px;font-weight:700;text-decoration:none;align-self:center;">+ 去充值</a>
+        </div>
+        <div id="odList"><div class="od-empty"><div class="ee-d">加载中…</div></div></div>
+      </main>
+    </div>
+  </div>
+
+  <!-- 隐藏文件输入(回单上传) -->
+  <input type="file" id="receiptInput" accept="image/png,image/jpeg" style="display:none">
+
+  <script src="shell.js"></script>
+  <script src="api.js"></script>
+  <script>
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+    function fmtN(n){ return (n||0).toLocaleString('zh-CN'); }
+    const NEW_ID = new URLSearchParams(location.search).get('new');
+
+    const BADGE = {
+      pending_payment:['待打款','b-pending'], paid_claimed:['待确认','b-claimed'],
+      credited:['已到账','b-credited'], rejected:['已驳回','b-rejected'], cancelled:['已取消','b-cancelled'],
+    };
+
+    async function refreshBalance(){
+      try{ const { balance } = await LJ.get('/orders'); const el=document.getElementById('lj-balance'); if(el && balance!=null) el.textContent = fmtN(balance); }catch{}
+    }
+
+    async function load(){
+      try{
+        const { orders, balance } = await LJ.get('/orders');
+        const el=document.getElementById('lj-balance'); if(el && balance!=null) el.textContent = fmtN(balance);
+        render(orders||[]);
+      }catch(e){
+        document.getElementById('odList').innerHTML = '<div class="od-empty"><div class="ee-d">加载失败,请刷新重试。</div></div>';
+      }
+    }
+
+    function render(orders){
+      const box = document.getElementById('odList');
+      if(!orders.length){
+        box.innerHTML = `<div class="od-empty">
+          <div class="ee-t">还没有充值记录</div>
+          <div class="ee-d">首次充值即享开票与发票台账。用多少扣多少,失败自动退还。</div>
+          <a class="ee-b" href="recharge.html">去充值 →</a>
+        </div>`;
+        return;
+      }
+      box.innerHTML = '<div class="od-list">' + orders.map(o => {
+        const [label, cls] = BADGE[o.status] || ['未知','b-pending'];
+        const hl = o.id === NEW_ID ? ' hl' : '';
+        const note = o.status==='rejected' && o.adminNote ? `<div class="od-note">驳回原因:${esc(o.adminNote)}</div>` : '';
+        return `<div class="od-row${hl}" data-id="${esc(o.id)}">
+          <div class="od-top">
+            <span class="od-plan">${esc(o.planName)}</span>
+            <span class="od-badge ${cls}">${label}</span>
+            <span class="od-amt"><span class="cur">¥</span>${fmtN(o.priceYuan)}</span>
+          </div>
+          <div class="od-meta"><span class="od-no">${esc(o.orderNo)}</span> · 到账 <span class="cr">${fmtN(o.credits + o.bonusCredits)}</span> 积分</div>
+          ${note}
+          <div class="od-acts">${actions(o)}</div>
+        </div>`;
+      }).join('') + '</div>';
+      box.querySelectorAll('[data-act]').forEach(b => b.onclick = () => handle(b.dataset.act, b.dataset.id));
+    }
+
+    function actions(o){
+      const a = [];
+      if(o.status==='pending_payment'){ a.push(btn('claim',o.id,'我已打款','primary')); a.push(btn('cancel',o.id,'取消','ghost')); }
+      if(o.status==='rejected'){ a.push(btn('claim',o.id,'重新提交打款','primary')); a.push(btn('cancel',o.id,'取消','ghost')); }
+      // paid_claimed:核对中,不给取消(竞态守卫,外部#3)
+      if(o.status==='paid_claimed'){ a.push('<span class="od-act ghost" style="cursor:default">核对中…</span>'); }
+      if(o.status==='credited'){ a.push(btn('invoice',o.id,'去开票','')); }
+      return a.join('');
+    }
+    function btn(act,id,label,cls){ return `<button class="od-act ${cls}" data-act="${act}" data-id="${esc(id)}">${label}</button>`; }
+
+    let claimTargetId = null;
+    const fileInput = document.getElementById('receiptInput');
+    fileInput.onchange = () => { if(fileInput.files[0]) submitClaim(claimTargetId, fileInput.files[0]); fileInput.value=''; };
+
+    async function handle(act, id){
+      if(act==='claim'){
+        // 询问是否上传回单
+        const up = await window.LJConfirm({ title:'确认已打款', body:'确认已完成对公转账?可选上传银行回单截图加快核对(PNG/JPEG,≤5MB)。', confirmText:'上传回单', cancelText:'直接提交' });
+        if(up){ claimTargetId = id; fileInput.click(); }
+        else submitClaim(id, null);
+      } else if(act==='cancel'){
+        if(!(await window.LJConfirm({ title:'取消订单', body:'确认取消该充值订单?', confirmText:'取消订单', danger:true }))) return;
+        try{ await LJ.post('/orders/'+id+'/cancel'); window.LJToast('✓ 订单已取消'); load(); }catch(e){ window.LJToast(e.message,'err'); }
+      } else if(act==='invoice'){
+        location.href = 'invoices.html?order=' + encodeURIComponent(id);
+      }
+    }
+
+    async function submitClaim(id, file){
+      try{
+        const fd = new FormData();
+        if(file){
+          if(file.size > 5*1024*1024){ window.LJToast('回单截图过大(≤5MB)','err'); return; }
+          fd.append('receipt', file);
+        }
+        const res = await fetch('/api/orders/'+id+'/claim-paid', { method:'POST', credentials:'same-origin', body:fd });
+        if(res.status===401){ location.href='login.html'; return; }
+        const data = await res.json().catch(()=>null);
+        if(!res.ok) throw new Error((data&&data.error)||'提交失败');
+        window.LJToast('✓ 已提交,等待平台核对到账');
+        load();
+      }catch(e){ window.LJToast(e.message,'err'); }
+    }
+
+    load();
+    // 余额刷新:页面 focus 时重拉(到账后回到本页能看到余额已涨,外部#7)
+    window.addEventListener('focus', refreshBalance);
+  </script>
+</body>
+</html>
