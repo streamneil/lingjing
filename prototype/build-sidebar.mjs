@@ -26,9 +26,10 @@ const I = {
 const svg = (inner) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
 const ic = (p) => svg(I[p]);
 
-// nav 链接(static:不设 active,active 由 shell.js 按 data-page 运行时加)。
-const link = (p, label, href) =>
-  `<a class="sb-item" data-page="${p}" href="${href}" data-label="${label}">${ic(p)}<span>${label}</span></a>`;
+// nav 链接。active 按页面 data-page 在生成时静态烘焙(首帧即高亮,不靠 JS),
+// 消除 Safari/Chrome 下「切页后高亮慢一拍」的闪烁。
+const link = (p, label, href, cur) =>
+  `<a class="sb-item${p === cur ? ' active' : ''}" data-page="${p}" href="${href}" data-label="${label}">${ic(p)}<span>${label}</span></a>`;
 
 // —— 创作工具组:从 tools.js 解析 TOOLS(单一真源)——
 function parseTools() {
@@ -42,32 +43,33 @@ function parseTools() {
 function toolHref(t) {
   return t.enabled && t.page ? t.page : `tool.html?tool=${encodeURIComponent(t.key)}`;
 }
-function buildToolItems(tools) {
+function buildToolItems(tools, cur) {
   return tools.map((t) => {
     let suffix = '';
     if (t.badge) suffix = `<span class="${t.badge.kind === 'nano' ? 'nano' : 'nbadge'}">${t.badge.text}</span>`;
     else if (!t.enabled) suffix = `<span class="soon">即将上线</span>`;
-    return `<a class="sb-item sb-tool" data-page="${t.key}" href="${toolHref(t)}" data-label="${t.label}" data-requires-create>${svg(t.icon)}<span>${t.label}</span>${suffix}</a>`;
+    const on = t.key === cur ? ' active' : '';
+    return `<a class="sb-item sb-tool${on}" data-page="${t.key}" href="${toolHref(t)}" data-label="${t.label}" data-requires-create>${svg(t.icon)}<span>${t.label}</span>${suffix}</a>`;
   }).join('');
 }
 
 // —— 默认品牌(static:shell.js 会按 localStorage 缓存运行时覆盖为机构真实名/Logo)——
 const DEFAULT_MARK = `<svg viewBox="0 0 100 100" fill="none"><circle cx="37" cy="50" r="29" stroke="#0E0E0E" stroke-width="5"/><circle cx="63" cy="50" r="29" stroke="#0E0E0E" stroke-width="5"/><path d="M50 24.08 A29 29 0 0 1 50 75.92 A29 29 0 0 1 50 24.08 Z" fill="#0E0E0E"/></svg>`;
 
-function buildSidebar() {
+function buildSidebar(cur) {
   const tools = parseTools();
   const items =
-    link('explore', '探索', 'explore.html') +
-    link('assets', '我的资产', 'assets.html') +
+    link('explore', '探索', 'explore.html', cur) +
+    link('assets', '我的资产', 'assets.html', cur) +
     `<div class="sb-group">创作工具</div>` +
-    `<div id="sb-tools">${buildToolItems(tools)}</div>` +
+    `<div id="sb-tools">${buildToolItems(tools, cur)}</div>` +
     `<div class="sb-group">财务中心</div>` +
-    link('billing', '用量计费', 'billing.html') +
-    link('orders', '充值订单', 'orders.html') +
-    link('invoices', '发票管理', 'invoices.html') +
+    link('billing', '用量计费', 'billing.html', cur) +
+    link('orders', '充值订单', 'orders.html', cur) +
+    link('invoices', '发票管理', 'invoices.html', cur) +
     `<div class="sb-group">经营管理</div>` +
-    link('members', '成员与权限', 'members.html') +
-    link('settings', '系统设置', 'settings.html');
+    link('members', '成员与权限', 'members.html', cur) +
+    link('settings', '系统设置', 'settings.html', cur);
   return `<aside class="sidebar">
 <a class="sb-brand" href="explore.html" title="灵镜 · 探索">
 <span class="logo-mark" id="lj-brand-mark">${DEFAULT_MARK}</span>
@@ -75,7 +77,17 @@ function buildSidebar() {
 </a>
 <nav class="sb-nav">${items}</nav>
 <div class="sb-foot"><div class="deploy-tag"><span class="d"></span><span>云端服务 · 运行中</span></div></div>
-</aside>`;
+</aside>
+<script>/* 品牌即时渲染:此内联脚本紧跟 .sb-brand,解析到此即同步执行(早于首次绘制),
+按 localStorage 缓存把默认「Lingjing 灵镜」改成机构真实名/Logo → Chrome/Safari 0 闪。
+shell.js(defer)随后用 LJ.me() 校正并写回缓存。 */
+(function(){try{var c=JSON.parse(localStorage.getItem('ljBrand')||'null');if(!c)return;
+var b=document.currentScript.previousElementSibling;
+var brand=b&&b.querySelector?b.querySelector('.sb-brand'):null;if(!brand)return;
+if(c.showName){var nm=brand.querySelector('.nm'),cj=brand.querySelector('.cjk');if(nm)nm.textContent=c.showName;if(cj)cj.style.display='none';brand.title=c.showName;}
+if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Image();img.src=c.logoUrl;img.style.cssText='width:100%;height:100%;object-fit:contain;border-radius:7px';img.onload=function(){m.innerHTML='';m.appendChild(img);};}}
+}catch(e){}})();
+</script>`;
 }
 
 // —— 内联进各页 #shell-mount(START/END 标记间幂等重写)——
@@ -101,10 +113,14 @@ function injectInto(file, sidebar) {
 }
 
 const EXCLUDE = new Set(['login.html']); // 无壳页
-const sidebar = buildSidebar();
 const pages = readdirSync(DIR).filter(
   (f) => f.endsWith('.html') && !EXCLUDE.has(f) && readFileSync(join(DIR, f), 'utf8').includes('id="shell-mount"'),
 );
-const results = pages.map((f) => `${f}: ${injectInto(f, sidebar)}`);
+// 每页按其 <body data-page="..."> 静态烘焙对应菜单的 active 高亮 → 首帧即高亮。
+const results = pages.map((f) => {
+  const html = readFileSync(join(DIR, f), 'utf8');
+  const cur = (html.match(/<body[^>]*\bdata-page="([^"]*)"/) || [])[1] || '';
+  return `${f}: ${injectInto(f, buildSidebar(cur))} (active=${cur || '—'})`;
+});
 console.log(`生成侧边栏并内联 ${pages.length} 页:`);
 console.log(results.join('\n'));
