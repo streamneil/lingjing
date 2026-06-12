@@ -15,6 +15,7 @@ import { voicesRouter } from './api/voices.js';
 import { settingsRouter } from './api/settings.js';
 import { legalRouter } from './api/legal.js';
 import { pricingRouter } from './api/pricing.js';
+import { ordersRouter } from './api/orders.js';
 import { adminRouter } from './api/admin.js';
 import { captchaRouter } from './api/captcha.js';
 import { attachUser } from './auth/middleware.js';
@@ -52,6 +53,7 @@ export function createApp() {
   app.use('/api', settingsRouter);
   app.use('/api', legalRouter);
   app.use('/api', pricingRouter);
+  app.use('/api', ordersRouter);
   app.use('/api', jobsRouter);
 
   // 根路径 → 营销落地页(公开入口);旧 index.html 已改名 avatars.html

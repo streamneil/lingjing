@@ -210,6 +210,53 @@
         <tbody id="leadRows"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
+
+    <!-- ── 对公收款核对 ── -->
+    <div class="ph" style="margin-top:34px">
+      <div><h1>对公收款核对</h1><p>用户提交「我已打款」的充值订单。核对对公账户实际到账后点「确认到账」,积分自动入账(只发一次)。</p></div>
+      <button class="btn-new" onclick="openPayee()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>对公收款信息</button>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>订单号</th><th>套餐</th><th>金额</th><th>到账积分</th><th>回单</th><th style="text-align:right">操作</th></tr></thead>
+        <tbody id="orderRows"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- ── 发票开具 ── -->
+    <div class="ph" style="margin-top:34px">
+      <div><h1>发票开具</h1><p>用户申请开票的订单。回填发票号、上传发票 PDF 后置为「已开票」,用户即可下载。</p></div>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>抬头</th><th>税号</th><th>金额</th><th>类型</th><th style="text-align:right">操作</th></tr></thead>
+        <tbody id="invRows"><tr><td colspan="5" class="empty">加载中…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 对公收款信息配置 -->
+  <div class="ov" id="payeeOv">
+    <div class="modal">
+      <h3>对公收款信息</h3>
+      <p class="mdesc">充值页向用户展示的对公账户。真实银行账号存于此(数据库),不写入代码。</p>
+      <label>收款户名</label><input id="peName" placeholder="某某科技有限公司">
+      <label>企业税号</label><input id="peTax" placeholder="91320114MA…">
+      <label>开户银行</label><input id="peBank" placeholder="中国工商银行…支行">
+      <label>银行账号</label><input id="peAcct" placeholder="4301…">
+      <div class="row" style="margin-top:14px"><button class="cancel" onclick="closeOv('payeeOv')">取消</button><button class="ok" onclick="savePayee()">保存</button></div>
+    </div>
+  </div>
+
+  <!-- 发票开具弹窗 -->
+  <div class="ov" id="issueOv">
+    <div class="modal">
+      <h3>开具发票</h3>
+      <p class="mdesc" id="issueInfo"></p>
+      <label>发票号</label><input id="isNo" placeholder="发票号码">
+      <label>发票 PDF(可选)</label><input id="isPdf" type="file" accept="application/pdf">
+      <div class="row" style="margin-top:14px"><button class="cancel" onclick="closeOv('issueOv')">取消</button><button class="ok" onclick="submitIssue()">确认开票</button></div>
+    </div>
   </div>
 
   <!-- 新增/编辑 积分套餐 -->
@@ -401,7 +448,102 @@
       await loadModels();
       await loadPlans();
       await loadLeads();
+      await loadOrders();
+      await loadInvoices();
     }catch(e){ /* 401 已跳转 */ }
+  }
+
+  // ── 对公收款核对 ──
+  async function loadOrders(){
+    const tb=document.getElementById('orderRows');
+    try{
+      const { orders }=await PA('GET','/api/recharge-orders?status=paid_claimed');
+      if(!orders.length){ tb.innerHTML='<tr><td colspan="6" class="empty">暂无待核对的打款</td></tr>'; return; }
+      tb.innerHTML=orders.map(o=>`<tr>
+        <td style="font-family:var(--f-mono);font-size:12px">${esc(o.orderNo)}</td>
+        <td>${esc(o.planName)}</td>
+        <td class="bal">¥${fmtN(o.priceYuan)}</td>
+        <td>${fmtN(o.credits+o.bonusCredits)}</td>
+        <td>${o.hasReceipt?`<a class="act" href="/admin/api/recharge-orders/${esc(o.id)}/receipt" target="_blank">查看回单</a>`:'<span style="color:var(--t4)">无</span>'}</td>
+        <td><div class="acts">
+          <button class="act pri" onclick='confirmOrder(${JSON.stringify(o.id)},${JSON.stringify(o.orderNo)})'>确认到账</button>
+          <button class="act" onclick='rejectOrder(${JSON.stringify(o.id)})'>驳回</button>
+        </div></td>
+      </tr>`).join('');
+    }catch(e){ tb.innerHTML='<tr><td colspan="6" class="empty">加载失败</td></tr>'; }
+  }
+  async function confirmOrder(id, no){
+    if(!confirm(`确认订单 ${no} 已到账?积分将自动入账(不可撤销)。`)) return;
+    try{ await PA('POST',`/api/recharge-orders/${id}/confirm`); toast('✓ 已确认到账,积分已入账'); await loadOrders(); await load(); }
+    catch(e){ toast(e.message||'确认失败'); }
+  }
+  async function rejectOrder(id){
+    const note=prompt('驳回原因(用户可见):');
+    if(note==null||!note.trim()) return;
+    try{ await PA('POST',`/api/recharge-orders/${id}/reject`,{note:note.trim()}); toast('✓ 已驳回'); await loadOrders(); }
+    catch(e){ toast(e.message||'驳回失败'); }
+  }
+
+  // ── 发票开具 ──
+  let issueId=null;
+  async function loadInvoices(){
+    const tb=document.getElementById('invRows');
+    try{
+      const { invoices }=await PA('GET','/api/admin-invoices?status=requested');
+      if(!invoices.length){ tb.innerHTML='<tr><td colspan="5" class="empty">暂无待开票申请</td></tr>'; return; }
+      tb.innerHTML=invoices.map(iv=>`<tr>
+        <td>${esc(iv.title)}</td>
+        <td style="font-family:var(--f-mono);font-size:12px">${esc(iv.taxNo)}</td>
+        <td class="bal">¥${fmtN(iv.amountYuan)}</td>
+        <td>${esc(iv.kind)}</td>
+        <td><div class="acts">
+          <button class="act pri" onclick='openIssue(${JSON.stringify(iv.id)},${JSON.stringify(iv.title)})'>开票</button>
+          <button class="act" onclick='rejectInvoice(${JSON.stringify(iv.id)})'>驳回</button>
+        </div></td>
+      </tr>`).join('');
+    }catch(e){ tb.innerHTML='<tr><td colspan="5" class="empty">加载失败</td></tr>'; }
+  }
+  function openIssue(id, title){
+    issueId=id;
+    document.getElementById('issueInfo').textContent=`为「${title}」开具普票。回填发票号,可选上传 PDF。`;
+    document.getElementById('isNo').value=''; document.getElementById('isPdf').value='';
+    document.getElementById('issueOv').classList.add('on');
+  }
+  async function submitIssue(){
+    const no=document.getElementById('isNo').value.trim();
+    if(!no){ toast('请填写发票号'); return; }
+    try{
+      const fd=new FormData(); fd.append('invoiceNo',no);
+      const pdf=document.getElementById('isPdf').files[0]; if(pdf) fd.append('pdf',pdf);
+      const res=await fetch(`/admin/api/admin-invoices/${issueId}/issue`,{method:'POST',credentials:'same-origin',body:fd});
+      if(res.status===401){ location.href='/admin/login'; return; }
+      const data=await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((data&&data.error)||'开票失败');
+      closeOv('issueOv'); toast('✓ 已开票'); await loadInvoices();
+    }catch(e){ toast(e.message||'开票失败'); }
+  }
+  async function rejectInvoice(id){
+    if(!confirm('驳回该开票申请?用户可重新提交。')) return;
+    try{ await PA('POST',`/api/admin-invoices/${id}/reject`); toast('✓ 已驳回'); await loadInvoices(); }
+    catch(e){ toast(e.message||'驳回失败'); }
+  }
+
+  // ── 对公收款信息配置 ──
+  async function openPayee(){
+    try{ const p=await PA('GET','/api/payee');
+      document.getElementById('peName').value=p.payeeName||'';
+      document.getElementById('peTax').value=p.taxNo||'';
+      document.getElementById('peBank').value=p.bankName||'';
+      document.getElementById('peAcct').value=p.bankAccount||'';
+    }catch{}
+    document.getElementById('payeeOv').classList.add('on');
+  }
+  async function savePayee(){
+    const body={ payeeName:document.getElementById('peName').value.trim(), taxNo:document.getElementById('peTax').value.trim(),
+      bankName:document.getElementById('peBank').value.trim(), bankAccount:document.getElementById('peAcct').value.trim() };
+    if(!body.payeeName||!body.bankName||!body.bankAccount){ toast('户名/开户行/账号必填'); return; }
+    try{ await PA('POST','/api/payee',body); closeOv('payeeOv'); toast('✓ 对公信息已保存'); }
+    catch(e){ toast(e.message||'保存失败'); }
   }
 
   // ── AI 图片模型管理 ──

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>发票管理 · 灵镜</title>
+  <link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .iv-list{ display:flex; flex-direction:column; gap:10px; }
+    .iv-row{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px 18px; }
+    .iv-top{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+    .iv-title{ font-size:14px; font-weight:600; }
+    .iv-amt{ margin-left:auto; font-size:16px; font-weight:800; font-family:var(--f-en,'Manrope',sans-serif); }
+    .iv-meta{ font-size:12px; color:var(--t3); margin-top:6px; }
+    .iv-badge{ font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; border:1px solid; }
+    .b-req{ color:#9EC1FF; border-color:rgba(77,141,255,.4); background:var(--blue-bg); }
+    .b-iss{ color:var(--green); border-color:rgba(52,199,89,.4); background:rgba(52,199,89,.1); }
+    .iv-acts{ margin-top:12px; }
+    .iv-act{ font-size:13px; font-weight:600; padding:8px 16px; border-radius:999px; border:1px solid var(--line); background:var(--field); color:var(--t1); cursor:pointer; font-family:inherit; min-height:40px; text-decoration:none; display:inline-block; }
+    .iv-act.primary{ background:var(--blue); color:#fff; border:none; }
+    .iv-empty{ background:var(--card); border:1px solid var(--line); border-radius:16px; padding:48px 24px; text-align:center; }
+    .iv-empty .ee-t{ font-size:15px; font-weight:600; }
+    .iv-empty .ee-d{ font-size:13px; color:var(--t3); margin:8px 0 18px; }
+    .iv-empty .ee-b{ display:inline-block; background:var(--blue); color:#fff; border-radius:999px; padding:11px 24px; font-size:14px; font-weight:700; text-decoration:none; min-height:44px; }
+    /* 开票表单 */
+    .iv-form{ background:var(--card-hi); border:1px solid var(--blue); border-radius:14px; padding:18px; margin-bottom:14px; }
+    .iv-form h3{ font-size:14px; font-weight:700; margin-bottom:12px; }
+    .iv-form label{ display:block; font-size:12px; color:var(--t3); margin:10px 0 4px; }
+    .iv-form input{ width:100%; background:var(--field); border:1px solid var(--line); border-radius:10px; padding:10px 12px; color:var(--t1); font-size:14px; font-family:inherit; }
+    .iv-form .row{ display:flex; gap:10px; margin-top:14px; }
+    .iv-form .row button{ flex:1; padding:11px; border-radius:999px; font-size:14px; font-weight:700; font-family:inherit; cursor:pointer; min-height:44px; }
+    .iv-form .submit{ background:var(--blue); color:#fff; border:none; }
+    .iv-form .cancel{ background:var(--field); color:var(--t2); border:1px solid var(--line); }
+    .iv-form .hint{ font-size:11px; color:var(--t4); margin-top:8px; }
+  </style>
+</head>
+
+<body data-page="invoices" data-crumb="经营管理 > 发票管理">
+  <div class="shell" id="shell-mount">
+    <div class="main-col">
+      <main class="page">
+        <div class="ph">
+          <div><h1 class="t-h1">发票管理</h1><p class="desc">已到账订单可申请开具增值税普通发票。开具后可下载电子发票 PDF。</p></div>
+        </div>
+        <div id="ivForm"></div>
+        <div id="ivList"><div class="iv-empty"><div class="ee-d">加载中…</div></div></div>
+      </main>
+    </div>
+  </div>
+
+  <script src="shell.js"></script>
+  <script src="api.js"></script>
+  <script>
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+    function fmtN(n){ return (n||0).toLocaleString('zh-CN'); }
+    const ORDER_ID = new URLSearchParams(location.search).get('order');
+
+    async function load(){
+      try{
+        const { invoices } = await LJ.get('/invoices');
+        // 若带 ?order= 且该单未开票,显示开票表单
+        if(ORDER_ID && !invoices.some(iv => iv.orderId === ORDER_ID)) renderForm(ORDER_ID);
+        render(invoices||[]);
+      }catch(e){
+        document.getElementById('ivList').innerHTML = '<div class="iv-empty"><div class="ee-d">加载失败,请刷新重试。</div></div>';
+      }
+    }
+
+    function renderForm(orderId){
+      document.getElementById('ivForm').innerHTML = `<div class="iv-form">
+        <h3>申请开具发票(增值税普通发票)</h3>
+        <label for="ivTitle">发票抬头(公司名称)</label>
+        <input id="ivTitle" placeholder="例:某某科技有限公司">
+        <label for="ivTax">纳税人识别号(税号)</label>
+        <input id="ivTax" placeholder="例:91320114MAEGND5180">
+        <div class="row"><button class="cancel" id="ivCancel">取消</button><button class="submit" id="ivSubmit">提交申请</button></div>
+        <div class="hint">提交后平台开具并上传发票,可在下方台账下载。</div>
+      </div>`;
+      document.getElementById('ivCancel').onclick = () => { document.getElementById('ivForm').innerHTML=''; history.replaceState(null,'','invoices.html'); };
+      document.getElementById('ivSubmit').onclick = async () => {
+        const title = document.getElementById('ivTitle').value.trim();
+        const taxNo = document.getElementById('ivTax').value.trim();
+        if(!title){ window.LJToast('请填写发票抬头','err'); return; }
+        if(!taxNo){ window.LJToast('请填写税号','err'); return; }
+        try{
+          await LJ.post('/invoices', { orderId, title, taxNo });
+          window.LJToast('✓ 开票申请已提交');
+          document.getElementById('ivForm').innerHTML='';
+          history.replaceState(null,'','invoices.html');
+          load();
+        }catch(e){ window.LJToast(e.message,'err'); }
+      };
+    }
+
+    function render(invoices){
+      const box = document.getElementById('ivList');
+      if(!invoices.length){
+        box.innerHTML = `<div class="iv-empty">
+          <div class="ee-t">还没有发票</div>
+          <div class="ee-d">已到账的充值订单可在「充值订单」点「去开票」申请。</div>
+          <a class="ee-b" href="orders.html">查看订单 →</a>
+        </div>`;
+        return;
+      }
+      box.innerHTML = '<div class="iv-list">' + invoices.map(iv => {
+        const issued = iv.status==='issued';
+        const badge = issued ? '<span class="iv-badge b-iss">已开票</span>' : '<span class="iv-badge b-req">待开票</span>';
+        const dl = issued && iv.hasPdf ? `<a class="iv-act primary" href="/api/invoices/${esc(iv.id)}/pdf">下载发票 PDF</a>` : (issued ? `<span class="iv-meta">发票号 ${esc(iv.invoiceNo)}</span>` : '<span class="iv-meta">平台开具中,请稍候…</span>');
+        return `<div class="iv-row">
+          <div class="iv-top"><span class="iv-title">${esc(iv.title)}</span>${badge}<span class="iv-amt">¥${fmtN(iv.amountYuan)}</span></div>
+          <div class="iv-meta">税号 ${esc(iv.taxNo)} · ${esc(iv.kind)}${issued&&iv.invoiceNo?(' · 发票号 '+esc(iv.invoiceNo)):''}</div>
+          <div class="iv-acts">${dl}</div>
+        </div>`;
+      }).join('') + '</div>';
+    }
+
+    load();
+  </script>
+</body>
+</html>
