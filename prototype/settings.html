@@ -1,257 +1,315 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>系统设置 · 灵镜</title>
-<link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
-<link rel="stylesheet" href="app.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>系统设置 · 灵镜</title>
+  <link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
+  <link rel="stylesheet" href="app.css">
 </head>
+
 <body data-page="settings" data-crumb="经营管理 > 系统设置">
-<div class="shell" id="shell-mount">
-  <div class="main-col">
-    <main class="page">
-      <div class="ph"><div><h1 class="t-h1">系统设置</h1><p class="desc">机构信息、合规标识与默认创作参数。底层模型与算力由平台统一调度，您无需关心。</p></div></div>
-
-      <div class="set-card" style="animation-delay:.04s">
-        <h3>机构品牌</h3><div class="h-desc">机构名称是平台开通时设定的官方身份（不可自改）；系统名称与 Logo 可由管理员自定义，用于侧边栏顶部与落地页展示。机构内的形象、音色、作品相互隔离。</div>
-        <!-- 机构名称:只读官方身份(任何人不可改) -->
-        <div class="set-row" style="border-top:none"><div class="info"><div class="k">机构名称</div><div class="v">机构官方身份，如需变更请联系您的平台对接人</div></div>
-          <div class="ctl"><div class="ro-name">
-            <span id="orgNameVal" class="ro-val">—</span>
-            <span class="ro-lock" aria-label="平台设定，不可修改"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>平台设定</span>
-          </div></div>
+  <div class="shell" id="shell-mount">
+    <div class="main-col">
+      <main class="page">
+        <div class="ph">
+          <div>
+            <h1 class="t-h1">系统设置</h1>
+            <p class="desc">机构信息、合规标识与默认创作参数。底层模型与算力由平台统一调度，您无需关心。</p>
+          </div>
         </div>
-        <!-- 系统名称:品牌显示名(管理员可改;保存后刷新即在侧边栏看到) -->
-        <div class="set-row"><div class="info"><div class="k">系统名称</div><div class="v">展示在侧边栏顶部、落地页与生成记录中。保存后刷新页面即生效</div></div>
-          <div class="ctl"><div style="display:flex;gap:8px;align-items:center">
-            <input id="brandNameInput" maxlength="30" style="padding:9px 13px;width:200px;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;color:var(--t1);font-size:14px;font-family:var(--f);outline:none" placeholder="系统显示名称">
-            <span id="brandNameCount" aria-live="polite" style="font-size:12px;color:var(--t4);min-width:38px">0/30</span>
-            <button class="btn btn-dark" id="brandNameSave" onclick="saveBrandName()">保存</button>
-          </div></div>
+
+        <div class="set-card" style="animation-delay:.04s">
+          <h3>机构品牌</h3>
+          <div class="h-desc">机构名称是平台开通时设定的官方身份（不可自改）；系统名称与 Logo 可由管理员自定义，用于侧边栏顶部与落地页展示。机构内的形象、音色、作品相互隔离。</div>
+          <!-- 机构名称:只读官方身份(任何人不可改) -->
+          <div class="set-row" style="border-top:none">
+            <div class="info">
+              <div class="k">机构名称</div>
+              <div class="v">机构官方身份，如需变更请联系您的平台对接人</div>
+            </div>
+            <div class="ctl">
+              <div class="ro-name">
+                <span id="orgNameVal" class="ro-val">—</span>
+                <span class="ro-lock" aria-label="平台设定，不可修改"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="5" y="11" width="14" height="9" rx="2" />
+                    <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                  </svg>平台设定</span>
+              </div>
+            </div>
+          </div>
+          <!-- 系统名称:品牌显示名(管理员可改;保存后刷新即在侧边栏看到) -->
+          <div class="set-row">
+            <div class="info">
+              <div class="k">系统名称</div>
+              <div class="v">展示在侧边栏顶部、落地页与生成记录中。保存后刷新页面即生效</div>
+            </div>
+            <div class="ctl">
+              <div style="display:flex;gap:8px;align-items:center">
+                <input id="brandNameInput" maxlength="30"
+                  style="padding:9px 13px;width:200px;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;color:var(--t1);font-size:14px;font-family:var(--f);outline:none"
+                  placeholder="系统显示名称">
+                <span id="brandNameCount" aria-live="polite"
+                  style="font-size:12px;color:var(--t4);min-width:38px">0/30</span>
+                <button class="btn btn-dark" id="brandNameSave" onclick="saveBrandName()">保存</button>
+              </div>
+            </div>
+          </div>
+          <div id="brandNameMsg" style="font-size:12px;color:var(--amber);min-height:16px;margin:-6px 0 4px 0"></div>
+          <div class="set-row">
+            <div class="info">
+              <div class="k">系统 Logo</div>
+              <div class="v">建议透明背景 PNG，≤5MB（PNG / JPEG / WEBP）。保存后刷新页面即生效</div>
+            </div>
+            <div class="ctl">
+              <div style="display:flex;gap:10px;align-items:center">
+                <div id="logoPreview"
+                  style="width:48px;height:48px;border-radius:10px;background:var(--field,#121214);border:1px solid var(--line);background-size:contain;background-position:center;background-repeat:no-repeat">
+                </div>
+                <input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp" style="display:none"
+                  onchange="uploadLogo()">
+                <button class="btn btn-dark" id="logoUploadBtn" onclick="document.getElementById('logoFile').click()">更换
+                  Logo</button>
+                <button id="logoResetBtn" onclick="resetLogo()"
+                  style="background:none;border:none;color:var(--t3);font-size:13px;font-family:var(--f);cursor:pointer;text-decoration:underline;text-underline-offset:3px">恢复默认</button>
+              </div>
+            </div>
+          </div>
         </div>
-        <div id="brandNameMsg" style="font-size:12px;color:var(--amber);min-height:16px;margin:-6px 0 4px 0"></div>
-        <div class="set-row"><div class="info"><div class="k">系统 Logo</div><div class="v">建议透明背景 PNG，≤5MB（PNG / JPEG / WEBP）。保存后刷新页面即生效</div></div>
-          <div class="ctl"><div style="display:flex;gap:10px;align-items:center">
-            <div id="logoPreview" style="width:48px;height:48px;border-radius:10px;background:var(--field,#121214);border:1px solid var(--line);background-size:contain;background-position:center;background-repeat:no-repeat"></div>
-            <input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="uploadLogo()">
-            <button class="btn btn-dark" id="logoUploadBtn" onclick="document.getElementById('logoFile').click()">更换 Logo</button>
-            <button id="logoResetBtn" onclick="resetLogo()" style="background:none;border:none;color:var(--t3);font-size:13px;font-family:var(--f);cursor:pointer;text-decoration:underline;text-underline-offset:3px">恢复默认</button>
-          </div></div>
+
+        <div class="set-card" style="animation-delay:.12s">
+          <h3>内容合规与 AI 标识</h3>
+          <div class="h-desc">融媒体 / 政企硬性要求：生成内容添加 AI 生成标识，并对文案做敏感词预检。</div>
+          <div class="set-row">
+            <div class="info">
+              <div class="k">AI 生成标识(水印)</div>
+              <div class="v">在生成视频右下角添加“AI 合成”标识与元数据</div>
+            </div>
+            <div class="ctl">
+              <div class="switch on" id="aiLabelSwitch" onclick="this.classList.toggle('on');saveAiLabel()"><i></i>
+              </div>
+            </div>
+          </div>
+          <div class="set-row">
+            <div class="info">
+              <div class="k">AI 标识文案</div>
+              <div class="v">水印显示的文字（≤20 字，默认「AI 合成」）</div>
+            </div>
+            <div class="ctl">
+              <div style="display:flex;gap:8px;align-items:center"><input id="aiLabelText" maxlength="20"
+                  style="padding:9px 13px;width:180px;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;color:var(--t1);font-size:14px;font-family:var(--f);outline:none"
+                  placeholder="AI 合成"><button class="btn btn-dark" onclick="saveLabelText()">保存</button></div>
+            </div>
+          </div>
+          <div class="set-row">
+            <div class="info">
+              <div class="k">敏感词预检</div>
+              <div class="v">生成前对文案做本地敏感词预检（不可关闭）</div>
+            </div>
+            <div class="ctl"><span class="bdg bdg-ok">已启用</span></div>
+          </div>
         </div>
-      </div>
 
-      <div class="set-card" style="animation-delay:.12s">
-        <h3>内容合规与 AI 标识</h3><div class="h-desc">融媒体 / 政企硬性要求：生成内容添加 AI 生成标识，并对文案做敏感词预检。</div>
-        <div class="set-row"><div class="info"><div class="k">AI 生成标识(水印)</div><div class="v">在生成视频右下角添加“AI 合成”标识与元数据</div></div><div class="ctl"><div class="switch on" id="aiLabelSwitch" onclick="this.classList.toggle('on');saveAiLabel()"><i></i></div></div></div>
-        <div class="set-row"><div class="info"><div class="k">AI 标识文案</div><div class="v">水印显示的文字（≤20 字，默认「AI 合成」）</div></div><div class="ctl"><div style="display:flex;gap:8px;align-items:center"><input id="aiLabelText" maxlength="20" style="padding:9px 13px;width:180px;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;color:var(--t1);font-size:14px;font-family:var(--f);outline:none" placeholder="AI 合成"><button class="btn btn-dark" onclick="saveLabelText()">保存</button></div></div></div>
-        <div class="set-row"><div class="info"><div class="k">敏感词预检</div><div class="v">生成前对文案做本地敏感词预检（不可关闭，合规要求）</div></div><div class="ctl"><span class="bdg bdg-ok">已启用</span></div></div>
-      </div>
+        <div class="set-card" style="animation-delay:.16s">
+          <h3>默认创作参数</h3>
+          <div class="h-desc">机构级默认值，新建创作时套用，创作时可单独覆盖。视频比例由所选形象图决定，无需在此设置。</div>
+          <div class="set-row">
+            <div class="info">
+              <div class="k">默认分辨率</div>
+            </div>
+            <div class="ctl">
+              <div class="choice-seg" id="resSeg"><button data-v="720P" class="active">720P</button><button
+                  data-v="480P">480P</button></div>
+            </div>
+          </div>
+        </div>
 
-      <div class="set-card" style="animation-delay:.16s">
-        <h3>默认创作参数</h3><div class="h-desc">机构级默认值，新建创作时套用，创作时可单独覆盖。视频比例由所选形象图决定，无需在此设置。</div>
-        <div class="set-row"><div class="info"><div class="k">默认分辨率</div></div><div class="ctl"><div class="choice-seg" id="resSeg"><button data-v="720P" class="active">720P</button><button data-v="480P">480P</button></div></div></div>
-      </div>
-
-      <!-- T8:审计日志(仅 admin)-->
-      <div class="set-card" id="auditCard" style="animation-delay:.2s;display:none">
-        <div class="audit-hd"><h3>操作审计日志</h3><span class="audit-cnt" id="auditCount"></span></div>
-        <div class="h-desc">记录谁、何时、做了什么(登录、生成、成员变更、设置修改)。政企合规留存,可追溯。</div>
-        <div class="audit-feed" id="auditBody"><div class="af-empty">加载中…</div></div>
-      </div>
-    </main>
+        <!-- T8:审计日志(仅 admin)-->
+        <div class="set-card" id="auditCard" style="animation-delay:.2s;display:none">
+          <div class="audit-hd">
+            <h3>操作审计日志</h3><span class="audit-cnt" id="auditCount"></span>
+          </div>
+          <div class="h-desc">记录谁、何时、在哪个模块做了什么。政企合规留存,可追溯。</div>
+          <table class="tbl audit">
+            <thead><tr><th scope="col">时间</th><th scope="col">操作人</th><th scope="col">模块</th><th scope="col">操作</th><th scope="col">来源 IP</th></tr></thead>
+            <tbody id="auditBody"><tr><td colspan="5" class="af-empty">加载中…</td></tr></tbody>
+          </table>
+        </div>
+      </main>
+    </div>
   </div>
-</div>
-<script src="shell.js"></script>
-<script src="api.js"></script>
-<script>
-  // 默认分辨率分段控件:点击即保存。
-  document.querySelectorAll('#resSeg button').forEach(b=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('button').forEach(x=>x.classList.remove('active'));this.classList.add('active');saveResolution(this.dataset.v);}));
+  <script src="shell.js"></script>
+  <script src="api.js"></script>
+  <script>
+    // 默认分辨率分段控件:点击即保存。
+    document.querySelectorAll('#resSeg button').forEach(b => b.addEventListener('click', function () { this.parentNode.querySelectorAll('button').forEach(x => x.classList.remove('active')); this.classList.add('active'); saveResolution(this.dataset.v); }));
 
-  let canEdit=false;
-  // 用 PUT(api.js 没封装 put,直接 fetch)
-  async function put(body){
-    const res=await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify(body)});
-    if(res.status===401){location.href='login.html';return;}
-    const d=await res.json().catch(()=>({}));
-    if(!res.ok) throw new Error(d.error||'保存失败');
-    return d;
-  }
-  function guard(){ if(!canEdit){ window.LJToast('仅管理员可修改设置','err'); return false; } return true; }
-  async function saveAiLabel(){ if(!guard()){document.getElementById('aiLabelSwitch').classList.toggle('on');return;} try{await put({aiLabelEnabled:document.getElementById('aiLabelSwitch').classList.contains('on')});}catch(e){window.LJToast(e.message,'err');} }
-  async function saveLabelText(){ if(!guard())return; try{ await put({aiLabelText:document.getElementById('aiLabelText').value}); window.LJToast('✓ 已保存'); }catch(e){window.LJToast(e.message,'err');} }
-  async function saveResolution(v){ if(!guard())return; try{ await put({defaultResolution:v}); window.LJToast('✓ 默认分辨率已设为 '+v); }catch(e){window.LJToast(e.message,'err');} }
-  // 系统名称:计数。空值允许保存(后端回落机构名,不允许空品牌)。保存后刷新即在侧边栏看到。
-  function onBrandInput(){
-    const v=document.getElementById('brandNameInput').value;
-    document.getElementById('brandNameCount').textContent=v.length+'/30';
-    document.getElementById('brandNameCount').style.color = v.length>=30 ? 'var(--amber)' : 'var(--t4)';
-    document.getElementById('brandNameMsg').textContent = '';
-  }
-  async function saveBrandName(){
-    if(!guard())return;
-    const v=document.getElementById('brandNameInput').value.trim();
-    const btn=document.getElementById('brandNameSave'); btn.disabled=true;
-    try{ const d=await put({brandName:v});
-      // 后端清洗 + 空值回落机构名 → 回填真值
-      const clean = (d && typeof d.brandName==='string') ? d.brandName : (v || (document.getElementById('orgNameVal').textContent||'').trim());
-      document.getElementById('brandNameInput').value=clean;
-      onBrandInput();
-      window.LJToast('✓ 系统名称已更新，刷新后侧边栏生效');
-    }catch(e){ document.getElementById('brandNameMsg').style.color='var(--red)'; document.getElementById('brandNameMsg').textContent=e.message; }
-    finally{ btn.disabled=false; }
-  }
-  async function uploadLogo(){
-    if(!guard())return;
-    const f=document.getElementById('logoFile').files[0]; if(!f) return;
-    const fd=new FormData(); fd.append('logo', f);
-    const btn=document.getElementById('logoUploadBtn'); btn.disabled=true; const old=btn.textContent; btn.textContent='上传中…';
-    try{
-      const res=await fetch('/api/settings/logo',{method:'POST',body:fd,credentials:'same-origin'});
-      const d=await res.json().catch(()=>({}));
-      if(!res.ok) throw new Error(d.error||'上传失败');
-      window.LJToast('✓ Logo 已更新，刷新后侧边栏生效');
-      // 刷新设置页缩略图(加时间戳破缓存);侧边栏 Logo 下次进页/刷新时由 shell.js 更新
-      const me=await LJ.me();
-      const url='/api/org-logo/'+me.tenantId+'?t='+Date.now();
-      document.getElementById('logoPreview').style.backgroundImage='url('+url+')';
-    }catch(e){ window.LJToast(e.message,'err'); }
-    finally{ document.getElementById('logoFile').value=''; btn.disabled=false; btn.textContent=old; }
-  }
-  // 恢复默认 Logo:二次确认 → DELETE → 设置页缩略图清空。
-  async function resetLogo(){
-    if(!guard())return;
-    if(!(await window.LJConfirm({title:'恢复默认 Logo',body:'将清除当前机构 Logo，恢复为平台默认图标。确定吗？',confirmText:'恢复默认',danger:true})))return;
-    try{
-      const res=await fetch('/api/settings/logo',{method:'DELETE',credentials:'same-origin'});
-      const d=await res.json().catch(()=>({}));
-      if(!res.ok) throw new Error(d.error||'恢复失败');
-      document.getElementById('logoPreview').style.backgroundImage='';
-      window.LJToast('✓ 已恢复默认品牌，刷新后侧边栏生效');
-    }catch(e){ window.LJToast(e.message,'err'); }
-  }
+    let canEdit = false;
+    // 用 PUT(api.js 没封装 put,直接 fetch)
+    async function put(body) {
+      const res = await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(body) });
+      if (res.status === 401) { location.href = 'login.html'; return; }
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || '保存失败');
+      return d;
+    }
+    function guard() { if (!canEdit) { window.LJToast('仅管理员可修改设置', 'err'); return false; } return true; }
+    async function saveAiLabel() { if (!guard()) { document.getElementById('aiLabelSwitch').classList.toggle('on'); return; } try { await put({ aiLabelEnabled: document.getElementById('aiLabelSwitch').classList.contains('on') }); } catch (e) { window.LJToast(e.message, 'err'); } }
+    async function saveLabelText() { if (!guard()) return; try { await put({ aiLabelText: document.getElementById('aiLabelText').value }); window.LJToast('✓ 已保存'); } catch (e) { window.LJToast(e.message, 'err'); } }
+    async function saveResolution(v) { if (!guard()) return; try { await put({ defaultResolution: v }); window.LJToast('✓ 默认分辨率已设为 ' + v); } catch (e) { window.LJToast(e.message, 'err'); } }
+    // 系统名称:计数。空值允许保存(后端回落机构名,不允许空品牌)。保存后刷新即在侧边栏看到。
+    function onBrandInput() {
+      const v = document.getElementById('brandNameInput').value;
+      document.getElementById('brandNameCount').textContent = v.length + '/30';
+      document.getElementById('brandNameCount').style.color = v.length >= 30 ? 'var(--amber)' : 'var(--t4)';
+      document.getElementById('brandNameMsg').textContent = '';
+    }
+    async function saveBrandName() {
+      if (!guard()) return;
+      const v = document.getElementById('brandNameInput').value.trim();
+      const btn = document.getElementById('brandNameSave'); btn.disabled = true;
+      try {
+        const d = await put({ brandName: v });
+        // 后端清洗 + 空值回落机构名 → 回填真值
+        const clean = (d && typeof d.brandName === 'string') ? d.brandName : (v || (document.getElementById('orgNameVal').textContent || '').trim());
+        document.getElementById('brandNameInput').value = clean;
+        onBrandInput();
+        window.LJToast('✓ 系统名称已更新，刷新后侧边栏生效');
+      } catch (e) { document.getElementById('brandNameMsg').style.color = 'var(--red)'; document.getElementById('brandNameMsg').textContent = e.message; }
+      finally { btn.disabled = false; }
+    }
+    async function uploadLogo() {
+      if (!guard()) return;
+      const f = document.getElementById('logoFile').files[0]; if (!f) return;
+      const fd = new FormData(); fd.append('logo', f);
+      const btn = document.getElementById('logoUploadBtn'); btn.disabled = true; const old = btn.textContent; btn.textContent = '上传中…';
+      try {
+        const res = await fetch('/api/settings/logo', { method: 'POST', body: fd, credentials: 'same-origin' });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(d.error || '上传失败');
+        window.LJToast('✓ Logo 已更新，刷新后侧边栏生效');
+        // 刷新设置页缩略图(加时间戳破缓存);侧边栏 Logo 下次进页/刷新时由 shell.js 更新
+        const me = await LJ.me();
+        const url = '/api/org-logo/' + me.tenantId + '?t=' + Date.now();
+        document.getElementById('logoPreview').style.backgroundImage = 'url(' + url + ')';
+      } catch (e) { window.LJToast(e.message, 'err'); }
+      finally { document.getElementById('logoFile').value = ''; btn.disabled = false; btn.textContent = old; }
+    }
+    // 恢复默认 Logo:二次确认 → DELETE → 设置页缩略图清空。
+    async function resetLogo() {
+      if (!guard()) return;
+      if (!(await window.LJConfirm({ title: '恢复默认 Logo', body: '将清除当前机构 Logo，恢复为平台默认图标。确定吗？', confirmText: '恢复默认', danger: true }))) return;
+      try {
+        const res = await fetch('/api/settings/logo', { method: 'DELETE', credentials: 'same-origin' });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(d.error || '恢复失败');
+        document.getElementById('logoPreview').style.backgroundImage = '';
+        window.LJToast('✓ 已恢复默认品牌，刷新后侧边栏生效');
+      } catch (e) { window.LJToast(e.message, 'err'); }
+    }
 
-  function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-  // ── 审计时间线 ──
-  // 内联 SVG 描边图标(16x16 viewBox,与站点风格一致;非 emoji)。
-  const AF_ICON = {
-    login:  '<path d="M14 3H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h9"/><path d="M11 5l3 3-3 3"/><path d="M14 8H6"/>',          // 登录:箭头入框
-    create: '<path d="M8 3v10M3 8h10"/>',                                                                                   // 创建/生成:加号
-    edit:   '<path d="M11 2l3 3-7 7-3.5.5.5-3.5z"/><path d="M9.5 3.5l3 3"/>',                                               // 编辑/设置:笔
-    member: '<circle cx="8" cy="6" r="2.4"/><path d="M3.5 13a4.5 4.5 0 0 1 9 0"/>',                                         // 成员:人
-    credit: '<circle cx="8" cy="8" r="6"/><path d="M8 5v6M6 8h4"/>',                                                        // 点数:币+
-    upload: '<path d="M8 11V4M5 7l3-3 3 3"/><path d="M3 12h10"/>',                                                          // 上传:上箭头
-    danger: '<path d="M6 3h4l.5 1.5h2.5v1.5H3V4.5h2.5z"/><path d="M4 6l.7 7h6.6L12 6"/><path d="M6.5 8.5v3M9.5 8.5v3"/>',   // 危险/删除:垃圾桶
-    lock:   '<rect x="3.5" y="7" width="9" height="6" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/>',                  // 重置密码:锁
-    other:  '<circle cx="8" cy="8" r="6"/><path d="M8 5.5v3M8 10.5v.01"/>',                                                 // 兜底:信息圈
-  };
-  // 动作 → {v 谓语, obj 是否接对象, kind 颜色/图标档}。kind∈ login|create|edit|member|credit|upload|danger|other。
-  // 危险类(删除/重置密码)→ danger:红色 + 整行左红描边,审计场景一眼抓到。
-  const ACTION_CN={
-    login:{v:'登录了系统',kind:'login'}, padmin_login:{v:'登录了平台后台',kind:'login'},
-    create_job:{v:'发起了一次生成',kind:'create'},
-    grant_credit:{v:'发放了点数',obj:true,kind:'credit'},
-    member_add:{v:'新增了成员',obj:true,kind:'member'}, member_role:{v:'调整了成员角色',obj:true,kind:'member'},
-    update_profile:{v:'修改了个人信息',obj:true,kind:'edit'}, change_password:{v:'修改了登录密码',kind:'lock'},
-    update_settings:{v:'修改了系统设置',obj:true,kind:'edit'},
-    create_avatar:{v:'创建了形象',obj:true,kind:'create'}, delete_avatar:{v:'删除了形象',obj:true,kind:'danger'},
-    clone_voice:{v:'克隆了音色',obj:true,kind:'create'}, design_voice:{v:'设计了音色',obj:true,kind:'create'}, delete_voice:{v:'删除了音色',obj:true,kind:'danger'},
-    upload_asset:{v:'上传了素材',obj:true,kind:'upload'}, delete_asset:{v:'删除了素材',obj:true,kind:'danger'},
-    upload_image_input:{v:'上传了参考图',kind:'upload'},
-    image_model_create:{v:'新增了出图模型',obj:true,kind:'create'}, image_model_update:{v:'修改了出图模型',obj:true,kind:'edit'},
-    image_model_delete:{v:'删除了出图模型',obj:true,kind:'danger'}, image_model_reorder:{v:'调整了出图模型排序',kind:'edit'},
-    tenant_create:{v:'开通了机构',obj:true,kind:'create'}, tenant_update:{v:'修改了机构信息',obj:true,kind:'edit'},
-    tenant_user_create:{v:'创建了机构成员',obj:true,kind:'member'}, tenant_user_reset_pw:{v:'重置了成员密码',obj:true,kind:'lock'},
-  };
-  // kind → 颜色档(头像底色 + 图标色;lock 走 danger 红)。
-  const KIND_TONE={ login:'blue', create:'green', edit:'amber', member:'blue', credit:'green', upload:'amber', lock:'red', danger:'red', other:'gray' };
-  // kind → 用哪个 SVG(lock/danger 各有专属图标)。
-  const KIND_ICON={ login:'login', create:'create', edit:'edit', member:'member', credit:'credit', upload:'upload', lock:'lock', danger:'danger', other:'other' };
+    function esc(s) { return (s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+    // ── 审计表格:时间 / 操作人 / 模块 / 操作 / 来源IP ──
+    // 模块(工具类型)→ 中文 + 分色档(与 billing TOOL_CN 同口径)。tone∈ video|image|tts。
+    const TOOL_CN = {
+      video: { n: '数字人视频', tone: 'video' }, video_t2v: { n: '文字转影片', tone: 'video' },
+      video_i2v: { n: '图片转影片', tone: 'video' }, video_edit: { n: '影片编辑', tone: 'video' },
+      ai_image: { n: 'AI 图片', tone: 'image' }, tts: { n: '文字转语音', tone: 'tts' }, ai_music: { n: 'AI 音乐', tone: 'tts' },
+    };
+    // 动作 → {v 操作动词, obj 是否接对象}。表格「操作」列只显动作(模块单独成列)。
+    const ACTION_CN = {
+      login: { v: '登录系统' }, padmin_login: { v: '登录平台后台' },
+      create_job: { v: '发起生成' }, upload_image_input: { v: '上传参考图' },
+      grant_credit: { v: '发放点数', obj: true },
+      member_add: { v: '新增成员', obj: true }, member_role: { v: '调整成员角色', obj: true },
+      update_profile: { v: '修改个人信息', obj: true }, change_password: { v: '修改登录密码' },
+      update_settings: { v: '修改系统设置', obj: true },
+      create_avatar: { v: '创建形象', obj: true }, delete_avatar: { v: '删除形象', obj: true },
+      clone_voice: { v: '克隆音色', obj: true }, design_voice: { v: '设计音色', obj: true }, delete_voice: { v: '删除音色', obj: true },
+      upload_asset: { v: '上传素材', obj: true }, delete_asset: { v: '删除素材', obj: true },
+      image_model_create: { v: '新增出图模型', obj: true }, image_model_update: { v: '修改出图模型', obj: true },
+      image_model_delete: { v: '删除出图模型', obj: true }, image_model_reorder: { v: '调整出图模型排序' },
+      tenant_create: { v: '开通机构', obj: true }, tenant_update: { v: '修改机构信息', obj: true },
+      tenant_user_create: { v: '创建机构成员', obj: true }, tenant_user_reset_pw: { v: '重置成员密码', obj: true },
+    };
+    function actorName(a) { return a.actorName || '未知用户'; }
+    // 头像首字:展示名第一个字符(中文首字 / 英文首字母大写);空 → '?'。
+    function actorInitial(a) { const n = a.actorName || ''; return n ? [...n][0].toUpperCase() : '?'; }
+    function fmtTime(ts) { const d = new Date(ts), p = n => String(n).padStart(2, '0'); return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }
+    // 模块单元格:create_job 用后端 module(job.type);upload_image_input 固定图像编辑;否则「—」。
+    function moduleCell(a) {
+      let key = a.module || null;
+      if (!key && a.action === 'upload_image_input') return `<span class="mod image">图像编辑</span>`;
+      const m = key ? TOOL_CN[key] : null;
+      if (!m) return `<span class="mod none">—</span>`;
+      return `<span class="mod ${m.tone}">${esc(m.n)}</span>`;
+    }
+    // 操作单元格:<动词>「<对象>」。未知 action 回退原始串,不吞。
+    function actionCell(a) {
+      const act = ACTION_CN[a.action];
+      if (!act) return `操作「${esc(a.action)}」${a.target ? '(' + esc(a.target) + ')' : ''}`;
+      const obj = (act.obj && a.target) ? `「<span class="strong">${esc(a.target)}</span>」` : '';
+      return `${esc(act.v)}${obj}`;
+    }
+    // 渲染一行。
+    function auditRow(a) {
+      const plat = a.actor_type === 'platform_admin' ? '<span class="af-plat">平台</span>' : '';
+      return `<tr>
+        <td class="t-time">${fmtTime(a.created_at)}</td>
+        <td><div class="t-who"><div class="t-av" aria-hidden="true">${esc(actorInitial(a))}</div><span class="strong">${esc(actorName(a))}</span>${plat}</div></td>
+        <td>${moduleCell(a)}</td>
+        <td>${actionCell(a)}</td>
+        <td class="t-ip">${a.ip ? esc(a.ip) : '—'}</td>
+      </tr>`;
+    }
+    function renderAuditFeed(logs) {
+      if (!logs.length) return '<tr><td colspan="5" class="af-empty">暂无操作记录</td></tr>';
+      return logs.map(auditRow).join('');
+    }
 
-  // 操作者展示名 + 是否平台超管(平台超管单独打「平台」标,不再前缀「平台·」)。
-  function actorName(a){ return a.actorName||'未知用户'; }
-  // 头像首字:取展示名第一个字符(中文取首字,英文取首字母大写);空 → '?'。
-  function actorInitial(a){ const n=a.actorName||''; return n ? [...n][0].toUpperCase() : '?'; }
-  // 时间分组:今天 / 昨天 / 更早(按本地 0 点比较)。
-  function dayGroup(ts){
-    const d=new Date(ts), n=new Date();
-    const d0=new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime();
-    const t0=new Date(n.getFullYear(),n.getMonth(),n.getDate()).getTime();
-    const diff=Math.round((t0-d0)/86400000);
-    return diff<=0 ? '今天' : (diff===1 ? '昨天' : '更早');
-  }
-  function fmtClock(ts){const d=new Date(ts),p=n=>String(n).padStart(2,'0');return `${p(d.getHours())}:${p(d.getMinutes())}`;}
-  // 一句话正文:<谓语>「<对象>」。未知 action 回退原始串,不吞。
-  function auditSentence(a){
-    const act=ACTION_CN[a.action];
-    if(!act) return `执行了操作「${esc(a.action)}」${a.target?'(对象 '+esc(a.target)+')':''}`;
-    const obj=(act.obj && a.target) ? `「<span class="af-obj">${esc(a.target)}</span>」` : '';
-    return `${esc(act.v)}${obj}`;
-  }
-  // 渲染一条时间线事件。
-  function auditEvent(a){
-    const act=ACTION_CN[a.action]||{kind:'other'};
-    const tone=KIND_TONE[act.kind]||'gray';
-    const icon=AF_ICON[KIND_ICON[act.kind]||'other'];
-    const danger = act.kind==='danger'||act.kind==='lock' ? ' af-danger' : '';
-    const plat = a.actor_type==='platform_admin' ? '<span class="af-plat">平台</span>' : '';
-    const ip = a.ip ? `<span class="af-ip">${esc(a.ip)}</span>` : '';
-    return `<div class="af-ev${danger}">
-      <div class="af-av af-${tone}" aria-hidden="true">${esc(actorInitial(a))}</div>
-      <div class="af-body">
-        <div class="af-r1"><span class="af-who">${esc(actorName(a))}</span>${plat}<span class="af-time">${fmtClock(a.created_at)}</span></div>
-        <div class="af-r2"><span class="af-ic af-${tone}"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${icon}</svg></span><span class="af-txt">${auditSentence(a)}</span>${ip}</div>
-      </div></div>`;
-  }
-  // 整段时间线:按 今天/昨天/更早 分桶,每桶一个 .af-grp(竖轴 + 日期标 + 各事件)。
-  function renderAuditFeed(logs){
-    if(!logs.length) return '<div class="af-empty">暂无操作记录</div>';
-    const order=['今天','昨天','更早'], buckets={};
-    logs.forEach(a=>{ const g=dayGroup(a.created_at); (buckets[g]=buckets[g]||[]).push(a); });
-    return order.filter(g=>buckets[g]).map(g=>
-      `<div class="af-grp"><div class="af-day">${g}</div>${buckets[g].map(auditEvent).join('')}</div>`
-    ).join('');
-  }
+    async function load() {
+      try {
+        const me = await LJ.me(); canEdit = me.role === 'admin';
+        const s = await LJ.get('/settings');
+        // 机构名称(只读身份):纯展示值,无输入框,任何人不可改。
+        document.getElementById('orgNameVal').textContent = (s.orgName || '').trim() || '—';
+        // 系统名称(可编辑)+ 计数初始化(预填 brandName)
+        const brandInp = document.getElementById('brandNameInput');
+        brandInp.value = s.brandName || '';
+        brandInp.addEventListener('input', onBrandInput);
+        onBrandInput();
+        const sw = document.getElementById('aiLabelSwitch'); sw.classList.toggle('on', !!s.aiLabelEnabled);
+        document.getElementById('aiLabelText').value = s.aiLabelText || '';
+        document.querySelectorAll('#resSeg button').forEach(b => b.classList.toggle('active', b.dataset.v === (s.defaultResolution || '720P')));
+        // Logo 设置页缩略图(公开读路径;无 logo 留默认)
+        if (s.orgLogoKey) {
+          const url = '/api/org-logo/' + me.tenantId + '?t=' + Date.now();
+          document.getElementById('logoPreview').style.backgroundImage = 'url(' + url + ')';
+        }
+        // 非 admin:品牌卡控件只读(机构名本就只读;系统名/Logo 控件置灰)
+        if (!canEdit) {
+          brandInp.disabled = true;
+          ['brandNameSave', 'logoUploadBtn', 'logoResetBtn'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
+        }
 
-  async function load(){
-    try{
-      const me=await LJ.me(); canEdit=me.role==='admin';
-      const s=await LJ.get('/settings');
-      // 机构名称(只读身份):纯展示值,无输入框,任何人不可改。
-      document.getElementById('orgNameVal').textContent = (s.orgName||'').trim() || '—';
-      // 系统名称(可编辑)+ 计数初始化(预填 brandName)
-      const brandInp=document.getElementById('brandNameInput');
-      brandInp.value=s.brandName||'';
-      brandInp.addEventListener('input', onBrandInput);
-      onBrandInput();
-      const sw=document.getElementById('aiLabelSwitch'); sw.classList.toggle('on',!!s.aiLabelEnabled);
-      document.getElementById('aiLabelText').value = s.aiLabelText||'';
-      document.querySelectorAll('#resSeg button').forEach(b=>b.classList.toggle('active', b.dataset.v===(s.defaultResolution||'720P')));
-      // Logo 设置页缩略图(公开读路径;无 logo 留默认)
-      if(s.orgLogoKey){
-        const url='/api/org-logo/'+me.tenantId+'?t='+Date.now();
-        document.getElementById('logoPreview').style.backgroundImage='url('+url+')';
-      }
-      // 非 admin:品牌卡控件只读(机构名本就只读;系统名/Logo 控件置灰)
-      if(!canEdit){
-        brandInp.disabled=true;
-        ['brandNameSave','logoUploadBtn','logoResetBtn'].forEach(id=>{const el=document.getElementById(id); if(el) el.disabled=true;});
-      }
-
-      // T8:审计日志(仅 admin 可见+可查)
-      if(me.role==='admin'){
-        document.getElementById('auditCard').style.display='';
-        try{
-          const logs=await LJ.get('/audit');
-          const shown=logs.slice(0,50);
-          document.getElementById('auditBody').innerHTML = renderAuditFeed(shown);
-          // 计数 chip:总量;>50 只展示前 50,标「50+」诚实提示有截断。
-          const cnt=document.getElementById('auditCount');
-          if(cnt) cnt.textContent = logs.length ? ('共 '+(logs.length>50?'50+':logs.length)+' 条') : '';
-        }catch(e){}
-      }
-    }catch(e){}
-  }
-  load();
-</script>
+        // T8:审计日志(仅 admin 可见+可查)
+        if (me.role === 'admin') {
+          document.getElementById('auditCard').style.display = '';
+          try {
+            const logs = await LJ.get('/audit');
+            const shown = logs.slice(0, 50);
+            document.getElementById('auditBody').innerHTML = renderAuditFeed(shown);
+            // 计数 chip:总量;>50 只展示前 50,标「50+」诚实提示有截断。
+            const cnt = document.getElementById('auditCount');
+            if (cnt) cnt.textContent = logs.length ? ('共 ' + (logs.length > 50 ? '50+' : logs.length) + ' 条') : '';
+          } catch (e) { }
+        }
+      } catch (e) { }
+    }
+    load();
+  </script>
 </body>
+
 </html>

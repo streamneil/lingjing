@@ -65,26 +65,31 @@ export function writePlatformAudit(
 // 故两表都 LEFT JOIN,再 COALESCE 合成一列 actorName(与 credits.ledger() 的 userName 同套路)。
 // 经 JOIN 派生,不冗余存 audit_log;user_id 空 / 用户已删 → actorName 空(前端回退「未知用户」)。
 const ACTOR_NAME_SELECT = `COALESCE(uu.display_name, uu.username, pa.username) AS actorName`;
+// 模块(工具类型):create_job 行的 target = jobId,JOIN job 取 jt.type 即得精确工具
+// (video_i2v / ai_image / tts ...)。经 JOIN 派生,零写改动 + 自动覆盖历史老记录。
+// 非 create_job 行 / job 已删 → module 空(前端显「—」)。
+const MODULE_SELECT = `jt.type AS module`;
 const ACTOR_NAME_JOIN = `
    LEFT JOIN user uu ON l.actor_type='user' AND l.user_id = uu.id
-   LEFT JOIN platform_admin pa ON l.actor_type='platform_admin' AND l.user_id = pa.id`;
+   LEFT JOIN platform_admin pa ON l.actor_type='platform_admin' AND l.user_id = pa.id
+   LEFT JOIN job jt ON l.action='create_job' AND l.target = jt.id`;
 
-/** 查租户审计(admin 可见)。带操作者名(actorName)。 */
+/** 查租户审计(admin 可见)。带操作者名(actorName)+ 模块(module)。 */
 export function listAudit(tenantId: string, limit = 200): AuditRow[] {
   return db
     .prepare(
-      `SELECT l.*, ${ACTOR_NAME_SELECT}
+      `SELECT l.*, ${ACTOR_NAME_SELECT}, ${MODULE_SELECT}
          FROM audit_log l${ACTOR_NAME_JOIN}
         WHERE l.tenant_id=? ORDER BY l.created_at DESC LIMIT ?`,
     )
     .all(tenantId, limit) as AuditRow[];
 }
 
-/** 平台级审计:所有超管操作(跨所有目标租户 + 纯平台操作),供 /admin 追溯。带操作者名。 */
+/** 平台级审计:所有超管操作(跨所有目标租户 + 纯平台操作),供 /admin 追溯。带操作者名 + 模块。 */
 export function listPlatformAudit(limit = 200): AuditRow[] {
   return db
     .prepare(
-      `SELECT l.*, ${ACTOR_NAME_SELECT}
+      `SELECT l.*, ${ACTOR_NAME_SELECT}, ${MODULE_SELECT}
          FROM audit_log l${ACTOR_NAME_JOIN}
         WHERE l.actor_type='platform_admin' ORDER BY l.created_at DESC LIMIT ?`,
     )

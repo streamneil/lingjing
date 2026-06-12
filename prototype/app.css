@@ -569,43 +569,30 @@ img { display: block; }
 .tbl .num { font-family: var(--f-en); }
 .tbl .neg { color: var(--amber); }
 
-/* ── 审计日志:垂直时间线 ── 左轴贯穿 + 首字母头像骑轴 + 动作分色图标 + 危险红标 + 日期分组 */
+/* ── 审计日志:表格 + 模块列 ── 时间 / 操作人(首字母头像) / 模块(分色标签) / 操作 / 来源IP */
 .audit-hd { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .audit-hd h3 { margin: 0; }
 .audit-cnt { flex: none; font-family: var(--f-en); font-size: 12px; color: var(--t4); background: var(--card-hi); border: 1px solid var(--line); border-radius: 20px; padding: 3px 11px; }
-.audit-feed { margin: 10px 0 0; background: var(--card); border: 1px solid var(--line-soft); border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--sh-card); }
-/* 日期分组:左轴 (::before) 贯穿该组所有事件 */
-.af-grp { position: relative; padding-left: 62px; }
-.af-grp::before { content: ''; position: absolute; left: 31px; top: 0; bottom: 0; width: 1px; background: var(--line); }
-.af-grp:last-child::before { bottom: 14px; }
-.af-day { position: relative; padding: 14px 0 6px; color: var(--t3); font-size: 11.5px; font-weight: 600; letter-spacing: .04em; }
-.af-day::before { content: ''; position: absolute; left: -34px; top: 50%; width: 7px; height: 7px; border-radius: 50%; background: var(--line); transform: translateY(-50%); }
-/* 事件行 */
-.af-ev { position: relative; display: flex; flex-direction: column; gap: 3px; padding: 11px 18px 11px 0; border-bottom: 1px solid var(--line-soft); }
-.af-grp:last-child .af-ev:last-child { border-bottom: none; }
-.af-ev:hover { background: var(--card-hi); }
-.af-ev.af-danger { box-shadow: inset 2px 0 0 var(--red); }
-/* 头像骑轴:首字母 */
-.af-av { position: absolute; left: -46px; top: 11px; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-family: var(--f-en); font-weight: 700; font-size: 13px; color: #fff; border: 2px solid var(--card); }
-.af-av.af-blue { background: #3A6FCC; } .af-av.af-amber { background: #B57A1E; } .af-av.af-green { background: #268A3E; } .af-av.af-red { background: #C0392F; } .af-av.af-gray { background: #3A3A40; color: var(--t2); }
-.af-body { min-width: 0; }
-.af-r1 { display: flex; align-items: baseline; gap: 8px; }
-.af-who { color: var(--t1); font-weight: 600; font-size: 13.5px; }
+.tbl.audit { margin-top: 10px; }
+.tbl.audit .t-time { font-family: var(--f-en); font-size: 12.5px; color: var(--t3); white-space: nowrap; }
+.tbl.audit .t-who { display: flex; align-items: center; gap: 8px; }
+.tbl.audit .t-av { flex: none; width: 24px; height: 24px; border-radius: 50%; background: #3A6FCC; display: grid; place-items: center; font-family: var(--f-en); font-weight: 700; font-size: 11px; color: #fff; }
+.tbl.audit .t-ip { font-family: var(--f-en); font-size: 11.5px; color: var(--t4); }
 .af-plat { font-size: 10.5px; color: var(--amber); background: rgba(255,178,62,.14); border-radius: 5px; padding: 1px 6px; font-weight: 600; }
-.af-time { margin-left: auto; flex: none; font-family: var(--f-en); font-size: 12px; color: var(--t4); }
-.af-r2 { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--t2); }
-/* 动作图标:分色小方块,内嵌 16x16 描边 SVG */
-.af-ic { flex: none; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 6px; }
-.af-ic svg { width: 14px; height: 14px; }
-.af-ic.af-blue { background: rgba(77,141,255,.14); color: var(--blue); }
-.af-ic.af-amber { background: rgba(255,178,62,.14); color: var(--amber); }
-.af-ic.af-green { background: rgba(52,199,89,.14); color: var(--green); }
-.af-ic.af-red { background: rgba(255,82,71,.16); color: var(--red); }
-.af-ic.af-gray { background: var(--card-hi); color: var(--t3); }
-.af-txt { min-width: 0; }
-.af-obj { color: var(--t1); }
-.af-ip { margin-left: auto; flex: none; font-family: var(--f-en); font-size: 11px; color: var(--t4); }
 .af-empty { color: var(--t4); text-align: center; padding: 28px 20px; }
+/* 模块分色标签:视频蓝 / 图片绿 / 语音·音乐琥珀 */
+.mod { display: inline-flex; align-items: center; font-size: 12px; border-radius: 6px; padding: 2px 9px; font-weight: 500; }
+.mod.video { background: rgba(77,141,255,.13); color: var(--blue); }
+.mod.image { background: rgba(52,199,89,.13); color: var(--green); }
+.mod.tts { background: rgba(255,178,62,.14); color: var(--amber); }
+.mod.none { color: var(--t4); }
+/* 窄屏:审计表格转卡片(每行一卡,不横向溢出)*/
+@media (max-width: 640px) {
+  .tbl.audit thead { display: none; }
+  .tbl.audit, .tbl.audit tbody, .tbl.audit tr, .tbl.audit td { display: block; width: 100%; box-sizing: border-box; }
+  .tbl.audit tr { margin: 0; padding: 8px 4px; border-bottom: 1px solid var(--line-soft); }
+  .tbl.audit td { border: none; padding: 4px 4px; }
+}
 
 /* —— 行内徽章 —— */
 .bdg { font-family: var(--f-mono); font-size: 10px; padding: 3px 8px; border-radius: 6px; letter-spacing: .03em; display: inline-flex; align-items: center; gap: 5px; }
