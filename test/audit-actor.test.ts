@@ -13,6 +13,7 @@ process.env.DB_FILE = ':memory:';
 const { db } = await import('../src/db/index.js');
 const { writeAudit, listAudit } = await import('../src/audit/index.js');
 const { createTenant, createUser } = await import('../src/auth/index.js');
+const { enqueueJob } = await import('../src/queue/index.js');
 
 let tenantId = '';
 let uid = '';
@@ -76,5 +77,41 @@ describe('listAudit() 带操作者名 actorName', () => {
     const asPadmin = listAudit(tenantId).find((a) => a.action === 'tenant_update');
     expect(asUser!.actorName).toBe('collideuser'); // user 行只取 user 表
     expect(asPadmin!.actorName).toBe('collidepadmin'); // padmin 行只取 platform_admin 表
+  });
+});
+
+describe('listAudit() 带模块 module(JOIN job)', () => {
+  it('create_job 行 → module = job.type(LEFT JOIN job on target=job.id)', () => {
+    const jobId = enqueueJob('video_i2v', { prompt: 'p' }, tenantId, uid);
+    writeAudit(tenantId, uid, 'create_job', jobId, '1.2.3.4', 'user');
+    const row = listAudit(tenantId).find((a) => a.action === 'create_job' && a.target === jobId);
+    expect(row!.module).toBe('video_i2v'); // 精确工具子类型,前端映射「图片转影片」
+  });
+
+  it('不同工具 job → module 各自精确', () => {
+    const img = enqueueJob('ai_image', { prompt: 'p' }, tenantId, uid);
+    const tts = enqueueJob('tts', { text: 'x', voiceRef: 'Cherry' }, tenantId, uid);
+    writeAudit(tenantId, uid, 'create_job', img, '1.2.3.4', 'user');
+    writeAudit(tenantId, uid, 'create_job', tts, '1.2.3.4', 'user');
+    expect(listAudit(tenantId).find((a) => a.target === img)!.module).toBe('ai_image');
+    expect(listAudit(tenantId).find((a) => a.target === tts)!.module).toBe('tts');
+  });
+
+  it('非 create_job 行(login)→ module 空(前端显「—」)', () => {
+    writeAudit(tenantId, uid, 'login', null, '1.2.3.4', 'user');
+    const row = listAudit(tenantId).find((a) => a.action === 'login');
+    expect(row!.module ?? null).toBeNull();
+  });
+
+  it('create_job 但 job 已删 / 不存在 → module 空,不崩', () => {
+    writeAudit(tenantId, uid, 'create_job', 'ghost-job-id', '1.2.3.4', 'user');
+    const row = listAudit(tenantId).find((a) => a.target === 'ghost-job-id');
+    expect(row!.module ?? null).toBeNull();
+  });
+
+  it('upload_image_input 行 module 空(前端固定显「图像编辑」,非 JOIN 派生)', () => {
+    writeAudit(tenantId, uid, 'upload_image_input', 'image-inputs/x.png', '1.2.3.4', 'user');
+    const row = listAudit(tenantId).find((a) => a.action === 'upload_image_input');
+    expect(row!.module ?? null).toBeNull(); // 后端不派生;前端按 action 固定显图像编辑
   });
 });

@@ -442,6 +442,8 @@ export interface AuditRow {
   created_at: number;
   // 操作者名(listAudit() JOIN user/platform_admin 派生;非表列)。user_id 为空 / 用户已删 → 空。
   actorName?: string | null; // user → display_name||username;platform_admin → username
+  // 模块/工具类型(listAudit() JOIN job 派生;非表列)。create_job 行 = job.type;非工具行 / job 已删 → 空。
+  module?: string | null; // video_i2v / ai_image / tts ...;前端映射中文模块名 + 分色
 }
 
 export interface PlatformAdminRow {
