@@ -393,6 +393,76 @@ export interface ImageModelOverrideRow {
   created_at: number;
 }
 
+// ── 积分套餐 + 意向线索(/plan-design-review + /plan-eng-review)──
+// pricing_plan:admin 后台动态管理的定价套餐,前端定价区只渲染。照 image_model_override 范式
+//   (代码不写死套餐,运营在后台填真实价/积分;改完即时生效)。price_yuan 可空 = 面议。
+// sales_leads:咨询式购买点击落库(不接支付)。点「购买/扩容/企业定制」记一条线索给运营跟进。
+//   套餐快照(name/price/credits/bonus)落库 —— 套餐被改/删后线索仍可读运营手动 grant 的依据。
+db.exec(`
+  CREATE TABLE IF NOT EXISTS pricing_plan (
+    id              TEXT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    price_yuan      INTEGER,                    -- NULL = 面议(对公区间价/联系报价)
+    credits         INTEGER NOT NULL,
+    bonus_credits   INTEGER NOT NULL DEFAULT 0,
+    validity_months INTEGER NOT NULL DEFAULT 12,
+    features        TEXT,                       -- 卖点 JSON 数组
+    flag            TEXT,                       -- 角标(如"最受欢迎";空=无)
+    enabled         INTEGER NOT NULL DEFAULT 1,
+    sort_order      INTEGER NOT NULL DEFAULT 0,
+    created_at      INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS sales_leads (
+    id                 TEXT PRIMARY KEY,
+    tenant_id          TEXT NOT NULL,
+    user_id            TEXT NOT NULL,
+    plan_id            TEXT,                     -- 可空:enterprise/topup 无具体套餐
+    plan_name          TEXT,                     -- 套餐名快照
+    plan_price_yuan    INTEGER,                  -- 价格快照
+    plan_credits       INTEGER,                  -- 积分数快照(运营手动 grant 依据)
+    plan_bonus_credits INTEGER,                  -- 赠送积分快照
+    kind               TEXT NOT NULL DEFAULT 'plan',  -- plan | enterprise | topup
+    note               TEXT,                     -- 用户诉求/金额 + 运营备注
+    status             TEXT NOT NULL DEFAULT 'new',   -- new | contacted | closed
+    created_at         INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_leads_tenant ON sales_leads(tenant_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_leads_status ON sales_leads(status);
+`);
+
+export interface PricingPlanRow {
+  id: string;
+  name: string;
+  price_yuan: number | null; // null = 面议
+  credits: number;
+  bonus_credits: number;
+  validity_months: number;
+  features: string | null; // JSON 数组字符串
+  flag: string | null;
+  enabled: number;
+  sort_order: number;
+  created_at: number;
+}
+
+export type LeadKind = 'plan' | 'enterprise' | 'topup';
+export type LeadStatus = 'new' | 'contacted' | 'closed';
+
+export interface SalesLeadRow {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  plan_id: string | null;
+  plan_name: string | null;
+  plan_price_yuan: number | null;
+  plan_credits: number | null;
+  plan_bonus_credits: number | null;
+  kind: LeadKind;
+  note: string | null;
+  status: LeadStatus;
+  created_at: number;
+}
+
 export type JobStatus = 'queued' | 'running' | 'done' | 'failed';
 
 export interface JobRow {

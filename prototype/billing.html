@@ -97,13 +97,82 @@
   .bl-work:focus-visible{ outline:2px solid var(--blue); outline-offset:2px; }
   .bl-empty{ text-align:center; color:var(--t4); padding:54px 20px; }
   .bl-empty svg{ width:34px; height:34px; color:var(--t5); margin-bottom:12px; }
+  /* ── 定价区 ── */
+  .pr-plans{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  .pr-empty{ grid-column:1/-1; text-align:center; color:var(--t4); padding:36px; font-size:13px; }
+  .pr-plan{ position:relative; background:var(--card); border:1px solid var(--line); border-radius:18px; padding:24px 22px; transition:transform .15s var(--ease,cubic-bezier(.22,.61,.36,1)),border-color .15s; }
+  .pr-plan:hover{ transform:translateY(-3px); border-color:var(--line-hi); }
+  .pr-plan.pr-feat{ border-color:var(--blue); background:linear-gradient(180deg,rgba(77,141,255,.05),transparent); }
+  .pr-flag{ position:absolute; top:-10px; left:22px; background:var(--blue); color:#fff; font-size:10.5px; font-weight:700; padding:3px 10px; border-radius:999px; letter-spacing:.5px; }
+  .pr-name{ font-size:13px; color:var(--t3); font-weight:600; margin-bottom:8px; }
+  .pr-price{ font-size:34px; font-weight:800; font-family:var(--f-en,'Manrope',sans-serif); letter-spacing:-1px; }
+  .pr-price .pr-cur{ font-size:18px; color:var(--t2); font-weight:600; margin-right:2px; }
+  .pr-credits{ font-size:14px; color:var(--t1); font-weight:600; margin-top:8px; }
+  .pr-credits .pr-bonus{ color:var(--green); font-size:11px; font-weight:600; margin-left:4px; }
+  .pr-feats{ margin-top:14px; padding-top:14px; border-top:1px solid var(--line-soft,#1A1A1D); font-size:12.5px; color:var(--t2); line-height:2; }
+  .pr-feats .pr-ck{ color:var(--green); margin-right:6px; }
+  .pr-btn{ width:100%; margin-top:18px; padding:12px; border-radius:999px; font-size:14px; font-weight:600; font-family:inherit; cursor:pointer; border:1px solid var(--line); background:var(--field,#101012); color:var(--t1); transition:.15s; min-height:44px; }
+  .pr-btn:hover{ border-color:var(--line-hi); }
+  .pr-plan.pr-feat .pr-btn{ background:var(--t1); color:#0A0A0B; border:none; }
+  .pr-seclbl{ font-size:13px; color:var(--t3); font-weight:600; text-transform:uppercase; letter-spacing:.6px; font-family:var(--f-en,'Manrope',sans-serif); margin:34px 0 16px; }
+  .pr-ent{ display:flex; align-items:center; justify-content:space-between; gap:24px; background:linear-gradient(110deg,var(--card-hi),var(--card)); border:1px solid var(--line); border-radius:18px; padding:26px 28px; }
+  .pr-et{ font-size:18px; font-weight:700; }
+  .pr-ed{ font-size:13px; color:var(--t3); margin-top:6px; max-width:560px; line-height:1.6; }
+  .pr-ebtn{ flex-shrink:0; background:var(--t1); color:#0A0A0B; border:none; border-radius:999px; padding:12px 22px; font-size:14px; font-weight:700; font-family:inherit; cursor:pointer; min-height:44px; }
+  .pr-trust{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  .pr-ti{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 16px; text-align:center; }
+  .pr-tt{ font-size:13px; font-weight:600; }
+  .pr-td{ font-size:11px; color:var(--t4); margin-top:4px; line-height:1.5; }
+  .pr-faq{ display:flex; flex-direction:column; gap:8px; }
+  .pr-qa{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 18px; }
+  .pr-q{ width:100%; text-align:left; background:none; border:none; color:var(--t1); font-size:14px; font-weight:600; font-family:inherit; display:flex; justify-content:space-between; align-items:center; cursor:pointer; min-height:24px; }
+  .pr-chev{ color:var(--t4); }
+  .pr-a{ font-size:12.5px; color:var(--t3); line-height:1.7; margin-top:10px; }
+  .pr-qa.pr-closed .pr-a{ display:none; }
+  @media (max-width:640px){
+    .pr-plans{ grid-template-columns:1fr; }
+    .pr-plan.pr-feat{ order:-1; }
+    .pr-trust{ grid-template-columns:repeat(2,1fr); }
+    .pr-ent{ flex-direction:column; align-items:stretch; }
+  }
 </style>
 </head>
 <body data-page="billing" data-crumb="经营管理 > 用量计费">
 <div class="shell" id="shell-mount">
   <div class="main-col">
     <main class="page">
-      <div class="ph">
+      <!-- ── 购买积分套餐(定价区,数据由 admin 后台配置)── -->
+      <div class="ph" id="prAnchor">
+        <div><h1 class="t-h1">购买积分套餐</h1><p class="desc">对公采购,积分有效期 1 年,点数永不按月清零。用多少扣多少,失败自动退还。</p></div>
+      </div>
+      <div class="pr-plans" id="prPlans"><div class="pr-empty">加载中…</div></div>
+
+      <div class="pr-seclbl">企业定制</div>
+      <div class="pr-ent">
+        <div>
+          <div class="pr-et">需要更大额度或私有化部署?</div>
+          <div class="pr-ed">面向广电、报社、政企客户提供定制企业套餐:大额积分采购、私有化内网部署、专属技术支持与合规对接。客户成功经理为你定制方案。</div>
+        </div>
+        <button class="pr-ebtn" onclick="leadEnterprise()">联系客户成功经理</button>
+      </div>
+
+      <div class="pr-seclbl">为什么选择灵镜</div>
+      <div class="pr-trust">
+        <div class="pr-ti"><div class="pr-tt">合规可控</div><div class="pr-td">AI 合成标识 + 内容审核,符合广电审计</div></div>
+        <div class="pr-ti"><div class="pr-tt">数据安全</div><div class="pr-td">支持私有化内网部署,数据不出域</div></div>
+        <div class="pr-ti"><div class="pr-tt">秒级生成</div><div class="pr-td">云端算力统一调度,无需自建 GPU</div></div>
+        <div class="pr-ti"><div class="pr-tt">专属服务</div><div class="pr-td">客户成功经理 1 对 1 对接</div></div>
+      </div>
+
+      <div class="pr-seclbl">常见问题</div>
+      <div class="pr-faq" id="prFaq">
+        <div class="pr-qa"><button class="pr-q" aria-expanded="true">积分会过期吗?<span class="pr-chev">▲</span></button><div class="pr-a">积分有效期为购买之日起 1 年。有效期内用多少扣多少,不按月清零。临近到期平台会提前提醒,可续购延长。</div></div>
+        <div class="pr-qa pr-closed"><button class="pr-q" aria-expanded="false">怎么开发票?<span class="pr-chev">▼</span></button><div class="pr-a">支持开具增值税专用发票/普通发票。点击「购买」后,平台对接人会与你确认采购合同与开票信息,确认付款后积分入账并开票。</div></div>
+        <div class="pr-qa pr-closed"><button class="pr-q" aria-expanded="false">大额采购有折扣吗?<span class="pr-chev">▼</span></button><div class="pr-a">套餐档位越高赠送比例越高。超过 ¥10,000 的企业采购可联系客户成功经理定制更优惠的企业套餐。</div></div>
+        <div class="pr-qa pr-closed"><button class="pr-q" aria-expanded="false">生成失败会扣积分吗?<span class="pr-chev">▼</span></button><div class="pr-a">不会。每次生成先预扣积分,失败时全额自动退还,只有成功生成才实际扣点。失败释放在下方「消费明细」可查。</div></div>
+      </div>
+
+      <div class="ph" style="margin-top:40px">
         <div><h1 class="t-h1">用量与计费</h1><p class="desc">按量计费,每次生成消耗点数。底层算力成本由平台统一调度,您只需关注余额、消耗与对账。充值请联系平台运营。</p></div>
       </div>
 
@@ -357,9 +426,59 @@
   // ── 发放点数弹窗 ──
   // 租户自助充值已删除:充值收归平台超管(/admin)。billing 仅展示余额/消费/对账。
 
-  function requestTopup(){
-    window.LJToast('已记录扩容意向,平台对接人将与机构管理员联系');
+  // ── 定价区:加载套餐 + 咨询式落线索 ──
+  function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function fmtN(n){ return (n||0).toLocaleString('zh-CN'); }
+
+  async function loadPlans(){
+    const box=document.getElementById('prPlans');
+    try{
+      const { plans } = await LJ.get('/pricing-plans');
+      if(!plans.length){ box.innerHTML='<div class="pr-empty">暂无可购套餐,请联系平台运营开通。</div>'; return; }
+      box.innerHTML=plans.map(p=>{
+        const feat=p.flag?' pr-feat':'';
+        const price=p.priceYuan==null?'<span style="font-size:24px;font-weight:700">面议</span>':`<span class="pr-cur">¥</span>${fmtN(p.priceYuan)}`;
+        const bonus=p.bonusCredits>0?`<span class="pr-bonus">+${fmtN(p.bonusCredits)} 赠</span>`:'';
+        const feats=(p.features||[]).map(f=>`<div><span class="pr-ck">✓</span>${esc(f)}</div>`).join('')
+          || `<div><span class="pr-ck">✓</span>有效期 ${p.validityMonths||12} 个月</div>`;
+        return `<div class="pr-plan${feat}">
+          ${p.flag?`<div class="pr-flag">${esc(p.flag)}</div>`:''}
+          <div class="pr-name">${esc(p.name)}</div>
+          <div class="pr-price">${price}</div>
+          <div class="pr-credits">◆ ${fmtN(p.credits)} 积分${bonus}</div>
+          <div class="pr-feats">${feats}</div>
+          <button class="pr-btn" onclick='buyPlan(${JSON.stringify(p.id)},${JSON.stringify(p.name)})'>购买</button>
+        </div>`;
+      }).join('');
+    }catch(e){ box.innerHTML='<div class="pr-empty">套餐加载失败,请刷新重试。</div>'; }
   }
+
+  async function postLead(body, okMsg){
+    try{
+      const r=await LJ.post('/sales-leads', body);
+      window.LJToast('✓ '+(r.contact||okMsg||'已记录意向,平台对接人会联系你'));
+    }catch(e){ window.LJToast(e.message||'提交失败','err'); }
+  }
+  window.buyPlan=(id,name)=>postLead({kind:'plan',planId:id}, `已记录「${name}」购买意向`);
+  window.leadEnterprise=async()=>{
+    const note=await window.LJPrompt({title:'企业定制咨询',label:'简述你的需求(额度/私有化/合规等)',placeholder:'例:需私有化部署 + 50 万积分'});
+    if(note==null||!note.trim()) return;
+    postLead({kind:'enterprise',note:note.trim()});
+  };
+
+  async function requestTopup(){
+    const note=await window.LJPrompt({title:'申请扩容',label:'需要多少积分 / 充值金额?(便于运营准备方案)',placeholder:'例:充 ¥5000 / 50 万积分'});
+    if(note==null||!note.trim()) return;
+    postLead({kind:'topup',note:note.trim()}, '已记录扩容意向,平台对接人将与你联系');
+  }
+  window.requestTopup=requestTopup;
+
+  // FAQ 折叠(键盘可达:button + aria-expanded)
+  document.querySelectorAll('#prFaq .pr-q').forEach(q=>q.onclick=()=>{
+    const qa=q.closest('.pr-qa'); const open=qa.classList.toggle('pr-closed');
+    q.setAttribute('aria-expanded', String(!open));
+    q.querySelector('.pr-chev').textContent = open?'▼':'▲';
+  });
 
   // ── 筛选切换 ──
   document.querySelectorAll('#filterSeg button').forEach(b=>b.onclick=()=>{
@@ -368,6 +487,7 @@
   });
 
   async function load(){
+    loadPlans(); // 定价区独立加载(不阻塞余额/明细)
     try{
       const me = await LJ.me();
       isAdmin = me.role==='admin';

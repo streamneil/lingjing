@@ -181,6 +181,60 @@
         <tbody id="modelRows"><tr><td colspan="9" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
+
+    <!-- ── 积分套餐管理 ── -->
+    <div class="ph" style="margin-top:34px">
+      <div><h1>积分套餐</h1><p>管理定价页展示的套餐:价格 / 积分 / 赠送 / 卖点 / 推荐标签 / 启用 / 排序。改完即时生效到前台定价页。价格留空 = 面议。</p></div>
+      <button class="btn-new" onclick="openPlan()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>新增套餐</button>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>排序</th><th>套餐名</th><th>价格</th><th>积分</th><th>赠送</th><th>标签</th><th>启用</th><th style="text-align:right">操作</th></tr></thead>
+        <tbody id="planRows"><tr><td colspan="8" class="empty">加载中…</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- ── 意向线索 ── -->
+    <div class="ph" style="margin-top:34px">
+      <div><h1 id="leadHdr">意向线索</h1><p>用户点「购买 / 申请扩容 / 企业定制」记录的意向。不接支付,确认付款后在租户「管理」里手动充值。</p></div>
+      <div class="bl-seg" id="leadSeg" style="display:flex;gap:6px">
+        <button class="act on" data-s="">全部</button>
+        <button class="act" data-s="new">待跟进</button>
+        <button class="act" data-s="contacted">已联系</button>
+        <button class="act" data-s="closed">已关闭</button>
+      </div>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>时间</th><th>用户</th><th>类型 / 套餐</th><th>金额·积分</th><th>诉求/备注</th><th>状态</th><th style="text-align:right">操作</th></tr></thead>
+        <tbody id="leadRows"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 新增/编辑 积分套餐 -->
+  <div class="ov" id="planOv">
+    <div class="modal">
+      <h3 id="plTitle">新增套餐</h3>
+      <p class="mdesc">套餐数据驱动前台定价页。价格留空 = 面议(对公区间价/联系报价)。</p>
+      <label>套餐名</label>
+      <input id="plName" placeholder="如 标准">
+      <label>价格(元,留空=面议)</label>
+      <input id="plPrice" type="number" min="1" placeholder="如 1000(留空面议)">
+      <div class="mrow2">
+        <div><label>基础积分</label><input id="plCredits" type="number" min="1" placeholder="如 100000"></div>
+        <div><label>赠送积分</label><input id="plBonus" type="number" min="0" value="0"></div>
+      </div>
+      <label>有效期(月)</label>
+      <input id="plMonths" type="number" min="1" value="12">
+      <label>卖点(每行一条)</label>
+      <textarea id="plFeats" rows="3" placeholder="有效期 1 年&#10;专属客户成功对接" style="width:100%;box-sizing:border-box;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--t1);font-size:14px;font-family:var(--f);outline:none;resize:vertical"></textarea>
+      <label>推荐标签(可空,如「最受欢迎」)</label>
+      <input id="plFlag" placeholder="留空=无角标">
+      <label style="display:flex;align-items:center;gap:8px;margin-top:12px"><input id="plEnabled" type="checkbox" checked style="width:auto"> 启用(前台展示)</label>
+      <div class="mmsg" id="plMsg"></div>
+      <div class="mbtns"><button class="cancel" onclick="closeOv('planOv')">取消</button><button class="ok" id="plOk" onclick="submitPlan()">保存</button></div>
+    </div>
   </div>
 
   <!-- 新增/编辑 AI 图片模型 -->
@@ -345,6 +399,8 @@
           </div></td>
         </tr>`).join('');
       await loadModels();
+      await loadPlans();
+      await loadLeads();
     }catch(e){ /* 401 已跳转 */ }
   }
 
@@ -602,6 +658,9 @@
       failEl.innerHTML=fmtN(ov.todayFailed)+(ov.todayDone+ov.todayFailed>0?` <small>${(ov.failRate*100).toFixed(1)}%</small>`:'');
       failEl.className='ms-v'+(ov.failRate>0.1?' bad':ov.failRate>0.03?' warn':'');
       document.getElementById('msDur').textContent=fmtDur(ov.avgDurationMs);
+      // new 意向线索待跟进:在「意向线索」标题旁挂红点计数(咨询式购买无通知,给运营可见信号)
+      const lh=document.getElementById('leadHdr');
+      if(lh) lh.innerHTML='意向线索'+(ov.newLeads>0?` <span style="background:var(--red);color:#fff;font-size:11px;font-weight:700;padding:1px 8px;border-radius:999px;vertical-align:middle">${ov.newLeads} 待跟进</span>`:'');
       // 瓶颈诊断(区分 worker 吞吐 vs 百炼配额)
       const diag=document.getElementById('monDiag');
       if(ov.level==='red'){
@@ -680,6 +739,125 @@
   function startMonPoll(){ stopMonPoll(); loadMonitor(); monTimer=setInterval(loadMonitor,10000); }
   function stopMonPoll(){ if(monTimer){ clearInterval(monTimer); monTimer=null; } }
   document.addEventListener('visibilitychange',()=>{ if(document.hidden) stopMonPoll(); else startMonPoll(); });
+
+  // ── 积分套餐管理 ──
+  let editingPlan=null, plansCache=[];
+  function planPrice(p){ return p.price_yuan==null?'面议':'¥'+fmtN(p.price_yuan); }
+  async function loadPlans(){
+    const rows=document.getElementById('planRows');
+    try{
+      const { plans }=await PA('GET','/api/pricing-plans');
+      plansCache=plans;
+      if(!plans.length){ rows.innerHTML='<tr><td colspan="8" class="empty">还没有套餐,点右上「新增套餐」开始</td></tr>'; return; }
+      rows.innerHTML=plans.map((p,i)=>`
+        <tr>
+          <td><div class="acts" style="justify-content:flex-start;gap:4px">
+            <button class="act" ${i===0?'disabled style="opacity:.35"':''} onclick='movePlan(${i},-1)'>↑</button>
+            <button class="act" ${i===plans.length-1?'disabled style="opacity:.35"':''} onclick='movePlan(${i},1)'>↓</button>
+          </div></td>
+          <td><div class="tn">${esc(p.name)}</div></td>
+          <td class="bal">${planPrice(p)}</td>
+          <td style="font-family:var(--f-mono);font-size:12px">${fmtN(p.credits)}</td>
+          <td style="font-family:var(--f-mono);font-size:12px;color:${p.bonus_credits>0?'var(--green)':'var(--t4)'}">${p.bonus_credits>0?'+'+fmtN(p.bonus_credits):'—'}</td>
+          <td>${p.flag?`<span class="bdg bdg-host">${esc(p.flag)}</span>`:'—'}</td>
+          <td><span class="bdg ${p.enabled?'bdg-host':'bdg-priv'}">${p.enabled?'启用':'停用'}</span></td>
+          <td><div class="acts">
+            <button class="act" onclick='editPlan(${JSON.stringify(p.id)})'>编辑</button>
+            <button class="act" onclick='delPlan(${JSON.stringify(p.id)},${JSON.stringify(p.name)})'>删除</button>
+          </div></td>
+        </tr>`).join('');
+    }catch(e){ rows.innerHTML='<tr><td colspan="8" class="empty">加载失败</td></tr>'; }
+  }
+  window.movePlan=async(i,dir)=>{
+    const j=i+dir; if(j<0||j>=plansCache.length) return;
+    const ids=plansCache.map(p=>p.id); const t=ids[i]; ids[i]=ids[j]; ids[j]=t;
+    try{ await PA('POST','/api/pricing-plans/reorder',{ids}); await loadPlans(); }catch(e){ toast(e.message||'排序失败'); }
+  };
+  function openPlan(){
+    editingPlan=null;
+    document.getElementById('plTitle').textContent='新增套餐'; document.getElementById('plMsg').textContent='';
+    ['plName','plPrice','plCredits','plFlag'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('plBonus').value='0'; document.getElementById('plMonths').value='12';
+    document.getElementById('plFeats').value=''; document.getElementById('plEnabled').checked=true;
+    document.getElementById('planOv').classList.add('on');
+  }
+  window.openPlan=openPlan;
+  window.editPlan=(id)=>{
+    const p=plansCache.find(x=>x.id===id); if(!p) return;
+    editingPlan=id;
+    document.getElementById('plTitle').textContent='编辑套餐'; document.getElementById('plMsg').textContent='';
+    document.getElementById('plName').value=p.name;
+    document.getElementById('plPrice').value=p.price_yuan==null?'':p.price_yuan;
+    document.getElementById('plCredits').value=p.credits;
+    document.getElementById('plBonus').value=p.bonus_credits;
+    document.getElementById('plMonths').value=p.validity_months;
+    document.getElementById('plFeats').value=(p.features||[]).join('\n');
+    document.getElementById('plFlag').value=p.flag||'';
+    document.getElementById('plEnabled').checked=!!p.enabled;
+    document.getElementById('planOv').classList.add('on');
+  };
+  async function submitPlan(){
+    const priceRaw=document.getElementById('plPrice').value.trim();
+    const body={
+      name:document.getElementById('plName').value.trim(),
+      priceYuan: priceRaw===''?null:Number(priceRaw),
+      credits:Number(document.getElementById('plCredits').value),
+      bonusCredits:Number(document.getElementById('plBonus').value||0),
+      validityMonths:Number(document.getElementById('plMonths').value||12),
+      features:document.getElementById('plFeats').value.split('\n').map(s=>s.trim()).filter(Boolean),
+      flag:document.getElementById('plFlag').value.trim()||null,
+      enabled:document.getElementById('plEnabled').checked,
+    };
+    const ok=document.getElementById('plOk'); ok.disabled=true;
+    try{
+      if(editingPlan){ await PA('PUT',`/api/pricing-plans/${editingPlan}`,body); }
+      else { await PA('POST','/api/pricing-plans',body); }
+      closeOv('planOv'); toast('✓ 已保存'); await loadPlans();
+    }catch(e){ document.getElementById('plMsg').textContent=e.message||'保存失败'; }
+    finally{ ok.disabled=false; }
+  }
+  window.submitPlan=submitPlan;
+  window.delPlan=async(id,name)=>{
+    if(!confirm(`删除套餐「${name}」?前台定价页将不再展示。已落的线索仍保留快照。`)) return;
+    try{ await PA('DELETE',`/api/pricing-plans/${id}`); toast('✓ 已删除'); await loadPlans(); }catch(e){ toast(e.message||'删除失败'); }
+  };
+
+  // ── 意向线索 ──
+  let leadFilter='';
+  const LEAD_KIND={plan:'套餐',enterprise:'企业定制',topup:'扩容'};
+  const LEAD_ST={new:['bdg-priv','待跟进'],contacted:['bdg-host','已联系'],closed:['','已关闭']};
+  async function loadLeads(){
+    const rows=document.getElementById('leadRows');
+    try{
+      const q=leadFilter?`?status=${leadFilter}`:'';
+      const { leads }=await PA('GET','/api/sales-leads'+q);
+      if(!leads.length){ rows.innerHTML='<tr><td colspan="7" class="empty">暂无线索</td></tr>'; return; }
+      rows.innerHTML=leads.map(l=>{
+        const st=LEAD_ST[l.status]||['','?'];
+        const target=l.kind==='plan'?(l.plan_name||'套餐'):LEAD_KIND[l.kind];
+        const amt=l.plan_price_yuan!=null?`¥${fmtN(l.plan_price_yuan)} · ${fmtN(l.plan_credits)}积分`:'—';
+        return `<tr>
+          <td style="color:var(--t3);font-family:var(--f-mono);font-size:12px">${fmtDate(l.created_at)}</td>
+          <td style="font-family:var(--f-mono);font-size:11px;color:var(--t3)">${esc(l.user_id.slice(0,8))}</td>
+          <td><span class="bdg bdg-host" style="margin-right:6px">${LEAD_KIND[l.kind]||l.kind}</span>${esc(target)}</td>
+          <td style="font-family:var(--f-mono);font-size:12px">${amt}</td>
+          <td style="max-width:200px;font-size:12px;color:var(--t2)">${esc(l.note||'—')}</td>
+          <td><span class="bdg ${st[0]}">${st[1]}</span></td>
+          <td><div class="acts">
+            ${l.status!=='contacted'?`<button class="act" onclick='setLead(${JSON.stringify(l.id)},"contacted")'>标已联系</button>`:''}
+            ${l.status!=='closed'?`<button class="act" onclick='setLead(${JSON.stringify(l.id)},"closed")'>关闭</button>`:''}
+          </div></td>
+        </tr>`;
+      }).join('');
+    }catch(e){ rows.innerHTML='<tr><td colspan="7" class="empty">加载失败</td></tr>'; }
+  }
+  window.setLead=async(id,status)=>{
+    try{ await PA('PUT',`/api/sales-leads/${id}`,{status}); toast('✓ 已更新'); await loadLeads(); }catch(e){ toast(e.message||'更新失败'); }
+  };
+  document.querySelectorAll('#leadSeg button').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#leadSeg button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); leadFilter=b.dataset.s; loadLeads();
+  });
 
   load();
   startMonPoll();

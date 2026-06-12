@@ -26,6 +26,21 @@ import {
   setUserStatus,
 } from '../auth/index.js';
 import { grant, balance } from '../credits/index.js';
+import {
+  listPlans,
+  getPlan,
+  createPlan,
+  updatePlan,
+  deletePlan,
+  reorderPlans,
+  parseFeatures,
+  listLeads,
+  updateLeadStatus,
+  PricingError,
+  type PlanInput,
+} from '../pricing/index.js';
+import type { LeadStatus } from '../db/index.js';
+import { countLeadsByStatus } from '../pricing/index.js';
 import { IMAGE_MODELS } from '../gateway/image-models.js';
 import type { ImageModelOverrideRow } from '../db/index.js';
 import { writePlatformAudit, PLATFORM_TENANT } from '../audit/index.js';
@@ -151,6 +166,9 @@ adminRouter.get('/api/metrics/overview', requirePlatformAdmin, (_req: Request, r
 
   const level = bottleneckLevel(queued, avgQueueWaitMs, failRate);
 
+  // new 意向线索待跟进数(咨询式购买落库后无通知,这里给运营一个可见信号,防热线索冷掉)。
+  const newLeads = countLeadsByStatus('new');
+
   return res.json({
     queued,
     running,
@@ -160,6 +178,7 @@ adminRouter.get('/api/metrics/overview', requirePlatformAdmin, (_req: Request, r
     avgDurationMs,
     avgQueueWaitMs,
     level,
+    newLeads,
   });
 });
 
@@ -600,4 +619,92 @@ adminRouter.post('/api/image-models/reorder', requirePlatformAdmin, (req: Reques
   tx(keys as string[]);
   writePlatformAudit(req.padmin!.id, 'image_model_reorder', PLATFORM_TENANT, keys.join(','), padminIp(req));
   res.json({ ok: true });
+});
+
+// ── 积分套餐管理(/plan-design-review + /plan-eng-review)──
+// 照 image-models 范式:admin 增删改启停排序,改完前台 GET /api/pricing-plans 即时生效。
+// 校验在 pricing/index.ts(单一来源),本路由只解析 body + 调用 + 透传 PricingError。
+
+/** 从请求体解析 PlanInput(类型收敛;空值容错)。 */
+function parsePlanBody(b: Record<string, unknown>): PlanInput {
+  const priceRaw = b.priceYuan;
+  return {
+    name: typeof b.name === 'string' ? b.name : '',
+    // priceYuan:null/空字符串/undefined → null(面议);否则转 number。
+    priceYuan: priceRaw === null || priceRaw === undefined || priceRaw === '' ? null : Number(priceRaw),
+    credits: Number(b.credits),
+    bonusCredits: b.bonusCredits === undefined ? 0 : Number(b.bonusCredits),
+    validityMonths: b.validityMonths === undefined ? 12 : Number(b.validityMonths),
+    features: Array.isArray(b.features) ? (b.features as unknown[]).map(String).filter((s) => s.trim()) : [],
+    flag: typeof b.flag === 'string' && b.flag.trim() ? b.flag.trim() : null,
+    enabled: b.enabled !== false && b.enabled !== 0,
+  };
+}
+
+/** 列全部套餐(含停用);features 解析为数组供 admin 编辑回填。 */
+adminRouter.get('/api/pricing-plans', requirePlatformAdmin, (_req: Request, res: Response) => {
+  const plans = listPlans().map((p) => ({ ...p, features: parseFeatures(p.features) }));
+  res.json({ plans });
+});
+
+adminRouter.post('/api/pricing-plans', requirePlatformAdmin, (req: Request, res: Response) => {
+  try {
+    const plan = createPlan(parsePlanBody((req.body ?? {}) as Record<string, unknown>));
+    writePlatformAudit(req.padmin!.id, 'pricing_plan_create', PLATFORM_TENANT, plan.name, padminIp(req));
+    res.status(201).json({ id: plan.id });
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : '创建失败', ...(e instanceof PricingError ? { code: e.code } : {}) });
+  }
+});
+
+adminRouter.put('/api/pricing-plans/:id', requirePlatformAdmin, (req: Request, res: Response) => {
+  const id = req.params.id!;
+  if (!getPlan(id)) return res.status(404).json({ error: '套餐不存在' });
+  try {
+    updatePlan(id, parsePlanBody((req.body ?? {}) as Record<string, unknown>));
+    writePlatformAudit(req.padmin!.id, 'pricing_plan_update', PLATFORM_TENANT, id, padminIp(req));
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : '更新失败', ...(e instanceof PricingError ? { code: e.code } : {}) });
+  }
+});
+
+adminRouter.delete('/api/pricing-plans/:id', requirePlatformAdmin, (req: Request, res: Response) => {
+  const id = req.params.id!;
+  const ok = deletePlan(id);
+  if (!ok) return res.status(404).json({ error: '套餐不存在' });
+  writePlatformAudit(req.padmin!.id, 'pricing_plan_delete', PLATFORM_TENANT, id, padminIp(req));
+  res.json({ ok: true });
+});
+
+adminRouter.post('/api/pricing-plans/reorder', requirePlatformAdmin, (req: Request, res: Response) => {
+  const ids = req.body?.ids as unknown;
+  if (!Array.isArray(ids) || ids.some((x) => typeof x !== 'string'))
+    return res.status(400).json({ error: 'ids 需为字符串数组' });
+  reorderPlans(ids as string[]);
+  writePlatformAudit(req.padmin!.id, 'pricing_plan_reorder', PLATFORM_TENANT, ids.join(','), padminIp(req));
+  res.json({ ok: true });
+});
+
+// ── 意向线索(运营跟进)──
+adminRouter.get('/api/sales-leads', requirePlatformAdmin, (req: Request, res: Response) => {
+  const status = req.query.status ? String(req.query.status) : undefined;
+  const valid = status === 'new' || status === 'contacted' || status === 'closed';
+  const leads = listLeads({ status: valid ? (status as LeadStatus) : undefined });
+  res.json({ leads });
+});
+
+adminRouter.put('/api/sales-leads/:id', requirePlatformAdmin, (req: Request, res: Response) => {
+  const id = req.params.id!;
+  const { status, note } = (req.body ?? {}) as { status?: string; note?: string };
+  if (status !== 'new' && status !== 'contacted' && status !== 'closed')
+    return res.status(400).json({ error: '无效状态' });
+  try {
+    const ok = updateLeadStatus(id, status, note);
+    if (!ok) return res.status(404).json({ error: '线索不存在' });
+    writePlatformAudit(req.padmin!.id, 'sales_lead_update', PLATFORM_TENANT, `${id}→${status}`, padminIp(req));
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : '更新失败' });
+  }
 });
