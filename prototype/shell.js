@@ -32,6 +32,13 @@
   };
   const svg = inner => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
   const ic = p => svg(I[p]);
+
+  // 品牌即时渲染辅助(供同步模板 + onerror 回退用,挂到 window 方便 inline 调用)。
+  function ljEscapeBrand(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  const __DEFAULT_MARK_SVG = `<svg viewBox="0 0 100 100" fill="none"><circle cx="37" cy="50" r="29" stroke="#0E0E0E" stroke-width="5"/><circle cx="63" cy="50" r="29" stroke="#0E0E0E" stroke-width="5"/><path d="M50 24.08 A29 29 0 0 1 50 75.92 A29 29 0 0 1 50 24.08 Z" fill="#0E0E0E"/></svg>`;
+  function ljDefaultMarkSVG(){ return __DEFAULT_MARK_SVG; }
+  // 缓存 logo 加载失败时回退默认图标(img.onerror inline 调用)。
+  window.ljDefaultMark = function(){ const s=document.createElement('span'); s.innerHTML=__DEFAULT_MARK_SVG; return s.firstChild; };
   const cur = document.body.dataset.page;
   // data-label:折叠态(≤1000px)hover 飞出标签用(span 此时被隐藏)。
   const link = (p, label, href, extra) =>
@@ -64,11 +71,24 @@
     link('members','成员与权限','members.html') +
     link('settings','系统设置','settings.html');
 
+  // 品牌即时渲染:整页重载时先读上次缓存的机构品牌,同步渲进 .sb-brand →
+  // 0 闪烁。无缓存(首次/未登录)才用默认「Lingjing 灵镜」占位。
+  // LJ.me() 返回后(bindAuth)会写回缓存并按需校正,几乎总相同 → 无可见跳变。
+  let __brandCache = null;
+  try { __brandCache = JSON.parse(localStorage.getItem('ljBrand') || 'null'); } catch {}
+  const __defaultBrand = `<span class="nm">Lingjing</span><span class="cjk">灵镜</span>`;
+  const __brandHTML = (__brandCache && __brandCache.showName)
+    ? `<span class="nm">${ljEscapeBrand(__brandCache.showName)}</span>`
+    : __defaultBrand;
+  const __markHTML = (__brandCache && __brandCache.logoUrl)
+    ? `<img src="${ljEscapeBrand(__brandCache.logoUrl)}" alt="" style="width:100%;height:100%;object-fit:contain;border-radius:7px" onerror="this.replaceWith(ljDefaultMark())">`
+    : ljDefaultMarkSVG();
+
   const sb = `
   <aside class="sidebar">
-    <a class="sb-brand" href="explore.html" title="灵镜 · 探索">
-      <span class="logo-mark" id="lj-brand-mark"><svg viewBox="0 0 100 100" fill="none"><circle cx="37" cy="50" r="29" stroke="#0E0E0E" stroke-width="5"/><circle cx="63" cy="50" r="29" stroke="#0E0E0E" stroke-width="5"/><path d="M50 24.08 A29 29 0 0 1 50 75.92 A29 29 0 0 1 50 24.08 Z" fill="#0E0E0E"/></svg></span>
-      <span class="nm">Lingjing</span><span class="cjk">灵镜</span>
+    <a class="sb-brand" href="explore.html" title="${ljEscapeBrand((__brandCache && __brandCache.showName) || '灵镜 · 探索')}">
+      <span class="logo-mark" id="lj-brand-mark">${__markHTML}</span>
+      ${__brandHTML}
     </a>
     <nav class="sb-nav">${items}</nav>
     <div class="sb-foot"><div class="deploy-tag"><span class="d"></span><span>云端服务 · 运行中</span></div></div>
@@ -153,28 +173,41 @@
       const display = u.displayName || u.username;
       // 机构品牌:已自定义(设过 logo 或改过名)→ 换侧边栏顶部名称 + Logo。
       // isCustomBranded 由服务端判定(单一真相源),前端不字符串比 '我的机构'。
-      if (u.isCustomBranded) {
-        const brand = document.querySelector('.sb-brand');
-        if (brand) {
-          // 侧边栏显示名优先「系统名称」brandName(管理员可改);回落机构名 tenantName。
-          const showName = u.brandName || u.tenantName;
+      // 缓存即时渲染:同步阶段已按 localStorage.ljBrand 渲染过;此处只在「真实值
+      // 与已渲染缓存不同」时才改 DOM(几乎总相同 → 无可见跳变),并写回缓存供下次切页。
+      const showName = u.isCustomBranded ? (u.brandName || u.tenantName) : '';
+      const logoUrl = u.orgLogoKey
+        ? '/api/org-logo/' + u.tenantId + '?v=' + encodeURIComponent(u.logoVer || '')
+        : '';
+      // 写回缓存(无自定义则清空 → 防换账号后串用上家品牌)。
+      try {
+        if (showName || logoUrl) localStorage.setItem('ljBrand', JSON.stringify({ showName, logoUrl }));
+        else localStorage.removeItem('ljBrand');
+      } catch {}
+
+      const brand = document.querySelector('.sb-brand');
+      if (brand) {
+        const nm = brand.querySelector('.nm'), cjk = brand.querySelector('.cjk');
+        // 名称:与当前渲染不同才改(缓存命中时通常已正确)。
+        const wantName = showName || 'Lingjing';
+        if (showName) {
           brand.title = showName;
-          const nm = brand.querySelector('.nm'), cjk = brand.querySelector('.cjk');
-          // 单名称模型:.nm 放显示名(textContent 防 XSS),隐藏双语 .cjk。
-          if (nm) nm.textContent = showName;
-          if (cjk) cjk.style.display = 'none';
+          if (nm && nm.textContent !== wantName) nm.textContent = wantName;
+          if (cjk && cjk.style.display !== 'none') cjk.style.display = 'none';
         }
       }
-      // 机构 Logo:有则替换默认品牌图标(公开读路径,?v= 破缓存,onerror 回退默认 SVG)。
-      if (u.orgLogoKey) {
+      // 机构 Logo:有则替换默认品牌图标;缓存命中时 src 已一致,onload 不会造成可见跳变。
+      if (logoUrl) {
         const mark = document.getElementById('lj-brand-mark');
-        if (mark) {
+        const curImg = mark && mark.querySelector('img');
+        // 已是同一 logo(缓存命中)→ 不重复换,避免无谓闪一下。
+        if (mark && !(curImg && curImg.getAttribute('src') === logoUrl)) {
           const img = new Image();
-          img.src = '/api/org-logo/' + u.tenantId + '?v=' + encodeURIComponent(u.logoVer || '');
+          img.src = logoUrl;
           img.alt = u.tenantName || '机构';
           img.style.cssText = 'width:100%;height:100%;object-fit:contain;border-radius:7px';
           img.onload = () => { mark.innerHTML = ''; mark.appendChild(img); };
-          // onerror:不替换,保留默认 SVG 图标
+          // onerror:不替换,保留当前图标
         }
       }
       if (acc){
@@ -193,7 +226,7 @@
         menu.style.display='none';
         const act = mi.dataset.act;
         // 账户/定价改为独立页跳转(原弹窗式个人信息/改密码已迁到 account.html)。
-        if (act==='logout'){ if(!(await window.LJConfirm({title:'登出',body:'确认要退出当前账号吗?',confirmText:'登出',danger:true})))return; try{await LJ.logout();}catch{} location.href='login.html'; }
+        if (act==='logout'){ if(!(await window.LJConfirm({title:'登出',body:'确认要退出当前账号吗?',confirmText:'登出',danger:true})))return; try{await LJ.logout();}catch{} try{localStorage.removeItem('ljBrand');}catch{} location.href='login.html'; }
         else if (act==='account'){ location.href='account.html'; }
         else if (act==='pricing'){ location.href='pricing.html'; }
       });
