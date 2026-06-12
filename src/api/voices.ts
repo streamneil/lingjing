@@ -38,7 +38,7 @@ voicesRouter.get('/voices', requireAuth, async (req: Request, res: Response) => 
     })),
   );
   const clones = await Promise.all(
-    listClones(req.user!.tenantId).map(async (v) => ({
+    listClones(req.user!.tenantId, req.user!.id, req.user!.role === 'admin').map(async (v) => ({
       id: v.id,
       name: v.name,
       kind: v.kind,
@@ -130,7 +130,7 @@ voicesRouter.post('/voices/design', requireRole('admin', 'creator'), async (req:
     const { voiceId, previewAudio } = await createDesignedVoice(voicePrompt, previewText, 'design');
 
     // 4. 入库(kind=design,无授权存证)
-    const v = createDesignVoice({ tenantId, name, providerVoiceId: voiceId });
+    const v = createDesignVoice({ tenantId, name, providerVoiceId: voiceId, userId: req.user!.id });
 
     // 5. 预览音频落 MinIO(供前端试听确认)
     let previewUrl: string | null = null;
@@ -148,9 +148,10 @@ voicesRouter.post('/voices/design', requireRole('admin', 'creator'), async (req:
 });
 
 voicesRouter.delete('/voices/:id', requireRole('admin', 'creator'), (req: Request, res: Response) => {
-  const v = getVoice(req.params.id!, req.user!.tenantId);
+  const isAdmin = req.user!.role === 'admin';
+  const v = getVoice(req.params.id!, req.user!.tenantId, req.user!.id, isAdmin);
   if (!v) return res.status(404).json({ error: '音色不存在' });
-  deleteVoice(req.params.id!, req.user!.tenantId);
+  deleteVoice(req.params.id!, req.user!.tenantId, req.user!.id, isAdmin);
   audit(req, 'delete_voice', req.params.id!);
   res.json({ ok: true });
 });

@@ -36,7 +36,6 @@
     `<a class="sb-item ${p===cur?'active':''}" href="${href}" data-label="${label}"${extra||''}>${ic(p)}<span>${label}</span></a>`;
 
   // 创作工具组:从 tools.js 注册表渲染(唯一真源)。徽章/即将上线角标随描述符。
-  // 全部工具是"发起生成"入口,viewer 无权 → data-requires-create 兜底隐藏。
   // ⚠️ shell.js 在 tools.js 之前注入(异步),首渲时 LJTools 可能未就绪 →
   //    先渲占位容器 #sb-tools,挂载后由 fillTools() 轮询 LJTools 就绪再填(否则创作工具组为空)。
   function buildToolItems(){
@@ -78,8 +77,7 @@
     const host = document.getElementById('sb-tools');
     if (!host) return;
     if (!host.children.length) host.innerHTML = buildToolItems(); // 首渲已填则不重复
-    // 若用户已知是 viewer(bindAuth 已跑),补隐藏新填的创作入口
-    if (window.__ljRole === 'viewer') host.querySelectorAll('[data-requires-create]').forEach(el => el.style.display='none');
+    // 角色精简为 管理员/创作者,均可创作 → 不再隐藏创作入口。
   }
   fillTools();
 
@@ -156,11 +154,11 @@
 
   // 登录态:拉当前用户填充机构名/账号;未登录 api.js 会跳 login。
   // 注意 shell.js 在 api.js 之前注入,这里延迟到 LJ 就绪后执行。
-  const ROLE_CN = {admin:'管理员',creator:'创作者',viewer:'查看者'};
+  const ROLE_CN = {admin:'管理员',creator:'创作者'};
   function bindAuth(){
     if (!window.LJ) { setTimeout(bindAuth, 30); return; }
     LJ.me().then(u => {
-      window.__ljRole = u.role; // 供 fillTools 在 bindAuth 后补隐藏 viewer 创作入口
+      window.__ljRole = u.role; // 当前角色(管理员/创作者)
       const acc = document.getElementById('lj-account');
       const menu = document.getElementById('lj-menu');
       const display = u.displayName || u.username;
@@ -248,16 +246,7 @@
         try{ await LJ.post('/me/password',{oldPassword:op,newPassword:np}); msg.style.color='var(--green)'; msg.textContent='✓ 密码已修改,其它设备已登出'; setTimeout(()=>{document.getElementById('lj-ov-pwd').classList.remove('on');save.disabled=false;save.textContent='确认修改';window.LJToast&&window.LJToast('✓ 密码已更新');},1400); }
         catch(e){ msg.style.color='var(--red)'; msg.textContent=e.message; save.disabled=false; save.textContent='确认修改'; }
       };
-      // viewer 隐藏"创建/发起生成"入口(前端兜底,后端已有 403 硬拦)
-      if (u.role === 'viewer') {
-        document.querySelectorAll('[data-requires-create]').forEach(el => el.style.display='none');
-        // viewer 误入任一创作工具页(无权)→ 引导回探索,而非停在点了报 403 的页。
-        // 工具页的 data-page 是 tools.js 的 key;用注册表判定当前页是否为工具页。
-        const onToolPage = window.LJTools && LJTools.get(document.body.dataset.page);
-        if (onToolPage) {
-          window.LJToast('查看者无创作权限,已返回探索','err'); location.href = 'explore.html';
-        }
-      }
+      // 角色精简为 管理员/创作者,两者都可创作 → 无需隐藏创作入口(原 viewer 隐藏逻辑已移除)。
     }).catch(()=>{ /* 未登录已被 api.js 跳转 */ });
 
     // 顶栏真实余额

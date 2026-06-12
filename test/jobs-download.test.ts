@@ -47,6 +47,7 @@ const owner = new Client(app);
 const other = new Client(app);
 
 let tid = '';
+let ownerId = '';
 let imgJobId = '';
 let vidJobId = '';
 let runningJobId = '';
@@ -54,7 +55,7 @@ let runningJobId = '';
 beforeAll(async () => {
   const t = createTenant('下载测试台');
   tid = t.id;
-  createUser(t.id, 'dlowner', 'pw123456', 'creator');
+  ownerId = createUser(t.id, 'dlowner', 'pw123456', 'creator').id;
   grant(t.id, 100000);
   expect((await owner.login('dlowner', 'pw123456')).status).toBe(200);
 
@@ -64,16 +65,16 @@ beforeAll(async () => {
   grant(t2.id, 100000);
   expect((await other.login('dlother', 'pw123456')).status).toBe(200);
 
-  // 图片 job:两产物(JSON key 数组)→ done
-  imgJobId = enqueueJob('image', { prompt: 'x' }, tid);
+  // 图片 job:两产物(JSON key 数组)→ done(归属 dlowner,账号隔离后本人才看得到)
+  imgJobId = enqueueJob('image', { prompt: 'x' }, tid, ownerId);
   markDone(imgJobId, JSON.stringify(['img-key-0', 'img-key-1']), 'none', 'image');
 
   // 视频 job:单产物(裸 key)→ done
-  vidJobId = enqueueJob('video', { prompt: 'y' }, tid);
+  vidJobId = enqueueJob('video', { prompt: 'y' }, tid, ownerId);
   markDone(vidJobId, 'vid-key', 'none', 'video');
 
   // 未完成 job(running)
-  runningJobId = enqueueJob('image', { prompt: 'z' }, tid);
+  runningJobId = enqueueJob('image', { prompt: 'z' }, tid, ownerId);
 }, 30000);
 
 describe('GET /api/jobs/:id/download/:idx', () => {

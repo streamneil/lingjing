@@ -390,14 +390,14 @@
     document.getElementById('recent').innerHTML = `<div class="recent-empty">
       <div class="ei">${svg('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>')}</div>
       <div class="et">你的第一条作品会出现在这里</div>
-      <div class="ed">${canCreate?'从一个模板起步，几分钟就能产出一条合规的数字人内容。':'你当前是查看者，可以先浏览上面的案例与工具。'}</div>
+      <div class="ed">从一个模板起步，几分钟就能产出一条合规的数字人内容。</div>
       ${cta}</div>`;
   }
   // 最近作品渲染:接收已拉好的 jobs(null=请求失败)与角色,消除二次 /jobs 与 __ljRole 时序竞争
   function renderRecent(jobs, role){
     const box=document.getElementById('recent');
     if(jobs===null){ renderRecentErr(); return; }
-    if(!jobs.length){ renderRecentEmpty(role!=='viewer'); return; }
+    if(!jobs.length){ renderRecentEmpty(true); return; }
     box.innerHTML = jobs.slice(0,8).map(jobCard).join('');
   }
   function renderRecentErr(){

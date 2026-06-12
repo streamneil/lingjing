@@ -15,7 +15,9 @@ let tenantId: string;
 beforeAll(() => {
   tenantId = createTenant('设置测试台').id;
   createUser(tenantId, 'setadmin', 'pw123456', 'admin'); // 不能用保留字 admin(T7)
-  createUser(tenantId, 'setviewer', 'pw123456', 'viewer');
+  // 原 setviewer(viewer):viewer 已废弃 → 建为 creator。settings 读 requireAuth(creator 可读),
+  // 写 admin-only(creator 被拒 403)→ "非 admin 可读不可改" 的意图不变。
+  createUser(tenantId, 'setviewer', 'pw123456', 'creator');
 });
 
 async function loginAs(u: string) {
@@ -94,11 +96,11 @@ describe('系统设置', () => {
     expect((await c.get('/api/settings')).body.defaultResolution).toBe('480P');
   });
 
-  it('viewer 可读但不能改设置 → 403', async () => {
+  it('非 admin 可读但不能改设置 → 403', async () => {
     const c = await loginAs('setviewer');
-    expect((await c.get('/api/settings')).status).toBe(200); // viewer 可读
+    expect((await c.get('/api/settings')).status).toBe(200); // 非 admin 可读
     const put = await c.put('/api/settings', { defaultResolution: '720P' });
-    expect(put.status).toBe(403); // viewer 不能改(requireRole 先于 body 校验)
+    expect(put.status).toBe(403); // 非 admin 不能改(requireRole 先于 body 校验)
   });
 });
 

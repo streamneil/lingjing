@@ -4,7 +4,7 @@
 // 必须留"本人授权"凭证。未授权直接拒绝(政企法律门票 + 百炼接口可能硬性要求)。
 
 import { randomUUID } from 'node:crypto';
-import { db, type AvatarRow, type AvatarKind } from '../db/index.js';
+import { db, scopeByActor, type AvatarRow, type AvatarKind } from '../db/index.js';
 import { TERMS_VERSION } from '../legal/index.js';
 
 const now = () => Date.now();
@@ -72,18 +72,20 @@ export function createCustomAvatar(p: CreateAvatarParams): AvatarRow {
     authorization_id: authId,
     orientation: p.orientation ?? 'portrait',
     is_default: 0,
+    created_by: p.userId, // 账号隔离:创建者
     created_at: now(),
   };
   db.prepare(
-    `INSERT INTO avatar (id,tenant_id,name,kind,status,source_key,thumb_url,authorization_id,orientation,is_default,created_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-  ).run(av.id, av.tenant_id, av.name, av.kind, av.status, av.source_key, av.thumb_url, av.authorization_id, av.orientation, av.is_default, av.created_at);
+    `INSERT INTO avatar (id,tenant_id,name,kind,status,source_key,thumb_url,authorization_id,orientation,is_default,created_by,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(av.id, av.tenant_id, av.name, av.kind, av.status, av.source_key, av.thumb_url, av.authorization_id, av.orientation, av.is_default, av.created_by, av.created_at);
   return av;
 }
 
-/** C6:重命名形象。 */
-export function renameAvatar(id: string, tenantId: string, name: string): boolean {
-  const res = db.prepare(`UPDATE avatar SET name=? WHERE id=? AND tenant_id=?`).run(name, id, tenantId);
+/** C6:重命名形象(账号隔离:creator 仅改自己的;admin 任意)。 */
+export function renameAvatar(id: string, tenantId: string, name: string, actingUserId: string, isAdmin: boolean): boolean {
+  const scope = scopeByActor(actingUserId, isAdmin);
+  const res = db.prepare(`UPDATE avatar SET name=? WHERE id=? AND tenant_id=?${scope.clause}`).run(name, id, tenantId, ...scope.params);
   return res.changes === 1;
 }
 
@@ -96,32 +98,37 @@ export const setDefaultAvatar = db.transaction((id: string, tenantId: string): b
   return true;
 });
 
-/** 当前租户的默认形象(没有则 null)。 */
+/** 当前租户的默认形象(没有则 null)。**保持租户级**:is_default 是 tenant 单例,账号化会让多数创作者无默认。 */
 export function getDefaultAvatar(tenantId: string): AvatarRow | null {
   return (db.prepare(`SELECT * FROM avatar WHERE tenant_id=? AND is_default=1`).get(tenantId) as AvatarRow) ?? null;
 }
 
-/** 列某租户的自定义形象。 */
-export function listCustom(tenantId: string): AvatarRow[] {
+/** 列自定义形象。账号隔离:creator 仅自己建的;admin 全机构(含 NULL 老资产)。 */
+export function listCustom(tenantId: string, actingUserId: string, isAdmin: boolean): AvatarRow[] {
+  const scope = scopeByActor(actingUserId, isAdmin);
   return db
-    .prepare(`SELECT * FROM avatar WHERE tenant_id=? ORDER BY created_at DESC`)
-    .all(tenantId) as AvatarRow[];
+    .prepare(`SELECT * FROM avatar WHERE tenant_id=?${scope.clause} ORDER BY created_at DESC`)
+    .all(tenantId, ...scope.params) as AvatarRow[];
 }
 
-export function getAvatar(id: string, tenantId: string): AvatarRow | undefined {
-  return db.prepare(`SELECT * FROM avatar WHERE id=? AND tenant_id=?`).get(id, tenantId) as
+/** 取单个形象(账号隔离)。非本人非 admin → undefined → 路由 404。 */
+export function getAvatar(id: string, tenantId: string, actingUserId: string, isAdmin: boolean): AvatarRow | undefined {
+  const scope = scopeByActor(actingUserId, isAdmin);
+  return db.prepare(`SELECT * FROM avatar WHERE id=? AND tenant_id=?${scope.clause}`).get(id, tenantId, ...scope.params) as
     | AvatarRow
     | undefined;
 }
 
-export function deleteAvatar(id: string, tenantId: string): boolean {
-  const res = db.prepare(`DELETE FROM avatar WHERE id=? AND tenant_id=?`).run(id, tenantId);
+export function deleteAvatar(id: string, tenantId: string, actingUserId: string, isAdmin: boolean): boolean {
+  const scope = scopeByActor(actingUserId, isAdmin);
+  const res = db.prepare(`DELETE FROM avatar WHERE id=? AND tenant_id=?${scope.clause}`).run(id, tenantId, ...scope.params);
   return res.changes === 1;
 }
 
-/** 校验 avatarRef 是否对该租户可用(预置 or 本租户自定义)—— 供生成时校验。 */
-export function isUsableAvatar(avatarRef: string, tenantId: string): boolean {
+/** 校验 avatarRef 是否可用于生成。预置形象全员可用;自定义形象**账号隔离**(用户定:自己的不共享):
+ *  creator 仅认自己建的;admin 认本机构任意。 */
+export function isUsableAvatar(avatarRef: string, tenantId: string, actingUserId: string, isAdmin: boolean): boolean {
   if (isPreset(avatarRef)) return true;
-  const av = getAvatar(avatarRef, tenantId);
+  const av = getAvatar(avatarRef, tenantId, actingUserId, isAdmin);
   return !!av && av.status === 'ready';
 }

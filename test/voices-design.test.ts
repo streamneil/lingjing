@@ -3,7 +3,7 @@
 // 覆盖:
 //   - createDesignVoice 入库 kind=design、status=ready、无授权(authorization_id null)
 //   - countCustomVoices / countRecentDesignVoices 配额 helper
-//   - POST /voices/design:未登录 401、viewer 403、空/超长 prompt 400、
+//   - POST /voices/design:未登录 401、空/超长 prompt 400、
 //     总数上限 429、频率上限 429、正常 201 + previewUrl + 入库 kind=design
 
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
@@ -43,12 +43,16 @@ const creator = new Client(app);
 const viewer = new Client(app);
 
 let tid = '';
+let creatorId = '';
 
 beforeAll(async () => {
   const t = createTenant('设计测试台');
   tid = t.id;
-  createUser(t.id, 'dgcreator', 'pw123456', 'creator');
-  createUser(t.id, 'dgviewer', 'pw123456', 'viewer');
+  const cu = createUser(t.id, 'dgcreator', 'pw123456', 'creator');
+  creatorId = cu.id;
+  // 第二个非 admin 账号(原 viewer,role 已废弃 → 用 creator,需扩席位避免 SEATS_FULL)
+  db.prepare('UPDATE tenant SET max_creator_seats=? WHERE id=?').run(10, t.id);
+  createUser(t.id, 'dgviewer', 'pw123456', 'creator');
   expect((await creator.login('dgcreator', 'pw123456')).status).toBe(200);
   expect((await viewer.login('dgviewer', 'pw123456')).status).toBe(200);
 }, 30000);
@@ -59,20 +63,20 @@ beforeEach(() => {
 
 describe('createDesignVoice 服务', () => {
   it('入库 kind=design、ready、无授权', () => {
-    const v = voices.createDesignVoice({ tenantId: tid, name: '温柔女声', providerVoiceId: 'qwen-x' });
+    const v = voices.createDesignVoice({ tenantId: tid, name: '温柔女声', providerVoiceId: 'qwen-x', userId: creatorId });
     expect(v.kind).toBe('design');
     expect(v.status).toBe('ready');
     expect(v.provider_voice_id).toBe('qwen-x');
     expect(v.authorization_id).toBeNull(); // 合成音色无真人,无授权存证
-    expect(voices.isUsableVoice(v.id, tid)).toBe(true);
+    expect(voices.isUsableVoice(v.id, tid, creatorId, false)).toBe(true);
   });
   it('countCustomVoices 计克隆+设计', () => {
-    voices.createDesignVoice({ tenantId: tid, name: 'a', providerVoiceId: 'q1' });
+    voices.createDesignVoice({ tenantId: tid, name: 'a', providerVoiceId: 'q1', userId: creatorId });
     voices.createCloneVoice({ tenantId: tid, userId: 'u', name: 'b', sourceKey: 'k', consent: true, providerVoiceId: 'c1' });
     expect(voices.countCustomVoices(tid)).toBe(2);
   });
   it('countRecentDesignVoices 只计窗口内设计', () => {
-    voices.createDesignVoice({ tenantId: tid, name: 'a', providerVoiceId: 'q1' });
+    voices.createDesignVoice({ tenantId: tid, name: 'a', providerVoiceId: 'q1', userId: creatorId });
     expect(voices.countRecentDesignVoices(tid, 60_000)).toBe(1); // 近 1 分钟内 → 计入
     expect(voices.countRecentDesignVoices(tid, -1)).toBe(0); // since=now+1,无任何 created_at 满足 → 0
   });
@@ -85,10 +89,8 @@ describe('POST /api/voices/design', () => {
     expect(r.status).toBe(401);
   });
 
-  it('viewer → 403', async () => {
-    const r = await viewer.post('/api/voices/design', { name: 'x', voicePrompt: '年轻女声' });
-    expect(r.status).toBe(403);
-  });
+  // 原 "viewer → 403":viewer 角色已废弃,该端点仅放行 admin/creator,
+  // 再无可被拒的已登录角色 → RBAC 拒绝场景消失,删除此用例(未登录 401 已覆盖鉴权门)。
 
   it('空 voicePrompt → 400', async () => {
     const r = await creator.post('/api/voices/design', { name: 'x', voicePrompt: '   ' });
@@ -105,14 +107,14 @@ describe('POST /api/voices/design', () => {
     expect(r.status).toBe(201);
     expect(r.body.status).toBe('ready');
     expect(r.body.previewUrl).toContain('signed');
-    const v = voices.getVoice(r.body.id, tid);
+    const v = voices.getVoice(r.body.id, tid, creatorId, false);
     expect(v?.kind).toBe('design');
   });
 
   it('总数上限 → 429', async () => {
     // 直插 50 个自建音色顶满配额
     for (let i = 0; i < 50; i++)
-      voices.createDesignVoice({ tenantId: tid, name: 'q' + i, providerVoiceId: 'q' + i });
+      voices.createDesignVoice({ tenantId: tid, name: 'q' + i, providerVoiceId: 'q' + i, userId: creatorId });
     const r = await creator.post('/api/voices/design', { name: 'x', voicePrompt: '年轻女声' });
     expect(r.status).toBe(429);
     expect(r.body.error).toContain('上限');
@@ -121,7 +123,7 @@ describe('POST /api/voices/design', () => {
   it('创建频率上限 → 429', async () => {
     // 窗口内已有 5 个设计(频率上限),再建 → 429(未顶总数上限)
     for (let i = 0; i < 5; i++)
-      voices.createDesignVoice({ tenantId: tid, name: 'r' + i, providerVoiceId: 'r' + i });
+      voices.createDesignVoice({ tenantId: tid, name: 'r' + i, providerVoiceId: 'r' + i, userId: creatorId });
     const r = await creator.post('/api/voices/design', { name: 'x', voicePrompt: '年轻女声' });
     expect(r.status).toBe(429);
     expect(r.body.error).toContain('频繁');

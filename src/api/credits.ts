@@ -18,12 +18,12 @@ creditsRouter.get('/credits/balance', requireAuth, (req: Request, res: Response)
 
 // 消费记录(可查询,验收 H3)
 creditsRouter.get('/credits/ledger', requireAuth, (req: Request, res: Response) => {
-  return res.json(ledger(req.user!.tenantId));
+  return res.json(ledger(req.user!.tenantId, 100, req.user!.id, req.user!.role === 'admin'));
 });
 
 // 消费记录 CSV 导出(验收 H3:可导出)
 creditsRouter.get('/credits/ledger.csv', requireAuth, (req: Request, res: Response) => {
-  const rows = ledger(req.user!.tenantId, 10000);
+  const rows = ledger(req.user!.tenantId, 10000, req.user!.id, req.user!.role === 'admin');
   const KIND_CN: Record<string, string> = { grant: '发放', reserve: '预扣', settle: '结算', release: '释放' };
   // 工具类型 → 中文场景名(与前端 billing.html TOOL_CN 同口径)
   const TOOL_CN: Record<string, string> = {
@@ -66,5 +66,5 @@ creditsRouter.get('/credits/warning', requireAuth, (req: Request, res: Response)
 
 // 审计日志只读:登录即可看(团队透明,租户隔离);设置等写操作仍 admin-only。
 creditsRouter.get('/audit', requireAuth, (req: Request, res: Response) => {
-  return res.json(listAudit(req.user!.tenantId));
+  return res.json(listAudit(req.user!.tenantId, 200, req.user!.id, req.user!.role === 'admin'));
 });

@@ -96,7 +96,7 @@ type JobBuildResult =
   | { ok: false; status: number; error: string; extra?: Record<string, unknown> };
 
 /** 校验并构建 video(AI 虚拟人)job 入参 + 计价。 */
-function buildVideoJob(body: Record<string, unknown>, tid: string): JobBuildResult {
+function buildVideoJob(body: Record<string, unknown>, tid: string, actingUserId: string, isAdmin: boolean): JobBuildResult {
   const { avatarRef, voiceRef, script, resolution, ratio, speed, volume } =
     body as Partial<VideoGenInput>;
   if (!avatarRef || typeof avatarRef !== 'string')
@@ -107,10 +107,10 @@ function buildVideoJob(body: Record<string, unknown>, tid: string): JobBuildResu
     return { ok: false, status: 400, error: '缺少 script(文案)' };
   if (script.length > 2000)
     return { ok: false, status: 400, error: '文案超过 2000 字上限', extra: { length: script.length } };
-  if (!isUsableAvatar(avatarRef, tid))
-    return { ok: false, status: 400, error: '形象不可用(不存在或非本机构)' };
-  if (!isUsableVoice(voiceRef, tid))
-    return { ok: false, status: 400, error: '音色不可用(不存在或非本机构)' };
+  if (!isUsableAvatar(avatarRef, tid, actingUserId, isAdmin))
+    return { ok: false, status: 400, error: '形象不可用(不存在、非本机构、或非本人创建)' };
+  if (!isUsableVoice(voiceRef, tid, actingUserId, isAdmin))
+    return { ok: false, status: 400, error: '音色不可用(不存在、非本机构、或非本人创建)' };
   if (speed !== undefined && (typeof speed !== 'number' || speed < 0.5 || speed > 2))
     return { ok: false, status: 400, error: '语速需在 0.5–2 倍之间' };
   if (volume !== undefined && (typeof volume !== 'number' || volume < 0 || volume > 100))
@@ -263,14 +263,14 @@ function buildImageJob(body: Record<string, unknown>): JobBuildResult {
 /** 校验并构建 tts(文转语音)job 入参 + 计价。
  *  全 Qwen-TTS:无「品质」模型选择(系统按是否带情绪自动选 flash/instruct,见 worker.resolveVoice)。
  *  计价扁价(estimateTtsCost 默认 0.02/字);情绪/音高对所有音色开放(系统音色用 instruct 落地)。 */
-function buildTtsJob(body: Record<string, unknown>, tid: string): JobBuildResult {
+function buildTtsJob(body: Record<string, unknown>, tid: string, actingUserId: string, isAdmin: boolean): JobBuildResult {
   const { text, voiceRef } = body as Partial<TtsGenInput>;
   if (!text || typeof text !== 'string' || text.trim().length === 0)
     return { ok: false, status: 400, error: '缺少 text(配音文本)' };
   if (!voiceRef || typeof voiceRef !== 'string')
     return { ok: false, status: 400, error: '缺少 voiceRef(音色)' };
-  if (!isUsableVoice(voiceRef, tid))
-    return { ok: false, status: 400, error: '音色不可用(不存在或非本机构)' };
+  if (!isUsableVoice(voiceRef, tid, actingUserId, isAdmin))
+    return { ok: false, status: 400, error: '音色不可用(不存在、非本机构、或非本人创建)' };
 
   // 情绪 / 语速 / 音高(T-TTS-EMOTION):Qwen 系统音色经 instruct 模型落地;复刻/设计忽略(worker 处理)。
   // 语言(language_type):对所有音色生效(合成参数,非指令)。
@@ -608,8 +608,11 @@ async function buildVideoEditJob(body: Record<string, unknown>): Promise<JobBuil
 
 // 封闭 allowlist:type → builder。Object.create(null) 防原型链污染(type='__proto__' 取不到)。
 // builder 可同步可异步(eng-review E1:video_edit 须 await 读 sidecar;同步 builder 被 await 后行为不变)。
-const JOB_BUILDERS: Record<string, (body: Record<string, unknown>, tid: string) => JobBuildResult | Promise<JobBuildResult>> =
-  Object.assign(Object.create(null), {
+// 账号隔离:video/tts 的形象/音色校验需 actingUserId+isAdmin;其余 builder 不用,忽略多余参数。
+const JOB_BUILDERS: Record<
+  string,
+  (body: Record<string, unknown>, tid: string, actingUserId: string, isAdmin: boolean) => JobBuildResult | Promise<JobBuildResult>
+> = Object.assign(Object.create(null), {
     video: buildVideoJob,
     ai_image: (body: Record<string, unknown>) => buildImageJob(body),
     video_t2v: (body: Record<string, unknown>) => buildVideoT2VJob(body),
@@ -633,7 +636,7 @@ jobsRouter.post('/jobs', requireRole('admin', 'creator'), async (req: Request, r
     return res.status(400).json({ error: `不支持的任务类型:${type}` });
   }
 
-  const built = await builder(body, tid);
+  const built = await builder(body, tid, req.user!.id, req.user!.role === 'admin');
   if (!built.ok) {
     return res.status(built.status).json({ error: built.error, ...(built.extra ?? {}) });
   }
@@ -933,7 +936,7 @@ jobsRouter.get('/edit-models', requireAuth, (_req: Request, res: Response) => {
 
 // 作品列表 — 任何登录角色(含 viewer)可读本租户作品
 jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
-  const rows = listJobsForTenant(req.user!.tenantId);
+  const rows = listJobsForTenant(req.user!.tenantId, req.user!.id, req.user!.role === 'admin');
   const jobs = await Promise.all(
     rows.map(async (j) => {
       // 成品签名 URL:支持多产物(图片多图)。向后兼容旧视频裸 key(signOutputUrls 内处理)。
@@ -1019,7 +1022,7 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
 
 // 状态快照(前端轮询)— 任何登录角色可读,但只能读本租户的
 jobsRouter.get('/jobs/:id', requireAuth, async (req: Request, res: Response) => {
-  const job = getJobForTenant(req.params.id!, req.user!.tenantId);
+  const job = getJobForTenant(req.params.id!, req.user!.tenantId, req.user!.id, req.user!.role === 'admin');
   if (!job) return res.status(404).json({ error: '任务不存在' });
 
   const payload: Record<string, unknown> = {
@@ -1056,8 +1059,8 @@ jobsRouter.get('/jobs/:id', requireAuth, async (req: Request, res: Response) => 
 // attachment 回传(同源,无 CORS,<a download> 直接生效)。覆盖图/视频/未来音频。
 // 鉴权:复用 getJobForTenant 做租户隔离,只能下本机构的成品;越权/越界一律 404。
 jobsRouter.get('/jobs/:id/download/:idx', requireAuth, async (req: Request, res: Response) => {
-  const job = getJobForTenant(req.params.id!, req.user!.tenantId);
-  // 不存在 / 非本租户 / 未完成 / 无产物 → 统一 404(不泄露任务存在性)
+  const job = getJobForTenant(req.params.id!, req.user!.tenantId, req.user!.id, req.user!.role === 'admin');
+  // 不存在 / 非本租户 / 非本人(非 admin) / 未完成 / 无产物 → 统一 404(不泄露任务存在性)
   if (!job || job.status !== 'done' || !job.output_url) return res.status(404).end();
 
   const keys = parseOutputKeys(job.output_url);
@@ -1092,14 +1095,14 @@ jobsRouter.get('/jobs/:id/download/:idx', requireAuth, async (req: Request, res:
 
 // 失败重试 — 仅 admin/creator,且只能重试本租户的
 jobsRouter.post('/jobs/:id/retry', requireRole('admin', 'creator'), (req: Request, res: Response) => {
-  const ok = retryJob(req.params.id!, req.user!.tenantId);
-  if (!ok) return res.status(409).json({ error: '任务不存在、非本机构、或非 failed 状态' });
+  const ok = retryJob(req.params.id!, req.user!.tenantId, req.user!.id, req.user!.role === 'admin');
+  if (!ok) return res.status(409).json({ error: '任务不存在、非本机构、非本人、或非 failed 状态' });
   return res.json({ id: req.params.id, status: 'queued' });
 });
 
 // 删除作品 — 仅 admin/creator,租户隔离,生成中不可删
 jobsRouter.delete('/jobs/:id', requireRole('admin', 'creator'), (req: Request, res: Response) => {
-  const ok = deleteJobForTenant(req.params.id!, req.user!.tenantId);
-  if (!ok) return res.status(409).json({ error: '任务不存在、非本机构、或生成中不可删' });
+  const ok = deleteJobForTenant(req.params.id!, req.user!.tenantId, req.user!.id, req.user!.role === 'admin');
+  if (!ok) return res.status(409).json({ error: '任务不存在、非本机构、非本人、或生成中不可删' });
   return res.json({ ok: true });
 });

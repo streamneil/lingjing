@@ -156,7 +156,7 @@
 <script src="shell.js"></script>
 <script src="api.js"></script>
 <script>
-  const ROLE_CN={admin:'管理员',creator:'创作者',viewer:'查看者'};
+  const ROLE_CN={admin:'管理员',creator:'创作者'};
   function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
   function fmt(ts){const d=new Date(ts);const p=n=>String(n).padStart(2,'0');return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;}
   const BADGE={done:['rb-ok','已完成'],running:['rb-run','生成中'],queued:['rb-q','排队中'],failed:['rb-err','失败']};
