@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>账户 · 灵镜</title>
+  <link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
+  <link rel="stylesheet" href="app.css">
+  <style>
+    /* ── 账户页(独立页)── */
+    .ac-grid{ display:grid; grid-template-columns:1fr 1.4fr; gap:18px; }
+    .ac-card{ background:var(--card); border:1px solid var(--line); border-radius:16px; padding:24px; }
+    .ac-card h2{ font-size:15px; font-weight:700; margin-bottom:4px; }
+    .ac-card .sub{ font-size:12px; color:var(--t3); margin-bottom:18px; }
+    .ac-id{ display:flex; align-items:center; gap:14px; margin-bottom:20px; }
+    .ac-av{ width:56px; height:56px; border-radius:14px; background:var(--t1); color:#0A0A0B; display:grid; place-items:center; font-weight:800; font-size:24px; font-family:var(--f-en,'Manrope',sans-serif); }
+    .ac-name{ font-size:18px; font-weight:700; }
+    .ac-meta{ font-size:12px; color:var(--t3); font-family:var(--f-mono); margin-top:3px; }
+    .ac-rbdg{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:10.5px; font-weight:600; margin-left:8px; vertical-align:middle; }
+    .ac-rbdg-admin{ background:rgba(255,178,62,.13); color:var(--amber); }
+    .ac-rbdg-creator{ background:var(--blue-bg,rgba(77,141,255,.13)); color:var(--blue); }
+    .ac-kv{ font-size:12.5px; color:var(--t3); line-height:2.1; }
+    .ac-kv .row{ display:flex; justify-content:space-between; }
+    .ac-kv .row span:last-child{ color:var(--t2); }
+    .ac-field{ margin-bottom:16px; }
+    .ac-field label{ display:block; font-size:12px; color:var(--t3); margin-bottom:7px; }
+    .ac-field input{ width:100%; box-sizing:border-box; background:var(--field,#101012); border:1px solid var(--line); border-radius:10px; padding:11px 13px; color:var(--t1); font-size:14px; font-family:inherit; outline:none; }
+    .ac-field input:disabled{ color:var(--t3); }
+    .ac-field input:focus{ border-color:var(--blue); }
+    .ac-hint{ font-size:11px; color:var(--t4); margin-top:6px; line-height:1.5; }
+    .ac-pill{ padding:10px 20px; border-radius:999px; font-size:13.5px; font-weight:600; font-family:inherit; cursor:pointer; border:none; background:var(--t1); color:#0A0A0B; min-height:40px; }
+    .ac-pill:disabled{ opacity:.5; cursor:not-allowed; }
+    .ac-div{ border-top:1px solid var(--line); margin:22px 0; }
+    .ac-msg{ font-size:12.5px; min-height:16px; margin-top:8px; color:var(--red); }
+    @media (max-width:720px){ .ac-grid{ grid-template-columns:1fr; } }
+  </style>
+</head>
+
+<body data-page="account" data-crumb="账户 > 我的账户">
+  <div class="shell" id="shell-mount">
+    <div class="main-col">
+      <main class="page">
+        <div class="ph">
+          <div><h1 class="t-h1">账户</h1><p class="desc">管理你的昵称与登录密码。机构信息由管理员在「系统设置」维护。</p></div>
+        </div>
+
+        <div class="ac-grid">
+          <!-- 左:身份卡 -->
+          <div class="ac-card">
+            <div class="ac-id">
+              <div class="ac-av" id="acAv">…</div>
+              <div>
+                <div class="ac-name" id="acName">…<span class="ac-rbdg" id="acRole"></span></div>
+                <div class="ac-meta" id="acUser"></div>
+              </div>
+            </div>
+            <div class="ac-div" style="margin:14px 0"></div>
+            <div class="ac-kv">
+              <div class="row"><span>所属机构</span><span id="acTenant">—</span></div>
+              <div class="row"><span>角色</span><span id="acRole2">—</span></div>
+            </div>
+          </div>
+
+          <!-- 右:可编辑 -->
+          <div class="ac-card">
+            <h2>昵称</h2>
+            <div class="sub">昵称会展示在作品归属、成员列表与头像。</div>
+            <div class="ac-field">
+              <label>昵称(展示名)</label>
+              <input id="acDn" maxlength="30" placeholder="你的昵称">
+            </div>
+            <div class="ac-field">
+              <label>登录用户名</label>
+              <input id="acUn" disabled>
+              <div class="ac-hint">登录名由管理员开户时设定,不可自行修改。</div>
+            </div>
+            <button class="ac-pill" id="acSaveDn" onclick="saveDn()">保存昵称</button>
+            <div class="ac-msg" id="acDnMsg"></div>
+
+            <div class="ac-div"></div>
+
+            <h2>登录密码</h2>
+            <div class="sub">定期更换密码,保护账号安全。修改后其它设备会被登出。</div>
+            <div class="ac-field">
+              <label>原密码</label>
+              <input id="acOp" type="password" placeholder="当前密码">
+            </div>
+            <div class="ac-field">
+              <label>新密码(≥6 位)</label>
+              <input id="acNp" type="password" placeholder="新密码">
+            </div>
+            <div class="ac-field">
+              <label>确认新密码</label>
+              <input id="acNp2" type="password" placeholder="再次输入">
+            </div>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--t3);cursor:pointer;margin-bottom:12px"><input type="checkbox" id="acPwShow" style="width:auto;margin:0"> 显示密码</label>
+            <button class="ac-pill" id="acSavePw" onclick="savePw()">确认修改</button>
+            <div class="ac-msg" id="acPwMsg"></div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="shell.js"></script>
+  <script src="api.js"></script>
+  <script>
+    const ROLE_CN = { admin:['ac-rbdg-admin','管理员'], creator:['ac-rbdg-creator','创作者'] };
+
+    async function loadMe(){
+      const u = await LJ.me();
+      const display = u.displayName || u.username;
+      document.getElementById('acAv').textContent = display.slice(0,1).toUpperCase();
+      document.getElementById('acName').childNodes[0].textContent = display;
+      const r = ROLE_CN[u.role] || ['ac-rbdg-creator', u.role];
+      const rb = document.getElementById('acRole'); rb.className = 'ac-rbdg '+r[0]; rb.textContent = r[1];
+      document.getElementById('acUser').textContent = '@' + u.username;
+      document.getElementById('acTenant').textContent = u.tenantName || '—';
+      document.getElementById('acRole2').textContent = r[1];
+      document.getElementById('acDn').value = u.displayName || '';
+      document.getElementById('acUn').value = u.username;
+    }
+
+    async function saveDn(){
+      const dn = document.getElementById('acDn').value.trim();
+      const msg = document.getElementById('acDnMsg'); msg.style.color='var(--red)';
+      if(!dn){ msg.textContent='昵称不能为空'; return; }
+      const btn = document.getElementById('acSaveDn'); btn.disabled=true;
+      try{
+        await LJ.put('/me',{displayName:dn});
+        document.getElementById('acAv').textContent = dn.slice(0,1).toUpperCase();
+        document.getElementById('acName').childNodes[0].textContent = dn;
+        // 同步顶栏头像/菜单名
+        const acc=document.getElementById('lj-account'); if(acc) acc.textContent=dn.slice(0,1).toUpperCase();
+        const mn=document.getElementById('lj-menu-name'); if(mn) mn.textContent=dn;
+        msg.style.color='var(--green)'; msg.textContent='✓ 已保存';
+        window.LJToast && window.LJToast('✓ 昵称已更新');
+        setTimeout(()=>{ msg.textContent=''; }, 1500);
+      }catch(e){ msg.textContent=e.message||'保存失败'; }
+      finally{ btn.disabled=false; }
+    }
+
+    // 显示密码切换 + 即时一致性
+    const pwShow=document.getElementById('acPwShow');
+    pwShow.onchange=()=>['acOp','acNp','acNp2'].forEach(id=>document.getElementById(id).type=pwShow.checked?'text':'password');
+    const np=document.getElementById('acNp'), np2=document.getElementById('acNp2'), pwMsg=document.getElementById('acPwMsg');
+    function pwCheck(){
+      if(np2.value && np.value!==np2.value){ pwMsg.style.color='var(--amber)'; pwMsg.textContent='两次新密码不一致'; }
+      else if(np.value && np.value.length<6){ pwMsg.style.color='var(--amber)'; pwMsg.textContent='新密码至少 6 位'; }
+      else pwMsg.textContent='';
+    }
+    np.addEventListener('input',pwCheck); np2.addEventListener('input',pwCheck);
+
+    async function savePw(){
+      const op=document.getElementById('acOp').value, n=document.getElementById('acNp').value, n2=document.getElementById('acNp2').value;
+      const msg=document.getElementById('acPwMsg'); msg.style.color='var(--red)';
+      if(!op||!n){ msg.textContent='请填写原密码和新密码'; return; }
+      if(n!==n2){ msg.textContent='两次新密码不一致'; return; }
+      if(n.length<6){ msg.textContent='新密码至少 6 位'; return; }
+      const btn=document.getElementById('acSavePw'); btn.disabled=true; btn.textContent='修改中…';
+      try{
+        await LJ.post('/me/password',{oldPassword:op,newPassword:n});
+        msg.style.color='var(--green)'; msg.textContent='✓ 密码已修改,其它设备已登出';
+        ['acOp','acNp','acNp2'].forEach(id=>document.getElementById(id).value='');
+        window.LJToast && window.LJToast('✓ 密码已更新');
+      }catch(e){ msg.textContent=e.message||'修改失败'; }
+      finally{ btn.disabled=false; btn.textContent='确认修改'; }
+    }
+
+    loadMe();
+  </script>
+</body>
+</html>
