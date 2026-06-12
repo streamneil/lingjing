@@ -21,6 +21,7 @@ import {
   cancelOrder,
   requestInvoice,
   getInvoiceForActor,
+  getInvoiceByOrder,
   listInvoicesForActor,
   getInvoiceProfile,
   upsertInvoiceProfile,
@@ -141,7 +142,16 @@ ordersRouter.post('/orders/:id/cancel', requireRole('admin', 'creator'), (req: R
 ordersRouter.get('/orders/:id/receipt', requireAuth, async (req: Request, res: Response) => {
   const o = getOrderForActor(req.params.id!, req.user!.tenantId, req.user!.id, req.user!.role === 'admin');
   if (!o || !o.receipt_key) return res.status(404).json({ error: '回单不存在' });
-  await streamObject(o.receipt_key, `回单-${o.order_no}`, res);
+  await streamObject(o.receipt_key, `回单-${o.order_no}`, res, true); // inline 预览图片
+});
+
+// 订单关联的开票信息(订单页「开票信息」详情用)。账号隔离:先校验订单归属,再反查发票。
+ordersRouter.get('/orders/:id/invoice', requireAuth, (req: Request, res: Response) => {
+  const o = getOrderForActor(req.params.id!, req.user!.tenantId, req.user!.id, req.user!.role === 'admin');
+  if (!o) return res.status(404).json({ error: '订单不存在' });
+  const inv = getInvoiceByOrder(o.id, req.user!.tenantId);
+  if (!inv) return res.status(404).json({ error: '该订单尚未开票' });
+  res.json({ invoice: serializeInvoice(inv) });
 });
 
 // ── 发票 ──
@@ -218,7 +228,8 @@ ordersRouter.get('/invoices/:id/pdf', requireAuth, async (req: Request, res: Res
 
 // ── helpers ──
 
-async function streamObject(key: string, filename: string, res: Response): Promise<void> {
+// inline=true:浏览器内预览(回执图片用,按 magic bytes 判图片 Content-Type);否则 attachment 下载。
+async function streamObject(key: string, filename: string, res: Response, inline = false): Promise<void> {
   let buf: Buffer;
   try {
     buf = await getObject(key);
@@ -226,7 +237,16 @@ async function streamObject(key: string, filename: string, res: Response): Promi
     res.status(404).json({ error: '文件不存在' });
     return;
   }
-  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+  if (inline) {
+    const mime =
+      buf[0] === 0x89 && buf[1] === 0x50 ? 'image/png'
+      : buf[0] === 0xff && buf[1] === 0xd8 ? 'image/jpeg'
+      : 'application/octet-stream';
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Content-Disposition', 'inline');
+  } else {
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+  }
   res.setHeader('Cache-Control', 'private, max-age=0, no-store');
   res.send(buf);
 }

@@ -717,3 +717,15 @@ img { display: block; }
 .ld-pg { background: var(--field); border: 1px solid var(--line); color: var(--t1); border-radius: 8px; padding: 7px 14px; font-size: 13px; cursor: pointer; font-family: inherit; min-height: 34px; }
 .ld-pg:hover:not(:disabled) { border-color: var(--line-hi); }
 .ld-pg:disabled { opacity: .4; cursor: not-allowed; }
+
+/* 「开票信息」链接 + 详情弹层(订单页 / 发票页共用)*/
+.iv-detail-link, .od-ivlink { background: none; border: none; color: var(--blue); font-size: 12px; cursor: pointer; font-family: inherit; padding: 0; text-decoration: underline; text-underline-offset: 2px; }
+.ivd-ov { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 500; padding: 20px; }
+.ivd-modal { background: var(--card-hi); border: 1px solid var(--line); border-radius: 16px; padding: 24px; min-width: 360px; max-width: 480px; width: 100%; }
+.ivd-modal h3 { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+.ivd-row { display: flex; justify-content: space-between; gap: 16px; padding: 9px 0; border-bottom: 1px solid var(--line-soft); font-size: 13px; }
+.ivd-k { color: var(--t3); flex-shrink: 0; }
+.ivd-v { color: var(--t1); font-weight: 600; text-align: right; word-break: break-all; }
+.ivd-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.ivd-dl { background: var(--blue); color: #fff; border-radius: 999px; padding: 9px 18px; font-size: 13px; font-weight: 700; text-decoration: none; }
+.ivd-close { background: var(--field); border: 1px solid var(--line); color: var(--t2); border-radius: 999px; padding: 9px 18px; font-size: 13px; cursor: pointer; font-family: inherit; }

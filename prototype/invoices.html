@@ -71,19 +71,40 @@
         </div>`;
         return;
       }
+      INVOICES = invoices;
       box.innerHTML = '<div class="iv-list">' + invoices.map(iv => {
         const issued = iv.status==='issued';
         const badge = issued ? '<span class="iv-badge b-iss">已开票</span>' : '<span class="iv-badge b-req">待开票</span>';
-        const orders = (iv.orderNos||[]).length ? `含 ${(iv.orderNos||[]).length} 单:${(iv.orderNos||[]).map(esc).join('、')}` : '';
         const dl = issued && iv.hasPdf ? `<a class="iv-act primary" href="/api/invoices/${esc(iv.id)}/pdf">下载发票 PDF</a>` : (issued ? `<span class="iv-meta">发票号 ${esc(iv.invoiceNo)}</span>` : '<span class="iv-meta">平台开具中,请稍候…</span>');
         return `<div class="iv-row">
-          <div class="iv-top"><span class="iv-title">${esc(iv.title)}</span>${badge}<span class="iv-amt">¥${fmtN(iv.amountYuan)}</span></div>
-          <div class="iv-meta">税号 ${esc(iv.taxNo)} · ${esc(iv.kind)}${issued&&iv.invoiceNo?(' · 发票号 '+esc(iv.invoiceNo)):''}</div>
-          ${orders?`<div class="iv-meta">${orders}</div>`:''}
+          <div class="iv-top"><span class="iv-title">${esc(iv.title)}</span>${badge}<button class="iv-detail-link" onclick='showInvDetail(${JSON.stringify(iv.id)})'>开票信息</button><span class="iv-amt">¥${fmtN(iv.amountYuan)}</span></div>
+          <div class="iv-meta">税号 ${esc(iv.taxNo)} · ${esc(iv.kind)} · 含 ${(iv.orderNos||[]).length} 单</div>
           <div class="iv-acts">${dl}</div>
         </div>`;
       }).join('') + '</div>';
     }
+
+    // 开票信息详情弹层(抬头/税号/发票号/金额/含单/下载PDF)。
+    let INVOICES = [];
+    window.showInvDetail = (id) => {
+      const iv = INVOICES.find(x => x.id === id); if(!iv) return;
+      const issued = iv.status==='issued';
+      const orders = (iv.orderNos||[]).map(esc).join('、') || '—';
+      const rows = [
+        ['发票抬头', esc(iv.title)],
+        ['纳税人识别号', esc(iv.taxNo)],
+        ['发票类型', esc(iv.kind)],
+        ['开票金额', '¥'+fmtN(iv.amountYuan)],
+        ['所含订单', `${(iv.orderNos||[]).length} 单 · ${orders}`],
+        ['开票状态', issued?'已开票':'待开票'],
+        ...(issued&&iv.invoiceNo?[['发票号', esc(iv.invoiceNo)]]:[]),
+      ];
+      const body = rows.map(([k,v])=>`<div class="ivd-row"><span class="ivd-k">${k}</span><span class="ivd-v">${v}</span></div>`).join('');
+      const dl = issued && iv.hasPdf ? `<a class="ivd-dl" href="/api/invoices/${esc(iv.id)}/pdf">下载发票 PDF</a>` : '';
+      const ov = document.createElement('div'); ov.className='ivd-ov'; ov.onclick=()=>ov.remove();
+      ov.innerHTML = `<div class="ivd-modal" onclick="event.stopPropagation()"><h3>开票信息</h3>${body}<div class="ivd-foot">${dl}<button class="ivd-close" onclick="this.closest('.ivd-ov').remove()">关闭</button></div></div>`;
+      document.body.appendChild(ov);
+    };
 
     load();
   </script>

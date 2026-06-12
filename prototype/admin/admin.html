@@ -265,8 +265,17 @@
       <h3>开具发票</h3>
       <p class="mdesc" id="issueInfo"></p>
       <label>发票号</label><input id="isNo" placeholder="发票号码">
-      <label>发票 PDF(可选)</label><input id="isPdf" type="file" accept="application/pdf">
+      <label>发票 PDF(必传)</label><input id="isPdf" type="file" accept="application/pdf">
       <div class="row" style="margin-top:14px"><button class="cancel" onclick="closeOv('issueOv')">取消</button><button class="ok" onclick="submitIssue()">确认开票</button></div>
+    </div>
+  </div>
+
+  <!-- 回执预览(图片直显)-->
+  <div class="ov" id="receiptOv" onclick="closeOv('receiptOv')">
+    <div class="modal" style="max-width:680px;text-align:center" onclick="event.stopPropagation()">
+      <h3 id="receiptTitle" style="margin-bottom:12px">打款回执</h3>
+      <img id="receiptImg" alt="银行回执" style="max-width:100%;max-height:70vh;border-radius:10px;border:1px solid var(--line)">
+      <div class="row" style="margin-top:14px;justify-content:center"><button class="cancel" onclick="closeOv('receiptOv')">关闭</button></div>
     </div>
   </div>
 
@@ -477,7 +486,7 @@
         <td>${esc(o.planName)}</td>
         <td class="bal">¥${fmtN(o.priceYuan)}</td>
         <td>${fmtN(o.credits+o.bonusCredits)}</td>
-        <td>${o.hasReceipt?`<a class="act" href="/admin/api/recharge-orders/${esc(o.id)}/receipt" target="_blank">查看回单</a>`:'<span style="color:var(--t4)">无</span>'}</td>
+        <td>${o.hasReceipt?`<button class="act" onclick='previewReceipt(${JSON.stringify(o.id)},${JSON.stringify(o.orderNo)})'>查看回执</button>`:'<span style="color:var(--t4)">无</span>'}</td>
         <td><div class="acts">
           <button class="act pri" onclick='confirmOrder(${JSON.stringify(o.id)},${JSON.stringify(o.orderNo)})'>确认到账</button>
           <button class="act" onclick='rejectOrder(${JSON.stringify(o.id)})'>驳回</button>
@@ -528,15 +537,23 @@
   async function submitIssue(){
     const no=document.getElementById('isNo').value.trim();
     if(!no){ toast('请填写发票号'); return; }
+    const pdf=document.getElementById('isPdf').files[0];
+    if(!pdf){ toast('请上传发票 PDF'); return; } // 开票必传 PDF(用户决策)
     try{
-      const fd=new FormData(); fd.append('invoiceNo',no);
-      const pdf=document.getElementById('isPdf').files[0]; if(pdf) fd.append('pdf',pdf);
+      const fd=new FormData(); fd.append('invoiceNo',no); fd.append('pdf',pdf);
       const res=await fetch(`/admin/api/admin-invoices/${issueId}/issue`,{method:'POST',credentials:'same-origin',body:fd});
       if(res.status===401){ location.href='/admin/login'; return; }
       const data=await res.json().catch(()=>null);
       if(!res.ok) throw new Error((data&&data.error)||'开票失败');
       closeOv('issueOv'); toast('✓ 已开票'); await loadInvoices();
     }catch(e){ toast(e.message||'开票失败'); }
+  }
+
+  // 回执预览(图片直显,不下载)。
+  function previewReceipt(id, no){
+    document.getElementById('receiptTitle').textContent = '打款回执 · ' + no;
+    document.getElementById('receiptImg').src = '/admin/api/recharge-orders/'+encodeURIComponent(id)+'/receipt';
+    document.getElementById('receiptOv').classList.add('on');
   }
   async function rejectInvoice(id){
     if(!confirm('驳回该开票申请?用户可重新提交。')) return;

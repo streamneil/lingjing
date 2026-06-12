@@ -289,6 +289,18 @@ function validateInvoiceOrders(orderIds: string[], tenantId: string, expectedAmo
     throw new OrderError('AMOUNT_MISMATCH', '发票金额与所含订单金额之和不符');
 }
 
+// 取某订单关联的发票(订单页「开票信息」用;经 invoice_order 反查)。租户级,只限 tenant_id。
+export function getInvoiceByOrder(orderId: string, tenantId: string): InvoiceRow | undefined {
+  const inv = db
+    .prepare(
+      `SELECT i.* FROM invoice i
+         JOIN invoice_order io ON io.invoice_id = i.id
+        WHERE io.order_id = ? AND i.tenant_id = ?`,
+    )
+    .get(orderId, tenantId) as InvoiceRow | undefined;
+  return inv ? hydrateInvoice(inv) : undefined;
+}
+
 export function getInvoiceForActor(
   id: string,
   tenantId: string,
