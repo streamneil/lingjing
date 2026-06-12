@@ -161,10 +161,21 @@ describe('积分 + 审计 API', () => {
     expect(r.body.some((a: any) => a.action === 'login')).toBe(true);
   });
 
-  it('非 admin 不能看审计 → 403', async () => {
+  it('非 admin 也能看审计(只读放宽:团队透明)→ 200', async () => {
     const c = await loginAs(tenantA, 'viewer');
     const r = await c.get('/api/audit');
-    expect(r.status).toBe(403);
+    expect(r.status).toBe(200);
+    expect(Array.isArray(r.body)).toBe(true);
+  });
+
+  it('非 admin 能看成员名单(只读放宽)→ 200,但写仍 403', async () => {
+    const c = await loginAs(tenantA, 'creator');
+    const list = await c.get('/api/members');
+    expect(list.status).toBe(200);
+    expect(Array.isArray(list.body.members)).toBe(true);
+    // 写操作仍 admin-only:邀请 / 改角色 → 403(双保险,前端按钮也灰禁)
+    const add = await c.post('/api/members', { username: 'x', password: 'pw123456', role: 'viewer' });
+    expect(add.status).toBe(403);
   });
 });
 

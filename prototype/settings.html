@@ -288,24 +288,27 @@
           const url = '/api/org-logo/' + me.tenantId + '?t=' + Date.now();
           document.getElementById('logoPreview').style.backgroundImage = 'url(' + url + ')';
         }
-        // 非 admin:品牌卡控件只读(机构名本就只读;系统名/Logo 控件置灰)
+        // 非 admin:所有设置控件置灰只读(品牌 + AI 标识 + 默认分辨率);仍能看,写被 guard() 挡。
         if (!canEdit) {
           brandInp.disabled = true;
           ['brandNameSave', 'logoUploadBtn', 'logoResetBtn'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
+          document.getElementById('aiLabelText').disabled = true;
+          const sw = document.getElementById('aiLabelSwitch'); if (sw) { sw.style.opacity = '.45'; sw.style.pointerEvents = 'none'; sw.setAttribute('aria-disabled', 'true'); }
+          const seg = document.getElementById('resSeg'); if (seg) { seg.style.opacity = '.45'; seg.style.pointerEvents = 'none'; seg.setAttribute('aria-disabled', 'true'); }
+          // 各「保存」按钮置灰
+          document.querySelectorAll('.set-card .btn-dark').forEach(b => { if (/保存/.test(b.textContent)) b.disabled = true; });
         }
 
-        // T8:审计日志(仅 admin 可见+可查)
-        if (me.role === 'admin') {
-          document.getElementById('auditCard').style.display = '';
-          try {
-            const logs = await LJ.get('/audit');
-            const shown = logs.slice(0, 50);
-            document.getElementById('auditBody').innerHTML = renderAuditFeed(shown);
-            // 计数 chip:总量;>50 只展示前 50,标「50+」诚实提示有截断。
-            const cnt = document.getElementById('auditCount');
-            if (cnt) cnt.textContent = logs.length ? ('共 ' + (logs.length > 50 ? '50+' : logs.length) + ' 条') : '';
-          } catch (e) { }
-        }
+        // T8:审计日志 —— 所有登录成员可见可查(后端 GET /audit 已放宽);仅展示,不可改设置。
+        document.getElementById('auditCard').style.display = '';
+        try {
+          const logs = await LJ.get('/audit');
+          const shown = logs.slice(0, 50);
+          document.getElementById('auditBody').innerHTML = renderAuditFeed(shown);
+          // 计数 chip:总量;>50 只展示前 50,标「50+」诚实提示有截断。
+          const cnt = document.getElementById('auditCount');
+          if (cnt) cnt.textContent = logs.length ? ('共 ' + (logs.length > 50 ? '50+' : logs.length) + ' 条') : '';
+        } catch (e) { }
       } catch (e) { }
     }
     load();

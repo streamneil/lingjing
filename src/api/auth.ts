@@ -102,7 +102,9 @@ function memberError(res: Response, e: unknown): Response {
   return res.status(409).json({ error });
 }
 
-authRouter.get('/members', requireRole('admin'), (req: Request, res: Response) => {
+// 成员名单只读:登录即可看(团队透明);写操作仍 admin-only(下方各路由)。
+// 非 admin 看得到名单/角色/状态,但前端按钮灰禁 + 后端写路由 403 双保险。
+authRouter.get('/members', requireAuth, (req: Request, res: Response) => {
   const tid = req.user!.tenantId;
   // 附带席位用量供统计卡(已用 = 持席位 creator 数,上限 = max_creator_seats)。
   return res.json({ members: listUsers(tid), seats: seatUsage(tid) });
