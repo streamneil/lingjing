@@ -75,14 +75,18 @@ const ACTOR_NAME_JOIN = `
    LEFT JOIN job jt ON l.action='create_job' AND l.target = jt.id`;
 
 /** 查租户审计(admin 可见)。带操作者名(actorName)+ 模块(module)。 */
-export function listAudit(tenantId: string, limit = 200): AuditRow[] {
+export function listAudit(tenantId: string, limit = 200, actingUserId?: string, isAdmin = false): AuditRow[] {
+  // 账号隔离:creator 只看自己的操作行;admin / 无 actingUserId(内部)→ 看全机构。
+  const scoped = !isAdmin && actingUserId !== undefined;
+  const scopeClause = scoped ? ` AND l.user_id = ?` : '';
+  const scopeParams = scoped ? [actingUserId] : [];
   return db
     .prepare(
       `SELECT l.*, ${ACTOR_NAME_SELECT}, ${MODULE_SELECT}
          FROM audit_log l${ACTOR_NAME_JOIN}
-        WHERE l.tenant_id=? ORDER BY l.created_at DESC LIMIT ?`,
+        WHERE l.tenant_id=?${scopeClause} ORDER BY l.created_at DESC LIMIT ?`,
     )
-    .all(tenantId, limit) as AuditRow[];
+    .all(tenantId, ...scopeParams, limit) as AuditRow[];
 }
 
 /** 平台级审计:所有超管操作(跨所有目标租户 + 纯平台操作),供 /admin 追溯。带操作者名 + 模块。 */

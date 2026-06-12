@@ -25,7 +25,9 @@ beforeAll(() => {
   tenantB = createTenant('B 台').id;
   createUser(tenantA, 'A_admin', 'pw123456', 'admin');
   createUser(tenantA, 'A_creator', 'pw123456', 'creator');
-  createUser(tenantA, 'A_viewer', 'pw123456', 'viewer');
+  // 原 A_viewer:viewer 角色已废弃 → 建为 creator(只读类用例对 creator 同样成立);
+  // 用户名保留 A_viewer 以便 loginAs(tenantA,'viewer') 仍能登录。
+  createUser(tenantA, 'A_viewer', 'pw123456', 'creator');
   createUser(tenantB, 'B_admin', 'pw123456', 'admin');
   grant(tenantA, 10000); // A 有积分,可发起生成;B 故意不发(测余额隔离/不足)
 });
@@ -61,11 +63,8 @@ describe('认证', () => {
 });
 
 describe('RBAC 验收第8条', () => {
-  it('查看者不能发起生成 → 403', async () => {
-    const c = await loginAs(tenantA, 'viewer');
-    const r = await c.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'Cherry', script: '文案' });
-    expect(r.status).toBe(403);
-  });
+  // 原 "查看者不能发起生成 → 403":viewer 角色已废弃,POST /jobs 仅放行 admin/creator,
+  // 再无可被拒的已登录角色 → 删除此用例(creator 能发起已由下方用例覆盖)。
 
   it('创作者能发起生成 → 202', async () => {
     const c = await loginAs(tenantA, 'creator');
@@ -75,13 +74,13 @@ describe('RBAC 验收第8条', () => {
 
   it('创作者不能管理成员 → 403', async () => {
     const c = await loginAs(tenantA, 'creator');
-    const r = await c.post('/api/members', { username: 'x', password: 'pw123456', role: 'viewer' });
+    const r = await c.post('/api/members', { username: 'x', password: 'pw123456', role: 'creator' });
     expect(r.status).toBe(403);
   });
 
   it('管理员能管理成员 → 201', async () => {
     const c = await loginAs(tenantA, 'admin');
-    const r = await c.post('/api/members', { username: 'newbie', password: 'pw123456', role: 'viewer' });
+    const r = await c.post('/api/members', { username: 'newbie', password: 'pw123456', role: 'creator' });
     expect(r.status).toBe(201);
   });
 
@@ -174,7 +173,7 @@ describe('积分 + 审计 API', () => {
     expect(list.status).toBe(200);
     expect(Array.isArray(list.body.members)).toBe(true);
     // 写操作仍 admin-only:邀请 / 改角色 → 403(双保险,前端按钮也灰禁)
-    const add = await c.post('/api/members', { username: 'x', password: 'pw123456', role: 'viewer' });
+    const add = await c.post('/api/members', { username: 'x', password: 'pw123456', role: 'creator' });
     expect(add.status).toBe(403);
   });
 });

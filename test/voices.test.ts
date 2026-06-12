@@ -38,12 +38,12 @@ describe('音色:预置 + 克隆授权', () => {
   it('复刻未产出 voice_id → status=failed(不可用,避免误生成)', () => {
     const v = voices.createCloneVoice({ tenantId: T, userId: U, name: 'x', sourceKey: 'k', consent: true });
     expect(v.status).toBe('failed');
-    expect(voices.isUsableVoice(v.id, T)).toBe(false);
+    expect(voices.isUsableVoice(v.id, T, U, false)).toBe(false);
   });
   it('isUsableVoice:预置 + 本租户 ready(复刻成功)可用,跨租户不可用', () => {
     const v = voices.createCloneVoice({ tenantId: T, userId: U, name: 'x', sourceKey: 'k', consent: true, providerVoiceId: 'cosyvoice-v1-y-def' });
-    expect(voices.isUsableVoice('Cherry', T)).toBe(true);
-    expect(voices.isUsableVoice(v.id, T)).toBe(true);
-    expect(voices.isUsableVoice(v.id, 'other')).toBe(false);
+    expect(voices.isUsableVoice('Cherry', T, U, false)).toBe(true);
+    expect(voices.isUsableVoice(v.id, T, U, false)).toBe(true);
+    expect(voices.isUsableVoice(v.id, 'other', U, false)).toBe(false);
   });
 });

@@ -37,16 +37,16 @@ async function asAdmin() {
 
 describe('createUser 带昵称(display_name)', () => {
   it('传 displayName → display_name 入库', () => {
-    const u = createUser(tId, 'nameuser', 'pw123456', 'viewer', '王五');
+    const u = createUser(tId, 'nameuser', 'pw123456', 'creator', '王五');
     expect(u.display_name).toBe('王五');
   });
   it('省略 displayName → 回落 username(旧调用兼容)', () => {
-    const u = createUser(tId, 'nonameuser', 'pw123456', 'viewer');
+    const u = createUser(tId, 'nonameuser', 'pw123456', 'creator');
     expect(u.display_name).toBe('nonameuser');
   });
   it('POST /members 带 displayName → 成员昵称生效', async () => {
     const c = await asAdmin();
-    const r = await c.post('/api/members', { username: 'apiuser', password: 'pw123456', role: 'viewer', displayName: '李四' });
+    const r = await c.post('/api/members', { username: 'apiuser', password: 'pw123456', role: 'creator', displayName: '李四' });
     expect(r.status).toBe(201);
     expect(r.body.displayName).toBe('李四');
   });

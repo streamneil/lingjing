@@ -237,7 +237,7 @@
       <label>初始密码</label>
       <input id="uPass" type="text" placeholder="至少 6 位" value="">
       <label>角色</label>
-      <select id="uRole"><option value="admin">机构管理员</option><option value="creator">创作者</option><option value="viewer">查看者</option></select>
+      <select id="uRole"><option value="admin">机构管理员</option><option value="creator">创作者</option></select>
       <div class="mmsg" id="uMsg"></div>
       <div class="mbtns"><button class="cancel" onclick="closeOv('userOv')">取消</button><button class="ok" id="uOk" onclick="submitUser()">开通</button></div>
     </div>
@@ -545,9 +545,9 @@
       const { users }=await PA('GET',`/api/tenants/${mgTenant.id}/users`);
       document.getElementById('mUserCount').textContent=users.length;
       if(!users.length){ box.innerHTML='<div class="empty" style="padding:20px">该租户暂无用户</div>'; return; }
-      const ROLE={admin:['rbdg-admin','管理员'],creator:['rbdg-creator','创作者'],viewer:['rbdg-viewer','查看者']};
+      const ROLE={admin:['rbdg-admin','管理员'],creator:['rbdg-creator','创作者']};
       box.innerHTML=users.map(u=>{
-        const r=ROLE[u.role]||['rbdg-viewer',u.role];
+        const r=ROLE[u.role]||['rbdg-creator',u.role];
         const off=u.status==='disabled';
         return `<div class="muser">
           <div class="ui"><div class="un">${esc(u.display_name||u.username)}<span class="rbdg ${r[0]}">${r[1]}</span>${off?'<span class="rbdg rbdg-off">已停用</span>':''}</div>

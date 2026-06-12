@@ -21,7 +21,6 @@ let tenantId: string;
 beforeAll(() => {
   tenantId = createTenant('形象测试台').id;
   createUser(tenantId, 'creator', 'pw123456', 'creator');
-  createUser(tenantId, 'viewer', 'pw123456', 'viewer');
 });
 
 async function loginAs(username: string) {
@@ -63,11 +62,8 @@ describe('形象上传 API', () => {
     expect(list.body.custom.some((a: any) => a.name === '台长专属')).toBe(true);
   });
 
-  it('viewer 不能上传形象 → 403', async () => {
-    const c = await loginAs('viewer');
-    const r = await c.postMultipart('/api/avatars', { name: 'x', consent: 'true' }, { photo: fakePhoto });
-    expect(r.status).toBe(403);
-  });
+  // 原 "viewer 不能上传 → 403":viewer 角色已废弃,上传端点仅放行 admin/creator,
+  // 再无可被拒的已登录角色 → 该 RBAC 拒绝场景消失,删除此用例。
 
   it('C6:重命名 + 设为默认', async () => {
     const c = await loginAs('creator');

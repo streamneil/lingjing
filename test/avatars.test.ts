@@ -43,9 +43,9 @@ describe('预置形象', () => {
 describe('C6 重命名 + 设为默认', () => {
   it('重命名', () => {
     const av = createCustomAvatar({ tenantId: T, userId: U, name: '旧名', kind: 'photo', sourceKey: 'k', consent: true });
-    expect(renameAvatar(av.id, T, '新名')).toBe(true);
-    expect(listCustom(T).find((x) => x.id === av.id)!.name).toBe('新名');
-    expect(renameAvatar(av.id, 'other', 'x')).toBe(false); // 跨租户不可改
+    expect(renameAvatar(av.id, T, '新名', U, false)).toBe(true);
+    expect(listCustom(T, U, false).find((x) => x.id === av.id)!.name).toBe('新名');
+    expect(renameAvatar(av.id, 'other', 'x', U, false)).toBe(false); // 跨租户不可改
   });
   it('设为默认互斥(同租户只有一个默认)', () => {
     const a = createCustomAvatar({ tenantId: T, userId: U, name: 'A', kind: 'photo', sourceKey: 'k1', consent: true });
@@ -54,7 +54,7 @@ describe('C6 重命名 + 设为默认', () => {
     expect(getDefaultAvatar(T)!.id).toBe(a.id);
     setDefaultAvatar(b.id, T); // 切换默认
     expect(getDefaultAvatar(T)!.id).toBe(b.id); // 只有 b 是默认
-    expect(listCustom(T).filter((x) => x.is_default === 1).length).toBe(1);
+    expect(listCustom(T, U, false).filter((x) => x.is_default === 1).length).toBe(1);
   });
 });
 
@@ -88,17 +88,17 @@ describe('自定义形象 + 授权存证', () => {
   it('列表 + 删除 + 租户隔离', () => {
     createCustomAvatar({ tenantId: T, userId: U, name: 'A', kind: 'photo', sourceKey: 'k1', consent: true });
     createCustomAvatar({ tenantId: 'other', userId: U, name: 'B', kind: 'photo', sourceKey: 'k2', consent: true });
-    expect(listCustom(T).length).toBe(1); // 只看自己租户
-    const mine = listCustom(T)[0]!;
-    expect(deleteAvatar(mine.id, T)).toBe(true);
-    expect(listCustom(T).length).toBe(0);
+    expect(listCustom(T, U, false).length).toBe(1); // 只看自己租户
+    const mine = listCustom(T, U, false)[0]!;
+    expect(deleteAvatar(mine.id, T, U, false)).toBe(true);
+    expect(listCustom(T, U, false).length).toBe(0);
   });
 
   it('isUsableAvatar:预置可用、本租户 ready 可用、跨租户不可用', () => {
     const av = createCustomAvatar({ tenantId: T, userId: U, name: 'A', kind: 'photo', sourceKey: 'k', consent: true });
-    expect(isUsableAvatar('preset-1', T)).toBe(true);
-    expect(isUsableAvatar(av.id, T)).toBe(true);
-    expect(isUsableAvatar(av.id, 'other')).toBe(false); // 别的租户用不了
-    expect(isUsableAvatar('ghost', T)).toBe(false);
+    expect(isUsableAvatar('preset-1', T, U, false)).toBe(true);
+    expect(isUsableAvatar(av.id, T, U, false)).toBe(true);
+    expect(isUsableAvatar(av.id, 'other', U, false)).toBe(false); // 别的租户用不了
+    expect(isUsableAvatar('ghost', T, U, false)).toBe(false);
   });
 });

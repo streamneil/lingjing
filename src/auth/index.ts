@@ -89,7 +89,7 @@ export function createUser(
   role: Role,
   displayName?: string, // 昵称(展示名);空则回落用户名(保旧调用兼容)
 ): UserRow {
-  if (!['admin', 'creator', 'viewer'].includes(role)) throw memberErr('INVALID_ROLE', '角色非法');
+  if (!['admin', 'creator'].includes(role)) throw memberErr('INVALID_ROLE', '角色非法');
   if (RESERVED_USERNAMES.has(username.trim().toLowerCase())) {
     throw new Error('该用户名为平台保留字,请换一个(如机构简称+姓名)');
   }
@@ -175,7 +175,7 @@ export function changeRole(
   newRole: Role,
   actingUserId?: string,
 ): boolean {
-  if (!['admin', 'creator', 'viewer'].includes(newRole)) throw memberErr('INVALID_ROLE', '角色非法');
+  if (!['admin', 'creator'].includes(newRole)) throw memberErr('INVALID_ROLE', '角色非法');
   const tx = db.transaction((): boolean => {
     const target = db
       .prepare(`SELECT role,status FROM user WHERE id=? AND tenant_id=?`)

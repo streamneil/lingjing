@@ -1,9 +1,9 @@
 // 灵镜 成员与权限升级测试 —— 席位强制 + 锁死防护 + 角色变更 + last_active。
 //
 // 覆盖 eng-review 11 路径(6 回归级):
-//   席位:creator 超 max 抛 SEATS_FULL;停用不释放席位(可逆);admin/viewer 不占席位
+//   席位:creator 超 max 抛 SEATS_FULL;停用不释放席位(可逆);admin 不占席位
 //   锁死:停用/移除自己;停用/移除最后一个 active admin
-//   角色:viewer→creator 满席位拦;唯一 admin 降级拦;不能改自己
+//   角色:admin→creator 满席位拦;唯一 admin 降级拦;不能改自己(viewer 角色已废弃)
 //   活跃:last_active throttle(>5min 才写)
 //   列表:listUsers 返回 display_name + last_active
 
@@ -40,12 +40,11 @@ describe('创作席位强制', () => {
     expect(codeOf(() => createUser(tid, `c3_${tid}`, 'pw123456', 'creator'))).toBe('SEATS_FULL');
   });
 
-  it('admin / viewer 不占创作席位', () => {
+  it('admin 不占创作席位', () => {
     const tid = freshTenant(1);
     createUser(tid, `c_${tid}`, 'pw123456', 'creator'); // 占满 1 席
-    // 仍可建 admin / viewer
+    // 满席位时仍可建 admin(admin 不占创作席位)。viewer 角色已废弃,删除其断言。
     expect(() => createUser(tid, `a_${tid}`, 'pw123456', 'admin')).not.toThrow();
-    expect(() => createUser(tid, `v_${tid}`, 'pw123456', 'viewer')).not.toThrow();
   });
 
   it('停用 creator 不释放席位(可逆)→ 仍占,新建被拦', () => {
@@ -99,7 +98,7 @@ describe('锁死防护(self + last-admin)', () => {
   it('不能移除最后一个 active admin', () => {
     const tid = freshTenant();
     const a = createUser(tid, `a_${tid}`, 'pw123456', 'admin');
-    const other = createUser(tid, `v_${tid}`, 'pw123456', 'viewer');
+    const other = createUser(tid, `v_${tid}`, 'pw123456', 'creator'); // 非 admin 发起者(原 viewer)
     expect(codeOf(() => removeUser(tid, a.id, other.id))).toBe('LAST_ADMIN');
   });
 
@@ -112,12 +111,14 @@ describe('锁死防护(self + last-admin)', () => {
 });
 
 describe('角色变更(闭合席位不变量)', () => {
-  it('viewer→creator 满席位 → 抛 SEATS_FULL', () => {
+  // 原 "viewer→creator 满席位 → SEATS_FULL":viewer 已废弃。等价场景改用 admin→creator —
+  // admin 不占创作席位,升级为 creator 需空席位;满席位时同样抛 SEATS_FULL。
+  it('admin→creator 满席位 → 抛 SEATS_FULL', () => {
     const tid = freshTenant(1);
-    createUser(tid, `c_${tid}`, 'pw123456', 'creator'); // 占满
-    const v = createUser(tid, `v_${tid}`, 'pw123456', 'viewer');
-    const a = createUser(tid, `a_${tid}`, 'pw123456', 'admin');
-    expect(codeOf(() => changeRole(tid, v.id, 'creator', a.id))).toBe('SEATS_FULL');
+    createUser(tid, `c_${tid}`, 'pw123456', 'creator'); // 占满 1 席
+    const a = createUser(tid, `a_${tid}`, 'pw123456', 'admin'); // 不占席位
+    const a2 = createUser(tid, `a2_${tid}`, 'pw123456', 'admin'); // 留一个 admin 排除 LAST_ADMIN
+    expect(codeOf(() => changeRole(tid, a.id, 'creator', a2.id))).toBe('SEATS_FULL');
   });
 
   it('唯一 active admin 降级 → 抛 LAST_ADMIN', () => {
@@ -125,22 +126,24 @@ describe('角色变更(闭合席位不变量)', () => {
     const a = createUser(tid, `a_${tid}`, 'pw123456', 'admin');
     const a2 = createUser(tid, `a2_${tid}`, 'pw123456', 'admin');
     setUserStatus(tid, a2.id, 'disabled'); // active admin 只剩 a
-    expect(codeOf(() => changeRole(tid, a.id, 'viewer', a2.id))).toBe('LAST_ADMIN');
+    expect(codeOf(() => changeRole(tid, a.id, 'creator', a2.id))).toBe('LAST_ADMIN');
   });
 
   it('不能改自己的角色', () => {
     const tid = freshTenant();
     const a = createUser(tid, `a_${tid}`, 'pw123456', 'admin');
     createUser(tid, `a2_${tid}`, 'pw123456', 'admin');
-    expect(codeOf(() => changeRole(tid, a.id, 'viewer', a.id))).toBe('SELF_ACTION');
+    expect(codeOf(() => changeRole(tid, a.id, 'creator', a.id))).toBe('SELF_ACTION');
   });
 
-  it('viewer→creator 有空席位 → 成功 + 占席位', () => {
+  // 原 "viewer→creator 有空席位 → 成功 + 占席位":viewer 已废弃 → 用 admin→creator 等价覆盖
+  // "升级为 creator 在有空席位时成功并占用席位"。需第二个 admin 排除 LAST_ADMIN。
+  it('admin→creator 有空席位 → 成功 + 占席位', () => {
     const tid = freshTenant(2);
-    const v = createUser(tid, `v_${tid}`, 'pw123456', 'viewer');
-    const a = createUser(tid, `a_${tid}`, 'pw123456', 'admin');
-    expect(changeRole(tid, v.id, 'creator', a.id)).toBe(true);
-    expect(seatUsage(tid).used).toBe(1);
+    const a = createUser(tid, `a_${tid}`, 'pw123456', 'admin'); // 不占席位
+    const a2 = createUser(tid, `a2_${tid}`, 'pw123456', 'admin'); // 发起者,保住 admin 数
+    expect(changeRole(tid, a.id, 'creator', a2.id)).toBe(true);
+    expect(seatUsage(tid).used).toBe(1); // a 升级后占 1 席
   });
 });
 

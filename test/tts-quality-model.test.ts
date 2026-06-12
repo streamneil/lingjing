@@ -32,11 +32,12 @@ const { Client } = await import('./helpers.js');
 const app = createApp();
 const client = new Client(app);
 let tid = '';
+let uid = '';
 
 beforeAll(async () => {
   const t = createTenant('品质测试台');
   tid = t.id;
-  createUser(t.id, 'qmcreator', 'pw123456', 'creator');
+  uid = createUser(t.id, 'qmcreator', 'pw123456', 'creator').id;
   grant(t.id, 100000);
   expect((await client.login('qmcreator', 'pw123456')).status).toBe(200);
 }, 30000);
@@ -111,7 +112,7 @@ describe('resolveVoice(withEmotion) 按情绪选模型,全 http', () => {
   });
 
   it('设计音色 → designModel(用 provider_voice_id),情绪忽略', () => {
-    const dv = voices.createDesignVoice({ tenantId: tid, name: 'd', providerVoiceId: 'qv' });
+    const dv = voices.createDesignVoice({ tenantId: tid, name: 'd', providerVoiceId: 'qv', userId: uid });
     const r = resolveVoice(dv.id, tid, true);
     expect(r.model).toBe(config.baichuan.designModel);
     expect(r.voice).toBe('qv');
