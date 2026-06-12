@@ -22,7 +22,7 @@
       <div class="bar">
         <div class="search-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input id="searchIn" placeholder="搜索成员…"></div>
         <div class="sp"></div>
-        <button class="chip active" data-role="all">全部</button><button class="chip" data-role="admin">管理员</button><button class="chip" data-role="creator">创作者</button><button class="chip" data-role="viewer">查看者</button>
+        <button class="chip active" data-role="all">全部</button><button class="chip" data-role="admin">管理员</button><button class="chip" data-role="creator">创作者</button><button class="chip" data-role="viewer">查看者</button><button class="chip" data-role="disabled">已停用</button>
       </div>
 
       <table class="tbl">
@@ -41,13 +41,16 @@
 
 <!-- 邀请成员弹窗(替代 3 个 prompt)-->
 <div class="ov" id="ov-invite" style="position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:none;place-items:center;z-index:300">
-  <div style="width:380px;max-width:92vw;background:var(--modal,#161618);border:1px solid var(--line);border-radius:18px;padding:26px">
-    <h3 style="font-size:18px;font-weight:700;margin-bottom:4px">邀请成员</h3>
-    <div style="color:var(--t3);font-size:12.5px;margin-bottom:20px">为机构添加成员并分配角色。用户名全平台唯一。</div>
-    <label style="display:block;font-size:12px;color:var(--t3);margin-bottom:7px">用户名</label>
-    <input id="invUser" placeholder="登录用户名(全平台唯一)" style="width:100%;box-sizing:border-box;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--t1);font-size:14px;outline:none;margin-bottom:14px">
+  <div style="width:440px;max-width:92vw;background:var(--modal,#161618);border:1px solid var(--line);border-radius:18px;padding:28px">
+    <h3 style="font-size:19px;font-weight:700;margin-bottom:6px">邀请成员</h3>
+    <div style="color:var(--t3);font-size:12.5px;margin-bottom:22px">为机构添加成员并分配角色。账号全平台唯一。</div>
+    <label style="display:block;font-size:12px;color:var(--t3);margin-bottom:7px">昵称</label>
+    <input id="invName" maxlength="30" placeholder="成员昵称(展示名,如 张三)" style="width:100%;box-sizing:border-box;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--t1);font-size:14px;outline:none;margin-bottom:16px">
+    <label style="display:block;font-size:12px;color:var(--t3);margin-bottom:7px">账号</label>
+    <input id="invUser" placeholder="建议填手机号" style="width:100%;box-sizing:border-box;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--t1);font-size:14px;outline:none">
+    <div style="font-size:11.5px;color:var(--t4);margin:6px 0 16px">建议用手机号作账号,成员登录用;系统不验证手机号,仅作登录名</div>
     <label style="display:block;font-size:12px;color:var(--t3);margin-bottom:7px">初始密码(≥6 位)</label>
-    <input id="invPass" type="password" placeholder="成员首次登录用,可后续自行修改" style="width:100%;box-sizing:border-box;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--t1);font-size:14px;outline:none;margin-bottom:14px">
+    <input id="invPass" type="password" placeholder="成员首次登录用,可后续自行修改" style="width:100%;box-sizing:border-box;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--t1);font-size:14px;outline:none;margin-bottom:16px">
     <label style="display:block;font-size:12px;color:var(--t3);margin-bottom:9px">角色</label>
     <div id="invRoleSeg" style="display:flex;gap:8px;margin-bottom:6px">
       <button type="button" data-r="creator" class="ir-opt" onclick="pickRole(this)">创作者</button>
@@ -82,10 +85,41 @@
     </div>
   </div>
 </div>
+
+<!-- 重置密码结果弹窗:账号+密码 一键复制,仅显一次 -->
+<div class="ov" id="ov-reset" style="position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:none;place-items:center;z-index:300">
+  <div style="width:440px;max-width:92vw;background:var(--modal,#161618);border:1px solid var(--line);border-radius:18px;padding:28px">
+    <div class="reset-ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 6"/></svg></div>
+    <h3 style="font-size:19px;font-weight:700;margin-bottom:6px">密码已重置</h3>
+    <div class="reset-warn"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17v.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>请复制发给成员,此密码仅显示一次</div>
+    <div class="cred">
+      <div class="cred-r"><span class="cred-k">账号</span><span class="cred-v" id="resetAcct">—</span></div>
+      <div class="cred-r"><span class="cred-k">密码</span><span class="cred-v" id="resetPass">—</span></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:6px">
+      <button class="btn copy-btn" style="flex:2" id="resetCopy" onclick="copyResetCred()"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制账号和密码</button>
+      <button class="btn btn-dark" style="flex:1" onclick="document.getElementById('ov-reset').style.display='none'">完成</button>
+    </div>
+  </div>
+</div>
 <style>
   .ir-opt{flex:1;padding:9px;border-radius:9px;background:var(--field,#121214);border:1px solid var(--line);color:var(--t2);font-size:13px;font-family:var(--f);cursor:pointer;transition:.15s}
   .ir-opt:hover{border-color:var(--line-hi)}
   .ir-opt.active{background:var(--blue-bg);border-color:var(--blue);color:var(--blue)}
+  /* 停用成员整行置灰(头像/名/角色变暗,状态红 badge 仍醒目)*/
+  .tbl tr.m-off td:not(:last-child){opacity:.45}
+  .tbl tr.m-off .strong{color:var(--t3)}
+  /* 重置密码结果弹窗 */
+  .reset-ok{width:40px;height:40px;border-radius:50%;background:rgba(52,199,89,.14);color:var(--green);display:grid;place-items:center;margin-bottom:14px}
+  .reset-ok svg{width:22px;height:22px}
+  .reset-warn{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--amber);margin-bottom:2px}
+  .cred{background:var(--field,#121214);border:1px solid var(--line);border-radius:12px;margin:14px 0}
+  .cred-r{display:flex;align-items:center;gap:14px;padding:11px 16px;border-bottom:1px solid var(--line-soft)}
+  .cred-r:last-child{border-bottom:none}
+  .cred-k{font-size:12px;color:var(--t4);width:36px;flex:none}
+  .cred-v{font-family:var(--f-en,monospace);font-size:15px;color:var(--t1);letter-spacing:.02em;user-select:all}
+  .copy-btn{background:var(--blue);color:#fff;border:none;font-weight:600;display:flex;align-items:center;justify-content:center;gap:7px}
+  .copy-btn.done{background:var(--green)}
   /* 骨架屏:加载占位灰条 */
   .skel-bar{height:18px;border-radius:6px;background:linear-gradient(90deg,var(--card-2,#1c1c20) 25%,var(--line,#2a2a30) 37%,var(--card-2,#1c1c20) 63%);background-size:400% 100%;animation:skel 1.3s ease infinite}
   @keyframes skel{0%{background-position:100% 50%}100%{background-position:0 50%}}
@@ -142,15 +176,18 @@
       : '<span class="bdg" style="background:rgba(255,82,71,.14);color:var(--red)">已停用</span>';
     // 仅 admin 显示操作按钮(后端也有 403/code 兜底);不渲染针对自己的危险操作。
     const isSelf = m.id===myId;
+    const actBtn = (label, fn) => `<button class="btn btn-dark" style="padding:7px 11px;font-size:12px" aria-label="${label} ${name}" onclick="${fn}">${label}</button>`;
     const actions = myRole==='admin' ? `<td style="text-align:right;white-space:nowrap">
       ${isSelf ? '<span style="color:var(--t4);font-size:12px">本人</span>' : `
-      <button class="btn btn-dark" style="padding:7px 11px;font-size:12px" aria-label="改角色" onclick="openRole('${m.id}','${name}','${m.role}')">改角色</button>
+      ${actBtn('改角色', `openRole('${m.id}','${name}','${m.role}')`)}
+      ${actBtn('重置密码', `resetPw('${m.id}','${name}')`)}
       ${m.status==='active'
-        ? `<button class="btn btn-dark" style="padding:7px 11px;font-size:12px" aria-label="停用 ${name}" onclick="disable('${m.id}','${name}')">停用</button>`
-        : `<button class="btn btn-dark" style="padding:7px 11px;font-size:12px" aria-label="启用 ${name}" onclick="enable('${m.id}')">启用</button>`}
-      <button class="btn btn-dark" style="padding:7px 11px;font-size:12px" aria-label="移除 ${name}" onclick="removeM('${m.id}','${name}')">移除</button>`}
+        ? actBtn('停用', `disable('${m.id}','${name}')`)
+        : actBtn('启用', `enable('${m.id}')`)}
+      ${actBtn('移除', `removeM('${m.id}','${name}')`)}`}
     </td>` : '<td></td>';
-    return `<tr>
+    // 停用成员整行置灰(.m-off),与活跃一眼区分。
+    return `<tr class="${m.status==='disabled'?'m-off':''}">
       <td><div style="display:flex;align-items:center;gap:12px"><div class="mini-face" style="background:linear-gradient(150deg,#2C2C32,#161618);display:grid;place-items:center;font-weight:700;font-size:13px;color:var(--t2)">${initial}</div><div><div class="strong">${name}</div></div></div></td>
       <td><span class="bdg bdg-role">${ROLE_CN[m.role]||m.role}</span></td>
       <td class="num">${seatNo||'—'}</td>
@@ -163,14 +200,17 @@
   function render(roleFilter){
     const sn = seatNoMap();
     let list = members;
-    if(['admin','creator','viewer'].includes(roleFilter)) list = members.filter(m=>m.role===roleFilter);
+    if(roleFilter==='disabled') list = members.filter(m=>m.status==='disabled');
+    else if(['admin','creator','viewer'].includes(roleFilter)) list = members.filter(m=>m.role===roleFilter);
+    const empty = roleFilter==='disabled' ? '暂无停用成员' : '暂无成员';
     body.innerHTML = list.length ? list.map(m=>row(m, sn[m.id])).join('')
-      : '<tr><td colspan="6" style="text-align:center;color:var(--t4);padding:40px">暂无成员</td></tr>';
+      : `<tr><td colspan="6" style="text-align:center;color:var(--t4);padding:40px">${empty}</td></tr>`;
   }
 
   // 真实统计卡:机构名 / 创作席位(已用/上限) / 成员总数 / 角色分布。
   function renderStats(orgName){
     const total=members.length;
+    const nDisabled=members.filter(m=>m.status==='disabled').length;
     const nAdmin=members.filter(m=>m.role==='admin').length;
     const nCreator=members.filter(m=>m.role==='creator').length;
     const nViewer=members.filter(m=>m.role==='viewer').length;
@@ -179,7 +219,7 @@
     document.getElementById('statRow').innerHTML = `
       <div class="stat" style="animation-delay:.04s"><div class="lbl">机构</div><div class="val" style="font-size:22px">${esc(orgName||'我的机构')}</div></div>
       <div class="stat" style="animation-delay:.08s"><div class="lbl">创作席位</div><div class="val">${used} <small>/ ${limit}</small></div><div class="bar"><i style="width:${pct}%"></i></div><div class="sub">已用 ${used}，余 ${Math.max(0,limit-used)}</div></div>
-      <div class="stat" style="animation-delay:.12s"><div class="lbl">成员总数</div><div class="val">${total}</div><div class="sub">管理员 ${nAdmin} · 创作者 ${nCreator} · 查看者 ${nViewer}</div></div>`;
+      <div class="stat" style="animation-delay:.12s"><div class="lbl">成员总数</div><div class="val">${total}</div><div class="sub">管理员 ${nAdmin} · 创作者 ${nCreator} · 查看者 ${nViewer}${nDisabled?' · 已停用 '+nDisabled:''}</div></div>`;
   }
 
   // 错误码 → 用户文案兜底(后端已带中文 message,这里仅作 code 分支判断的语义来源)。
@@ -238,24 +278,26 @@
   function pickRole(b){ invRole=b.dataset.r; b.parentNode.querySelectorAll('.ir-opt').forEach(x=>{x.classList.remove('active');x.setAttribute('aria-pressed','false');}); b.classList.add('active'); b.setAttribute('aria-pressed','true'); document.getElementById('invRoleDesc').textContent=ROLE_DESC[invRole]; }
   function invite(){
     if(myRole!=='admin'){ window.LJToast('仅管理员可邀请成员','err'); return; }
-    document.getElementById('invUser').value=''; document.getElementById('invPass').value='';
+    document.getElementById('invName').value=''; document.getElementById('invUser').value=''; document.getElementById('invPass').value='';
     document.getElementById('invMsg').textContent=''; invRole='creator';
     document.querySelectorAll('#invRoleSeg .ir-opt').forEach(b=>{const on=b.dataset.r==='creator';b.classList.toggle('active',on);b.setAttribute('aria-pressed',String(on));});
     document.getElementById('invRoleDesc').textContent=ROLE_DESC.creator;
     document.getElementById('ov-invite').style.display='grid';
-    document.getElementById('invUser').focus();
+    document.getElementById('invName').focus();
   }
   async function submitInvite(){
+    const displayName=document.getElementById('invName').value.trim();
     const username=document.getElementById('invUser').value.trim();
     const password=document.getElementById('invPass').value;
     const msg=document.getElementById('invMsg'); msg.style.color='var(--red)';
-    if(!username){ msg.textContent='请输入用户名'; return; }
+    if(!displayName){ msg.textContent='请输入昵称'; return; }
+    if(!username){ msg.textContent='请输入账号'; return; }
     if(password.length<6){ msg.textContent='初始密码至少 6 位'; return; }
     const btn=document.getElementById('invSubmit'); btn.disabled=true; btn.textContent='邀请中…';
     try{
-      await LJ.post('/members',{username,password,role:invRole});
+      await LJ.post('/members',{username,password,role:invRole,displayName});
       document.getElementById('ov-invite').style.display='none';
-      window.LJToast('已邀请「'+username+'」');
+      window.LJToast('已邀请「'+displayName+'」');
       await load();
     }catch(e){ msg.textContent=e.message; }  // 含席位满 SEATS_FULL 文案
     finally{ btn.disabled=false; btn.textContent='邀请'; }
@@ -263,6 +305,26 @@
   async function disable(id,name){ if(!(await window.LJConfirm({title:'停用成员',body:`停用「<b style="color:var(--t1)">${esc(name)}</b>」?其登录将立即失效。`,confirmText:'停用',danger:true})))return; try{await LJ.post('/members/'+id+'/disable');await load();window.LJToast('已停用成员');}catch(e){window.LJToast(e.message,'err');} }
   async function enable(id){ try{await LJ.post('/members/'+id+'/enable');await load();window.LJToast('已启用成员');}catch(e){window.LJToast(e.message,'err');} }
   async function removeM(id,name){ if(!(await window.LJConfirm({title:'移除成员',body:`移除「<b style="color:var(--t1)">${esc(name)}</b>」?此操作不可恢复,并释放其创作席位。`,confirmText:'移除',danger:true})))return; try{await LJ.del('/members/'+id);await load();window.LJToast('已移除成员');}catch(e){window.LJToast(e.message,'err');} }
+
+  // 重置密码:二次确认 → 后端随机生成 + 作废 session → 弹账号+密码(仅显一次,一键复制)。
+  async function resetPw(id,name){
+    if(!(await window.LJConfirm({title:'重置密码',body:`重置「<b style="color:var(--t1)">${esc(name)}</b>」的密码?<br>原密码将立即失效,该成员需用新密码重新登录。`,confirmText:'重置密码',danger:true})))return;
+    try{
+      const r=await LJ.post('/members/'+id+'/reset-password',{});
+      document.getElementById('resetAcct').textContent=r.username;
+      document.getElementById('resetPass').textContent=r.password;
+      const cb=document.getElementById('resetCopy'); cb.disabled=false; cb.classList.remove('done');
+      cb.innerHTML='<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制账号和密码';
+      document.getElementById('ov-reset').style.display='grid';
+    }catch(e){ window.LJToast(e.message||'重置失败','err'); }
+  }
+  async function copyResetCred(){
+    const acct=document.getElementById('resetAcct').textContent;
+    const pass=document.getElementById('resetPass').textContent;
+    const text=`账号:${acct}\n密码:${pass}`;
+    try{ await navigator.clipboard.writeText(text); const cb=document.getElementById('resetCopy'); cb.textContent='✓ 已复制'; cb.classList.add('done'); window.LJToast('已复制账号和密码'); }
+    catch(e){ window.LJToast('复制失败,请手动选中复制','err'); }
+  }
 
   // 改角色:清晰单选弹窗(复用 .ir-opt 分段控件,与邀请一致)。
   let roleTargetId=null, roleNewRole=null, roleCur=null;
