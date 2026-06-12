@@ -10,24 +10,25 @@
   <style>
     /* ── 定价页(独立页)── */
     /* 套餐永远单行:flex nowrap;套餐多了横向滚动(不换行、不压扁)。*/
-    .pr-plans{ display:flex; flex-wrap:nowrap; gap:14px; overflow-x:auto; padding-bottom:6px; scrollbar-width:thin; }
+    .pr-plans{ display:flex; flex-wrap:nowrap; gap:14px; overflow-x:auto; padding-top:12px; padding-bottom:6px; scrollbar-width:thin; }
     .pr-plans::-webkit-scrollbar{ height:6px; }
     .pr-plans::-webkit-scrollbar-thumb{ background:var(--line-hi); border-radius:999px; }
     .pr-empty{ flex:1; text-align:center; color:var(--t4); padding:36px; font-size:13px; }
     .pr-plan{ position:relative; flex:1 1 0; min-width:220px; background:var(--card); border:1px solid var(--line); border-radius:18px; padding:24px 22px; transition:transform .15s var(--ease,cubic-bezier(.22,.61,.36,1)),border-color .15s; }
     .pr-plan:hover{ transform:translateY(-3px); border-color:var(--line-hi); }
-    .pr-plan.pr-feat{ border-color:var(--blue); background:linear-gradient(180deg,rgba(77,141,255,.05),transparent); }
-    .pr-flag{ position:absolute; top:-10px; left:22px; background:var(--blue); color:#fff; font-size:10.5px; font-weight:700; padding:3px 10px; border-radius:999px; letter-spacing:.5px; }
+    .pr-plan.pr-feat{ border-color:var(--gold-line); background:linear-gradient(180deg,var(--gold-bg),transparent); box-shadow:var(--gold-glow); }
+    .pr-flag{ position:absolute; top:-10px; left:22px; background:var(--gold-grad); color:#3A2A06; font-size:10.5px; font-weight:800; padding:3px 11px; border-radius:999px; letter-spacing:.5px; box-shadow:0 2px 8px -2px rgba(245,196,81,.6); }
     .pr-name{ font-size:13px; color:var(--t3); font-weight:600; margin-bottom:8px; }
     .pr-price{ font-size:34px; font-weight:800; font-family:var(--f-en,'Manrope',sans-serif); letter-spacing:-1px; }
-    .pr-price .pr-cur{ font-size:18px; color:var(--t2); font-weight:600; margin-right:2px; }
+    .pr-price .pr-cur{ font-size:18px; color:var(--gold); font-weight:700; margin-right:2px; }
     .pr-credits{ font-size:14px; color:var(--t1); font-weight:600; margin-top:8px; }
-    .pr-credits .pr-bonus{ color:var(--green); font-size:11px; font-weight:600; margin-left:4px; }
+    .pr-credits .pr-bonus{ color:var(--green); background:rgba(52,199,89,.12); font-size:11px; font-weight:700; margin-left:6px; padding:1px 7px; border-radius:999px; }
     .pr-feats{ margin-top:14px; padding-top:14px; border-top:1px solid var(--line-soft,#1A1A1D); font-size:12.5px; color:var(--t2); line-height:2; }
     .pr-feats .pr-ck{ color:var(--green); margin-right:6px; }
     .pr-btn{ width:100%; margin-top:18px; padding:12px; border-radius:999px; font-size:14px; font-weight:600; font-family:inherit; cursor:pointer; border:1px solid var(--line); background:var(--field,#101012); color:var(--t1); transition:.15s; min-height:44px; }
     .pr-btn:hover{ border-color:var(--line-hi); }
-    .pr-plan.pr-feat .pr-btn{ background:var(--t1); color:#0A0A0B; border:none; }
+    .pr-plan.pr-feat .pr-btn{ background:var(--gold-grad); color:#3A2A06; border:none; font-weight:700; box-shadow:var(--gold-glow); }
+    .pr-plan.pr-feat .pr-btn:hover{ filter:brightness(1.06); border:none; }
     .pr-seclbl{ font-size:13px; color:var(--t3); font-weight:600; text-transform:uppercase; letter-spacing:.6px; font-family:var(--f-en,'Manrope',sans-serif); margin:34px 0 16px; }
     .pr-ent{ display:flex; align-items:center; justify-content:space-between; gap:24px; background:linear-gradient(110deg,var(--card-hi),var(--card)); border:1px solid var(--line); border-radius:18px; padding:26px 28px; }
     .pr-et{ font-size:18px; font-weight:700; }

@@ -22,10 +22,10 @@
     /* 付款方式(对公唯一可用,其余灰禁占位) */
     .pm{ display:flex; flex-direction:column; gap:10px; margin-bottom:24px; }
     .pm-opt{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 18px; display:flex; align-items:center; gap:14px; }
-    .pm-opt.on{ border-color:var(--blue); background:linear-gradient(180deg,rgba(77,141,255,.06),transparent); }
+    .pm-opt.on{ border-color:var(--gold-line); background:linear-gradient(180deg,var(--gold-bg),transparent); }
     .pm-opt.dis{ opacity:.45; }
     .pm-radio{ width:18px; height:18px; border-radius:999px; border:2px solid var(--line-hi); flex-shrink:0; }
-    .pm-opt.on .pm-radio{ border-color:var(--blue); background:radial-gradient(circle,#fff 3.5px,var(--blue) 4.5px); }
+    .pm-opt.on .pm-radio{ border-color:var(--gold); background:radial-gradient(circle,#fff 3.5px,var(--gold) 4.5px); }
     .pm-ic{ width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:700; }
     .pm-name{ font-size:14px; font-weight:600; }
     .pm-sub{ font-size:11px; color:var(--t3); margin-top:2px; }
@@ -43,7 +43,9 @@
     .pay-foot{ display:flex; align-items:center; gap:16px; }
     .pay-foot .total{ font-size:13px; color:var(--t3); }
     .pay-foot .total b{ font-size:22px; color:var(--green); font-weight:800; margin-left:6px; font-family:var(--f-en,'Manrope',sans-serif); }
-    .pay-foot .btn{ margin-left:auto; background:var(--blue); color:#fff; border:none; border-radius:999px; padding:13px 32px; font-size:15px; font-weight:700; cursor:pointer; font-family:inherit; min-height:46px; }
+    .pay-foot .btn{ margin-left:auto; background:var(--gold-grad); color:#3A2A06; border:none; border-radius:999px; padding:13px 32px; font-size:15px; font-weight:700; cursor:pointer; font-family:inherit; min-height:46px; box-shadow:var(--gold-glow); transition:filter .15s; }
+    .pay-foot .btn:hover:not(:disabled){ filter:brightness(1.06); }
+    .pay-foot .btn:disabled{ opacity:.5; cursor:not-allowed; box-shadow:none; }
     .pay-foot .ghost{ background:none; color:var(--t3); border:1px solid var(--line); border-radius:999px; padding:13px 24px; font-size:14px; cursor:pointer; font-family:inherit; min-height:46px; }
     /* 非可付状态(已到账/已取消/核对中) */
     .pay-state{ background:var(--card); border:1px solid var(--line); border-radius:16px; padding:40px 24px; text-align:center; }

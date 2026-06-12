@@ -37,6 +37,14 @@
   --amber: #FFB23E;
   --red: #FF5247;
 
+  /* —— 暖金强调(购买/转化路径专用:套餐·充值·确认支付) —— */
+  --gold: #F5C451;
+  --gold-deep: #E0A03A;
+  --gold-grad: linear-gradient(135deg, #F7CE63 0%, #E5A53C 100%);
+  --gold-bg: rgba(245,196,81,.08);
+  --gold-line: rgba(245,196,81,.45);
+  --gold-glow: 0 6px 22px -8px rgba(245,196,81,.5);
+
   --r-sm: 11px;
   --r: 15px;
   --r-lg: 22px;
