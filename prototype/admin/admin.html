@@ -88,6 +88,34 @@
   .rbdg-off{background:rgba(255,82,71,.13);color:var(--red)}
   .toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:var(--card-hi);border:1px solid var(--line-hi);color:var(--t1);padding:12px 20px;border-radius:12px;font-size:13.5px;box-shadow:var(--sh-pop);z-index:500;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(-4px)}
+  /* ── 运营监控 ── */
+  .mon-light{display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:var(--card);font-size:13px;font-weight:600}
+  .ml-dot{width:9px;height:9px;border-radius:50%;background:var(--t4);box-shadow:0 0 0 0 transparent}
+  .mon-light.green .ml-dot{background:var(--green);box-shadow:0 0 10px var(--green)}
+  .mon-light.amber .ml-dot{background:var(--amber);box-shadow:0 0 10px var(--amber)}
+  .mon-light.red .ml-dot{background:var(--red);box-shadow:0 0 10px var(--red);animation:pulse 1.4s infinite}
+  .mon-light.green{color:var(--green)} .mon-light.amber{color:var(--amber)} .mon-light.red{color:var(--red)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+  .mon-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}
+  .mstat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .ms-k{font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;font-family:var(--f-en)}
+  .ms-v{font-size:26px;font-weight:700;font-family:var(--f-en);margin-top:6px;letter-spacing:-.5px}
+  .ms-v.warn{color:var(--amber)} .ms-v.bad{color:var(--red)}
+  .ms-v small{font-size:13px;color:var(--t3);font-weight:500;margin-left:3px}
+  .mon-diag{background:rgba(255,82,71,.08);border:1px solid rgba(255,82,71,.25);color:var(--t1);border-radius:12px;padding:12px 16px;font-size:13px;line-height:1.6;margin-bottom:16px}
+  .mon-diag.amber{background:rgba(255,178,62,.08);border-color:rgba(255,178,62,.25)}
+  .mon-diag b{color:var(--amber)}
+  .mon-chart{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 18px}
+  .mc-head{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--t3);font-weight:600;margin-bottom:8px;font-family:var(--f-en);text-transform:uppercase;letter-spacing:.5px}
+  .mc-legend{color:var(--t2);text-transform:none;letter-spacing:0;font-family:var(--f-mono)}
+  .jobs-list{margin-top:10px;display:flex;flex-direction:column;gap:7px;max-height:54vh;overflow-y:auto}
+  .jrow{display:flex;align-items:center;gap:12px;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 13px;font-size:13px}
+  .jrow .jst{flex:0 0 60px;font-weight:600;font-size:11.5px}
+  .jst.queued{color:var(--t3)} .jst.running{color:var(--blue)} .jst.done{color:var(--green)} .jst.failed{color:var(--red)}
+  .jrow .jty{flex:0 0 70px;color:var(--t2);font-family:var(--f-mono);font-size:11.5px}
+  .jrow .jtime{flex:1;color:var(--t4);font-family:var(--f-mono);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .jrow .jdur{flex:0 0 auto;color:var(--t3);font-family:var(--f-mono);font-size:11.5px}
+  .jrow .jerr{color:var(--red);font-size:11.5px}
 </style>
 </head>
 <body>
@@ -97,7 +125,42 @@
   </div>
 
   <div class="page">
+    <!-- ── 运营监控驾驶舱 ── -->
     <div class="ph">
+      <div>
+        <h1>运营监控</h1>
+        <p id="monStatus">各租户任务、并发与瓶颈 · 每 10 秒刷新</p>
+      </div>
+      <div class="mon-light" id="monLight"><span class="ml-dot"></span><span id="mlText">加载中…</span></div>
+    </div>
+
+    <!-- 健康条 -->
+    <div class="mon-stats" id="monStats">
+      <div class="mstat"><div class="ms-k">排队中</div><div class="ms-v" id="msQueued">—</div></div>
+      <div class="mstat"><div class="ms-k">进行中</div><div class="ms-v" id="msRunning">—</div></div>
+      <div class="mstat"><div class="ms-k">今日完成</div><div class="ms-v" id="msDone">—</div></div>
+      <div class="mstat"><div class="ms-k">今日失败</div><div class="ms-v" id="msFailed">—</div></div>
+      <div class="mstat"><div class="ms-k">平均耗时</div><div class="ms-v" id="msDur">—</div></div>
+    </div>
+
+    <!-- 瓶颈诊断提示(red/amber 时出) -->
+    <div class="mon-diag" id="monDiag" style="display:none"></div>
+
+    <!-- 并发趋势 -->
+    <div class="mon-chart">
+      <div class="mc-head"><span>并发趋势 · 近 24 小时</span><span class="mc-legend" id="mcPeak"></span></div>
+      <svg id="monSpark" viewBox="0 0 720 120" preserveAspectRatio="none" width="100%" height="120"></svg>
+    </div>
+
+    <!-- 租户维度表 -->
+    <div class="tbl" style="margin-top:18px">
+      <table>
+        <thead><tr><th>租户</th><th>排队</th><th>进行中</th><th>今日量</th><th>成功率</th><th>P95 耗时</th><th style="text-align:right">明细</th></tr></thead>
+        <tbody id="monTenantRows"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="ph" style="margin-top:40px">
       <div><h1>租户管理</h1><p id="subline">管理机构、开设账号、充值点数</p></div>
       <button class="btn-new" onclick="openTenant()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>新建租户</button>
     </div>
@@ -228,6 +291,16 @@
       <p style="font-size:11.5px;color:var(--t4);margin-top:8px">重置后该用户当前所有登录会话立即失效,需用新密码重新登录。</p>
       <div class="mmsg" id="rMsg"></div>
       <div class="mbtns"><button class="cancel" onclick="closeOv('resetOv')">取消</button><button class="ok" id="rOk" onclick="submitReset()">确认重置</button></div>
+    </div>
+  </div>
+
+  <!-- 租户任务流(监控表点「明细」展开)-->
+  <div class="ov" id="jobsOv">
+    <div class="modal mwide">
+      <h3 id="jTitle">任务明细</h3>
+      <p class="mdesc">该租户最近任务(状态 / 类型 / 耗时 / 错误)。仅展示,不含生成入参。</p>
+      <div id="jobsList" class="jobs-list"><div class="empty" style="padding:20px">加载中…</div></div>
+      <div class="mbtns"><button class="cancel" onclick="closeOv('jobsOv')" style="flex:none;padding:11px 24px">关闭</button></div>
     </div>
   </div>
 
@@ -508,7 +581,108 @@
 
   document.getElementById('logoutBtn').onclick=async()=>{ try{ await PA('POST','/logout'); }catch{} location.href='/admin/login'; };
 
+  // ── 运营监控驾驶舱 ──
+  const LV_CN={green:'健康',amber:'排队偏高',red:'已达瓶颈'};
+  function fmtDur(ms){ if(!ms)return '—'; const s=Math.round(ms/1000); if(s<60)return s+'s'; const m=Math.floor(s/60); return m+'m'+String(s%60).padStart(2,'0')+'s'; }
+  function fmtTime(ts){ const d=new Date(ts); return `${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
+
+  async function loadMonitor(){
+    try{
+      const ov=await PA('GET','/api/metrics/overview');
+      // 瓶颈灯
+      const light=document.getElementById('monLight');
+      light.className='mon-light '+ov.level;
+      document.getElementById('mlText').textContent=LV_CN[ov.level]||ov.level;
+      // 健康条
+      document.getElementById('msQueued').textContent=fmtN(ov.queued);
+      document.getElementById('msQueued').className='ms-v'+(ov.queued>15?' bad':ov.queued>5?' warn':'');
+      document.getElementById('msRunning').textContent=fmtN(ov.running);
+      document.getElementById('msDone').textContent=fmtN(ov.todayDone);
+      const failEl=document.getElementById('msFailed');
+      failEl.innerHTML=fmtN(ov.todayFailed)+(ov.todayDone+ov.todayFailed>0?` <small>${(ov.failRate*100).toFixed(1)}%</small>`:'');
+      failEl.className='ms-v'+(ov.failRate>0.1?' bad':ov.failRate>0.03?' warn':'');
+      document.getElementById('msDur').textContent=fmtDur(ov.avgDurationMs);
+      // 瓶颈诊断(区分 worker 吞吐 vs 百炼配额)
+      const diag=document.getElementById('monDiag');
+      if(ov.level==='red'){
+        diag.style.display=''; diag.className='mon-diag';
+        if(ov.failRate>0.1){ diag.innerHTML='🔴 <b>失败率偏高</b>。多为生成失败——优先排查百炼 API(配额/限流/AccessDenied),而非扩服务器。点租户「明细」看具体错误。'; }
+        else { diag.innerHTML='🔴 <b>队列拥堵</b>(排队 '+ov.queued+',平均等待 '+fmtDur(ov.avgQueueWaitMs)+')。进行中='+ov.running+':若 running 不高,是单 worker 吞吐瓶颈 → 拆多 worker;若 running 也高,是百炼并发配额到顶 → 加配额。'; }
+      } else if(ov.level==='amber'){
+        diag.style.display=''; diag.className='mon-diag amber';
+        diag.innerHTML='🟡 <b>排队偏高</b>(排队 '+ov.queued+',平均等待 '+fmtDur(ov.avgQueueWaitMs)+')。还能撑,建议开始评估拆多 worker。';
+      } else { diag.style.display='none'; }
+
+      await Promise.all([loadConcurrency(), loadMonTenants()]);
+    }catch(e){ /* 401 已跳转 */ }
+  }
+
+  async function loadConcurrency(){
+    try{
+      const { series }=await PA('GET','/api/metrics/concurrency?range=24h');
+      const svg=document.getElementById('monSpark'); const W=720,H=120,pad=6;
+      const vals=series.map(p=>p.active); const peak=Math.max(1,...vals);
+      document.getElementById('mcPeak').textContent='峰值并发 '+peak;
+      const n=series.length; const bw=(W-pad*2)/n;
+      // 柱状:active 高度;failed 部分染红
+      let bars='';
+      series.forEach((p,i)=>{
+        const x=pad+i*bw; const h=(p.active/peak)*(H-pad*2);
+        const fh=p.active?(p.failed/p.active)*h:0;
+        const y=H-pad-h;
+        bars+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(bw-2).toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" fill="var(--blue)" opacity="0.85"><title>${fmtTime(p.hourStart)} 活跃${p.active} 完成${p.done} 失败${p.failed}</title></rect>`;
+        if(fh>0.5) bars+=`<rect x="${x.toFixed(1)}" y="${(H-pad-fh).toFixed(1)}" width="${(bw-2).toFixed(1)}" height="${fh.toFixed(1)}" rx="1.5" fill="var(--red)"></rect>`;
+      });
+      svg.innerHTML=bars;
+    }catch(e){}
+  }
+
+  async function loadMonTenants(){
+    const rows=document.getElementById('monTenantRows');
+    try{
+      const { tenants }=await PA('GET','/api/metrics/by-tenant');
+      if(!tenants.length){ rows.innerHTML='<tr><td colspan="7" class="empty">暂无任务数据(多租户启用后这里按租户分行)</td></tr>'; return; }
+      rows.innerHTML=tenants.map(t=>{
+        const sr=(t.successRate*100).toFixed(0);
+        const srColor=t.successRate<0.9?'var(--red)':t.successRate<0.98?'var(--amber)':'var(--green)';
+        return `<tr>
+          <td><div class="tn">${esc(t.name)}</div><div class="tid">${esc(t.tenantId)}</div></td>
+          <td>${t.queued?`<span style="color:${t.queued>5?'var(--amber)':'inherit'}">${t.queued}</span>`:'0'}</td>
+          <td>${t.running}</td>
+          <td>${fmtN(t.todayCount)}</td>
+          <td style="color:${t.todayCount?srColor:'var(--t4)'};font-family:var(--f-mono)">${t.todayCount?sr+'%':'—'}</td>
+          <td style="font-family:var(--f-mono);font-size:12px;color:var(--t2)">${fmtDur(t.p95DurationMs)}</td>
+          <td><div class="acts"><button class="act" onclick='openJobs(${JSON.stringify(t.tenantId)},${JSON.stringify(t.name)})'>明细</button></div></td>
+        </tr>`;
+      }).join('');
+    }catch(e){ rows.innerHTML='<tr><td colspan="7" class="empty">加载失败</td></tr>'; }
+  }
+
+  window.openJobs=async(tenantId,name)=>{
+    document.getElementById('jTitle').textContent='任务明细 · '+name;
+    const box=document.getElementById('jobsList'); box.innerHTML='<div class="empty" style="padding:20px">加载中…</div>';
+    document.getElementById('jobsOv').classList.add('on');
+    try{
+      const { jobs }=await PA('GET',`/api/metrics/recent-jobs?tenant=${encodeURIComponent(tenantId)}&limit=80`);
+      if(!jobs.length){ box.innerHTML='<div class="empty" style="padding:20px">该租户暂无任务</div>'; return; }
+      const ST={queued:'排队',running:'进行中',done:'完成',failed:'失败'};
+      box.innerHTML=jobs.map(j=>`<div class="jrow">
+        <span class="jst ${j.status}">${ST[j.status]||j.status}</span>
+        <span class="jty">${esc(j.type)}</span>
+        <span class="jtime">${fmtTime(j.created_at)}${j.status==='failed'&&j.error?` · <span class="jerr">${esc(j.error)}</span>`:''}</span>
+        <span class="jdur">${j.durationMs!=null?fmtDur(j.durationMs):''}</span>
+      </div>`).join('');
+    }catch(e){ box.innerHTML='<div class="empty" style="padding:20px">加载失败</div>'; }
+  };
+
+  // 10 秒轮询;离页暂停(复用 works.html 模式,省请求)。
+  let monTimer=null;
+  function startMonPoll(){ stopMonPoll(); loadMonitor(); monTimer=setInterval(loadMonitor,10000); }
+  function stopMonPoll(){ if(monTimer){ clearInterval(monTimer); monTimer=null; } }
+  document.addEventListener('visibilitychange',()=>{ if(document.hidden) stopMonPoll(); else startMonPoll(); });
+
   load();
+  startMonPoll();
 </script>
 </body>
 </html>

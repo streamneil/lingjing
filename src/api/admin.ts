@@ -83,6 +83,221 @@ adminRouter.get('/api/me', requirePlatformAdmin, (req: Request, res: Response) =
   return res.json(req.padmin);
 });
 
+// ── 运营监控驾驶舱(平台超管:看各租户任务/并发/瓶颈)──
+// 设计来源:/plan-ceo-review 监控规划轮。全部只读聚合 job 表(现有 idx_job_status 索引),
+// 零新表、零新依赖。目标:把抽象的"扩容信号"变成超管能看见的一盏瓶颈灯。
+//
+// 真实瓶颈不是 SQLite(低频长任务,写极少),而是:① 单 worker 吞吐 ② 百炼 API 配额。
+// 故监控直接量 queued 深度 / 排队时长 / 失败率,并区分两类瓶颈给运营对症提示。
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** 今日零点(本地时区,与审计/积分同口径——容器 TZ=Asia/Shanghai)。 */
+function startOfTodayMs(): number {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+/** 瓶颈灯阈值(规划轮定稿):把"何时扩容"从拍脑袋变成数据驱动。
+ *  green=健康 / amber=排队偏高(考虑拆多 worker)/ red=已达瓶颈(扩容或查百炼配额)。 */
+function bottleneckLevel(queued: number, avgQueueWaitMs: number, failRate: number): 'green' | 'amber' | 'red' {
+  if (queued > 15 || avgQueueWaitMs > 120_000 || failRate > 0.1) return 'red';
+  if (queued > 5 || avgQueueWaitMs > 30_000) return 'amber';
+  return 'green';
+}
+
+/** 概览:顶部健康条 + 瓶颈灯。queued/running 是实时快照,今日完成/失败按本地零点切。 */
+adminRouter.get('/api/metrics/overview', requirePlatformAdmin, (_req: Request, res: Response) => {
+  const todayStart = startOfTodayMs();
+
+  // 实时队列深度(全状态计数)。
+  const statusRows = db.prepare(`SELECT status, COUNT(*) AS n FROM job GROUP BY status`).all() as {
+    status: string;
+    n: number;
+  }[];
+  const byStatus: Record<string, number> = {};
+  for (const r of statusRows) byStatus[r.status] = r.n;
+  const queued = byStatus.queued ?? 0;
+  const running = byStatus.running ?? 0;
+
+  // 今日完成 / 失败(本地零点起)。
+  const today = db
+    .prepare(
+      `SELECT
+         SUM(CASE WHEN status='done'   THEN 1 ELSE 0 END) AS done,
+         SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failed
+       FROM job WHERE created_at >= ?`,
+    )
+    .get(todayStart) as { done: number | null; failed: number | null };
+  const todayDone = today.done ?? 0;
+  const todayFailed = today.failed ?? 0;
+  const todayTotal = todayDone + todayFailed;
+  const failRate = todayTotal > 0 ? todayFailed / todayTotal : 0;
+
+  // 平均生成耗时(今日已完成任务:updated_at - started_at,started_at 非空)。
+  const dur = db
+    .prepare(
+      `SELECT AVG(updated_at - started_at) AS avg
+       FROM job WHERE status='done' AND started_at IS NOT NULL AND created_at >= ?`,
+    )
+    .get(todayStart) as { avg: number | null };
+  const avgDurationMs = Math.round(dur.avg ?? 0);
+
+  // 平均排队时长(当前仍在 queued 的任务已等多久:now - created_at)——队列拥堵的直接信号。
+  const wait = db
+    .prepare(`SELECT AVG(? - created_at) AS avg FROM job WHERE status='queued'`)
+    .get(Date.now()) as { avg: number | null };
+  const avgQueueWaitMs = Math.round(wait.avg ?? 0);
+
+  const level = bottleneckLevel(queued, avgQueueWaitMs, failRate);
+
+  return res.json({
+    queued,
+    running,
+    todayDone,
+    todayFailed,
+    failRate,
+    avgDurationMs,
+    avgQueueWaitMs,
+    level,
+  });
+});
+
+/** 租户维度:谁在用、用得怎么样。queued/running 实时,今日量/成功率/P95 按本地零点。 */
+adminRouter.get('/api/metrics/by-tenant', requirePlatformAdmin, (_req: Request, res: Response) => {
+  const todayStart = startOfTodayMs();
+
+  // 实时:各租户 queued/running 计数。
+  const live = db
+    .prepare(
+      `SELECT tenant_id,
+         SUM(CASE WHEN status='queued'  THEN 1 ELSE 0 END) AS queued,
+         SUM(CASE WHEN status='running' THEN 1 ELSE 0 END) AS running
+       FROM job WHERE status IN ('queued','running') GROUP BY tenant_id`,
+    )
+    .all() as { tenant_id: string; queued: number; running: number }[];
+
+  // 今日:各租户完成/失败计数(算成功率)。
+  const todayAgg = db
+    .prepare(
+      `SELECT tenant_id,
+         SUM(CASE WHEN status='done'   THEN 1 ELSE 0 END) AS done,
+         SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failed
+       FROM job WHERE created_at >= ? GROUP BY tenant_id`,
+    )
+    .all(todayStart) as { tenant_id: string; done: number; failed: number }[];
+
+  // 今日已完成任务的耗时数组(P95 在 JS 算——SQLite 无原生 percentile)。
+  const durRows = db
+    .prepare(
+      `SELECT tenant_id, (updated_at - started_at) AS d
+       FROM job WHERE status='done' AND started_at IS NOT NULL AND created_at >= ?`,
+    )
+    .all(todayStart) as { tenant_id: string; d: number }[];
+  const durByTenant = new Map<string, number[]>();
+  for (const r of durRows) {
+    const arr = durByTenant.get(r.tenant_id) ?? [];
+    arr.push(r.d);
+    durByTenant.set(r.tenant_id, arr);
+  }
+  const p95 = (arr: number[]): number => {
+    if (!arr.length) return 0;
+    const sorted = [...arr].sort((a, b) => a - b);
+    const idx = Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1);
+    return Math.round(sorted[idx]!);
+  };
+
+  // 并起来:涉及今日有活动或当前有在途任务的租户全集。
+  const tenants = db.prepare(`SELECT id, name FROM tenant`).all() as { id: string; name: string }[];
+  const nameById = new Map(tenants.map((t) => [t.id, t.name]));
+  const liveById = new Map(live.map((r) => [r.tenant_id, r]));
+  const todayById = new Map(todayAgg.map((r) => [r.tenant_id, r]));
+  const ids = new Set<string>([...liveById.keys(), ...todayById.keys()]);
+
+  const items = [...ids].map((id) => {
+    const l = liveById.get(id);
+    const t = todayById.get(id);
+    const done = t?.done ?? 0;
+    const failed = t?.failed ?? 0;
+    const total = done + failed;
+    return {
+      tenantId: id,
+      name: nameById.get(id) ?? id, // 老 default 租户可能无 tenant 行 → 回退 id
+      queued: l?.queued ?? 0,
+      running: l?.running ?? 0,
+      todayCount: total,
+      successRate: total > 0 ? done / total : 1,
+      p95DurationMs: p95(durByTenant.get(id) ?? []),
+    };
+  });
+  // 在途多的排前(运营先看正在消耗资源的)。
+  items.sort((a, b) => b.running + b.queued - (a.running + a.queued) || b.todayCount - a.todayCount);
+  return res.json({ tenants: items });
+});
+
+/** 并发趋势:近 N 小时按小时分桶,看历史峰值贴没贴到容量上限。
+ *  实时算(MVP):running 是瞬态,用 started_at/updated_at 落桶近似——同时活跃任务数。 */
+adminRouter.get('/api/metrics/concurrency', requirePlatformAdmin, (req: Request, res: Response) => {
+  const range = String(req.query.range ?? '24h');
+  const hours = range === '7d' ? 24 * 7 : range === '48h' ? 48 : 24;
+  const now = Date.now();
+  const since = now - hours * 60 * 60 * 1000;
+
+  // 每小时桶:该小时内"启动过"的任务计为该桶活跃(近似并发);并附完成/失败数。
+  const rows = db
+    .prepare(
+      `SELECT
+         CAST((COALESCE(started_at, created_at) - ?) / 3600000 AS INTEGER) AS bucket,
+         SUM(CASE WHEN status='done'   THEN 1 ELSE 0 END) AS done,
+         SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failed,
+         COUNT(*) AS active
+       FROM job
+       WHERE COALESCE(started_at, created_at) >= ?
+       GROUP BY bucket ORDER BY bucket`,
+    )
+    .all(since, since) as { bucket: number; done: number; failed: number; active: number }[];
+
+  const byBucket = new Map(rows.map((r) => [r.bucket, r]));
+  const series = Array.from({ length: hours }, (_, i) => {
+    const r = byBucket.get(i);
+    return {
+      hourStart: since + i * 3600000,
+      active: r?.active ?? 0,
+      done: r?.done ?? 0,
+      failed: r?.failed ?? 0,
+    };
+  });
+  return res.json({ range, hours, series });
+});
+
+/** 某租户最近任务流(点开租户行展开)。input_json/output_url 不下发(隐私+体积),只给运营要看的字段。 */
+adminRouter.get('/api/metrics/recent-jobs', requirePlatformAdmin, (req: Request, res: Response) => {
+  const tenant = req.query.tenant ? String(req.query.tenant) : null;
+  const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+  const rows = (
+    tenant
+      ? db
+          .prepare(
+            `SELECT id, tenant_id, type, status, progress, attempts, error, created_at, started_at, updated_at
+             FROM job WHERE tenant_id=? ORDER BY created_at DESC, rowid DESC LIMIT ?`,
+          )
+          .all(tenant, limit)
+      : db
+          .prepare(
+            `SELECT id, tenant_id, type, status, progress, attempts, error, created_at, started_at, updated_at
+             FROM job ORDER BY created_at DESC, rowid DESC LIMIT ?`,
+          )
+          .all(limit)
+  ) as Record<string, unknown>[];
+  // 附耗时(done 的算 updated_at-started_at;其余 null)。
+  const jobs = rows.map((r) => ({
+    ...r,
+    durationMs:
+      r.status === 'done' && r.started_at ? Number(r.updated_at) - Number(r.started_at) : null,
+  }));
+  return res.json({ jobs });
+});
+
 // ── 租户管理 ──
 interface TenantListItem extends TenantRow {
   balance: number;
