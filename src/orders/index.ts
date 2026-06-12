@@ -27,6 +27,7 @@ import {
   type OrderStatus,
   type InvoiceStatus,
   type PayeeSettingRow,
+  type TenantInvoiceProfileRow,
 } from '../db/index.js';
 import { getPlan } from '../pricing/index.js';
 import { grant } from '../credits/index.js';
@@ -137,12 +138,14 @@ export function listOrdersForActor(
   limit = 100,
 ): RechargeOrderRow[] {
   const scope = scopeByActor(actingUserId, isAdmin);
-  // LEFT JOIN user 取发起人名(display_name 优先,回退 username;admin 看全机构时显谁下的单)。
+  // LEFT JOIN user 取发起人名;LEFT JOIN invoice_order+invoice 派生开票状态(走关联表,非死列)。
   return db
     .prepare(
-      `SELECT o.*, COALESCE(u.display_name, u.username) AS actorName
+      `SELECT o.*, COALESCE(u.display_name, u.username) AS actorName, iv.status AS invoiceStatus
          FROM recharge_order o
          LEFT JOIN user u ON o.created_by = u.id
+         LEFT JOIN invoice_order io ON io.order_id = o.id
+         LEFT JOIN invoice iv ON iv.id = io.invoice_id
         WHERE o.tenant_id=?${scope.clause.replace(/created_by/g, 'o.created_by')}
         ORDER BY o.created_at DESC, o.rowid DESC LIMIT ?`,
     )
@@ -235,10 +238,54 @@ export const confirmAndCredit = db.transaction((id: string, adminId: string): bo
   return true;
 });
 
-// ── 发票 ──
+// ── 发票(一票多单)──
+//
+// 关联走 invoice_order(UNIQUE(order_id) 保证一单只进一张在途/已开发票);invoice 表无 order_id 列。
+// 权限:租户 admin 发起申请(去 created_by 检查,可批本租户任意人的单);平台超管开具。
+// 钱路:单一 validateInvoiceOrders 助手在「申请时 + 开具时」两处校验 —— 所含订单都 credited
+//       且属本租户 + Σ金额 = 发票金额 + 非空。防漂移、防错开。
+
+// 取某发票所含订单 id(派生)。
+function invoiceOrderIds(invoiceId: string): string[] {
+  return (
+    db.prepare(`SELECT order_id FROM invoice_order WHERE invoice_id=?`).all(invoiceId) as {
+      order_id: string;
+    }[]
+  ).map((r) => r.order_id);
+}
+
+// 给发票挂上 orderIds/orderNos(展示用)。
+function hydrateInvoice(inv: InvoiceRow): InvoiceRow {
+  const rows = db
+    .prepare(
+      `SELECT o.id, o.order_no FROM invoice_order io
+         JOIN recharge_order o ON o.id = io.order_id
+        WHERE io.invoice_id=?`,
+    )
+    .all(inv.id) as { id: string; order_no: string }[];
+  inv.orderIds = rows.map((r) => r.id);
+  inv.orderNos = rows.map((r) => r.order_no);
+  return inv;
+}
 
 export function getInvoice(id: string): InvoiceRow | undefined {
-  return db.prepare(`SELECT * FROM invoice WHERE id=?`).get(id) as InvoiceRow | undefined;
+  const inv = db.prepare(`SELECT * FROM invoice WHERE id=?`).get(id) as InvoiceRow | undefined;
+  return inv ? hydrateInvoice(inv) : undefined;
+}
+
+// 单一钱路校验(申请时 + 开具时共用):所含订单都存在 + 属本租户 + credited + Σ金额=发票金额 + 非空。
+// 不符抛 OrderError(API 层透传 400)。
+function validateInvoiceOrders(orderIds: string[], tenantId: string, expectedAmount: number): void {
+  if (orderIds.length === 0) throw new OrderError('NO_ORDERS', '请至少选择一个订单');
+  let sum = 0;
+  for (const oid of orderIds) {
+    const o = getOrder(oid);
+    if (!o || o.tenant_id !== tenantId) throw new OrderError('ORDER_NOT_FOUND', '订单不存在');
+    if (o.status !== 'credited') throw new OrderError('ORDER_NOT_CREDITED', '仅已到账订单可开票');
+    sum += o.price_yuan;
+  }
+  if (sum !== expectedAmount)
+    throw new OrderError('AMOUNT_MISMATCH', '发票金额与所含订单金额之和不符');
 }
 
 export function getInvoiceForActor(
@@ -247,10 +294,14 @@ export function getInvoiceForActor(
   actingUserId: string,
   isAdmin: boolean,
 ): InvoiceRow | undefined {
-  const scope = scopeByActor(actingUserId, isAdmin);
-  return db
-    .prepare(`SELECT * FROM invoice WHERE id=? AND tenant_id=?${scope.clause}`)
-    .get(id, tenantId, ...scope.params) as InvoiceRow | undefined;
+  // 发票现在是租户级(admin 发起,代表机构)。creator 看本机构所有发票(只读),不按 created_by 隔离。
+  // 故不用 scopeByActor 的 created_by 限制 —— 只限 tenant_id。actingUserId/isAdmin 保留签名兼容调用点。
+  void actingUserId;
+  void isAdmin;
+  const inv = db
+    .prepare(`SELECT * FROM invoice WHERE id=? AND tenant_id=?`)
+    .get(id, tenantId) as InvoiceRow | undefined;
+  return inv ? hydrateInvoice(inv) : undefined;
 }
 
 export function listInvoicesForActor(
@@ -259,77 +310,135 @@ export function listInvoicesForActor(
   isAdmin: boolean,
   limit = 100,
 ): InvoiceRow[] {
-  const scope = scopeByActor(actingUserId, isAdmin);
-  return db
+  void actingUserId;
+  void isAdmin;
+  const rows = db
     .prepare(
-      `SELECT * FROM invoice WHERE tenant_id=?${scope.clause}
+      `SELECT * FROM invoice WHERE tenant_id=?
        ORDER BY created_at DESC, rowid DESC LIMIT ?`,
     )
-    .all(tenantId, ...scope.params, limit) as InvoiceRow[];
+    .all(tenantId, limit) as InvoiceRow[];
+  return rows.map(hydrateInvoice);
 }
 
 export function listInvoicesByStatus(status: InvoiceStatus, limit = 200): InvoiceRow[] {
-  return db
+  const rows = db
     .prepare(`SELECT * FROM invoice WHERE status=? ORDER BY created_at DESC, rowid DESC LIMIT ?`)
     .all(status, limit) as InvoiceRow[];
+  return rows.map(hydrateInvoice);
 }
 
-// 用户申请开票:仅 credited 订单,且该订单尚无 requested/issued 发票(防重复申请)。
-// 金额取订单快照。事务保证「校验订单 credited + 无在途发票 + 插入」原子。
+// 申请开票(一票多单)。租户 admin 发起:勾选 N 个本租户 credited 未占用订单 + 抬头。
+//   事务原子:① pre-validate 每单未被其他发票占用 ② validateInvoiceOrders(credited + Σ金额 + 非空)
+//   ③ 插 invoice + N 条 invoice_order。UNIQUE(order_id) 做并发后来者 backstop → 捕获映射 409。
 export const requestInvoice = db.transaction(
   (params: {
-    orderId: string;
+    orderIds: string[];
     tenantId: string;
-    userId: string;
+    userId: string; // 发起的 admin
     title: string;
     taxNo: string;
   }): InvoiceRow => {
-    const order = getOrder(params.orderId);
-    if (!order || order.tenant_id !== params.tenantId || order.created_by !== params.userId)
-      throw new OrderError('ORDER_NOT_FOUND', '订单不存在');
-    if (order.status !== 'credited')
-      throw new OrderError('ORDER_NOT_CREDITED', '仅已到账订单可开票');
-    const existing = db
-      .prepare(`SELECT id FROM invoice WHERE order_id=? AND status IN ('requested','issued')`)
-      .get(params.orderId);
-    if (existing) throw new OrderError('INVOICE_EXISTS', '该订单已申请开票');
     if (!params.title.trim()) throw new OrderError('TITLE_REQUIRED', '请填写发票抬头');
     if (!params.taxNo.trim()) throw new OrderError('TAXNO_REQUIRED', '请填写税号');
+    if (params.orderIds.length === 0) throw new OrderError('NO_ORDERS', '请至少选择一个订单');
 
+    // ① pre-validate:每单未被在途/已开发票占用(invoice_order UNIQUE 做并发兜底)。
+    for (const oid of params.orderIds) {
+      const occupied = db
+        .prepare(`SELECT 1 FROM invoice_order WHERE order_id=?`)
+        .get(oid);
+      if (occupied) throw new OrderError('INVOICE_EXISTS', '所选订单中有已申请/已开票的');
+    }
+
+    // ② 金额 = Σ订单金额;校验所含订单都 credited + 属本租户 + 非空。
+    let amount = 0;
+    for (const oid of params.orderIds) {
+      const o = getOrder(oid);
+      if (!o || o.tenant_id !== params.tenantId) throw new OrderError('ORDER_NOT_FOUND', '订单不存在');
+      amount += o.price_yuan;
+    }
+    validateInvoiceOrders(params.orderIds, params.tenantId, amount);
+
+    // ③ 插 invoice + N 条关联。UNIQUE(order_id) 冲突(并发)→ 抛 → 整体回滚。
     const id = randomUUID();
     const t = now();
     db.prepare(
       `INSERT INTO invoice
-         (id, order_id, tenant_id, created_by, title, tax_no, kind, amount_yuan, status, created_at)
-       VALUES (?,?,?,?,?,?,'普票',?,'requested',?)`,
-    ).run(
-      id,
-      params.orderId,
-      params.tenantId,
-      params.userId,
-      params.title.trim(),
-      params.taxNo.trim(),
-      order.price_yuan,
-      t,
-    );
+         (id, tenant_id, created_by, title, tax_no, kind, amount_yuan, status, created_at)
+       VALUES (?,?,?,?,?,'普票',?,'requested',?)`,
+    ).run(id, params.tenantId, params.userId, params.title.trim(), params.taxNo.trim(), amount, t);
+    const insOrder = db.prepare(`INSERT INTO invoice_order (invoice_id, order_id) VALUES (?,?)`);
+    try {
+      for (const oid of params.orderIds) insOrder.run(id, oid);
+    } catch (e) {
+      // 并发后来者撞 UNIQUE(order_id) → 映射为 409 业务错误(整事务回滚,不留孤儿发票)。
+      throw new OrderError('INVOICE_EXISTS', '所选订单已被并发开票占用,请刷新重试');
+    }
     return getInvoice(id)!;
   },
 );
 
-// 超管开票回填:requested → issued(发票号 + PDF key)。
-export function issueInvoice(id: string, invoiceNo: string, pdfKey: string | null): boolean {
-  const res = db
-    .prepare(
-      `UPDATE invoice SET status='issued', invoice_no=?, pdf_key=?, issued_at=?
-       WHERE id=? AND status='requested'`,
-    )
-    .run(invoiceNo, pdfKey, now(), id);
-  return res.changes === 1;
+// 超管开具:requested → issued(发票号 + PDF)。开具前**重校**所含订单仍全 credited + Σ金额=发票金额
+//   (用户「确认订单 + 审查入账」),不符拒开。自己重加载 invoice_order,不依赖外传订单。
+export const issueInvoice = db.transaction(
+  (id: string, invoiceNo: string, pdfKey: string | null): boolean => {
+    const inv = db.prepare(`SELECT * FROM invoice WHERE id=?`).get(id) as InvoiceRow | undefined;
+    if (!inv || inv.status !== 'requested') return false;
+    // 重校(审查入账):所含订单仍全 credited + Σ金额=发票金额。
+    validateInvoiceOrders(invoiceOrderIds(id), inv.tenant_id, inv.amount_yuan);
+    const res = db
+      .prepare(
+        `UPDATE invoice SET status='issued', invoice_no=?, pdf_key=?, issued_at=?
+         WHERE id=? AND status='requested'`,
+      )
+      .run(invoiceNo, pdfKey, now(), id);
+    return res.changes === 1;
+  },
+);
+
+// 超管驳回:删发票 + 删该发票所有 invoice_order 关联 → 订单释放回「未开票」可重选(架构 #1)。
+export const rejectInvoice = db.transaction((id: string): boolean => {
+  const res = db.prepare(`DELETE FROM invoice WHERE id=? AND status='requested'`).run(id);
+  if (res.changes !== 1) return false;
+  db.prepare(`DELETE FROM invoice_order WHERE invoice_id=?`).run(id);
+  return true;
+});
+
+// ── 租户开票抬头资料(单例/租户;首次开票自动 upsert;仅 admin 编辑)──
+export function getInvoiceProfile(tenantId: string): TenantInvoiceProfileRow | undefined {
+  return db.prepare(`SELECT * FROM tenant_invoice_profile WHERE tenant_id=?`).get(tenantId) as
+    | TenantInvoiceProfileRow
+    | undefined;
 }
 
-// 超管驳回开票:requested → 删行(退回 none,用户可重新申请)。带原因记审计由 API 层做。
-export function rejectInvoice(id: string): boolean {
-  return db.prepare(`DELETE FROM invoice WHERE id=? AND status='requested'`).run(id).changes === 1;
+export function upsertInvoiceProfile(p: {
+  tenantId: string;
+  title: string;
+  taxNo: string;
+  bankName?: string;
+  bankAccount?: string;
+  address?: string;
+  phone?: string;
+  updatedBy: string;
+}): void {
+  db.prepare(
+    `INSERT INTO tenant_invoice_profile (tenant_id, title, tax_no, bank_name, bank_account, address, phone, updated_at, updated_by)
+     VALUES (?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(tenant_id) DO UPDATE SET title=excluded.title, tax_no=excluded.tax_no,
+       bank_name=excluded.bank_name, bank_account=excluded.bank_account, address=excluded.address,
+       phone=excluded.phone, updated_at=excluded.updated_at, updated_by=excluded.updated_by`,
+  ).run(
+    p.tenantId,
+    p.title,
+    p.taxNo,
+    p.bankName ?? null,
+    p.bankAccount ?? null,
+    p.address ?? null,
+    p.phone ?? null,
+    now(),
+    p.updatedBy,
+  );
 }
 
 // ── 对公收款信息(单例平台配置)──

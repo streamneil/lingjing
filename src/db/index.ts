@@ -464,16 +464,17 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_order_tenant_creator ON recharge_order(tenant_id, created_by);
   CREATE INDEX IF NOT EXISTS idx_order_status ON recharge_order(status);
 
+  -- 发票(一票多单;无 order_id 列 —— 订单关联走 invoice_order)。
+  -- 存量库若仍是老「一票一单」(有 order_id NOT NULL)→ 下方表重建迁移修复。
   CREATE TABLE IF NOT EXISTS invoice (
     id          TEXT PRIMARY KEY,
-    order_id    TEXT NOT NULL,                  -- 仅 credited 订单可申请
     tenant_id   TEXT NOT NULL,
-    created_by  TEXT NOT NULL,
+    created_by  TEXT NOT NULL,                  -- 发起的租户 admin(迁移行可能是老 creator,仅展示)
     title       TEXT NOT NULL,                  -- 抬头
     tax_no      TEXT NOT NULL,                  -- 税号
-    kind        TEXT NOT NULL DEFAULT '普票',    -- 本轮仅普票(专票字段留下轮)
-    amount_yuan INTEGER NOT NULL,               -- 申请时金额快照(= order.price_yuan)
-    status      TEXT NOT NULL DEFAULT 'requested', -- requested | issued(none 即未申请,无行)
+    kind        TEXT NOT NULL DEFAULT '普票',    -- 本轮仅普票
+    amount_yuan INTEGER NOT NULL,               -- = 所含订单金额之和(申请时快照)
+    status      TEXT NOT NULL DEFAULT 'requested', -- requested | issued
     invoice_no  TEXT,                           -- 超管回填发票号
     pdf_key     TEXT,                           -- 超管上传 PDF storage key
     admin_note  TEXT,                           -- 驳回原因
@@ -481,8 +482,28 @@ db.exec(`
     issued_at   INTEGER
   );
   CREATE INDEX IF NOT EXISTS idx_invoice_tenant_creator ON invoice(tenant_id, created_by);
-  CREATE INDEX IF NOT EXISTS idx_invoice_order ON invoice(order_id);
   CREATE INDEX IF NOT EXISTS idx_invoice_status ON invoice(status);
+
+  -- 一票多单关联表;UNIQUE(order_id) 保证一单只进一张在途/已开发票。
+  CREATE TABLE IF NOT EXISTS invoice_order (
+    invoice_id TEXT NOT NULL,
+    order_id   TEXT NOT NULL UNIQUE,
+    PRIMARY KEY (invoice_id, order_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_invoice_order_invoice ON invoice_order(invoice_id);
+
+  -- 租户开票抬头资料(单例/租户;首次开票自动 upsert;仅 admin 可编辑)。
+  CREATE TABLE IF NOT EXISTS tenant_invoice_profile (
+    tenant_id    TEXT PRIMARY KEY,
+    title        TEXT,
+    tax_no       TEXT,
+    bank_name    TEXT,
+    bank_account TEXT,
+    address      TEXT,
+    phone        TEXT,
+    updated_at   INTEGER,
+    updated_by   TEXT
+  );
 
   -- 对公收款信息(单行平台配置,超管后台填;真实银行账号不进代码/git)。
   CREATE TABLE IF NOT EXISTS payee_setting (
@@ -505,6 +526,39 @@ db.exec(
 // recharge_order 加 payment_method:收银台付款方式(本轮仅对公;为未来支付宝/微信预留枚举)。
 // 老订单加列后默认 offline_bank(下单时唯一方式)。
 addColumnIfMissing('recharge_order', 'payment_method', `payment_method TEXT NOT NULL DEFAULT 'offline_bank'`);
+
+// ── invoice 一票多单迁移(外部声音 #3/#4)──
+// 老库 invoice 是「一票一单」(order_id TEXT NOT NULL)。SQLite 改不了列约束 → 表重建:
+//   ① 老数据按 (id,order_id) 回填 invoice_order ② 建无 order_id 的新表拷数据 ③ drop 老表 rename。
+// 幂等:只在检测到老 order_id 列时执行;新库上面 CREATE 已是新形态,跳过。
+{
+  const cols = db.prepare(`PRAGMA table_info(invoice)`).all() as { name: string }[];
+  const hasLegacyOrderId = cols.some((c) => c.name === 'order_id');
+  if (hasLegacyOrderId) {
+    db.transaction(() => {
+      // ① 回填关联表(老的一票一单 → 一行关联)。INSERT OR IGNORE 防 UNIQUE 撞(理论不会)。
+      db.exec(
+        `INSERT OR IGNORE INTO invoice_order (invoice_id, order_id)
+         SELECT id, order_id FROM invoice WHERE order_id IS NOT NULL;`,
+      );
+      // ② 建无 order_id 的新表 + 拷数据(列对齐,排除 order_id)。
+      db.exec(`
+        CREATE TABLE invoice_new (
+          id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, created_by TEXT NOT NULL,
+          title TEXT NOT NULL, tax_no TEXT NOT NULL, kind TEXT NOT NULL DEFAULT '普票',
+          amount_yuan INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'requested',
+          invoice_no TEXT, pdf_key TEXT, admin_note TEXT, created_at INTEGER NOT NULL, issued_at INTEGER
+        );
+        INSERT INTO invoice_new (id,tenant_id,created_by,title,tax_no,kind,amount_yuan,status,invoice_no,pdf_key,admin_note,created_at,issued_at)
+          SELECT id,tenant_id,created_by,title,tax_no,kind,amount_yuan,status,invoice_no,pdf_key,admin_note,created_at,issued_at FROM invoice;
+        DROP TABLE invoice;
+        ALTER TABLE invoice_new RENAME TO invoice;
+        CREATE INDEX IF NOT EXISTS idx_invoice_tenant_creator ON invoice(tenant_id, created_by);
+        CREATE INDEX IF NOT EXISTS idx_invoice_status ON invoice(status);
+      `);
+    })();
+  }
+}
 
 export interface PricingPlanRow {
   id: string;
@@ -565,25 +619,39 @@ export interface RechargeOrderRow {
   created_at: number;
   updated_at: number;
   actorName?: string | null; // 发起人名(listOrdersForActor JOIN user 派生;非表列。admin 看全机构时显谁下的单)
+  invoiceStatus?: string | null; // 开票状态(JOIN invoice_order+invoice 派生;NULL=未开/requested=开票中/issued=已开)
 }
 
 export type InvoiceStatus = 'requested' | 'issued';
 
 export interface InvoiceRow {
   id: string;
-  order_id: string;
   tenant_id: string;
-  created_by: string;
+  created_by: string; // 发起的租户 admin(迁移行可能是老 creator,仅展示)
   title: string;
   tax_no: string;
   kind: string;
-  amount_yuan: number;
+  amount_yuan: number; // = 所含订单金额之和
   status: InvoiceStatus;
   invoice_no: string | null;
   pdf_key: string | null;
   admin_note: string | null;
   created_at: number;
   issued_at: number | null;
+  orderIds?: string[]; // 所含订单(JOIN invoice_order 派生;非表列)
+  orderNos?: string[]; // 所含订单展示号(派生)
+}
+
+export interface TenantInvoiceProfileRow {
+  tenant_id: string;
+  title: string | null;
+  tax_no: string | null;
+  bank_name: string | null;
+  bank_account: string | null;
+  address: string | null;
+  phone: string | null;
+  updated_at: number | null;
+  updated_by: string | null;
 }
 
 export interface PayeeSettingRow {

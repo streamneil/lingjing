@@ -29,6 +29,7 @@ const {
   getInvoiceForActor,
   listInvoicesForActor,
   issueInvoice,
+  rejectInvoice,
   setPayee,
   OrderError,
 } = await import('../src/orders/index.js');
@@ -207,53 +208,94 @@ describe('账号隔离 + IDOR', () => {
   });
 });
 
-describe('发票闭环', () => {
-  it('仅 credited 订单可申请;非 credited → 拒', () => {
-    const o = createOrder({ tenantId: tId, userId: alice, planId });
-    expect(() =>
-      requestInvoice({ orderId: o.id, tenantId: tId, userId: alice, title: '某公司', taxNo: '123' }),
-    ).toThrow(); // pending → 拒
+describe('发票一票多单', () => {
+  // 造一个 credited 订单返回(planId=5000/55000)。
+  function creditedOrder(userId: string): string {
+    const o = createOrder({ tenantId: tId, userId, planId });
     claimPaid(o.id, tId, null);
-    confirmAndCredit(o.id, admin); // → credited
+    confirmAndCredit(o.id, admin);
+    return o.id;
+  }
+
+  it('多单合开:Σ金额累加 + 状态 requested + orderIds 全含', () => {
+    const o1 = creditedOrder(alice);
+    const o2 = creditedOrder(bob); // admin 可批别人(alice/bob)的单
     const inv = requestInvoice({
-      orderId: o.id,
+      orderIds: [o1, o2],
       tenantId: tId,
-      userId: alice,
-      title: '某公司',
+      userId: admin,
+      title: '合开公司',
       taxNo: '91320114MA',
     });
     expect(inv.status).toBe('requested');
-    expect(inv.amount_yuan).toBe(5000); // 金额取订单快照
+    expect(inv.amount_yuan).toBe(10000); // 5000 + 5000
+    expect(inv.orderIds!.sort()).toEqual([o1, o2].sort());
   });
 
-  it('重复申请 → 拒;超管回填 → issued + 用户可下载', () => {
-    const o = createOrder({ tenantId: tId, userId: bob, planId });
-    claimPaid(o.id, tId, null);
-    confirmAndCredit(o.id, admin);
-    const inv = requestInvoice({
-      orderId: o.id,
-      tenantId: tId,
-      userId: bob,
-      title: 'B公司',
-      taxNo: 'TAX',
-    });
+  it('含非 credited 订单 → 拒(钱路校验)', () => {
+    const credited = creditedOrder(alice);
+    const pending = createOrder({ tenantId: tId, userId: alice, planId }).id; // pending 单 id
     expect(() =>
-      requestInvoice({ orderId: o.id, tenantId: tId, userId: bob, title: 'B公司', taxNo: 'TAX' }),
-    ).toThrow(); // 重复
-    expect(issueInvoice(inv.id, 'INV-001', 'pdf-key-1')).toBe(true);
-    const got = getInvoiceForActor(inv.id, tId, bob, false)!;
+      requestInvoice({ orderIds: [credited, pending], tenantId: tId, userId: admin, title: 'x', taxNo: 'y' }),
+    ).toThrow(/已到账|不存在/);
+  });
+
+  it('空选 → 拒(外部 #7)', () => {
+    expect(() =>
+      requestInvoice({ orderIds: [], tenantId: tId, userId: admin, title: 'x', taxNo: 'y' }),
+    ).toThrow(/至少选择/);
+  });
+
+  it('UNIQUE 防重开:已在发票里的订单不能再开(外部 #6)', () => {
+    const o = creditedOrder(alice);
+    requestInvoice({ orderIds: [o], tenantId: tId, userId: admin, title: 'A', taxNo: 'T' });
+    expect(() =>
+      requestInvoice({ orderIds: [o], tenantId: tId, userId: admin, title: 'B', taxNo: 'T' }),
+    ).toThrow(/已申请|已开票|占用/);
+  });
+
+  it('订单开票状态派生:未开→requested→issued(列表徽章用)', () => {
+    const o = creditedOrder(alice);
+    // 未开票:invoiceStatus 空
+    let row = listOrdersForActor(tId, admin, true).find((r) => r.id === o);
+    expect(row!.invoiceStatus ?? null).toBeNull();
+    // 申请 → 开票中
+    const inv = requestInvoice({ orderIds: [o], tenantId: tId, userId: admin, title: 'A', taxNo: 'T' });
+    row = listOrdersForActor(tId, admin, true).find((r) => r.id === o);
+    expect(row!.invoiceStatus).toBe('requested');
+    // 开具 → 已开
+    issueInvoice(inv.id, 'INV-X', null);
+    row = listOrdersForActor(tId, admin, true).find((r) => r.id === o);
+    expect(row!.invoiceStatus).toBe('issued');
+  });
+
+  it('开具重校 + 驳回释放订单回未开票(架构 #1)', () => {
+    const o1 = creditedOrder(alice);
+    const o2 = creditedOrder(bob);
+    const inv = requestInvoice({ orderIds: [o1, o2], tenantId: tId, userId: admin, title: 'A', taxNo: 'T' });
+    // 开具(重校 Σ金额=发票金额)
+    expect(issueInvoice(inv.id, 'INV-001', 'pdf-1')).toBe(true);
+    const got = getInvoiceForActor(inv.id, tId, admin, true)!;
     expect(got.status).toBe('issued');
     expect(got.invoice_no).toBe('INV-001');
-    // 隔离:alice 取不到 bob 的发票
-    expect(getInvoiceForActor(inv.id, tId, alice, false)).toBeUndefined();
+
+    // 另起一张可驳回的(requested)→ 驳回后订单释放
+    const o3 = creditedOrder(alice);
+    const inv2 = requestInvoice({ orderIds: [o3], tenantId: tId, userId: admin, title: 'B', taxNo: 'T' });
+    expect(rejectInvoice(inv2.id)).toBe(true);
+    // o3 释放回未开票,可重新开
+    const row = listOrdersForActor(tId, admin, true).find((r) => r.id === o3);
+    expect(row!.invoiceStatus ?? null).toBeNull();
+    expect(() =>
+      requestInvoice({ orderIds: [o3], tenantId: tId, userId: admin, title: 'B2', taxNo: 'T' }),
+    ).not.toThrow();
   });
 
-  it('alice 不能给 bob 的订单开票(归属校验)', () => {
-    const ob = createOrder({ tenantId: tId, userId: bob, planId });
-    claimPaid(ob.id, tId, null);
-    confirmAndCredit(ob.id, admin);
-    expect(() =>
-      requestInvoice({ orderId: ob.id, tenantId: tId, userId: alice, title: 'x', taxNo: 'y' }),
-    ).toThrow();
+  it('发票租户级可见:creator 也能查看本机构发票(只读)', () => {
+    const o = creditedOrder(alice);
+    const inv = requestInvoice({ orderIds: [o], tenantId: tId, userId: admin, title: 'A', taxNo: 'T' });
+    // creator alice 能取到(发票是机构级,非按 created_by 隔离)
+    expect(getInvoiceForActor(inv.id, tId, alice, false)).toBeTruthy();
+    expect(listInvoicesForActor(tId, alice, false).some((x) => x.id === inv.id)).toBe(true);
   });
 });

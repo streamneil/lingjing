@@ -225,11 +225,11 @@
 
     <!-- ── 发票开具 ── -->
     <div class="ph" style="margin-top:34px">
-      <div><h1>发票开具</h1><p>用户申请开票的订单。回填发票号、上传发票 PDF 后置为「已开票」,用户即可下载。</p></div>
+      <div><h1>发票开具</h1><p>租户管理员申请开票(可多单合并)。<b>开具前请核对所含订单均已到账、金额无误</b>,确认后回填发票号、上传 PDF 置「已开票」。</p></div>
     </div>
     <div class="tbl">
       <table>
-        <thead><tr><th>抬头</th><th>税号</th><th>金额</th><th>类型</th><th style="text-align:right">操作</th></tr></thead>
+        <thead><tr><th>抬头</th><th>税号</th><th>金额</th><th>所含订单</th><th style="text-align:right">操作</th></tr></thead>
         <tbody id="invRows"><tr><td colspan="5" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
@@ -503,16 +503,19 @@
     try{
       const { invoices }=await PA('GET','/api/admin-invoices?status=requested');
       if(!invoices.length){ tb.innerHTML='<tr><td colspan="5" class="empty">暂无待开票申请</td></tr>'; return; }
-      tb.innerHTML=invoices.map(iv=>`<tr>
+      tb.innerHTML=invoices.map(iv=>{
+        const orders=(iv.orderNos||[]);
+        const ordTxt=orders.length?`${orders.length} 单:${orders.map(esc).join('、')}`:'—';
+        return `<tr>
         <td>${esc(iv.title)}</td>
         <td style="font-family:var(--f-mono);font-size:12px">${esc(iv.taxNo)}</td>
         <td class="bal">¥${fmtN(iv.amountYuan)}</td>
-        <td>${esc(iv.kind)}</td>
+        <td style="font-size:12px;color:var(--t3)">${ordTxt}</td>
         <td><div class="acts">
           <button class="act pri" onclick='openIssue(${JSON.stringify(iv.id)},${JSON.stringify(iv.title)})'>开票</button>
           <button class="act" onclick='rejectInvoice(${JSON.stringify(iv.id)})'>驳回</button>
         </div></td>
-      </tr>`).join('');
+      </tr>`;}).join('');
     }catch(e){ tb.innerHTML='<tr><td colspan="5" class="empty">加载失败</td></tr>'; }
   }
   function openIssue(id, title){
