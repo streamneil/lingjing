@@ -9,9 +9,12 @@
   <link rel="stylesheet" href="app.css">
   <style>
     /* ── 定价页(独立页)── */
-    .pr-plans{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
-    .pr-empty{ grid-column:1/-1; text-align:center; color:var(--t4); padding:36px; font-size:13px; }
-    .pr-plan{ position:relative; background:var(--card); border:1px solid var(--line); border-radius:18px; padding:24px 22px; transition:transform .15s var(--ease,cubic-bezier(.22,.61,.36,1)),border-color .15s; }
+    /* 套餐永远单行:flex nowrap;套餐多了横向滚动(不换行、不压扁)。*/
+    .pr-plans{ display:flex; flex-wrap:nowrap; gap:14px; overflow-x:auto; padding-bottom:6px; scrollbar-width:thin; }
+    .pr-plans::-webkit-scrollbar{ height:6px; }
+    .pr-plans::-webkit-scrollbar-thumb{ background:var(--line-hi); border-radius:999px; }
+    .pr-empty{ flex:1; text-align:center; color:var(--t4); padding:36px; font-size:13px; }
+    .pr-plan{ position:relative; flex:1 1 0; min-width:220px; background:var(--card); border:1px solid var(--line); border-radius:18px; padding:24px 22px; transition:transform .15s var(--ease,cubic-bezier(.22,.61,.36,1)),border-color .15s; }
     .pr-plan:hover{ transform:translateY(-3px); border-color:var(--line-hi); }
     .pr-plan.pr-feat{ border-color:var(--blue); background:linear-gradient(180deg,rgba(77,141,255,.05),transparent); }
     .pr-flag{ position:absolute; top:-10px; left:22px; background:var(--blue); color:#fff; font-size:10.5px; font-weight:700; padding:3px 10px; border-radius:999px; letter-spacing:.5px; }
@@ -41,8 +44,8 @@
     .pr-a{ font-size:12.5px; color:var(--t3); line-height:1.7; margin-top:10px; }
     .pr-qa.pr-closed .pr-a{ display:none; }
     @media (max-width:640px){
-      .pr-plans{ grid-template-columns:1fr; }
-      .pr-plan.pr-feat{ order:-1; }
+      /* 套餐仍单行横滑(用户要求:无论几个都一行);卡片不再撑满,按 min-width 横滚。*/
+      .pr-plan{ flex:0 0 auto; }
       .pr-trust{ grid-template-columns:repeat(2,1fr); }
       .pr-ent{ flex-direction:column; align-items:stretch; }
     }
