@@ -521,8 +521,14 @@
     .then(function(d){ renderPlans((d && d.plans) || []); })
     .catch(function(){ renderPlans(FALLBACK); }); // 网络/500 → 回退静态四档价,不空白
 
-  // ── 租户品牌:?org=<slug>(沿用现有机制;接口若不存在则 .catch 静默回退默认)──
+  // ── 租户品牌:?org=<slug> ──
+  // ⚠️ 后端 /api/public-brand 与 /api/org-logo 本轮不做(NOT in scope)。
+  //    在接口落地前直接 return —— 不 fetch 死接口,避免每个 ?org= 链接在 console
+  //    报一条 404(QA ISSUE-001:功能本就回退默认,fetch 纯噪声)。
+  //    后端 public-brand 上线后,把下面这行 return 去掉即可启用整段(脚本骨架保留)。
+  var TENANT_BRAND_API_READY = false;
   (function applyTenantBrand(){
+    if (!TENANT_BRAND_API_READY) return; // public-brand 接口未实现,暂不调
     var slug = new URLSearchParams(location.search).get('org');
     if (!slug) return;
     fetch('/api/public-brand/' + encodeURIComponent(slug))
