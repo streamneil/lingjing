@@ -111,3 +111,11 @@
 - Why:子域名比 `/t/slug` 更像「租户自己的站」,品牌感更强,适合给政企客户做白标。
 - Depends on:泛域名证书(`*.lingjing.com`)、Caddy 动态签证/通配 host 路由、`tenant.slug` 唯一列(MVP 已加)。
 - Context:租户品牌自定义(Logo/名称)MVP 已落地路径式识别;子域名是同一识别逻辑换入口,后端 `GET /api/public-brand/:slug` 可复用,只需把 slug 来源从 path 改为 Host 头。见 prototype/TENANT-BRANDING-PLAN.md「缺口 3」。
+
+## 种子/部署脚本建默认四档套餐
+- **What:** 在 scripts/seed(或部署初始化)里建默认四档定价套餐(入门体验/标准充值/专业充值/大富罁)。
+- **Why:** 全新部署种子当前不建任何套餐,公开价格接口 `/api/public-pricing-plans` 返 `{plans:[]}`,新部署的落地页价格区会空白(只靠空态兜底文案)。
+- **Pros:** 新环境一部署落地页价格区即有内容;营销页不空。
+- **Cons:** 需维护一份默认套餐数据 + 幂等插入(避免重复建)。
+- **Context:** 发现于 landing-flagship eng-review(2026-06-13)外部声音。现有 lingjing.db 已有四档真实套餐,仅「全新空库部署」会空。落地页本身已有空态兜底(同 pricing.html「暂无可购套餐」),所以不阻塞落地页上线。
+- **Depends on / blocked by:** 无。独立于落地页 PR。

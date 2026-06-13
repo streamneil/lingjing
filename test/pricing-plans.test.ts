@@ -163,3 +163,41 @@ describe('租户 API:GET /api/pricing-plans requireAuth', () => {
     expect(r.body.plans[0].features).toEqual(['面议']);
   });
 });
+
+// 公开价格接口(营销落地页用)。设计来源:plan-eng-review —— landing.html 匿名页不能用
+// requireAuth 的 /pricing-plans;此接口无鉴权、带 Cache-Control、与登录版共用 serializePlan。
+describe('公开 API:GET /api/public-pricing-plans', () => {
+  it('匿名(无 session)→ 200 + 启用套餐(对照 /pricing-plans 仍 401)', async () => {
+    pricing.createPlan({ name: '入门体验', priceYuan: 100, credits: 800, features: ['有效期1年'] });
+    const c = new Client(app);
+    const r = await c.get('/api/public-pricing-plans');
+    expect(r.status).toBe(200);
+    expect(r.body.plans).toHaveLength(1);
+    expect(r.body.plans[0].name).toBe('入门体验');
+    // 同一匿名客户端打 requireAuth 版仍 401 —— 证明公开版确实免鉴权
+    expect((await c.get('/api/pricing-plans')).status).toBe(401);
+  });
+  it('只返 enabledOnly(停用套餐不出现)', async () => {
+    pricing.createPlan({ name: '启用档', priceYuan: 500, credits: 50000 });
+    pricing.createPlan({ name: '停用档', priceYuan: 1000, credits: 100000, enabled: false });
+    const r = await new Client(app).get('/api/public-pricing-plans');
+    expect(r.body.plans.map((p: any) => p.name)).toEqual(['启用档']);
+  });
+  it('响应带 Cache-Control: public, max-age=30', async () => {
+    pricing.createPlan({ name: 'X', priceYuan: 1, credits: 1 });
+    const r = await new Client(app).get('/api/public-pricing-plans');
+    expect(r.headers!['cache-control']).toBe('public, max-age=30');
+  });
+  it('回归:公开版与登录版输出形状一致(serializePlan 抽取后)', async () => {
+    pricing.createPlan({ name: '专业', priceYuan: 1000, credits: 100000, bonusCredits: 5000, flag: '最受欢迎', features: ['有效期1年'] });
+    const pub = await new Client(app).get('/api/public-pricing-plans');
+    const auth = await (await tenantLogin()).get('/api/pricing-plans');
+    expect(pub.body.plans).toEqual(auth.body.plans);
+    // 关键展示字段健在(eng-review:别丢 flag/priceYuan)
+    const p = pub.body.plans[0];
+    expect(Object.keys(p).sort()).toEqual(
+      ['bonusCredits', 'credits', 'features', 'flag', 'id', 'name', 'priceYuan', 'validityMonths'].sort(),
+    );
+    expect(p.flag).toBe('最受欢迎');
+  });
+});

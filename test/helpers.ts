@@ -8,6 +8,7 @@ export interface Res {
   status: number;
   body: any;
   setCookie?: string;
+  headers?: http.IncomingHttpHeaders;
 }
 
 export interface RawRes {
@@ -49,7 +50,7 @@ export class Client {
             } catch {
               json = buf;
             }
-            resolveP({ status: res.statusCode!, body: json, setCookie: sc });
+            resolveP({ status: res.statusCode!, body: json, setCookie: sc, headers: res.headers });
           });
         });
         req.on('error', (e) => {
