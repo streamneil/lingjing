@@ -10,6 +10,7 @@ import { config } from '../config.js';
 
 export const db = new Database(config.db.file);
 db.pragma('journal_mode = WAL'); // 并发读 + 单写,适合 worker 轮询拉任务
+db.pragma('busy_timeout = 5000'); // 写碰撞时等而非立刻抛 SQLITE_BUSY(WAL 下单进程现不触发,但为 worker 拆进程留保险)
 db.pragma('foreign_keys = ON');
 
 // ┌──────────────────────────────────────────────────────────────┐
