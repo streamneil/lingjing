@@ -20,7 +20,7 @@ let tenantId = '';
 
 beforeAll(async () => {
   tenantId = createTenant('审计测试台').id;
-  createUser(tenantId, 'auditadmin', 'pw123456', 'admin');
+  await createUser(tenantId, 'auditadmin', 'pw123456', 'admin');
 });
 
 async function loginAdmin() {

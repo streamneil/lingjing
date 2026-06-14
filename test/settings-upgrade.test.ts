@@ -21,12 +21,12 @@ const { Client } = await import('./helpers.js');
 const app = createApp();
 let tenantId: string;
 
-beforeAll(() => {
+beforeAll(async () => {
   tenantId = createTenant('设置测试台').id;
-  createUser(tenantId, 'set_admin', 'pw123456', 'admin');
+  await createUser(tenantId, 'set_admin', 'pw123456', 'admin');
   // 原 set_viewer(viewer):viewer 已废弃 → 建为 creator;该端点 admin-only,creator 同样 403,
   // "非 admin → 403" 的意图不变。
-  createUser(tenantId, 'set_viewer', 'pw123456', 'creator');
+  await createUser(tenantId, 'set_viewer', 'pw123456', 'creator');
 });
 
 async function loginAs(username: string) {
@@ -49,7 +49,7 @@ describe('默认分辨率', () => {
   });
   it('未设时 GET 兜底 720P', async () => {
     const t2 = createTenant('未设台').id;
-    createUser(t2, 'fresh_admin', 'pw123456', 'admin');
+    await createUser(t2, 'fresh_admin', 'pw123456', 'admin');
     const c = await loginAs('fresh_admin');
     expect((await c.get('/api/settings')).body.defaultResolution).toBe('720P');
   });

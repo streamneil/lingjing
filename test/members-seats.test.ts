@@ -28,84 +28,84 @@ function freshTenant(seats?: number): string {
   if (seats !== undefined) db.prepare(`UPDATE tenant SET max_creator_seats=? WHERE id=?`).run(seats, t.id);
   return t.id;
 }
-const codeOf = (fn: () => void): string | undefined => {
-  try { fn(); return undefined; } catch (e) { return (e as { code?: string }).code; }
+const codeOf = async (fn: () => unknown): Promise<string | undefined> => {
+  try { await fn(); return undefined; } catch (e) { return (e as { code?: string }).code; }
 };
 
 describe('创作席位强制', () => {
-  it('creator 数达上限 → 再建抛 SEATS_FULL', () => {
+  it('creator 数达上限 → 再建抛 SEATS_FULL', async () => {
     const tid = freshTenant(2);
-    createUser(tid, `c1_${tid}`, 'pw123456', 'creator');
-    createUser(tid, `c2_${tid}`, 'pw123456', 'creator');
-    expect(codeOf(() => createUser(tid, `c3_${tid}`, 'pw123456', 'creator'))).toBe('SEATS_FULL');
+    await createUser(tid, `c1_${tid}`, 'pw123456', 'creator');
+    await createUser(tid, `c2_${tid}`, 'pw123456', 'creator');
+    expect(await codeOf(() => createUser(tid, `c3_${tid}`, 'pw123456', 'creator'))).toBe('SEATS_FULL');
   });
 
-  it('admin 不占创作席位', () => {
+  it('admin 不占创作席位', async () => {
     const tid = freshTenant(1);
-    createUser(tid, `c_${tid}`, 'pw123456', 'creator'); // 占满 1 席
+    await createUser(tid, `c_${tid}`, 'pw123456', 'creator'); // 占满 1 席
     // 满席位时仍可建 admin(admin 不占创作席位)。viewer 角色已废弃,删除其断言。
-    expect(() => createUser(tid, `a_${tid}`, 'pw123456', 'admin')).not.toThrow();
+    await expect(createUser(tid, `a_${tid}`, 'pw123456', 'admin')).resolves.toBeDefined();
   });
 
-  it('停用 creator 不释放席位(可逆)→ 仍占,新建被拦', () => {
+  it('停用 creator 不释放席位(可逆)→ 仍占,新建被拦', async () => {
     const tid = freshTenant(1);
-    const c = createUser(tid, `c_${tid}`, 'pw123456', 'creator');
+    const c = await createUser(tid, `c_${tid}`, 'pw123456', 'creator');
     setUserStatus(tid, c.id, 'disabled');
     // 停用后席位仍被占用 → 不能再建 creator
-    expect(codeOf(() => createUser(tid, `c2_${tid}`, 'pw123456', 'creator'))).toBe('SEATS_FULL');
+    expect(await codeOf(() => createUser(tid, `c2_${tid}`, 'pw123456', 'creator'))).toBe('SEATS_FULL');
     expect(seatUsage(tid).used).toBe(1); // active+disabled 都算
   });
 
-  it('移除 creator 才释放席位', () => {
+  it('移除 creator 才释放席位', async () => {
     const tid = freshTenant(1);
-    const c = createUser(tid, `c_${tid}`, 'pw123456', 'creator');
+    const c = await createUser(tid, `c_${tid}`, 'pw123456', 'creator');
     removeUser(tid, c.id);
     expect(seatUsage(tid).used).toBe(0);
-    expect(() => createUser(tid, `c2_${tid}`, 'pw123456', 'creator')).not.toThrow();
+    await expect(createUser(tid, `c2_${tid}`, 'pw123456', 'creator')).resolves.toBeDefined();
   });
 
-  it('seatUsage 返回 used/limit', () => {
+  it('seatUsage 返回 used/limit', async () => {
     const tid = freshTenant(5);
-    createUser(tid, `c_${tid}`, 'pw123456', 'creator');
+    await createUser(tid, `c_${tid}`, 'pw123456', 'creator');
     expect(seatUsage(tid)).toEqual({ used: 1, limit: 5 });
   });
 });
 
 describe('锁死防护(self + last-admin)', () => {
-  it('不能停用自己', () => {
+  it('不能停用自己', async () => {
     const tid = freshTenant();
-    const a = createUser(tid, `a_${tid}`, 'pw123456', 'admin');
-    createUser(tid, `a2_${tid}`, 'pw123456', 'admin'); // 留一个,排除 last-admin 干扰
-    expect(codeOf(() => setUserStatus(tid, a.id, 'disabled', a.id))).toBe('SELF_ACTION');
+    const a = await createUser(tid, `a_${tid}`, 'pw123456', 'admin');
+    await createUser(tid, `a2_${tid}`, 'pw123456', 'admin'); // 留一个,排除 last-admin 干扰
+    expect(await codeOf(() => setUserStatus(tid, a.id, 'disabled', a.id))).toBe('SELF_ACTION');
   });
 
-  it('不能移除自己', () => {
+  it('不能移除自己', async () => {
     const tid = freshTenant();
-    const a = createUser(tid, `a_${tid}`, 'pw123456', 'admin');
-    createUser(tid, `a2_${tid}`, 'pw123456', 'admin');
-    expect(codeOf(() => removeUser(tid, a.id, a.id))).toBe('SELF_ACTION');
+    const a = await createUser(tid, `a_${tid}`, 'pw123456', 'admin');
+    await createUser(tid, `a2_${tid}`, 'pw123456', 'admin');
+    expect(await codeOf(() => removeUser(tid, a.id, a.id))).toBe('SELF_ACTION');
   });
 
-  it('不能停用最后一个 active admin', () => {
+  it('不能停用最后一个 active admin', async () => {
     const tid = freshTenant();
-    const a = createUser(tid, `a_${tid}`, 'pw123456', 'admin');
+    const a = await createUser(tid, `a_${tid}`, 'pw123456', 'admin');
     // 另一个 admin 是停用态 → active admin 只剩 a;由别人(非自己)发起停用 a
-    const a2 = createUser(tid, `a2_${tid}`, 'pw123456', 'admin');
+    const a2 = await createUser(tid, `a2_${tid}`, 'pw123456', 'admin');
     setUserStatus(tid, a2.id, 'disabled');
-    expect(codeOf(() => setUserStatus(tid, a.id, 'disabled', a2.id))).toBe('LAST_ADMIN');
+    expect(await codeOf(() => setUserStatus(tid, a.id, 'disabled', a2.id))).toBe('LAST_ADMIN');
   });
 
-  it('不能移除最后一个 active admin', () => {
+  it('不能移除最后一个 active admin', async () => {
     const tid = freshTenant();
-    const a = createUser(tid, `a_${tid}`, 'pw123456', 'admin');
-    const other = createUser(tid, `v_${tid}`, 'pw123456', 'creator'); // 非 admin 发起者(原 viewer)
-    expect(codeOf(() => removeUser(tid, a.id, other.id))).toBe('LAST_ADMIN');
+    const a = await createUser(tid, `a_${tid}`, 'pw123456', 'admin');
+    const other = await createUser(tid, `v_${tid}`, 'pw123456', 'creator'); // 非 admin 发起者(原 viewer)
+    expect(await codeOf(() => removeUser(tid, a.id, other.id))).toBe('LAST_ADMIN');
   });
 
-  it('两个 admin 时可停用其中一个', () => {
+  it('两个 admin 时可停用其中一个', async () => {
     const tid = freshTenant();
-    const a = createUser(tid, `a_${tid}`, 'pw123456', 'admin');
-    const a2 = createUser(tid, `a2_${tid}`, 'pw123456', 'admin');
+    const a = await createUser(tid, `a_${tid}`, 'pw123456', 'admin');
+    const a2 = await createUser(tid, `a2_${tid}`, 'pw123456', 'admin');
     expect(setUserStatus(tid, a2.id, 'disabled', a.id)).toBe(true);
   });
 });
@@ -113,44 +113,44 @@ describe('锁死防护(self + last-admin)', () => {
 describe('角色变更(闭合席位不变量)', () => {
   // 原 "viewer→creator 满席位 → SEATS_FULL":viewer 已废弃。等价场景改用 admin→creator —
   // admin 不占创作席位,升级为 creator 需空席位;满席位时同样抛 SEATS_FULL。
-  it('admin→creator 满席位 → 抛 SEATS_FULL', () => {
+  it('admin→creator 满席位 → 抛 SEATS_FULL', async () => {
     const tid = freshTenant(1);
-    createUser(tid, `c_${tid}`, 'pw123456', 'creator'); // 占满 1 席
-    const a = createUser(tid, `a_${tid}`, 'pw123456', 'admin'); // 不占席位
-    const a2 = createUser(tid, `a2_${tid}`, 'pw123456', 'admin'); // 留一个 admin 排除 LAST_ADMIN
-    expect(codeOf(() => changeRole(tid, a.id, 'creator', a2.id))).toBe('SEATS_FULL');
+    await createUser(tid, `c_${tid}`, 'pw123456', 'creator'); // 占满 1 席
+    const a = await createUser(tid, `a_${tid}`, 'pw123456', 'admin'); // 不占席位
+    const a2 = await createUser(tid, `a2_${tid}`, 'pw123456', 'admin'); // 留一个 admin 排除 LAST_ADMIN
+    expect(await codeOf(() => changeRole(tid, a.id, 'creator', a2.id))).toBe('SEATS_FULL');
   });
 
-  it('唯一 active admin 降级 → 抛 LAST_ADMIN', () => {
+  it('唯一 active admin 降级 → 抛 LAST_ADMIN', async () => {
     const tid = freshTenant();
-    const a = createUser(tid, `a_${tid}`, 'pw123456', 'admin');
-    const a2 = createUser(tid, `a2_${tid}`, 'pw123456', 'admin');
+    const a = await createUser(tid, `a_${tid}`, 'pw123456', 'admin');
+    const a2 = await createUser(tid, `a2_${tid}`, 'pw123456', 'admin');
     setUserStatus(tid, a2.id, 'disabled'); // active admin 只剩 a
-    expect(codeOf(() => changeRole(tid, a.id, 'creator', a2.id))).toBe('LAST_ADMIN');
+    expect(await codeOf(() => changeRole(tid, a.id, 'creator', a2.id))).toBe('LAST_ADMIN');
   });
 
-  it('不能改自己的角色', () => {
+  it('不能改自己的角色', async () => {
     const tid = freshTenant();
-    const a = createUser(tid, `a_${tid}`, 'pw123456', 'admin');
-    createUser(tid, `a2_${tid}`, 'pw123456', 'admin');
-    expect(codeOf(() => changeRole(tid, a.id, 'creator', a.id))).toBe('SELF_ACTION');
+    const a = await createUser(tid, `a_${tid}`, 'pw123456', 'admin');
+    await createUser(tid, `a2_${tid}`, 'pw123456', 'admin');
+    expect(await codeOf(() => changeRole(tid, a.id, 'creator', a.id))).toBe('SELF_ACTION');
   });
 
   // 原 "viewer→creator 有空席位 → 成功 + 占席位":viewer 已废弃 → 用 admin→creator 等价覆盖
   // "升级为 creator 在有空席位时成功并占用席位"。需第二个 admin 排除 LAST_ADMIN。
-  it('admin→creator 有空席位 → 成功 + 占席位', () => {
+  it('admin→creator 有空席位 → 成功 + 占席位', async () => {
     const tid = freshTenant(2);
-    const a = createUser(tid, `a_${tid}`, 'pw123456', 'admin'); // 不占席位
-    const a2 = createUser(tid, `a2_${tid}`, 'pw123456', 'admin'); // 发起者,保住 admin 数
+    const a = await createUser(tid, `a_${tid}`, 'pw123456', 'admin'); // 不占席位
+    const a2 = await createUser(tid, `a2_${tid}`, 'pw123456', 'admin'); // 发起者,保住 admin 数
     expect(changeRole(tid, a.id, 'creator', a2.id)).toBe(true);
     expect(seatUsage(tid).used).toBe(1); // a 升级后占 1 席
   });
 });
 
 describe('listUsers 字段 + last_active', () => {
-  it('返回 display_name + last_active(新建为 null)', () => {
+  it('返回 display_name + last_active(新建为 null)', async () => {
     const tid = freshTenant();
-    createUser(tid, `u_${tid}`, 'pw123456', 'admin');
+    await createUser(tid, `u_${tid}`, 'pw123456', 'admin');
     const list = listUsers(tid);
     expect(list.length).toBe(1);
     expect(list[0]).toHaveProperty('display_name');
@@ -158,10 +158,10 @@ describe('listUsers 字段 + last_active', () => {
     expect(list[0]!.last_active).toBeNull(); // 从未活跃
   });
 
-  it('按 created_at 升序(席位号派生依赖此序)', () => {
+  it('按 created_at 升序(席位号派生依赖此序)', async () => {
     const tid = freshTenant(5);
-    const c1 = createUser(tid, `c1_${tid}`, 'pw123456', 'creator');
-    const c2 = createUser(tid, `c2_${tid}`, 'pw123456', 'creator');
+    const c1 = await createUser(tid, `c1_${tid}`, 'pw123456', 'creator');
+    const c2 = await createUser(tid, `c2_${tid}`, 'pw123456', 'creator');
     const list = listUsers(tid).filter((u) => u.role === 'creator');
     expect(list[0]!.id).toBe(c1.id);
     expect(list[1]!.id).toBe(c2.id);

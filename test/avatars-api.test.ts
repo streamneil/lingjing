@@ -18,9 +18,9 @@ const { Client } = await import('./helpers.js');
 const app = createApp();
 let tenantId: string;
 
-beforeAll(() => {
+beforeAll(async () => {
   tenantId = createTenant('形象测试台').id;
-  createUser(tenantId, 'creator', 'pw123456', 'creator');
+  await createUser(tenantId, 'creator', 'pw123456', 'creator');
 });
 
 async function loginAs(username: string) {

@@ -67,11 +67,11 @@ const todayStart = (() => {
   return d.getTime();
 })();
 
-beforeAll(() => {
-  bootstrapSuperadmin();
+beforeAll(async () => {
+  await bootstrapSuperadmin();
   tenantA = createTenant('电视台A').id;
   tenantB = createTenant('报社B').id;
-  createUser(tenantA, 'a-admin', 'pw123456', 'admin');
+  await createUser(tenantA, 'a-admin', 'pw123456', 'admin');
 
   // 清掉可能的历史 job,从干净状态造数据。
   db.prepare(`DELETE FROM job`).run();

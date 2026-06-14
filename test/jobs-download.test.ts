@@ -55,13 +55,13 @@ let runningJobId = '';
 beforeAll(async () => {
   const t = createTenant('下载测试台');
   tid = t.id;
-  ownerId = createUser(t.id, 'dlowner', 'pw123456', 'creator').id;
+  ownerId = (await createUser(t.id, 'dlowner', 'pw123456', 'creator')).id;
   grant(t.id, 100000);
   expect((await owner.login('dlowner', 'pw123456')).status).toBe(200);
 
   // 另一个租户(跨租户隔离用)
   const t2 = createTenant('别家');
-  createUser(t2.id, 'dlother', 'pw123456', 'creator');
+  await createUser(t2.id, 'dlother', 'pw123456', 'creator');
   grant(t2.id, 100000);
   expect((await other.login('dlother', 'pw123456')).status).toBe(200);
 

@@ -18,11 +18,11 @@ const { createTenant, createUser } = await import('../src/auth/index.js');
 const T = 'attr-tenant';
 let uid = '';
 
-beforeAll(() => {
+beforeAll(async () => {
   const t = createTenant('归属测试台');
   // 用真实租户 id 覆盖常量 T 不行(createTenant 自生成 id),改用它的 id
   (globalThis as Record<string, unknown>).__T = t.id;
-  const u = createUser(t.id, 'attruser', 'pw123456', 'creator');
+  const u = await createUser(t.id, 'attruser', 'pw123456', 'creator');
   uid = u.id;
   grant(t.id, 100000);
 });

@@ -29,11 +29,11 @@ let adminId = '';
 let aliceId = ''; // creator A
 let bobId = ''; // creator B
 
-beforeAll(() => {
+beforeAll(async () => {
   tId = createTenant('隔离测试台').id;
-  adminId = createUser(tId, 'isoadmin', 'pw123456', 'admin').id;
-  aliceId = createUser(tId, 'alice', 'pw123456', 'creator').id;
-  bobId = createUser(tId, 'bob', 'pw123456', 'creator').id;
+  adminId = (await createUser(tId, 'isoadmin', 'pw123456', 'admin')).id;
+  aliceId = (await createUser(tId, 'alice', 'pw123456', 'creator')).id;
+  bobId = (await createUser(tId, 'bob', 'pw123456', 'creator')).id;
   grant(tId, 100000);
 });
 
@@ -177,8 +177,8 @@ describe('老资产 backfill(部署前建的资产迁移后原创作者仍可见
 });
 
 describe('砍 viewer 角色', () => {
-  it('createUser(viewer) → INVALID_ROLE', () => {
-    expect(() => createUser(tId, 'whoviewer', 'pw123456', 'viewer' as never)).toThrow();
+  it('createUser(viewer) → INVALID_ROLE', async () => {
+    await expect(createUser(tId, 'whoviewer', 'pw123456', 'viewer' as never)).rejects.toThrow();
   });
   it('changeRole → viewer → 拒', () => {
     expect(() => changeRole(tId, bobId, 'viewer' as never, adminId)).toThrow();

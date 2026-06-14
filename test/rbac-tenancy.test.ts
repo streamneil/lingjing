@@ -20,15 +20,15 @@ let tenantB: string;
 // 用户名全局唯一:测试里给每个租户的账号加租户前缀,loginAs 自动拼。
 const tag = (tid: string) => (tid === tenantA ? 'A' : tid === tenantB ? 'B' : 'X');
 
-beforeAll(() => {
+beforeAll(async () => {
   tenantA = createTenant('A 台').id;
   tenantB = createTenant('B 台').id;
-  createUser(tenantA, 'A_admin', 'pw123456', 'admin');
-  createUser(tenantA, 'A_creator', 'pw123456', 'creator');
+  await createUser(tenantA, 'A_admin', 'pw123456', 'admin');
+  await createUser(tenantA, 'A_creator', 'pw123456', 'creator');
   // 原 A_viewer:viewer 角色已废弃 → 建为 creator(只读类用例对 creator 同样成立);
   // 用户名保留 A_viewer 以便 loginAs(tenantA,'viewer') 仍能登录。
-  createUser(tenantA, 'A_viewer', 'pw123456', 'creator');
-  createUser(tenantB, 'B_admin', 'pw123456', 'admin');
+  await createUser(tenantA, 'A_viewer', 'pw123456', 'creator');
+  await createUser(tenantB, 'B_admin', 'pw123456', 'admin');
   grant(tenantA, 10000); // A 有积分,可发起生成;B 故意不发(测余额隔离/不足)
 });
 
@@ -145,7 +145,7 @@ describe('积分 + 审计 API', () => {
   it('余额不足时发起生成 → 402', async () => {
     // 新建一个没发过积分的租户(用户名全局唯一)
     const poorTenant = createTenant('穷台').id;
-    createUser(poorTenant, 'poor_creator', 'pw123456', 'creator');
+    await createUser(poorTenant, 'poor_creator', 'pw123456', 'creator');
     const c = new Client(app);
     await c.login('poor_creator', 'pw123456');
     const r = await c.post('/api/jobs', { avatarRef: 'preset-1', voiceRef: 'Cherry', script: '需要扣分的文案' });

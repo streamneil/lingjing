@@ -16,7 +16,7 @@ let tenantId: string;
 beforeAll(async () => {
   const t = createTenant('测试台');
   tenantId = t.id;
-  createUser(tenantId, 'creator1', 'pw123456', 'creator');
+  await createUser(tenantId, 'creator1', 'pw123456', 'creator');
   grant(tenantId, 10000); // 有积分才能发起生成(Slice3 计费门)
   const r = await client.login('creator1', 'pw123456');
   expect(r.status).toBe(200);

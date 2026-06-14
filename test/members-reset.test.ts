@@ -24,9 +24,9 @@ let memberId = '';
 
 beforeAll(async () => {
   tId = createTenant('重置测试台').id;
-  adminId = createUser(tId, 'resetadmin', 'pw123456', 'admin').id;
-  memberId = createUser(tId, 'resetmember', 'oldpw123', 'creator', '小张').id;
-  createUser(tId, 'resetcreator', 'pw123456', 'creator');
+  adminId = (await createUser(tId, 'resetadmin', 'pw123456', 'admin')).id;
+  memberId = (await createUser(tId, 'resetmember', 'oldpw123', 'creator', '小张')).id;
+  await createUser(tId, 'resetcreator', 'pw123456', 'creator');
 });
 
 async function asAdmin() {
@@ -36,12 +36,12 @@ async function asAdmin() {
 }
 
 describe('createUser 带昵称(display_name)', () => {
-  it('传 displayName → display_name 入库', () => {
-    const u = createUser(tId, 'nameuser', 'pw123456', 'creator', '王五');
+  it('传 displayName → display_name 入库', async () => {
+    const u = await createUser(tId, 'nameuser', 'pw123456', 'creator', '王五');
     expect(u.display_name).toBe('王五');
   });
-  it('省略 displayName → 回落 username(旧调用兼容)', () => {
-    const u = createUser(tId, 'nonameuser', 'pw123456', 'creator');
+  it('省略 displayName → 回落 username(旧调用兼容)', async () => {
+    const u = await createUser(tId, 'nonameuser', 'pw123456', 'creator');
     expect(u.display_name).toBe('nonameuser');
   });
   it('POST /members 带 displayName → 成员昵称生效', async () => {
@@ -113,7 +113,7 @@ describe('POST /members/:id/reset-password(管理员)', () => {
     expect(r.status).toBe(404);
   });
 
-  it('helper tenantAdminResetPassword:重置自己抛错', () => {
-    expect(() => tenantAdminResetPassword(tId, adminId, adminId)).toThrow();
+  it('helper tenantAdminResetPassword:重置自己抛错', async () => {
+    await expect(tenantAdminResetPassword(tId, adminId, adminId)).rejects.toThrow();
   });
 });

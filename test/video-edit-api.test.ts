@@ -45,7 +45,7 @@ mem.set(`${VID30}.meta.json`, Buffer.from(JSON.stringify({ duration: 30, width: 
 
 beforeAll(async () => {
   const t = createTenant('视频编辑测试台');
-  createUser(t.id, 'vecreator', 'pw123456', 'creator');
+  await createUser(t.id, 'vecreator', 'pw123456', 'creator');
   grant(t.id, 100000);
   const r = await client.login('vecreator', 'pw123456');
   expect(r.status).toBe(200);

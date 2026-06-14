@@ -32,14 +32,15 @@ const PADMIN_COOKIE = 'lj_padmin';
 //
 // 幂等:表非空不重建(INSERT 前先查)。SUPERADMIN_PASS 未设时 config.superadmin.password()
 // 抛错 → 拒绝启动(B3,绝不用默认口令)。已建超管的环境不进 INSERT 分支,不会因缺 pass 崩。
-export function bootstrapSuperadmin(): void {
+export async function bootstrapSuperadmin(): Promise<void> {
   const count = (db.prepare(`SELECT COUNT(*) AS n FROM platform_admin`).get() as { n: number }).n;
   if (count > 0) return; // 已有超管,不重建(幂等)
   const username = config.superadmin.username;
   const password = config.superadmin.password(); // 未设 SUPERADMIN_PASS 在此抛错拒启
+  const passwordHash = await hashPassword(password); // bcrypt 异步,await 后再写库
   db.prepare(
     `INSERT INTO platform_admin (id,username,password_hash,created_at) VALUES (?,?,?,?)`,
-  ).run(randomUUID(), username, hashPassword(password), now());
+  ).run(randomUUID(), username, passwordHash, now());
   console.log(`[超管] 初始平台超管已创建:${username}(密码取自 SUPERADMIN_PASS)`);
 }
 
@@ -109,16 +110,16 @@ export interface AuthedPlatformAdmin {
 }
 
 /** 超管登录:校验 captcha_token + 密码 → 返回 platform_session token。 */
-export function platformLogin(username: string, password: string): string {
+export async function platformLogin(username: string, password: string): Promise<string> {
   const pa = db
     .prepare(`SELECT * FROM platform_admin WHERE username=?`)
     .get(username) as PlatformAdminRow | undefined;
   const fail = () => new Error('用户名或密码错误');
   if (!pa) {
-    dummyVerify(password); // 抵消时序差异
+    await dummyVerify(password); // 抵消时序差异
     throw fail();
   }
-  if (!verifyPassword(password, pa.password_hash)) throw fail();
+  if (!(await verifyPassword(password, pa.password_hash))) throw fail();
   const token = genToken();
   const t = now();
   db.prepare(

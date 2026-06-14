@@ -82,23 +82,24 @@ export function seatUsage(tenantId: string): { used: number; limit: number } {
 // 建一个叫 admin 的用户造成"我以为我是超管"的混淆,不承担安全职责。
 const RESERVED_USERNAMES = new Set(['admin', 'administrator', 'root', 'superadmin', 'system']);
 
-export function createUser(
+export async function createUser(
   tenantId: string,
   username: string,
   password: string,
   role: Role,
   displayName?: string, // 昵称(展示名);空则回落用户名(保旧调用兼容)
-): UserRow {
+): Promise<UserRow> {
   if (!['admin', 'creator'].includes(role)) throw memberErr('INVALID_ROLE', '角色非法');
   if (RESERVED_USERNAMES.has(username.trim().toLowerCase())) {
     throw new Error('该用户名为平台保留字,请换一个(如机构简称+姓名)');
   }
+  const passwordHash = await hashPassword(password); // bcrypt 异步,在开事务前算好(事务体内不能 await)
   const u: UserRow = {
     id: randomUUID(),
     tenant_id: tenantId,
     username,
     display_name: (displayName && displayName.trim()) || username, // 昵称优先;空回落用户名
-    password_hash: hashPassword(password),
+    password_hash: passwordHash,
     role,
     status: 'active',
     last_active: null,
@@ -212,12 +213,13 @@ export function listUsers(tenantId: string): Omit<UserRow, 'password_hash'>[] {
 // 所有 session 强制重登。租户名改:租户侧只读(ORG_NAME_READONLY),仅超管能改。
 
 /** 超管重置某用户密码(免旧密码)。重置后作废其所有 session。返回 false=用户不存在。 */
-export function adminResetPassword(tenantId: string, userId: string, newPassword: string): boolean {
+export async function adminResetPassword(tenantId: string, userId: string, newPassword: string): Promise<boolean> {
   if (!newPassword || newPassword.length < 6) throw new Error('新密码至少 6 位');
   const u = db.prepare(`SELECT 1 FROM user WHERE id=? AND tenant_id=?`).get(userId, tenantId);
   if (!u) return false;
+  const passwordHash = await hashPassword(newPassword); // 事务前算好(事务体不能 await)
   const tx = db.transaction(() => {
-    db.prepare(`UPDATE user SET password_hash=? WHERE id=? AND tenant_id=?`).run(hashPassword(newPassword), userId, tenantId);
+    db.prepare(`UPDATE user SET password_hash=? WHERE id=? AND tenant_id=?`).run(passwordHash, userId, tenantId);
     db.prepare(`DELETE FROM session WHERE user_id=?`).run(userId); // 作废所有 session,强制重登
   });
   tx();
@@ -227,11 +229,11 @@ export function adminResetPassword(tenantId: string, userId: string, newPassword
 /** 租户 admin 强制重置成员密码:生成随机强密码 → adminResetPassword(作废 session)。
  *  自我保护:不能重置自己(改自己密码走 /me/password,需旧密码)。
  *  返回 {username, password}(明文仅此次回传,不落库、不写审计);用户不存在 → null。 */
-export function tenantAdminResetPassword(
+export async function tenantAdminResetPassword(
   tenantId: string,
   userId: string,
   actingUserId: string,
-): { username: string; password: string } | null {
+): Promise<{ username: string; password: string } | null> {
   if (userId === actingUserId) {
     throw memberErr('SELF_ACTION', '不能重置自己的密码,请在个人信息中修改');
   }
@@ -240,7 +242,7 @@ export function tenantAdminResetPassword(
     .get(userId, tenantId) as { username: string } | undefined;
   if (!u) return null;
   const password = genTempPassword();
-  adminResetPassword(tenantId, userId, password); // 复用:写 hash + 作废 session(租户隔离已校验)
+  await adminResetPassword(tenantId, userId, password); // 复用:写 hash + 作废 session(租户隔离已校验);bcrypt 异步须 await
   return { username: u.username, password };
 }
 
@@ -294,18 +296,18 @@ export interface AuthedUser {
 }
 
 /** 用 (username, password) 登录(用户名全局唯一,租户从账号反查),成功返回 session token。 */
-export function login(username: string, password: string): string {
+export async function login(username: string, password: string): Promise<string> {
   const u = db
     .prepare(`SELECT * FROM user WHERE username=?`)
     .get(username) as UserRow | undefined;
   // 统一报错文案,避免泄露"用户是否存在"
   const fail = () => new Error('用户名或密码错误');
   if (!u) {
-    dummyVerify(password); // 抵消时序差异
+    await dummyVerify(password); // 抵消时序差异
     throw fail();
   }
   if (u.status === 'disabled') throw new Error('账号已被停用');
-  if (!verifyPassword(password, u.password_hash)) throw fail();
+  if (!(await verifyPassword(password, u.password_hash))) throw fail();
 
   const token = genToken();
   const t = now();
@@ -371,12 +373,13 @@ export function updateDisplayName(userId: string, displayName: string): void {
 }
 
 /** 改密码:校验旧密码 → 写新 hash → 作废其它 session(强制重新登录,安全)。 */
-export function changePassword(userId: string, oldPassword: string, newPassword: string, keepToken?: string): void {
+export async function changePassword(userId: string, oldPassword: string, newPassword: string, keepToken?: string): Promise<void> {
   const u = db.prepare(`SELECT * FROM user WHERE id=?`).get(userId) as UserRow | undefined;
   if (!u) throw new Error('用户不存在');
-  if (!verifyPassword(oldPassword, u.password_hash)) throw new Error('原密码错误');
+  if (!(await verifyPassword(oldPassword, u.password_hash))) throw new Error('原密码错误');
   if (newPassword.length < 6) throw new Error('新密码至少 6 位');
-  db.prepare(`UPDATE user SET password_hash=? WHERE id=?`).run(hashPassword(newPassword), userId);
+  const passwordHash = await hashPassword(newPassword);
+  db.prepare(`UPDATE user SET password_hash=? WHERE id=?`).run(passwordHash, userId);
   // 改密后作废其它会话(保留当前这个,避免把自己踢下线)
   if (keepToken) db.prepare(`DELETE FROM session WHERE user_id=? AND token!=?`).run(userId, keepToken);
   else db.prepare(`DELETE FROM session WHERE user_id=?`).run(userId);

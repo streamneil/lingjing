@@ -38,7 +38,7 @@ const origFetch = globalThis.fetch;
 beforeAll(async () => {
   const t = createTenant('音乐测试台');
   tid = t.id;
-  createUser(t.id, 'musiccreator', 'pw123456', 'creator');
+  await createUser(t.id, 'musiccreator', 'pw123456', 'creator');
   grant(t.id, 100000);
   expect((await client.login('musiccreator', 'pw123456')).status).toBe(200);
 }, 30000);

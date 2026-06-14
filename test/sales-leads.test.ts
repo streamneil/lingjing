@@ -33,10 +33,10 @@ async function tenantLogin(): Promise<InstanceType<typeof Client>> {
   return c;
 }
 
-beforeAll(() => {
-  bootstrapSuperadmin();
+beforeAll(async () => {
+  await bootstrapSuperadmin();
   tenantId = createTenant('线索测试台').id;
-  createUser(tenantId, 'lead-user', 'pw123456', 'creator');
+  await createUser(tenantId, 'lead-user', 'pw123456', 'creator');
 });
 
 beforeEach(() => {

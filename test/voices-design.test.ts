@@ -48,11 +48,11 @@ let creatorId = '';
 beforeAll(async () => {
   const t = createTenant('设计测试台');
   tid = t.id;
-  const cu = createUser(t.id, 'dgcreator', 'pw123456', 'creator');
+  const cu = await createUser(t.id, 'dgcreator', 'pw123456', 'creator');
   creatorId = cu.id;
   // 第二个非 admin 账号(原 viewer,role 已废弃 → 用 creator,需扩席位避免 SEATS_FULL)
   db.prepare('UPDATE tenant SET max_creator_seats=? WHERE id=?').run(10, t.id);
-  createUser(t.id, 'dgviewer', 'pw123456', 'creator');
+  await createUser(t.id, 'dgviewer', 'pw123456', 'creator');
   expect((await creator.login('dgcreator', 'pw123456')).status).toBe(200);
   expect((await viewer.login('dgviewer', 'pw123456')).status).toBe(200);
 }, 30000);

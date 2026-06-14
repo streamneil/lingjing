@@ -12,12 +12,12 @@ const { Client } = await import('./helpers.js');
 const app = createApp();
 let tenantId: string;
 
-beforeAll(() => {
+beforeAll(async () => {
   tenantId = createTenant('设置测试台').id;
-  createUser(tenantId, 'setadmin', 'pw123456', 'admin'); // 不能用保留字 admin(T7)
+  await createUser(tenantId, 'setadmin', 'pw123456', 'admin'); // 不能用保留字 admin(T7)
   // 原 setviewer(viewer):viewer 已废弃 → 建为 creator。settings 读 requireAuth(creator 可读),
   // 写 admin-only(creator 被拒 403)→ "非 admin 可读不可改" 的意图不变。
-  createUser(tenantId, 'setviewer', 'pw123456', 'creator');
+  await createUser(tenantId, 'setviewer', 'pw123456', 'creator');
 });
 
 async function loginAs(u: string) {
@@ -46,7 +46,7 @@ describe('个人信息 + 改密码', () => {
   });
   it('改密码:成功后新密码可登录、旧密码失效', async () => {
     // 单独建一个用户避免影响其它用例
-    createUser(tenantId, 'pwuser', 'oldpw123', 'creator');
+    await createUser(tenantId, 'pwuser', 'oldpw123', 'creator');
     const c = new Client(app);
     await c.login('pwuser', 'oldpw123');
     const r = await c.post('/api/me/password', { oldPassword: 'oldpw123', newPassword: 'newpw456' });

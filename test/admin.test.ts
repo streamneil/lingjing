@@ -18,10 +18,10 @@ const { Client } = await import('./helpers.js');
 const app = createApp();
 let tenantId: string;
 
-beforeAll(() => {
-  bootstrapSuperadmin(); // 首启建超管 admin（env 种子）
+beforeAll(async () => {
+  await bootstrapSuperadmin(); // 首启建超管 admin（env 种子）
   tenantId = createTenant('超管测试台').id;
-  createUser(tenantId, 'tadmin', 'pw123456', 'admin'); // 租户管理员（非保留字）
+  await createUser(tenantId, 'tadmin', 'pw123456', 'admin'); // 租户管理员（非保留字）
 });
 
 /** 超管登录助手:走滑块 → /admin/login,返回带 lj_padmin cookie 的 Client。 */
@@ -39,8 +39,8 @@ describe('超管 bootstrap（首启建超管）', () => {
     expect(me.status).toBe(200);
     expect(me.body.username).toBe('admin');
   });
-  it('bootstrap 幂等：再调一次不重复建', () => {
-    expect(() => bootstrapSuperadmin()).not.toThrow();
+  it('bootstrap 幂等：再调一次不重复建', async () => {
+    await expect(bootstrapSuperadmin()).resolves.toBeUndefined();
   });
 });
 
@@ -165,8 +165,8 @@ describe('租户详情管理(A2)', () => {
   it('席位上限降到低于已用 → 400', async () => {
     const c = await padminLogin();
     const t = createTenant('满席台').id;
-    createUser(t, 'seat-c1', 'pw123456', 'creator');
-    createUser(t, 'seat-c2', 'pw123456', 'creator');
+    await createUser(t, 'seat-c1', 'pw123456', 'creator');
+    await createUser(t, 'seat-c2', 'pw123456', 'creator');
     const r = await c.put(`/admin/api/tenants/${t}`, { maxCreatorSeats: 1 }); // 已用 2 > 1
     expect(r.status).toBe(400);
   });
@@ -193,7 +193,7 @@ describe('租户详情管理(A2)', () => {
   it('重置用户密码(免旧密码)→ 新密码可登录,旧密码失效', async () => {
     const c = await padminLogin();
     const t = createTenant('重置台').id;
-    const u = createUser(t, 'reset-user', 'oldpw123', 'creator');
+    const u = await createUser(t, 'reset-user', 'oldpw123', 'creator');
     const r = await c.post(`/admin/api/tenants/${t}/users/${u.id}/reset-password`, { newPassword: 'newpw456' });
     expect(r.status).toBe(200);
     // 新密码能登录
@@ -206,7 +206,7 @@ describe('租户详情管理(A2)', () => {
   it('重置密码 <6 位 → 400', async () => {
     const c = await padminLogin();
     const t = createTenant('短密台').id;
-    const u = createUser(t, 'short-pw-user', 'pw123456', 'creator');
+    const u = await createUser(t, 'short-pw-user', 'pw123456', 'creator');
     const r = await c.post(`/admin/api/tenants/${t}/users/${u.id}/reset-password`, { newPassword: '123' });
     expect(r.status).toBe(400);
   });
@@ -219,8 +219,8 @@ describe('租户详情管理(A2)', () => {
   it('停用 + 启用用户', async () => {
     const c = await padminLogin();
     const t = createTenant('停用台').id;
-    createUser(t, 'disable-admin', 'pw123456', 'admin'); // 留一个 admin 保底
-    const u = createUser(t, 'to-disable', 'pw123456', 'creator');
+    await createUser(t, 'disable-admin', 'pw123456', 'admin'); // 留一个 admin 保底
+    const u = await createUser(t, 'to-disable', 'pw123456', 'creator');
     const dis = await c.post(`/admin/api/tenants/${t}/users/${u.id}/disable`);
     expect(dis.status).toBe(200);
     const users1 = await c.get(`/admin/api/tenants/${t}/users`);
@@ -231,7 +231,7 @@ describe('租户详情管理(A2)', () => {
   it('停用最后一个 admin → 409(LAST_ADMIN 保护)', async () => {
     const c = await padminLogin();
     const t = createTenant('独管台').id;
-    const a = createUser(t, 'only-admin', 'pw123456', 'admin');
+    const a = await createUser(t, 'only-admin', 'pw123456', 'admin');
     const r = await c.post(`/admin/api/tenants/${t}/users/${a.id}/disable`);
     expect(r.status).toBe(409);
   });

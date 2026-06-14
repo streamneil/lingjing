@@ -25,7 +25,7 @@ let tenantId: string;
 beforeAll(async () => {
   const t = createTenant('视频测试台');
   tenantId = t.id;
-  createUser(tenantId, 'vcreator', 'pw123456', 'creator');
+  await createUser(tenantId, 'vcreator', 'pw123456', 'creator');
   grant(tenantId, 100000);
   const r = await client.login('vcreator', 'pw123456');
   expect(r.status).toBe(200);

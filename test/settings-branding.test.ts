@@ -36,13 +36,13 @@ const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]); // PN
 beforeAll(async () => {
   const t = createTenant('品牌测试台');
   tenantId = t.id;
-  createUser(tenantId, 'brandadmin', 'pw123456', 'admin');
-  createUser(tenantId, 'brandcreator', 'pw123456', 'creator');
+  await createUser(tenantId, 'brandadmin', 'pw123456', 'admin');
+  await createUser(tenantId, 'brandcreator', 'pw123456', 'creator');
   // 原 brandviewer(viewer):viewer 已废弃 → 建为 creator;settings 写接口 admin-only,
   // creator 同样被拒 403,"非 admin 改名 → 403" 的意图不变。
-  createUser(tenantId, 'brandviewer', 'pw123456', 'creator');
+  await createUser(tenantId, 'brandviewer', 'pw123456', 'creator');
   otherTenantId = createTenant('另一个台').id;
-  createUser(otherTenantId, 'otheradmin', 'pw123456', 'admin');
+  await createUser(otherTenantId, 'otheradmin', 'pw123456', 'admin');
 });
 
 async function asUser(username: string) {
@@ -79,7 +79,7 @@ describe('系统名称可改、机构名称只读(T1)', () => {
   it('GET /settings 返回 brandName;未设过 → 回落机构名', async () => {
     // 新建一个没设过 brand_name 的租户,brandName 应回落 tenant.name
     const freshT = createTenant('未改名台').id;
-    createUser(freshT, 'freshadmin', 'pw123456', 'admin');
+    await createUser(freshT, 'freshadmin', 'pw123456', 'admin');
     const c = await asUser('freshadmin');
     const s = (await c.get('/api/settings')).body;
     expect(s.brandName).toBe('未改名台'); // 回落机构名
@@ -218,7 +218,7 @@ describe('/me 品牌哨兵(T2)', () => {
 
   it('真名「我的机构」+ 无 logo → isCustomBranded=false', async () => {
     const def = createTenant('我的机构'); // 名 = 平台默认串
-    createUser(def.id, 'defadmin', 'pw123456', 'admin');
+    await createUser(def.id, 'defadmin', 'pw123456', 'admin');
     const c = await asUser('defadmin');
     const r = await c.get('/api/me');
     expect(r.body.isCustomBranded).toBe(false);

@@ -18,9 +18,9 @@ const { enqueueJob } = await import('../src/queue/index.js');
 let tenantId = '';
 let uid = '';
 
-beforeAll(() => {
+beforeAll(async () => {
   tenantId = createTenant('审计归属台').id;
-  uid = createUser(tenantId, 'opuser', 'pw123456', 'admin').id;
+  uid = (await createUser(tenantId, 'opuser', 'pw123456', 'admin')).id;
 });
 
 describe('listAudit() 带操作者名 actorName', () => {

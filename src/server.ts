@@ -73,7 +73,8 @@ export function createApp() {
 // 直接运行(非测试导入)时启动服务 + worker
 const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
-  bootstrapSuperadmin(); // 首启建初始超管(无 SUPERADMIN_PASS 在此抛错拒启)
+  void (async () => {
+  await bootstrapSuperadmin(); // 首启建初始超管(无 SUPERADMIN_PASS 在此抛错拒启;bcrypt 异步)
   // OSS 未配齐告警(Docker 部署就绪 D15):wan2.2-s2v 需公网可达素材 URL,
   // 内网 minio 百炼访问不到。没配 OSS 时生成会卡 pending 超时,这里早告警而非运行时才暴雷。
   if (!config.oss.enabled) {
@@ -108,4 +109,5 @@ if (isMain) {
     console.log(`灵镜启动: http://localhost:${config.port}`);
     console.log(`  worker: 已启动(DB 队列轮询)`);
   });
+  })();
 }

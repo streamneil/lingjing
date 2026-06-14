@@ -5,25 +5,31 @@
 // 但两套 session 表语义不同(session / platform_session),各自查表不强合泛型。
 //
 // 改 bcrypt rounds / token 长度只此一处,两边自动一致。
+//
+// 并发决策(/qa 压测):改用原生 bcrypt 的【异步】API。原 bcryptjs(纯 JS)+ *Sync
+// 会阻塞事件循环 —— 一次 compare ~57ms 期间全服务(读/写/所有用户)冻结,登录因此
+// 封顶 ~17 RPS 且加并发不涨。原生 bcrypt 异步把哈希放进 libuv 线程池,跨核并行:
+// 实测 20 并发登录 1097ms→261ms(18→77 logins/s,4.3×)且不再冻结读写。
+// hash 格式仍为 $2b$,与历史 bcryptjs 存量 hash 双向兼容,无需迁移密码。
 
 import { randomBytes } from 'node:crypto';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 
 const BCRYPT_ROUNDS = 10;
 
-/** bcrypt hash 明文密码(同步,Slice 单机够)。 */
-export function hashPassword(plain: string): string {
-  return bcrypt.hashSync(plain, BCRYPT_ROUNDS);
+/** bcrypt hash 明文密码(异步,跑在 libuv 线程池,不阻塞事件循环)。 */
+export function hashPassword(plain: string): Promise<string> {
+  return bcrypt.hash(plain, BCRYPT_ROUNDS);
 }
 
-/** 校验明文密码与 hash 是否匹配。 */
-export function verifyPassword(plain: string, hash: string): boolean {
-  return bcrypt.compareSync(plain, hash);
+/** 校验明文密码与 hash 是否匹配(异步,不阻塞事件循环)。 */
+export function verifyPassword(plain: string, hash: string): Promise<boolean> {
+  return bcrypt.compare(plain, hash);
 }
 
 /** 抵消时序差异:对不存在的用户也跑一次 compare,避免"用户是否存在"被时序泄露。 */
-export function dummyVerify(plain: string): void {
-  bcrypt.compareSync(plain, '$2b$10$invalidinvalidinvalidinvalidinvalidinvalidinv');
+export function dummyVerify(plain: string): Promise<boolean> {
+  return bcrypt.compare(plain, '$2b$10$invalidinvalidinvalidinvalidinvalidinvalidinv');
 }
 
 /** 生成不可猜的随机 token(session token / captcha token 共用)。 */

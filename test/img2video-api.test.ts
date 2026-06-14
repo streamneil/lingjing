@@ -22,7 +22,7 @@ const client = new Client(app);
 
 beforeAll(async () => {
   const t = createTenant('i2v 测试台');
-  createUser(t.id, 'icreator', 'pw123456', 'creator');
+  await createUser(t.id, 'icreator', 'pw123456', 'creator');
   grant(t.id, 100000);
   const r = await client.login('icreator', 'pw123456');
   expect(r.status).toBe(200);

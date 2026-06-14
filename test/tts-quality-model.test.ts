@@ -37,7 +37,7 @@ let uid = '';
 beforeAll(async () => {
   const t = createTenant('品质测试台');
   tid = t.id;
-  uid = createUser(t.id, 'qmcreator', 'pw123456', 'creator').id;
+  uid = (await createUser(t.id, 'qmcreator', 'pw123456', 'creator')).id;
   grant(t.id, 100000);
   expect((await client.login('qmcreator', 'pw123456')).status).toBe(200);
 }, 30000);

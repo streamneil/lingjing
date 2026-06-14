@@ -30,7 +30,7 @@ const client = new Client(app);
 
 beforeAll(async () => {
   const t = createTenant('情绪测试台');
-  createUser(t.id, 'emocreator', 'pw123456', 'creator');
+  await createUser(t.id, 'emocreator', 'pw123456', 'creator');
   grant(t.id, 100000);
   expect((await client.login('emocreator', 'pw123456')).status).toBe(200);
 }, 30000);

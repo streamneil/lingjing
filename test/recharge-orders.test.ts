@@ -42,11 +42,11 @@ let planId = '';
 let pricedFaceId = ''; // 面议套餐(price_yuan=null)
 let disabledId = '';
 
-beforeAll(() => {
+beforeAll(async () => {
   tId = createTenant('充值测试台').id;
-  admin = createUser(tId, 'rcadmin', 'pw123456', 'admin').id;
-  alice = createUser(tId, 'rcalice', 'pw123456', 'creator').id;
-  bob = createUser(tId, 'rcbob', 'pw123456', 'creator').id;
+  admin = (await createUser(tId, 'rcadmin', 'pw123456', 'admin')).id;
+  alice = (await createUser(tId, 'rcalice', 'pw123456', 'creator')).id;
+  bob = (await createUser(tId, 'rcbob', 'pw123456', 'creator')).id;
   planId = createPlan({ name: '专业版', priceYuan: 5000, credits: 50000, bonusCredits: 5000 }).id;
   pricedFaceId = createPlan({ name: '企业版', priceYuan: null, credits: 100000 }).id; // 面议
   disabledId = createPlan({
@@ -81,9 +81,9 @@ describe('建单 + 快照 + 守卫', () => {
     expect(pendings.length).toBe(1);
   });
 
-  it('payee 未配 → 拒下单(外部 #7,不生成付不了的孤儿单)', () => {
+  it('payee 未配 → 拒下单(外部 #7,不生成付不了的孤儿单)', async () => {
     const t2 = createTenant('未配台').id;
-    const u2 = createUser(t2, 'noConfig', 'pw123456', 'creator').id;
+    const u2 = (await createUser(t2, 'noConfig', 'pw123456', 'creator')).id;
     const p2 = createPlan({ name: '台2套餐', priceYuan: 100, credits: 1000 }).id;
     // 注:payee 是单例全局配置,这里已被 beforeAll 配上 → 改成临时清空验证守卫逻辑
     setPayee({ payeeName: '', taxNo: '', bankName: '', bankAccount: '' });

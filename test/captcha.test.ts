@@ -49,7 +49,7 @@ describe('滑块 challenge / verify(拖到底式)', () => {
 describe('captcha_token 一次性（登录场景）', () => {
   it('同一 token 登录两次:第二次 400（token 用过即弃）', async () => {
     const tenantId = createTenant('滑块台').id;
-    createUser(tenantId, 'capuser', 'pw123456', 'creator');
+    await createUser(tenantId, 'capuser', 'pw123456', 'creator');
     // 手动走一遍:challenge → verify 拿 token → 用同一 token 登录两次
     const c = new Client(app);
     const ch = await c.get('/api/captcha/challenge');
@@ -63,7 +63,7 @@ describe('captcha_token 一次性（登录场景）', () => {
 
   it('无 captchaToken 登录 → 400', async () => {
     const tenantId = createTenant('滑块台2').id;
-    createUser(tenantId, 'capuser2', 'pw123456', 'creator');
+    await createUser(tenantId, 'capuser2', 'pw123456', 'creator');
     const c = new Client(app);
     const r = await c.post('/api/login', { username: 'capuser2', password: 'pw123456' });
     expect(r.status).toBe(400);

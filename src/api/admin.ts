@@ -89,14 +89,14 @@ adminRouter.get('/', (_req, res) => res.sendFile(resolve(adminPagesDir, 'admin.h
 adminRouter.get('/login', (_req, res) => res.sendFile(resolve(adminPagesDir, 'admin-login.html')));
 
 // ── 超管登录 / 登出(防暴破:必携 captcha_token)──
-adminRouter.post('/login', (req: Request, res: Response) => {
+adminRouter.post('/login', async (req: Request, res: Response) => {
   const { username, password, captchaToken } = req.body ?? {};
   if (!username || !password) return res.status(400).json({ error: '缺少 username / password' });
   if (!consumeCaptchaToken(captchaToken)) {
     return res.status(400).json({ error: '请先完成滑块验证' });
   }
   try {
-    const token = platformLogin(username, password);
+    const token = await platformLogin(username, password);
     setPadminCookie(res, token);
     const padmin = req.body.username as string;
     writePlatformAudit(padmin, 'padmin_login', PLATFORM_TENANT, username, padminIp(req));
@@ -368,7 +368,7 @@ adminRouter.post('/api/tenants', requirePlatformAdmin, (req: Request, res: Respo
 });
 
 // ── 开户(复用 createUser,透传 code 到 UI — E2)──
-adminRouter.post('/api/tenants/:id/users', requirePlatformAdmin, (req: Request, res: Response) => {
+adminRouter.post('/api/tenants/:id/users', requirePlatformAdmin, async (req: Request, res: Response) => {
   const tenantId = req.params.id!;
   const { username, password, role } = req.body ?? {};
   if (!username || !password || !role) {
@@ -379,7 +379,7 @@ adminRouter.post('/api/tenants/:id/users', requirePlatformAdmin, (req: Request, 
     return res.status(404).json({ error: '租户不存在' });
   }
   try {
-    const u = createUser(tenantId, username, password, role as Role);
+    const u = await createUser(tenantId, username, password, role as Role);
     writePlatformAudit(req.padmin!.id, 'tenant_user_create', tenantId, `${u.username}(${u.role})`, padminIp(req));
     return res.status(201).json({ id: u.id, username: u.username, role: u.role });
   } catch (e) {
@@ -444,13 +444,13 @@ adminRouter.get('/api/tenants/:id/users', requirePlatformAdmin, (req: Request, r
 });
 
 // 重置租户用户密码(免旧密码,运营帮租户找回;作废其所有 session 强制重登)。
-adminRouter.post('/api/tenants/:id/users/:uid/reset-password', requirePlatformAdmin, (req: Request, res: Response) => {
+adminRouter.post('/api/tenants/:id/users/:uid/reset-password', requirePlatformAdmin, async (req: Request, res: Response) => {
   const tenantId = req.params.id!;
   const userId = req.params.uid!;
   if (!ensureTenant(tenantId, res)) return;
   const { newPassword } = req.body ?? {};
   try {
-    const ok = adminResetPassword(tenantId, userId, newPassword);
+    const ok = await adminResetPassword(tenantId, userId, newPassword);
     if (!ok) return res.status(404).json({ error: '用户不存在' });
     writePlatformAudit(req.padmin!.id, 'tenant_user_reset_pw', tenantId, userId, padminIp(req));
     return res.json({ ok: true });

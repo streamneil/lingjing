@@ -31,7 +31,7 @@ export const authRouter = Router();
 
 // 登录:(username, password) → 设 session cookie(用户名全局唯一,租户从账号反查)。
 // 防暴破(D8/D9):必携 captcha_token(滑块过后服务端发的一次性凭证),消费即弃。
-authRouter.post('/login', (req: Request, res: Response) => {
+authRouter.post('/login', async (req: Request, res: Response) => {
   const { username, password, captchaToken } = req.body ?? {};
   if (!username || !password) {
     return res.status(400).json({ error: '缺少 username / password' });
@@ -40,7 +40,7 @@ authRouter.post('/login', (req: Request, res: Response) => {
     return res.status(400).json({ error: '请先完成滑块验证' });
   }
   try {
-    const token = login(username, password);
+    const token = await login(username, password);
     setSessionCookie(res, token);
     // 审计登录(此时 req.user 还没挂,用 resolveSession 拿 user id)
     const u = resolveSession(token);
@@ -76,14 +76,14 @@ authRouter.put('/me', requireAuth, (req: Request, res: Response) => {
 });
 
 // 改密码(校验原密码;成功后作废其它会话,当前会话保留)
-authRouter.post('/me/password', requireAuth, (req: Request, res: Response) => {
+authRouter.post('/me/password', requireAuth, async (req: Request, res: Response) => {
   const { oldPassword, newPassword } = req.body ?? {};
   if (!oldPassword || !newPassword) return res.status(400).json({ error: '缺少原密码 / 新密码' });
   try {
     // 当前 session token 从 cookie 取,改密后保留它(不把自己踢下线)
     const m = (req.headers.cookie ?? '').match(/lj_session=([^;]+)/);
     const keep = m ? decodeURIComponent(m[1]!) : undefined;
-    changePassword(req.user!.id, oldPassword, newPassword, keep);
+    await changePassword(req.user!.id, oldPassword, newPassword, keep);
     audit(req, 'change_password');
     return res.json({ ok: true });
   } catch (e) {
@@ -110,13 +110,13 @@ authRouter.get('/members', requireAuth, (req: Request, res: Response) => {
   return res.json({ members: listUsers(tid), seats: seatUsage(tid) });
 });
 
-authRouter.post('/members', requireRole('admin'), (req: Request, res: Response) => {
+authRouter.post('/members', requireRole('admin'), async (req: Request, res: Response) => {
   const { username, password, role, displayName } = req.body ?? {};
   if (!username || !password || !role) {
     return res.status(400).json({ error: '缺少 username / password / role' });
   }
   try {
-    const u = createUser(
+    const u = await createUser(
       req.user!.tenantId,
       username,
       password,
@@ -132,9 +132,9 @@ authRouter.post('/members', requireRole('admin'), (req: Request, res: Response) 
 
 // 管理员强制重置成员密码:随机生成 → 作废其 session → 返回 {username, password}(明文仅此次回传)。
 // 自我保护:不能重置自己(auth/index.ts 抛 CANNOT_RESET_SELF)。审计仅记动作,不含密码明文。
-authRouter.post('/members/:id/reset-password', requireRole('admin'), (req: Request, res: Response) => {
+authRouter.post('/members/:id/reset-password', requireRole('admin'), async (req: Request, res: Response) => {
   try {
-    const r = tenantAdminResetPassword(req.user!.tenantId, req.params.id!, req.user!.id);
+    const r = await tenantAdminResetPassword(req.user!.tenantId, req.params.id!, req.user!.id);
     if (!r) return res.status(404).json({ error: '成员不存在' });
     audit(req, 'member_reset_pw', r.username);
     return res.json({ ok: true, username: r.username, password: r.password });
