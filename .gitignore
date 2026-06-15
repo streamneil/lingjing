@@ -31,3 +31,7 @@ prototype/showcase/*.jpg
 prototype/showcase/probe-*.jpg
 prototype/showcase/*.mp4
 prototype/showcase/*.wav
+
+# gstack 团队模式自动生成的准入钩子(本仓库单人/无 remote,不入库;团队协作时再放开)
+.claude/settings.json
+.claude/hooks/
