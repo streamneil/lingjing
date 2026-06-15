@@ -67,11 +67,19 @@
   .player .cmp figure .img{ position:absolute; inset:0; background-size:cover; background-position:center; }
   .player .cmp figcaption{ position:absolute; left:8px; bottom:8px; z-index:1; font-size:11px; font-family:var(--f-mono);
     color:#fff; background:rgba(8,8,10,.6); padding:3px 8px; border-radius:6px; backdrop-filter:blur(8px); }
-  .showcase{ display:flex; gap:15px; overflow-x:auto; padding:6px 2px 12px; scroll-snap-type:x proximity; scrollbar-width:none }
-  .showcase::-webkit-scrollbar{ display:none }
+  /* 瀑布流(masonry 错落墙):CSS columns 铺满宽度,卡片高度随各自模态比例参差 → 大气丰盛 */
+  .showcase{ columns:4; column-gap:16px; padding:6px 2px 12px; }
+  @media(max-width:1280px){ .showcase{ columns:3 } }
+  @media(max-width:880px){ .showcase{ columns:2 } }
+  @media(max-width:560px){ .showcase{ columns:1 } }
   .showcase:focus-visible{ outline:2px solid var(--blue); outline-offset:4px; border-radius:14px }
-  .demo{ flex:0 0 214px; scroll-snap-align:start; border-radius:18px; overflow:hidden; position:relative; aspect-ratio:9/13.6;
+  .demo{ width:100%; break-inside:avoid; margin:0 0 16px; border-radius:18px; overflow:hidden; position:relative;
     border:1px solid var(--line-soft); box-shadow:var(--sh-card); cursor:pointer; transition:transform .4s var(--ease-out), border-color .3s }
+  /* 卡片高度按模态参差(错落感):影片宽、图片/数字人竖、编辑近方 */
+  .demo{ aspect-ratio:3/4 } /* 默认竖图 */
+  .demo.m-video{ aspect-ratio:16/10 }
+  .demo.m-image-edit{ aspect-ratio:1/1 }
+  .demo.m-avatar{ aspect-ratio:3/4 }
   .demo:hover{ transform:translateY(-6px); border-color:var(--line-hi) }
   .demo:focus-visible{ outline:2px solid var(--blue); outline-offset:2px }
   .demo .img{ position:absolute; inset:0; background-size:cover; background-position:center top; transition:transform 1.1s var(--ease-out) }
@@ -289,7 +297,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   let SHOWCASE = SC_ALL.slice(); // 当前筛选/抽样后的可见集
   let SC_THEME = '全部';
   let SC_OFFSET = 0; // 「换一批」轮转起点
-  const SC_VISIBLE = 14; // 一屏展示量
+  const SC_VISIBLE = 24; // 瀑布流墙一屏展示量(多行,比横滚露更多)
   // 模态权重:多模态(影片/编辑/数字人)是新内容,优先露出;图片垫后。
   const MOD_RANK = { video:0, avatar:1, 'image-edit':2, image:3 };
 
@@ -326,8 +334,9 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         : (s.modality==='image-edit')
           ? '<path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/>'
           : '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>';
+      const mClass = s.modality && s.modality!=='image' ? ` m-${s.modality}` : '';
       return `
-      <div class="demo" tabindex="0" role="button" aria-label="查看：${esc(s.title)}" data-i="${i}">
+      <div class="demo${mClass}" tabindex="0" role="button" aria-label="查看：${esc(s.title)}" data-i="${i}">
         <div class="img" style="background-image:url('${esc(s.poster||'')}')"></div>
         <div class="veil"></div>
         <span class="tag prompt-tag">${esc(s.tag)}</span>
