@@ -102,7 +102,8 @@ export const IMAGE_MODELS: Record<string, ImageModelDef> = {
   'wan2.7-image-pro': {
     key: 'wan2.7-image-pro', label: '万相2.7 编辑 Pro', modelId: 'wan2.7-image-pro',
     shape: 'A_EDIT', sizeKind: 'keyword', modes: ['text2img', 'img2img'],
-    maxImages: 4, maxInputImages: 5, maxResolution: '2K', priceTier: 10, supportsBbox: true,
+    // 真实成本 0.50 元/张 × 35 = 18(原 10 是偏低占位,会亏:只收 2 倍成本而非 3.5 倍)。
+    maxImages: 4, maxInputImages: 5, maxResolution: '2K', priceTier: 18, supportsBbox: true,
   },
 };
 
