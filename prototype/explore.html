@@ -73,6 +73,7 @@
   /* 卡片高度按模态参差(错落感):影片宽、图片/数字人竖、编辑近方 */
   .demo{ aspect-ratio:3/4 } /* 默认竖图 */
   .demo.m-video{ aspect-ratio:16/10 }
+  .demo.m-video-edit{ aspect-ratio:9/16 }
   .demo.m-image-edit{ aspect-ratio:1/1 }
   .demo.m-avatar{ aspect-ratio:3/4 }
   .demo:hover{ transform:translateY(-6px); border-color:var(--line-hi) }
@@ -297,7 +298,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   // 灵感库:平台自产的多模态真实产出(showcase-data.js / window.LJShowcase)。
   // 每项 = 一条可一键复用的真实样例;点动作 → 带 ?prompt= 进对应工具(eng-review:只文本,不带 ?img=)。
   // modality: image | video | image-edit | avatar。actionLabel/actionText 按模态由 build-showcase-data 生成。
-  const MOD_BADGE = { video:'▶ 影片', 'image-edit':'✎ 编辑', avatar:'🧍 数字人' }; // image 无徽章
+  const MOD_BADGE = { video:'▶ 影片', 'video-edit':'▶ 影片编辑', 'image-edit':'✎ 图片编辑', avatar:'🧍 数字人' }; // image 无徽章
   const SC_ALL = (window.LJShowcase || []).map(s=>({
     id:s.id, title:s.title, sub:`${s.toolName} · ${s.theme}`, tag:s.theme, theme:s.theme,
     modality:s.modality, poster:s.poster, videoUrl:s.videoUrl, beforeUrl:s.beforeUrl, afterUrl:s.afterUrl, sourceUrl:s.sourceUrl,
@@ -309,7 +310,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   let SC_OFFSET = 0; // 「换一批」轮转起点
   const SC_VISIBLE = 24; // 瀑布流墙一屏展示量(多行,比横滚露更多)
   // 模态权重:多模态(影片/编辑/数字人)是新内容,优先露出;图片垫后。
-  const MOD_RANK = { video:0, avatar:1, 'image-edit':2, image:3 };
+  const MOD_RANK = { video:0, 'video-edit':1, avatar:2, 'image-edit':3, image:4 };
 
   function scApplyFilter(reshuffle){
     if(reshuffle) SC_OFFSET += SC_VISIBLE;
@@ -339,7 +340,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     el.innerHTML = SHOWCASE.map((s,i)=>{
       const modBadge = MOD_BADGE[s.modality] ? `<span class="mod-badge">${esc(MOD_BADGE[s.modality])}</span>` : '';
       // 影片/数字人=播放图标;编辑=对比图标;图片=提示词图标
-      const ic = (s.modality==='video'||s.modality==='avatar')
+      const ic = (s.modality==='video'||s.modality==='avatar'||s.modality==='video-edit')
         ? '<path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/>'
         : (s.modality==='image-edit')
           ? '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M12 5v14"/><path d="m7 13 2-2 2 2"/><path d="m15 11 2 2"/>'
@@ -367,7 +368,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     _lastFocus=document.activeElement;
     const view=document.getElementById('playerView');
     // 按模态渲染 modal:影片/数字人=<video controls>;编辑=前后对比;图片=纯净大图
-    if((s.modality==='video'||s.modality==='avatar') && s.videoUrl){
+    if((s.modality==='video'||s.modality==='avatar'||s.modality==='video-edit') && s.videoUrl){
       view.innerHTML = `<video src="${esc(s.videoUrl)}" controls autoplay playsinline poster="${esc(s.poster||'')}"></video>`;
     } else if(s.modality==='image-edit' && s.beforeUrl && s.afterUrl){
       view.innerHTML = `<div class="cmp">
@@ -380,7 +381,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     }
     document.getElementById('playerName').textContent=s.title;
     // 副行展示真实文本(截断);标签按模态:提示词/编辑指令/口播文案
-    const noun = s.modality==='image-edit'?'编辑指令':(s.modality==='avatar'?'口播文案':'提示词');
+    const noun = (s.modality==='image-edit'||s.modality==='video-edit')?'编辑指令':(s.modality==='avatar'?'口播文案':'提示词');
     const txt=(s.actionText||'').trim();
     document.getElementById('playerSub').textContent = txt ? `${noun}:${txt.slice(0,80)}${txt.length>80?'…':''}` : s.sub;
     const useBtn=document.getElementById('playerUse');

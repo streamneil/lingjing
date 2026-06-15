@@ -724,7 +724,16 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     try{ scheduleEstimate(); refreshBtn(); }catch(e){}
   }
 
-  LJ.me().then(()=>{ loadModels(); loadHistory(); }).catch(()=>{});
+  // 探索页灵感库一键复用:?prompt=<编辑指令> 只填指令框(eng-review:不接 ?img=/视频;
+  // 输入视频/参考图有 consent 合规闸,请用户自行上传原视频 + 勾选授权)。
+  function applyPromptFromQuery(){
+    const p=new URLSearchParams(location.search).get('prompt');
+    if(!p) return;
+    ta.value=p.slice(0,5000); cnt.textContent=ta.value.length;
+    refreshBtn(); scheduleEstimate(); ta.focus();
+    window.LJToast&&window.LJToast('✓ 已套用编辑指令,请上传原视频 + 勾选授权后生成');
+  }
+  LJ.me().then(()=>{ loadModels(); loadHistory(); applyPromptFromQuery(); }).catch(()=>{});
   renderVidCard(); refreshBtn();
 </script>
 </body>

@@ -30,6 +30,7 @@ const TOOL = {
   text2video: { name: '文字转影片', page: 'text2video.html', action: '用这个提示词' },
   img2video: { name: '图片转影片', page: 'img2video.html', action: '用这个提示词' },
   'ai-image-edit': { name: 'AI 图片编辑器', page: 'ai-image-edit.html', action: '用这个编辑指令' },
+  'ai-video-edit': { name: 'AI 影片编辑器', page: 'video-edit.html', action: '用这个编辑指令' },
   'ai-avatar': { name: 'AI 虚拟人', page: 'avatars.html', action: '去做同款数字人' },
 };
 const ABS = (u) => (u && /^https?:/.test(u) ? u : OSS + u); // ossKey/相对 key → 绝对 URL
@@ -48,6 +49,7 @@ function norm(x) {
   };
   if (modality === 'image') return { ...base, poster: ABS(x.ossKey || x.url), url: ABS(x.ossKey || x.url) };
   if (modality === 'video') return { ...base, poster: ABS(x.posterUrl), videoUrl: ABS(x.videoUrl) };
+  if (modality === 'video-edit') return { ...base, poster: ABS(x.posterUrl || x.sourceUrl), videoUrl: ABS(x.videoUrl) };
   if (modality === 'image-edit') return { ...base, poster: ABS(x.afterUrl), beforeUrl: ABS(x.beforeUrl), afterUrl: ABS(x.afterUrl) };
   if (modality === 'avatar') return { ...base, poster: ABS(x.sourceUrl), videoUrl: ABS(x.videoUrl), sourceUrl: ABS(x.sourceUrl) };
   return base;
