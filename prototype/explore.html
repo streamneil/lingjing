@@ -172,11 +172,12 @@
   .ex-ov{ position:fixed; inset:0; background:rgba(4,4,5,.66); backdrop-filter:blur(8px); z-index:200;
     display:none; align-items:center; justify-content:center; padding:30px }
   .ex-ov.show{ display:flex }
-  .player{ width:min(420px,100%); background:var(--modal); border-radius:var(--r-lg); border:1px solid var(--line);
-    overflow:hidden; box-shadow:var(--sh-pop); animation:pop .35s var(--ease-out) }
+  .player{ position:relative; width:min(440px,100%); max-height:90vh; overflow-y:auto; background:var(--modal); border-radius:var(--r-lg); border:1px solid var(--line);
+    box-shadow:var(--sh-pop); animation:pop .35s var(--ease-out) }
   @keyframes pop{ from{transform:scale(.96) translateY(10px);opacity:0} to{transform:scale(1) translateY(0);opacity:1} }
-  .player .pv{ aspect-ratio:9/16; background:#000; position:relative; display:grid; place-items:center; max-height:64vh }
-  .player .pv video, .player .pv img{ width:100%; height:100%; object-fit:contain; background:#000 }
+  /* 媒体区:不再强制 9:16,内容按自身比例,封顶 64vh → 横视频不再有大黑边 */
+  .player .pv{ background:#000; position:relative; display:flex; align-items:center; justify-content:center; max-height:64vh; overflow:hidden; border-radius:var(--r-lg) var(--r-lg) 0 0 }
+  .player .pv video, .player .pv img{ display:block; width:100%; max-height:64vh; object-fit:contain; background:#000 }
   .player .pv .pph{ color:var(--t4); font-size:12px; display:flex; flex-direction:column; gap:8px; align-items:center }
   .player .pv .pph svg{ width:30px; height:30px }
   .player .pbar{ padding:18px 20px; display:flex; align-items:center; gap:14px }
@@ -186,9 +187,13 @@
   .player .pbar .puse{ flex:none; display:inline-flex; align-items:center; gap:7px; background:var(--t1); color:#0A0A0B;
     border:none; border-radius:var(--r-pill); padding:11px 16px; font-size:13px; font-weight:700; font-family:var(--f);
     cursor:pointer; box-shadow:var(--sh-white-btn); text-decoration:none }
-  .player .pclose{ position:absolute; top:14px; right:14px; width:34px; height:34px; border-radius:10px; z-index:2;
-    background:rgba(8,8,10,.55); backdrop-filter:blur(10px); border:none; color:#fff; cursor:pointer; display:grid; place-items:center }
-  .player .pclose svg{ width:17px; height:17px }
+  /* 关闭按钮:固定在弹窗右上角、最高层级,绝不被 video controls / 对比图盖住 */
+  .player .pclose{ position:absolute; top:12px; right:12px; width:36px; height:36px; border-radius:50%; z-index:10;
+    background:rgba(255,255,255,.92); border:none; color:#0A0A0B; cursor:pointer; display:grid; place-items:center;
+    box-shadow:0 4px 16px rgba(0,0,0,.45); transition:transform .15s, background .15s }
+  .player .pclose:hover{ transform:scale(1.08); background:#fff }
+  .player .pclose:focus-visible{ outline:2px solid var(--blue); outline-offset:2px }
+  .player .pclose svg{ width:18px; height:18px }
 
   @media (prefers-reduced-motion: reduce){
     .explore, .demo, .player{ animation:none !important }
@@ -267,12 +272,12 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
 <!-- 弹窗播放器 -->
 <div class="ex-ov" id="player" role="dialog" aria-modal="true" aria-label="案例预览">
   <div class="player">
-    <button class="pclose" id="playerClose" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     <div class="pv" id="playerView"></div>
     <div class="pbar">
       <div class="pt"><div class="pn" id="playerName"></div><div class="ps" id="playerSub"></div></div>
       <a class="puse" id="playerUse" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3Z"/></svg><span class="use-label">用这个模板</span></a>
     </div>
+    <button class="pclose" id="playerClose" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
   </div>
 </div>
 
@@ -332,7 +337,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       const ic = (s.modality==='video'||s.modality==='avatar')
         ? '<path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/>'
         : (s.modality==='image-edit')
-          ? '<path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/>'
+          ? '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M12 5v14"/><path d="m7 13 2-2 2 2"/><path d="m15 11 2 2"/>'
           : '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>';
       const mClass = s.modality && s.modality!=='image' ? ` m-${s.modality}` : '';
       return `
