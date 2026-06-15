@@ -68,19 +68,21 @@ describe('i2v registry 自洽性', () => {
 });
 
 describe("costFor('video_i2v') 并入 video_t2v 分支(reserve==settle)", () => {
-  it('读快照:秒×档×tier(audio 恒 false)', () => {
+  it('读快照:秒 × 每秒售价(priceTier 已含分辨率,resFactor=1)', () => {
+    // 快照 priceTier=35 = 万相2.7 i2v 1080P 每秒售价 → 10 × 35 = 350
     const cost = costFor('video_i2v', {
-      model: 'wan2.7-i2v', durationSnapshot: 10, resSnapshot: '1080P', audioSnapshot: false, priceTierSnapshot: 5,
+      model: 'wan2.7-i2v', durationSnapshot: 10, resSnapshot: '1080P', audioSnapshot: false, priceTierSnapshot: 35,
     });
-    // 10 × 5 × 2(1080P) = 100
-    expect(cost).toBe(100);
-    expect(cost).toBe(estimateVideoCost(10, 5, '1080P', false));
+    expect(cost).toBe(350);
+    expect(cost).toBe(estimateVideoCost(10, 35, '1080P', false));
   });
 
-  it('1080P = 2 × 720P(i2v)', () => {
-    const p720 = costFor('video_i2v', { model: 'happyhorse-1.0-i2v', durationSnapshot: 5, resSnapshot: '720P', priceTierSnapshot: 3 });
-    const p1080 = costFor('video_i2v', { model: 'happyhorse-1.0-i2v', durationSnapshot: 5, resSnapshot: '1080P', priceTierSnapshot: 3 });
-    expect(p1080).toBe(p720 * 2);
+  it('无快照回落:按分辨率派生每秒价(HH i2v 720P=32 / 1080P=56,不再 ×2)', () => {
+    // 无 priceTierSnapshot → videoPriceTier 按分辨率选(720P→priceTier、1080P→priceTier1080)
+    const p720 = costFor('video_i2v', { model: 'happyhorse-1.0-i2v', durationSnapshot: 5, resSnapshot: '720P' });
+    const p1080 = costFor('video_i2v', { model: 'happyhorse-1.0-i2v', durationSnapshot: 5, resSnapshot: '1080P' });
+    expect(p720).toBe(5 * 32); // 160
+    expect(p1080).toBe(5 * 56); // 280(真实比值 1.78,非 ×2)
   });
 });
 

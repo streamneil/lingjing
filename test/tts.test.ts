@@ -14,8 +14,8 @@ const { enqueueJob, markDone, getJob } = await import('../src/queue/index.js');
 describe('TTS 计价(costFor / estimateTtsCost)', () => {
   it('estimateTtsCost 按字数', () => {
     expect(estimateTtsCost(0)).toBe(1); // MIN_COST
-    expect(estimateTtsCost(100)).toBe(2); // ceil(100*0.02)
-    expect(estimateTtsCost(1000)).toBe(20);
+    expect(estimateTtsCost(100)).toBe(1); // ceil(100*0.0028=0.28)=1(0.8元/万×3.5)
+    expect(estimateTtsCost(1000)).toBe(3); // ceil(1000*0.0028=2.8)=3
   });
   it("costFor('tts') = estimateTtsCost(text.length)", () => {
     expect(costFor('tts', { text: 'a'.repeat(500) })).toBe(estimateTtsCost(500));

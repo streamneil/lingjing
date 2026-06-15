@@ -325,8 +325,9 @@
         <label style="display:flex;align-items:center;gap:6px;width:auto;font-weight:400"><input id="mModeI2I" type="checkbox" style="width:auto"> 图生图</label>
       </div>
       <div id="mModeHint" style="font-size:11px;color:#d08770;line-height:1.5;display:none"></div>
-      <label>价/张</label>
-      <input id="mPrice" type="number" min="1" value="4">
+      <label>真实成本(元/张)<span style="color:#9aa;font-weight:400">— 厂商单价,售价积分自动算</span></label>
+      <input id="mCost" type="number" min="0" step="0.001" placeholder="如 0.25" oninput="syncDerivedCredits()">
+      <div style="font-size:12px;color:#7d8590;margin:-2px 0 4px">售价积分(自动 = ⌈成本×35⌉,毛利约71%):<b id="mDerived" style="color:var(--blue)">—</b></div>
       <label>张数上限</label>
       <input id="mMax" type="number" min="1" value="1">
       <label>分辨率列表(照百炼文档录 比例:宽*高,清晰度档自动算;留空=用系统默认)</label>
@@ -685,7 +686,7 @@
     document.getElementById('mKey').disabled=false; document.getElementById('mKey').value='';
     document.getElementById('mShape').disabled=false; fillShapeSel();
     document.getElementById('mLabel').value=''; document.getElementById('mModelId').value='';
-    document.getElementById('mPrice').value='4'; document.getElementById('mMax').value='1'; document.getElementById('mEnabled').checked=true;
+    document.getElementById('mCost').value=''; syncDerivedCredits(); document.getElementById('mMax').value='1'; document.getElementById('mEnabled').checked=true;
     setResRows([]);
     // 默认按模板能力勾上(贴默认行为)
     const cap=tmplModesMap[document.getElementById('mShape').value]||['text2img'];
@@ -699,12 +700,20 @@
     document.getElementById('mKey').value=m.key; document.getElementById('mKey').disabled=true;
     document.getElementById('mShape').value=m.shapeTemplate||m.key; document.getElementById('mShape').disabled=true; // 编辑不改技术模板
     document.getElementById('mLabel').value=m.label; document.getElementById('mModelId').value=m.modelId;
-    document.getElementById('mPrice').value=m.priceTier; document.getElementById('mMax').value=m.maxImages; document.getElementById('mEnabled').checked=m.enabled;
+    // 回填真实成本(有则填,无则由 priceTier 反推 ≈priceTier/35 供参考);售价积分自动算
+    document.getElementById('mCost').value=(m.realCostYuan!=null?m.realCostYuan:(m.priceTier?(m.priceTier/35).toFixed(3):'')); syncDerivedCredits();
+    document.getElementById('mMax').value=m.maxImages; document.getElementById('mEnabled').checked=m.enabled;
     document.getElementById('mModeT2I').checked=(m.modes||[]).includes('text2img'); document.getElementById('mModeI2I').checked=(m.modes||[]).includes('img2img');
     setResRows(m.resolutions||[]);
     onShapeChange();
     document.getElementById('modelOv').classList.add('on');
   };
+  // 真实成本 → 售价积分:⌈成本×35⌉(整数系数35=3.5倍毛利×10积分/元;禁 ×3.5×10 浮点多收)
+  function syncDerivedCredits(){
+    const c=Number(document.getElementById('mCost').value);
+    document.getElementById('mDerived').textContent=(Number.isFinite(c)&&c>0)?Math.max(1,Math.ceil(c*35)):'—';
+  }
+  window.syncDerivedCredits=syncDerivedCredits;
   window.openModel=openModel;
   // 勾选变化时刷新能力提示
   ['mModeT2I','mModeI2I'].forEach(id=>document.getElementById(id).addEventListener('change',onShapeChange));
@@ -712,7 +721,7 @@
     const key=document.getElementById('mKey').value.trim();
     const modes=[]; if(document.getElementById('mModeT2I').checked) modes.push('text2img'); if(document.getElementById('mModeI2I').checked) modes.push('img2img');
     const body={ label:document.getElementById('mLabel').value.trim(), modelId:document.getElementById('mModelId').value.trim(),
-      priceTier:Number(document.getElementById('mPrice').value), maxImages:Number(document.getElementById('mMax').value),
+      realCostYuan:Number(document.getElementById('mCost').value)||undefined, costSource:'doc', maxImages:Number(document.getElementById('mMax').value),
       enabled:document.getElementById('mEnabled').checked, shapeTemplate:document.getElementById('mShape').value, modes,
       resolutions:collectResRows(),
       sortOrder:editingKey?(modelsCache.find(m=>m.key===editingKey)?.sortOrder??0):modelsCache.length };

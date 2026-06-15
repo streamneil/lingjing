@@ -72,46 +72,46 @@ describe('VIDEO_MODELS registry 自洽性', () => {
   });
 });
 
-describe('estimateVideoCost(秒×档×tier,audio 加价)', () => {
-  it('基础:duration × priceTier × resFactor', () => {
-    // 5s × tier 3 × 720P(1) = 15
-    expect(estimateVideoCost(5, 3, '720P', false)).toBe(15);
-    // 10s × tier 5 × 720P = 50
-    expect(estimateVideoCost(10, 5, '720P', false)).toBe(50);
+describe('estimateVideoCost(秒 × 每秒售价积分)', () => {
+  // 价格对齐(2026-06):priceTier 已是「该模型该分辨率/有声」的每秒售价积分;
+  // resFactor / audioFactor 全取 1(真实比值随模型变,装不下单全局系数,改由 priceTier 编码)。
+  it('基础:duration × priceTier(resFactor=1)', () => {
+    expect(estimateVideoCost(5, 21, '720P', false)).toBe(105); // 大师720P 5s
+    expect(estimateVideoCost(10, 21, '720P', false)).toBe(210);
   });
 
-  it('1080P = 2 × 720P(同 duration/tier)', () => {
-    const p720 = estimateVideoCost(8, 6, '720P', false);
-    const p1080 = estimateVideoCost(8, 6, '1080P', false);
-    expect(p1080).toBe(p720 * 2);
+  it('1080P 不再 ×2:同 priceTier 时与 720P 相等(差价已在 priceTier 里)', () => {
+    expect(estimateVideoCost(8, 35, '1080P', false)).toBe(estimateVideoCost(8, 35, '720P', false));
+    // 真实 1080P 价靠传入更高的 priceTier 表达(大师 1080P=35 vs 720P=21)
+    expect(estimateVideoCost(8, 35, '1080P', false)).toBe(280);
   });
 
-  it('audio=true 加价 1.3×(ceil)', () => {
-    // 5s × tier 6 × 720P = 30;audio → 30×1.3=39
-    expect(estimateVideoCost(5, 6, '720P', true)).toBe(39);
+  it('audio 不再乘 1.3:有声差价已并入 priceTier(可灵有声单列)', () => {
+    expect(estimateVideoCost(5, 32, '720P', true)).toBe(160); // 可灵有声720P=32,无额外×1.3
+    expect(estimateVideoCost(5, 32, '720P', true)).toBe(estimateVideoCost(5, 32, '720P', false));
   });
 
   it('未知分辨率回落 factor 1', () => {
-    expect(estimateVideoCost(5, 3, '4K', false)).toBe(15);
+    expect(estimateVideoCost(5, 21, '4K', false)).toBe(105);
   });
 });
 
 describe("costFor('video_t2v') 读快照(reserve==settle)", () => {
   it('读 durationSnapshot/resSnapshot/audioSnapshot/priceTierSnapshot', () => {
+    // 快照里 priceTier 已是该组合每秒售价(可灵有声1080P=42)→ 10s × 42 = 420
     const cost = costFor('video_t2v', {
       model: 'kling-v3-t2v',
-      durationSnapshot: 10, resSnapshot: '1080P', audioSnapshot: true, priceTierSnapshot: 6,
+      durationSnapshot: 10, resSnapshot: '1080P', audioSnapshot: true, priceTierSnapshot: 42,
     });
-    // 10 × 6 × 2(1080P) × 1.3(audio) = 156
-    expect(cost).toBe(156);
+    expect(cost).toBe(420);
     // 与 estimateVideoCost 直接算一致(同一函数,reserve==settle)
-    expect(cost).toBe(estimateVideoCost(10, 6, '1080P', true));
+    expect(cost).toBe(estimateVideoCost(10, 42, '1080P', true));
   });
 
   it('无快照(老 job)回落实时派生:可灵 mode→res、audio 仅可灵', () => {
-    // 可灵 pro → 1080P 档、audio=true 生效
+    // 可灵 pro → 1080P 档、audio=true → 派生 priceTierAudio1080=42(deriveVideoT2VParams)
     const c = costFor('video_t2v', { model: 'kling-v3-t2v', mode: 'pro', duration: 5, audio: true });
-    expect(c).toBe(estimateVideoCost(5, VIDEO_MODELS['kling-v3-t2v']!.priceTier, '1080P', true));
+    expect(c).toBe(estimateVideoCost(5, 42, '1080P', true)); // 可灵有声1080P 每秒42
   });
 
   it('V_DASH 模型 audio 派生恒 false(R6:happyhorse 即便传 audio=true 也不计加价)', () => {

@@ -107,7 +107,7 @@ describe('POST /api/jobs (video_edit) 校验', () => {
     expect(inp.billableSecondsSnapshot).toBe(13); // 8 + min(5,8)
     expect(inp.truncateDuration).toBe(5);
     expect(inp.audioSetting).toBe('origin');
-    expect(inp.priceTierSnapshot).toBe(6);
+    expect(inp.priceTierSnapshot).toBe(21); // 万相2.7 编辑 720P 每秒售价(0.6元×35)
   });
 
   it('HH 30s 输入 → billable=30+15=45(输出截 15)', async () => {

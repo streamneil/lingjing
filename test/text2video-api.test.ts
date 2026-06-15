@@ -100,10 +100,11 @@ describe('POST /api/jobs/estimate (video_t2v) ≡ build(N1/N2,reserve==settle)',
     expect(r10.body.cost).toBe(r5.body.cost * 2); // 10s = 2 × 5s
   });
 
-  it('估价 1080P = 2 × 720P', async () => {
+  it('估价按真实分辨率档(大师 720P=21/秒、1080P=35/秒;5s)', async () => {
     const r720 = await client.post('/api/jobs/estimate', { type: 'video_t2v', model: 'wan2.7-t2v', resolution: '720P', ratio: '16:9', duration: 5 });
     const r1080 = await client.post('/api/jobs/estimate', { type: 'video_t2v', model: 'wan2.7-t2v', resolution: '1080P', ratio: '16:9', duration: 5 });
-    expect(r1080.body.cost).toBe(r720.body.cost * 2);
+    expect(r720.body.cost).toBe(5 * 21); // 105
+    expect(r1080.body.cost).toBe(5 * 35); // 175(真实比值 1.67,非 ×2)
   });
 
   it('可灵 audio=true 加价(1.3×)', async () => {
