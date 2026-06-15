@@ -119,3 +119,12 @@
 - **Cons:** 需维护一份默认套餐数据 + 幂等插入(避免重复建)。
 - **Context:** 发现于 landing-flagship eng-review(2026-06-13)外部声音。现有 lingjing.db 已有四档真实套餐,仅「全新空库部署」会空。落地页本身已有空态兜底(同 pricing.html「暂无可购套餐」),所以不阻塞落地页上线。
 - **Depends on / blocked by:** 无。独立于落地页 PR。
+
+## 安全(2026-06-15,eng-review 发现 — explore 多模态轮)
+
+### T-IMGREF-IDOR:/jobs 输入图 imageRefs 跨租户/越权(MEDIUM)
+- **What:** `/jobs` 的 i2v/图片编辑/视频编辑 builder 只做 `imageRefs.filter(string)`(src/api/jobs.ts:446/534),不校验 key 归属本租户、不校验有无 authorization 行;worker 对任意 key 直接 `publisher.publish(k)→getSignedUrl(k)`(worker.ts:363)。
+- **Why:** 登录用户 POST `/jobs` 带 `imageRefs:["image-inputs/<他租户>/<uuid>.png"]` → worker 签名送百炼 = 跨租户输入图读取(IDOR)+ consent 合规闸旁路。需登录 + 猜 UUID(跨租户),故 MEDIUM。
+- **Fix:** builder 加校验:imageRef 必须 `image-inputs/<本租户>/` 前缀 **且** 存在对应 authorization 行(本租户)。回归测试入 `test/account-isolation.test.ts`(creator A 拿 B 的 imageRef 建 job → 拒)。
+- **Context:** 发现于探索页多模态 eng-review。该轮原计划的 `?img=` 预填会把此旁路产品化,已改降级方案(只填文本)规避,但底层缺陷仍在。既有缺陷,非该轮引入。
+- **Depends on / blocked by:** 无。独立于探索页 PR。

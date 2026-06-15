@@ -58,6 +58,15 @@
   .sc-chip.on{ background:var(--t1); color:#0A0A0B; border-color:var(--t1); font-weight:600 }
   .sc-chip:focus-visible{ outline:2px solid var(--blue); outline-offset:2px }
   .demo .tag.prompt-tag{ background:rgba(77,141,255,.28); color:#cfe0ff }
+  /* 模态徽章(右上角):影片/编辑/数字人;图片无 */
+  .demo .mod-badge{ position:absolute; top:12px; right:12px; font-family:var(--f-mono); font-size:9.5px; font-weight:700;
+    padding:4px 8px; border-radius:7px; background:rgba(8,8,10,.62); backdrop-filter:blur(10px); color:#fff; letter-spacing:.02em }
+  /* 编辑前后对比(modal 内) */
+  .player .cmp{ display:grid; grid-template-columns:1fr 1fr; gap:2px; width:100%; height:100%; }
+  .player .cmp figure{ position:relative; margin:0; overflow:hidden; background:#000; }
+  .player .cmp figure .img{ position:absolute; inset:0; background-size:cover; background-position:center; }
+  .player .cmp figcaption{ position:absolute; left:8px; bottom:8px; z-index:1; font-size:11px; font-family:var(--f-mono);
+    color:#fff; background:rgba(8,8,10,.6); padding:3px 8px; border-radius:6px; backdrop-filter:blur(8px); }
   .showcase{ display:flex; gap:15px; overflow-x:auto; padding:6px 2px 12px; scroll-snap-type:x proximity; scrollbar-width:none }
   .showcase::-webkit-scrollbar{ display:none }
   .showcase:focus-visible{ outline:2px solid var(--blue); outline-offset:4px; border-radius:14px }
@@ -212,8 +221,8 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     <section class="ex-hero" aria-label="欢迎">
       <div class="hero-main">
         <div class="hi">LINGJING · 灵镜</div>
-        <h1 id="ex-greet">看见好内容，<br>是怎么生成的</h1>
-        <p>从数字人播报到配音、配图、配乐，灵镜把一条合规融媒体内容需要的工具放在同一处。先看看别人怎么做，再一键开始。</p>
+        <h1 id="ex-greet">好内容，<br>这样生成</h1>
+        <p>影片、图片、音频，九大 AI 创作工具云端就绪。看一眼真实产出，一键带参数进工具，照着做。</p>
         <div class="cta">
           <a class="go" href="create.html" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3Z"/></svg>开始创作</a>
           <a class="ghost" href="works.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>我的作品</a>
@@ -223,7 +232,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         <div>
           <div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg>剩余点数</div>
           <div class="bal" id="balVal">—</div>
-          <div class="meta" id="balMeta">实时余额 · 按文案计费</div>
+          <div class="meta" id="balMeta">实时余额 · 按用量计费</div>
           <div class="warn" id="balWarn">⚠ 余额不足，请及时充值</div>
         </div>
         <div class="mini">
@@ -236,35 +245,12 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
 
     <!-- 2. 灵感库(真实提示词 + 平台自产封面) -->
     <section aria-label="灵感库">
-      <div class="ex-sec-h"><h3>灵感库</h3><span class="c" id="scCount">PROMPT · LIBRARY</span><a class="more" href="#" id="scShuffle">换一批 ↻</a></div>
+      <div class="ex-sec-h"><h3>灵感库 · 多模态产出</h3><span class="c" id="scCount">INSPIRATION</span><a class="more" href="#" id="scShuffle">换一批 ↻</a></div>
       <div class="sc-filter" id="scFilter" role="tablist" aria-label="按主题筛选灵感"></div>
       <div class="showcase" id="showcase" role="region" aria-label="灵感库，可横向滚动" tabindex="0"></div>
     </section>
 
-    <!-- 3. 一键开始 -->
-    <section aria-label="一键开始" data-requires-create>
-      <div class="ex-sec-h"><h3>一键开始</h3><span class="c" id="startCount"></span></div>
-      <div class="starts" id="starts"></div>
-    </section>
-
-    <!-- 4. 创作工具 -->
-    <section aria-label="创作工具">
-      <div class="ex-sec-h"><h3>创作工具</h3><span class="c" id="ex-count"></span></div>
-      <div class="tool-grid" id="toolGrid">
-        <div style="color:var(--t4);padding:20px">加载工具中…</div>
-      </div>
-    </section>
-
-    <!-- 5. 最近作品 -->
-    <section aria-label="最近作品">
-      <div class="ex-sec-h"><h3 id="recentTitle">最近作品</h3><span class="c">FROM /jobs</span><a class="more" href="works.html">查看全部 →</a></div>
-      <div class="recent" id="recent">
-        <div class="rskel"><div class="rthumb"></div><div class="rb"><div class="rt">&nbsp;</div><div class="rd">&nbsp;</div></div></div>
-        <div class="rskel"><div class="rthumb"></div><div class="rb"><div class="rt">&nbsp;</div><div class="rd">&nbsp;</div></div></div>
-        <div class="rskel"><div class="rthumb"></div><div class="rb"><div class="rt">&nbsp;</div><div class="rd">&nbsp;</div></div></div>
-        <div class="rskel"><div class="rthumb"></div><div class="rb"><div class="rt">&nbsp;</div><div class="rd">&nbsp;</div></div></div>
-      </div>
-    </section>
+    <!-- 一键开始 / 创作工具 / 最近作品 已移除:左侧菜单可一键直达,探索页专注「灵感发现」 -->
 
   </div>
  </div>
@@ -282,48 +268,42 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   </div>
 </div>
 
-<script src="tools.js"></script>
 <script src="showcase-data.js"></script>
 <script src="api.js"></script>
 <script>
   // ============ 数据 ============
   // 同时转义单引号:展示墙 url('...') / 属性多用单引号,SHOWCASE 若将来改为 API 驱动可防 CSS/属性注入
   function esc(s){ return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-  function fmt(ts){ const d=new Date(ts); const p=n=>String(n).padStart(2,'0'); return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }
   function svg(inner){ return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`; }
 
-  // 灵感库:真实提示词 + 平台自产封面(showcase-data.js / window.LJShowcase)。
-  // 每张卡 = 一条可一键复用的真实提示词;点「用这个提示词」→ 带 ?prompt= 进对应工具直接生成。
-  // 工具页接收端:ai-image / text2video 已支持 ?prompt=(本轮补)。
+  // 灵感库:平台自产的多模态真实产出(showcase-data.js / window.LJShowcase)。
+  // 每项 = 一条可一键复用的真实样例;点动作 → 带 ?prompt= 进对应工具(eng-review:只文本,不带 ?img=)。
+  // modality: image | video | image-edit | avatar。actionLabel/actionText 按模态由 build-showcase-data 生成。
+  const MOD_BADGE = { video:'▶ 影片', 'image-edit':'✎ 编辑', avatar:'🧍 数字人' }; // image 无徽章
   const SC_ALL = (window.LJShowcase || []).map(s=>({
-    title:s.title, sub:`${s.toolName} · ${s.theme}`, tag:s.theme, theme:s.theme,
-    poster:s.url, prompt:s.prompt, toolName:s.toolName,
-    prefill:`${s.page}?prompt=${encodeURIComponent(s.prompt)}`,
+    id:s.id, title:s.title, sub:`${s.toolName} · ${s.theme}`, tag:s.theme, theme:s.theme,
+    modality:s.modality, poster:s.poster, videoUrl:s.videoUrl, beforeUrl:s.beforeUrl, afterUrl:s.afterUrl, sourceUrl:s.sourceUrl,
+    toolName:s.toolName, actionLabel:s.actionLabel||'用这个提示词', actionText:s.actionText||s.prompt||'',
+    prefill:`${s.page}?prompt=${encodeURIComponent(s.actionText||s.prompt||'')}`,
   }));
   let SHOWCASE = SC_ALL.slice(); // 当前筛选/抽样后的可见集
   let SC_THEME = '全部';
-  const SC_VISIBLE = 12; // 一屏展示量,「换一批」洗牌
+  let SC_OFFSET = 0; // 「换一批」轮转起点
+  const SC_VISIBLE = 14; // 一屏展示量
+  // 模态权重:多模态(影片/编辑/数字人)是新内容,优先露出;图片垫后。
+  const MOD_RANK = { video:0, avatar:1, 'image-edit':2, image:3 };
 
-  function scApplyFilter(){
-    let pool = SC_THEME==='全部' ? SC_ALL : SC_ALL.filter(s=>s.theme===SC_THEME);
-    // 轻量洗牌(不用 Math.random 也可,这里用时间种子的稳定打散:按 id 长度+索引错位)
-    pool = pool.slice().sort((a,b)=>(a.title.length%5)-(b.title.length%5));
-    SHOWCASE = pool.slice(0, SC_VISIBLE);
+  function scApplyFilter(reshuffle){
+    if(reshuffle) SC_OFFSET += SC_VISIBLE;
+    let pool = SC_THEME==='全部' ? SC_ALL.slice() : SC_ALL.filter(s=>s.theme===SC_THEME);
+    // 排序:先按模态权重(多模态优先),同权重内按 id 稳定;轮转 offset 让「换一批」翻页。
+    pool.sort((a,b)=>(MOD_RANK[a.modality]??9)-(MOD_RANK[b.modality]??9) || (a.id<b.id?-1:1));
+    if(SC_OFFSET >= pool.length) SC_OFFSET = 0;
+    const rot = pool.slice(SC_OFFSET).concat(pool.slice(0, SC_OFFSET));
+    SHOWCASE = rot.slice(0, SC_VISIBLE);
     renderShowcase();
-    document.getElementById('scCount').textContent = `${pool.length} 条提示词`;
+    document.getElementById('scCount').textContent = `${pool.length} 个产出`;
   }
-
-  // 一键开始(聚合 create/ai-image/ai-music 的发现内容)
-  const STARTS = [
-    { title:'新闻播报脚本', sd:'填入演播室口播文案，选主播即可生成。', kind:'数字人视频 · 模板', href:'create.html?template=news',
-      icon:'<path d="M4 6h16M4 12h16M4 18h10"/>' },
-    { title:'政策解读模板', sd:'结构化解读脚本，适合政务新媒体。', kind:'数字人视频 · 模板', href:'create.html?template=policy',
-      icon:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/>' },
-    { title:'演播室配图', sd:'点击即填示例提示词，生成新闻配图。', kind:'AI 图片 · 示例', href:'ai-image.html?sample=studio',
-      icon:'<rect x="4" y="4" width="16" height="16" rx="2"/><path d="m5 17 4-4 3 3 3-3 4 4"/><circle cx="9" cy="9" r="1.5"/>' },
-    { title:'片头背景乐', sd:'国风 / 大气 / 科技感，一键套用风格。', kind:'AI 音乐 · 预置', href:'ai-music.html?style=intro',
-      icon:'<path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/>' },
-  ];
 
   // ============ 渲染:灵感库筛选 chips ============
   function renderScFilter(){
@@ -331,21 +311,30 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     const box = document.getElementById('scFilter');
     box.innerHTML = themes.map(t=>`<button class="sc-chip${t===SC_THEME?' on':''}" role="tab" aria-selected="${t===SC_THEME}" data-theme="${esc(t)}">${esc(t)}</button>`).join('');
     box.querySelectorAll('.sc-chip').forEach(c=>{
-      c.addEventListener('click', ()=>{ SC_THEME=c.dataset.theme; renderScFilter(); scApplyFilter(); });
+      c.addEventListener('click', ()=>{ SC_THEME=c.dataset.theme; SC_OFFSET=0; renderScFilter(); scApplyFilter(); });
     });
   }
 
-  // ============ 渲染:灵感库 ============
+  // ============ 渲染:灵感库(多模态)============
   function renderShowcase(){
     const el = document.getElementById('showcase');
-    el.innerHTML = SHOWCASE.map((s,i)=>`
-      <div class="demo" tabindex="0" role="button" aria-label="查看提示词：${esc(s.title)}" data-i="${i}">
-        <div class="img" style="background-image:url('${esc(s.poster)}')"></div>
+    el.innerHTML = SHOWCASE.map((s,i)=>{
+      const modBadge = MOD_BADGE[s.modality] ? `<span class="mod-badge">${esc(MOD_BADGE[s.modality])}</span>` : '';
+      // 影片/数字人=播放图标;编辑=对比图标;图片=提示词图标
+      const ic = (s.modality==='video'||s.modality==='avatar')
+        ? '<path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/>'
+        : (s.modality==='image-edit')
+          ? '<path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/>'
+          : '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>';
+      return `
+      <div class="demo" tabindex="0" role="button" aria-label="查看：${esc(s.title)}" data-i="${i}">
+        <div class="img" style="background-image:url('${esc(s.poster||'')}')"></div>
         <div class="veil"></div>
         <span class="tag prompt-tag">${esc(s.tag)}</span>
-        <button class="play" tabindex="-1" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+        ${modBadge}
+        <button class="play" tabindex="-1" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ic}</svg></button>
         <div class="cap-t"><div class="ttl">${esc(s.title)}</div><div class="sub">${esc(s.sub)}</div></div>
-      </div>`).join('');
+      </div>`;}).join('');
     el.querySelectorAll('.demo').forEach(card=>{
       const open=()=>openPlayer(SHOWCASE[+card.dataset.i]);
       card.addEventListener('click', open);
@@ -358,16 +347,25 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   function openPlayer(s){
     _lastFocus=document.activeElement;
     const view=document.getElementById('playerView');
-    // 灵感库:展示平台自产封面(无 veil 文字遮挡,纯净大图)
-    view.innerHTML = `<div class="img" style="position:absolute;inset:0;background-size:cover;background-position:center;background-image:url('${esc(s.poster)}')"></div>`;
+    // 按模态渲染 modal:影片/数字人=<video controls>;编辑=前后对比;图片=纯净大图
+    if((s.modality==='video'||s.modality==='avatar') && s.videoUrl){
+      view.innerHTML = `<video src="${esc(s.videoUrl)}" controls autoplay playsinline poster="${esc(s.poster||'')}"></video>`;
+    } else if(s.modality==='image-edit' && s.beforeUrl && s.afterUrl){
+      view.innerHTML = `<div class="cmp">
+        <figure><div class="img" style="background-image:url('${esc(s.beforeUrl)}')"></div><figcaption>原图</figcaption></figure>
+        <figure><div class="img" style="background-image:url('${esc(s.afterUrl)}')"></div><figcaption>编辑后</figcaption></figure>
+      </div>`;
+    } else {
+      view.innerHTML = `<div class="img" style="position:absolute;inset:0;background-size:cover;background-position:center;background-image:url('${esc(s.poster||'')}')"></div>`;
+    }
     document.getElementById('playerName').textContent=s.title;
-    // 副行展示真实提示词(截断),让用户一眼看到「这是怎么生成的」
-    const promptShort = (s.prompt||'').slice(0,90) + ((s.prompt||'').length>90?'…':'');
-    document.getElementById('playerSub').textContent = promptShort;
+    // 副行展示真实文本(截断);标签按模态:提示词/编辑指令/口播文案
+    const noun = s.modality==='image-edit'?'编辑指令':(s.modality==='avatar'?'口播文案':'提示词');
+    const txt=(s.actionText||'').trim();
+    document.getElementById('playerSub').textContent = txt ? `${noun}:${txt.slice(0,80)}${txt.length>80?'…':''}` : s.sub;
     const useBtn=document.getElementById('playerUse');
     useBtn.href=s.prefill;
-    // 灵感库每张都带真实提示词 + ?prompt= 预填,统一「用这个提示词」
-    useBtn.querySelector('.use-label').textContent = '用这个提示词';
+    useBtn.querySelector('.use-label').textContent = s.actionLabel || '用这个提示词';
     const ov=document.getElementById('player');
     ov.classList.add('show');
     document.getElementById('playerClose').focus();
@@ -382,83 +380,10 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   document.getElementById('player').addEventListener('click', e=>{ if(e.target.id==='player') closePlayer(); });
   document.addEventListener('keydown', e=>{ if(e.key==='Escape' && document.getElementById('player').classList.contains('show')) closePlayer(); });
 
-  // ============ 渲染:一键开始 ============
-  function renderStarts(){
-    document.getElementById('startCount').textContent=`TEMPLATES · ${STARTS.length}`;
-    document.getElementById('starts').innerHTML = STARTS.map(s=>`
-      <button class="start" onclick="location.href='${s.href}'">
-        <div class="si">${svg(s.icon)}</div>
-        <h4>${esc(s.title)}</h4>
-        <div class="sd">${esc(s.sd)}</div>
-        <div class="kind">${esc(s.kind)}</div>
-      </button>`).join('');
-  }
-
-  // ============ 渲染:创作工具 ============
-  function renderTools(){
-    if(!window.LJTools){ setTimeout(renderTools,30); return; }
-    const grid=document.getElementById('toolGrid');
-    const live=LJTools.list.filter(t=>t.enabled).length;
-    document.getElementById('ex-count').textContent=`${live} 个已上线 · ${LJTools.list.length} 个规划中`;
-    const DESC={ 'ai-avatar':'上传照片建数字人，输入文案生成口型自然的播报视频。','tts':'输入文字，用预置或克隆音色生成配音。','ai-image':'文字或参考图生成新闻配图、缩略图。','img2video':'让一张静态图动起来，生成短影片。','ref-video':'上传参考素材，生成同风格影片。','text2video':'一句话描述，生成影片。','ai-image-edit':'局部重绘、替换、扩图，精修图片。','ai-video-edit':'按描述编辑影片：移除、替换、新增元素。','ai-music':'描述风格，生成背景音乐或歌曲。' };
-    grid.innerHTML = LJTools.list.map(t=>{
-      const soon=!t.enabled;
-      const badge=t.badge ? `<span class="${t.badge.kind==='nano'?'nano':'nbadge'}">${esc(t.badge.text)}</span>` : '';
-      const corner=soon ? `<span class="soon-corner">即将上线</span>` : '';
-      return `<div class="tool-card${soon?' is-soon':''}" tabindex="0" role="link" aria-label="${esc(t.label)}" onclick="location.href='${LJTools.href(t)}'" onkeydown="if(event.key==='Enter'){location.href='${LJTools.href(t)}'}">
-        ${corner}
-        <div class="ti">${svg(t.icon)}</div>
-        <h4>${esc(t.label)} ${badge}</h4>
-        <div class="tdesc">${DESC[t.key]||''}</div>
-      </div>`;
-    }).join('');
-  }
-
-  // ============ 渲染:最近作品(真实 /jobs + 全状态) ============
-  const BADGE={ done:['rb-ok','已完成'], running:['rb-run','生成中'], queued:['rb-q','排队中'], failed:['rb-err','失败'] };
-  function jobCard(j){
-    const [cls,txt]=BADGE[j.status]||['rb-q',j.status];
-    let inner;
-    if(j.status==='done' && j.videoUrl){
-      inner=`<video src="${j.videoUrl}#t=0.1" preload="metadata" muted playsinline></video><div class="pb"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>`;
-    } else if(j.status==='running'||j.status==='queued'){
-      inner=`<div class="ph"><div class="spinner" style="width:20px;height:20px;border:2.5px solid var(--line);border-top-color:var(--amber);border-radius:50%;animation:spin 1s linear infinite"></div>${j.status==='queued'?'排队中':'生成中'}</div>`;
-    } else {
-      inner=`<div class="ph">${svg('<path d="M12 9v4M12 17h.01"/><path d="M10.3 4 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 4a2 2 0 0 0-3.4 0Z"/>')}${j.status==='failed'?'生成失败':'暂无成品'}</div>`;
-    }
-    const title=(j.script||'').trim().slice(0,12)||'数字人视频';
-    return `<a class="rcard" href="works.html"><div class="rthumb"><span class="rbadge ${cls}">${txt}</span>${inner}</div>
-      <div class="rb"><div class="rt" title="${esc(j.script||'')}">${esc(title)}${(j.script||'').length>12?'…':''}</div><div class="rd">${fmt(j.createdAt)}</div></div></a>`;
-  }
-  function renderRecentEmpty(canCreate){
-    const cta = canCreate
-      ? `<a class="ea" href="create.html">从模板开始 →</a>`
-      : `<a class="ea" href="#" onclick="document.getElementById('showcase').focus();return false;">先看看案例 →</a>`;
-    document.getElementById('recentTitle').textContent = canCreate ? '从这里开始' : '最近作品';
-    document.getElementById('recent').innerHTML = `<div class="recent-empty">
-      <div class="ei">${svg('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>')}</div>
-      <div class="et">你的第一条作品会出现在这里</div>
-      <div class="ed">从一个模板起步，几分钟就能产出一条合规的数字人内容。</div>
-      ${cta}</div>`;
-  }
-  // 最近作品渲染:接收已拉好的 jobs(null=请求失败)与角色,消除二次 /jobs 与 __ljRole 时序竞争
-  function renderRecent(jobs, role){
-    const box=document.getElementById('recent');
-    if(jobs===null){ renderRecentErr(); return; }
-    if(!jobs.length){ renderRecentEmpty(true); return; }
-    box.innerHTML = jobs.slice(0,8).map(jobCard).join('');
-  }
-  function renderRecentErr(){
-    document.getElementById('recent').innerHTML = `<div class="recent-err">作品加载失败，可能是网络波动。
-      <br><button onclick="reloadAll()">点此重试 ↻</button></div>`;
-  }
-
-  // ============ 统一加载:一次 LJ.me() 定角色,一次 /jobs 同时供 Hero 计数 + 最近作品 ============
+  // ============ 统一加载:Hero 余额 + 统计(一次 /jobs 供作品计数)============
+  // (删 3 区后只剩 Hero 用它;最近作品/角色透传已移除,但保留五连拉数供余额+统计)
   async function loadAll(){
-    let me;
-    try{ me=await LJ.me(); }catch(e){ return; /* 401 已跳登录 */ }
-    const role=me.role;  // 本页自己的角色真相,不依赖 shell.js 的 window.__ljRole 时序
-
+    try{ await LJ.me(); }catch(e){ return; /* 401 已跳登录 */ }
     const [bal,warn,jobs,avs,vcs]=await Promise.all([
       LJ.get('/credits/balance').catch(()=>({balance:null})),
       LJ.get('/credits/warning').catch(()=>null),
@@ -466,8 +391,6 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       LJ.get('/avatars').catch(()=>null),
       LJ.get('/voices').catch(()=>null),
     ]);
-
-    // Hero 点数 + 统计
     const balEl=document.getElementById('balVal');
     balEl.textContent = bal.balance==null ? '—' : bal.balance.toLocaleString('en-US');
     if(warn&&warn.low){ balEl.classList.add('low'); document.getElementById('balWarn').style.display='block'; document.getElementById('balMeta').style.display='none'; }
@@ -475,18 +398,13 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     set('cWorks', jobs?jobs.length:null);
     set('cAvatars', avs?(avs.custom||[]).length:null);
     set('cVoices', vcs?(vcs.clones||[]).length:null);
-
-    // 最近作品(复用同一份 jobs + 确定的 role)
-    renderRecent(jobs, role);
   }
-  function reloadAll(){ loadAll(); }
 
   // ============ 启动 ============
+  function scEmpty(){ document.getElementById('showcase').innerHTML = `<div style="color:var(--t4);padding:40px 8px;font-size:13px">灵感正在生成中,稍后再来看看 ✨</div>`; }
   renderScFilter();
-  scApplyFilter();
-  document.getElementById('scShuffle').addEventListener('click', e=>{ e.preventDefault(); scApplyFilter(); document.getElementById('showcase').scrollTo({left:0,behavior:'smooth'}); });
-  renderStarts();
-  renderTools();
+  if(SC_ALL.length) scApplyFilter(); else scEmpty();
+  document.getElementById('scShuffle').addEventListener('click', e=>{ e.preventDefault(); scApplyFilter(true); document.getElementById('showcase').scrollTo({left:0,behavior:'smooth'}); });
   loadAll();
 </script>
 </body>
