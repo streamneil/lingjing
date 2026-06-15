@@ -504,6 +504,8 @@ adminRouter.get('/api/image-models', requirePlatformAdmin, (_req: Request, res: 
       modelId: ov?.model_id ?? tmpl?.modelId ?? '',
       enabled: ov ? ov.enabled === 1 : true,
       priceTier: ov?.price_tier ?? tmpl?.priceTier ?? 0,
+      realCostYuan: ov?.real_cost_yuan ?? null, // 真实成本(元/张);表单回填,售价积分 = ceil(×35)
+      costSource: ov?.cost_source ?? null, // 'doc' | 'estimate'
       maxImages: ov?.max_images ?? tmpl?.maxImages ?? 1,
       shapeTemplate: tmplKey,
       modes: ovModes.length ? ovModes : (tmpl?.modes ?? []), // 生效 modes(管理员可改)
@@ -527,14 +529,27 @@ function parseAdminResolutions(raw: string | null | undefined): { ratio: string;
   try { const a = JSON.parse(raw); return Array.isArray(a) ? a : []; } catch { return []; }
 }
 
-function validModelBody(b: Record<string, unknown>): { ok: true; v: { label: string; modelId: string; enabled: number; priceTier: number; maxImages: number; modes: string; sortOrder: number; resolutions: string | null } } | { ok: false; error: string } {
+// 售价积分 = ceil(真实成本元 × 35)。整数系数 35(=3.5倍毛利 × 10积分/元);禁 ×3.5×10 浮点多收。
+function creditsFromCost(realCostYuan: number): number { return Math.max(1, Math.ceil(realCostYuan * 35)); }
+
+function validModelBody(b: Record<string, unknown>): { ok: true; v: { label: string; modelId: string; enabled: number; priceTier: number; realCostYuan: number | null; costSource: string | null; maxImages: number; modes: string; sortOrder: number; resolutions: string | null } } | { ok: false; error: string } {
   const label = typeof b.label === 'string' ? b.label.trim() : '';
   const modelId = typeof b.modelId === 'string' ? b.modelId.trim() : '';
   if (!label) return { ok: false, error: '显示名不能为空' };
   if (!modelId) return { ok: false, error: '模型名(modelId)不能为空' };
-  const priceTier = Number(b.priceTier);
+  // 成本驱动:优先读 realCostYuan(元/张),售价积分自动 = ceil(×35)。
+  // 兼容:无 realCostYuan 时回落直接读 priceTier(老前端/脚本);costSource 标记来源。
+  let priceTier: number, realCostYuan: number | null = null, costSource: string | null = null;
+  if (b.realCostYuan !== undefined && b.realCostYuan !== null && b.realCostYuan !== '') {
+    realCostYuan = Number(b.realCostYuan);
+    if (!Number.isFinite(realCostYuan) || realCostYuan <= 0) return { ok: false, error: '真实成本需为正数(元/张)' };
+    priceTier = creditsFromCost(realCostYuan);
+    costSource = typeof b.costSource === 'string' && b.costSource === 'estimate' ? 'estimate' : 'doc';
+  } else {
+    priceTier = Number(b.priceTier);
+    if (!Number.isFinite(priceTier) || priceTier <= 0) return { ok: false, error: '价格(或真实成本)需为正数' };
+  }
   const maxImages = Number(b.maxImages);
-  if (!Number.isFinite(priceTier) || priceTier <= 0) return { ok: false, error: '价格需为正数' };
   if (!Number.isInteger(maxImages) || maxImages < 1) return { ok: false, error: '张数上限需 ≥1' };
   const enabled = b.enabled === false || b.enabled === 0 ? 0 : 1;
   // modes:管理员勾选(完全自由),至少选一个;存 CSV。
@@ -562,7 +577,7 @@ function validModelBody(b: Record<string, unknown>): { ok: true; v: { label: str
     if (!rows.some((x) => x.isDefault) && rows[0]) rows[0].isDefault = true;
     resolutions = JSON.stringify(rows);
   }
-  return { ok: true, v: { label, modelId, enabled, priceTier, maxImages, modes: modesArr.join(','), sortOrder, resolutions } };
+  return { ok: true, v: { label, modelId, enabled, priceTier, realCostYuan, costSource, maxImages, modes: modesArr.join(','), sortOrder, resolutions } };
 }
 
 /** 新增模型(DB 新增 key,必须选一个代码 shape 模板,A5 防技术契约被破)。 */
@@ -577,9 +592,9 @@ adminRouter.post('/api/image-models', requirePlatformAdmin, (req: Request, res: 
   const v = validModelBody(b);
   if (!v.ok) return res.status(400).json({ error: v.error });
   db.prepare(
-    `INSERT INTO image_model_override (key,label,model_id,enabled,price_tier,max_images,shape_template,modes,sort_order,resolutions,created_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-  ).run(key, v.v.label, v.v.modelId, v.v.enabled, v.v.priceTier, v.v.maxImages, shapeTemplate, v.v.modes, v.v.sortOrder, v.v.resolutions, Date.now());
+    `INSERT INTO image_model_override (key,label,model_id,enabled,price_tier,real_cost_yuan,cost_source,max_images,shape_template,modes,sort_order,resolutions,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(key, v.v.label, v.v.modelId, v.v.enabled, v.v.priceTier, v.v.realCostYuan, v.v.costSource, v.v.maxImages, shapeTemplate, v.v.modes, v.v.sortOrder, v.v.resolutions, Date.now());
   writePlatformAudit(req.padmin!.id, 'image_model_create', PLATFORM_TENANT, key, padminIp(req));
   res.status(201).json({ ok: true });
 });
@@ -596,12 +611,13 @@ adminRouter.put('/api/image-models/:key', requirePlatformAdmin, (req: Request, r
   // 代码内置改 → upsert(shape_template=自身,技术契约取自身);DB 新增改 → 保留原 shape_template。
   const shapeTemplate: string | null = existing?.shape_template ?? (codeDef ? key : null);
   db.prepare(
-    `INSERT INTO image_model_override (key,label,model_id,enabled,price_tier,max_images,shape_template,modes,sort_order,resolutions,created_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?)
+    `INSERT INTO image_model_override (key,label,model_id,enabled,price_tier,real_cost_yuan,cost_source,max_images,shape_template,modes,sort_order,resolutions,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
      ON CONFLICT(key) DO UPDATE SET label=excluded.label, model_id=excluded.model_id,
-       enabled=excluded.enabled, price_tier=excluded.price_tier, max_images=excluded.max_images,
+       enabled=excluded.enabled, price_tier=excluded.price_tier, real_cost_yuan=excluded.real_cost_yuan,
+       cost_source=excluded.cost_source, max_images=excluded.max_images,
        modes=excluded.modes, sort_order=excluded.sort_order, resolutions=excluded.resolutions`,
-  ).run(key, v.v.label, v.v.modelId, v.v.enabled, v.v.priceTier, v.v.maxImages, shapeTemplate, v.v.modes, v.v.sortOrder, v.v.resolutions, existing?.created_at ?? Date.now());
+  ).run(key, v.v.label, v.v.modelId, v.v.enabled, v.v.priceTier, v.v.realCostYuan, v.v.costSource, v.v.maxImages, shapeTemplate, v.v.modes, v.v.sortOrder, v.v.resolutions, existing?.created_at ?? Date.now());
   writePlatformAudit(req.padmin!.id, 'image_model_update', PLATFORM_TENANT, key, padminIp(req));
   res.json({ ok: true });
 });

@@ -28,9 +28,12 @@ export function estimateCost(scriptLength: number, resolution = '1080P'): number
   return Math.max(MIN_COST, Math.ceil(scriptLength * PRICE_PER_CHAR * factor));
 }
 
-// ── AI 图片计价:图数 × 单价 × 分辨率系数 ──
-const PRICE_PER_IMAGE = 4; // 每张图 4 积分基价(占位值,可配置)
-const IMG_RES_FACTOR: Record<string, number> = { '1K': 1, '2K': 1.5, '4K': 2.5 };
+// ── AI 图片计价:图数 × 单价(图片费用与分辨率无关) ──
+// 价格对齐(2026-06):百炼官方明示「图像费用与输出分辨率、宽高比无关」(图像生成计费规则)。
+// ∴ IMG_RES_FACTOR 全取 1 —— 不再按 1K/2K/4K 上浮,否则 2K 图片凭空多收 1.5 倍。
+// price_tier 即每张售价积分(= ceil(真实单价元 × 35)),由 admin 真实成本表单算出落库。
+const PRICE_PER_IMAGE = 4; // 每张图 4 积分基价(无 model 时回落默认 ≈ z-image 关改写档)
+const IMG_RES_FACTOR: Record<string, number> = { '1K': 1, '2K': 1, '4K': 1 };
 
 /** 把请求图数 clamp 到 [1, maxImages](默认 4)。model-aware(外部声音 P1):
  *  z-image 固定1、qwen-2.0 6;选超额张数会预扣多返少 → reserve≠settle 超扣。
@@ -58,11 +61,13 @@ export function estimateImageEditCost(resolution = '1K', priceTier = PRICE_PER_E
   return Math.max(MIN_COST, Math.ceil(n * priceTier * factor));
 }
 
-// ── 文生视频(text2video)计价:秒 × 分辨率档 × 模型 tier,audio 加价 ──
-// VIDEO_RES_FACTOR:1080P 真实成本约 720P 的 2×(同图片 480P<720P 必分档教训)。
-const VIDEO_RES_FACTOR: Record<string, number> = { '720P': 1, '1080P': 2 };
-// AUDIO_FACTOR:可灵有声视频加价(占位 1.3,上线前须填真实厂商有声加价)。
-const AUDIO_FACTOR = 1.3;
+// ── 文生视频(text2video)计价:秒 × priceTier(每秒售价积分)──
+// 价格对齐(2026-06):各模型 1080P/720P 真实比值不同(大师1.67、HappyHorse1.78、可灵无声1.33),
+// 单个全局 resFactor 装不下 → 改为「priceTier 已是该(模型,分辨率,有声)组合的每秒售价积分」,
+// 由 deriveVideoT2VParams 按 resolution+audio 选好后快照(reserve==settle)。
+// ∴ 此处 resFactor / audioFactor 全取 1(价格已在 priceTier 里编码完毕)。
+const VIDEO_RES_FACTOR: Record<string, number> = { '480P': 1, '720P': 1, '1080P': 1 };
+const AUDIO_FACTOR = 1; // 有声加价已并入 priceTier(可灵有声单价单列);此处不再乘
 /** 文生视频费用预估:ceil(duration × priceTier × resFactor)[× audioFactor]。
  *  duration/res/audio 由 buildVideoT2VJob 快照,costFor 读快照 → reserve==settle。
  *  可灵 mode 已在 build 时翻译成 resolution 档(R3),此函数不感知 std/pro。 */
@@ -74,8 +79,25 @@ export function estimateVideoCost(duration: number, priceTier: number, resolutio
   return Math.max(MIN_COST, Math.ceil(cost));
 }
 
-// 文转语音(TTS)计价:按字数 × 每字单价(单价随品质模型,T-TTS-QUALITY-MODEL)。
-const TTS_PRICE_PER_CHAR = 0.02; // 全 Qwen-TTS 扁价每字 0.02(无品质模型分层)
+/** 取(模型,分辨率,有声)对应的每秒售价积分(无快照时回落用;与 jobs.ts:videoPricePerSec 同规则)。
+ *  价格已在 priceTier 系列字段编码(1080P/有声真实比值随模型变)。缺省回落:有声1080→有声720→1080→720。 */
+export function videoPriceTier(def: ReturnType<typeof getVideoModel>, resolution: string, audio: boolean): number {
+  const is1080 = resolution === '1080P';
+  if (audio) {
+    if (is1080) return def.priceTierAudio1080 ?? def.priceTierAudio ?? def.priceTier1080 ?? def.priceTier;
+    return def.priceTierAudio ?? def.priceTier;
+  }
+  if (is1080) return def.priceTier1080 ?? def.priceTier;
+  return def.priceTier;
+}
+
+// 文转语音(TTS)计价:按字数 × 每字单价。
+// 价格对齐(2026-06):qwen3-tts-flash / cosyvoice-v3.5-flash 真实 0.8元/万字符 = 0.00008/字符。
+// 售价 = 成本 × 3.5 = 0.00028/字符 → 取 0.0028(留 10 倍安全垫?不:0.00008×35=0.0028,正好3.5倍)。
+// 旧扁价 0.02 是真实成本的 ~7 倍(超收),订正为 0.0028。
+// 注:cosyvoice 高阶档(plus 1.5~2元/万)真实成本更高,分层售价(0.00525/0.007)待加 per-model 字段(TODO),
+// 当前扁价按主力 flash 档(0.0028)统一,高阶档暂亏本不上架。
+const TTS_PRICE_PER_CHAR = 0.0028; // flash 档售价/字符(0.8元/万 × 3.5);分层 TODO
 /** TTS 费用预估:ceil(字数 × 每字单价)。pricePerChar 缺省扁价。
  *  pricePerChar 形参保留:遗留 job 的 costFor 读旧快照走它,保 reserve==settle(byte-identical)。 */
 export function estimateTtsCost(textLength: number, pricePerChar = TTS_PRICE_PER_CHAR): number {
@@ -130,11 +152,12 @@ export function costFor(toolType: string, input: Record<string, unknown>): numbe
       // 视频编辑:计费秒快照 = 输入 + 预计输出(贴厂商 usage.duration=in+out,CEO D3)。
       // 快照在 buildVideoEditJob 写入(时长源自 sidecar 服务端真相);无快照视为坏数据,按 0 秒拒绝出价。
       const def = getVideoModel(typeof input.model === 'string' ? input.model : undefined);
-      const priceTier = typeof input.priceTierSnapshot === 'number' ? input.priceTierSnapshot : def.priceTier;
       const billable = typeof input.billableSecondsSnapshot === 'number' ? input.billableSecondsSnapshot : 0;
       const resolution = typeof input.resSnapshot === 'string'
         ? input.resSnapshot
         : (typeof input.resolution === 'string' ? input.resolution : '720P');
+      // 无快照(老 job)→ 按分辨率派生每秒价(编辑无声)。
+      const priceTier = typeof input.priceTierSnapshot === 'number' ? input.priceTierSnapshot : videoPriceTier(def, resolution, false);
       return estimateVideoCost(billable, priceTier, resolution, false);
     }
     case 'video_t2v':
@@ -142,7 +165,6 @@ export function costFor(toolType: string, input: Record<string, unknown>): numbe
       // 文生视频 / 图转影片:同计价(秒×档×tier;i2v audio 恒 false)。读快照(reserve==settle);
       // 无快照(老 job)回落实时派生(同 build 规则,R5.1 DRY)。
       const def = getVideoModel(typeof input.model === 'string' ? input.model : undefined);
-      const priceTier = typeof input.priceTierSnapshot === 'number' ? input.priceTierSnapshot : def.priceTier;
       const duration = typeof input.durationSnapshot === 'number'
         ? input.durationSnapshot
         : (typeof input.duration === 'number' ? input.duration : def.defaultDuration);
@@ -157,6 +179,8 @@ export function costFor(toolType: string, input: Record<string, unknown>): numbe
       const audio = typeof input.audioSnapshot === 'boolean'
         ? input.audioSnapshot
         : (def.supportsAudio ? !!input.audio : false);
+      // 无快照(老 job)→ 按(分辨率,有声)派生每秒价(与 deriveVideoT2VParams 同规则)。
+      const priceTier = typeof input.priceTierSnapshot === 'number' ? input.priceTierSnapshot : videoPriceTier(def, resolution, audio);
       return estimateVideoCost(duration, priceTier, resolution, audio);
     }
     case 'tts': {

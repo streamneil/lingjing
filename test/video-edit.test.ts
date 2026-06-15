@@ -19,7 +19,7 @@ const { BaichuanGateway } = await import('../src/gateway/baichuan.js');
 afterEach(() => vi.restoreAllMocks());
 
 describe('edit registry 自洽 + 三向互斥', () => {
-  it('两编辑模型:tasks=[edit]、videoDurRange、refMax、tier(HH=4/wan=6)', () => {
+  it('两编辑模型:tasks=[edit]、videoDurRange、refMax、tier(HH 720P=32、wan 720P=21)', () => {
     const edits = listEditModels();
     expect(edits.map((d) => d.key).sort()).toEqual(['happyhorse-1.0-video-edit', 'wan2.7-videoedit']);
     const hh = VIDEO_MODELS['happyhorse-1.0-video-edit']!;
@@ -27,14 +27,14 @@ describe('edit registry 自洽 + 三向互斥', () => {
     expect(hh.maxOutSeconds).toBe(15);
     expect(hh.maxRefImages).toBe(5);
     expect(hh.promptRequired).toBe(true);
-    expect(hh.priceTier).toBe(4);
+    expect(hh.priceTier).toBe(32); expect(hh.priceTier1080).toBe(56); // 0.9/1.6 元/秒 × 35
     expect(hh.supportsTruncate).toBe(false);
     const wan = VIDEO_MODELS['wan2.7-videoedit']!;
     expect(wan.videoDurRange).toEqual([2, 10]);
     expect(wan.maxOutSeconds).toBeUndefined();
     expect(wan.maxRefImages).toBe(4);
     expect(wan.promptRequired).toBe(false);
-    expect(wan.priceTier).toBe(6);
+    expect(wan.priceTier).toBe(21); expect(wan.priceTier1080).toBe(35); // 0.6/1.0 元/秒 × 35
     expect(wan.supportsTruncate).toBe(true);
     for (const d of edits) {
       expect(d.shape).toBe('V_DASH');
@@ -66,22 +66,23 @@ describe('edit registry 自洽 + 三向互斥', () => {
 describe("costFor('video_edit') 读 billable 快照(reserve==settle)", () => {
   it('HH 输入 20s → billable=20+15=35;读快照与 estimateVideoCost 一致', () => {
     const cost = costFor('video_edit', {
-      model: 'happyhorse-1.0-video-edit', billableSecondsSnapshot: 35, resSnapshot: '720P', priceTierSnapshot: 4,
+      model: 'happyhorse-1.0-video-edit', billableSecondsSnapshot: 35, resSnapshot: '720P', priceTierSnapshot: 32,
     });
-    expect(cost).toBe(estimateVideoCost(35, 4, '720P', false));
+    expect(cost).toBe(estimateVideoCost(35, 32, '720P', false)); // 35 × 32 = 1120
   });
 
-  it('wan 截断 5s(输入 8s)→ billable=8+5=13;1080P=2×720P', () => {
-    const p720 = costFor('video_edit', { model: 'wan2.7-videoedit', billableSecondsSnapshot: 13, resSnapshot: '720P', priceTierSnapshot: 6 });
-    const p1080 = costFor('video_edit', { model: 'wan2.7-videoedit', billableSecondsSnapshot: 13, resSnapshot: '1080P', priceTierSnapshot: 6 });
-    expect(p720).toBe(estimateVideoCost(13, 6, '720P', false));
-    expect(p1080).toBe(p720 * 2);
+  it('wan 截断 5s(输入 8s)→ billable=8+5=13;1080P 价由快照表达(不再 ×2)', () => {
+    // 快照 priceTier 已是该分辨率每秒售价(万相2.7 编辑 720P=21 / 1080P=35)。
+    const p720 = costFor('video_edit', { model: 'wan2.7-videoedit', billableSecondsSnapshot: 13, resSnapshot: '720P', priceTierSnapshot: 21 });
+    const p1080 = costFor('video_edit', { model: 'wan2.7-videoedit', billableSecondsSnapshot: 13, resSnapshot: '1080P', priceTierSnapshot: 35 });
+    expect(p720).toBe(13 * 21); // 273
+    expect(p1080).toBe(13 * 35); // 455
   });
 
-  it('无快照(坏数据)→ 按 0 秒走 estimateVideoCost 兜底(最低 1 秒档),不读客户端字段', () => {
-    // estimateVideoCost 对 0 秒有最低收费兜底;关键是与同函数一致(reserve==settle)且远小于正常单。
+  it('无快照(坏数据)→ 按 0 秒兜底 + 按分辨率派生每秒价(reserve==settle 同函数)', () => {
+    // billable 无快照=0;priceTier 无快照→videoPriceTier(wan2.7-videoedit,720P,false)=21。
     expect(costFor('video_edit', { model: 'wan2.7-videoedit' }))
-      .toBe(estimateVideoCost(0, 6, '720P', false));
+      .toBe(estimateVideoCost(0, 21, '720P', false));
   });
 });
 

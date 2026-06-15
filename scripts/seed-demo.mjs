@@ -30,6 +30,33 @@ if (userExists('demoadmin') && userExists('editor')) {
   console.log('(平台超管 admin 由 SUPERADMIN_PASS 环境变量首启自动创建,登录 /admin/login)');
 }
 
+// ── 图片模型定价 + 能力(成本驱动,2026-06 价格页确价)──
+// 幂等:只插缺失的行,绝不覆盖 admin 已改的价/能力。price_tier = ceil(真实元/张 × 35)。
+// 含 DB-only 模型(qwen-image-2.0 / wan2.6-t2i 无代码模板,靠 shape_template 指向模板);
+// 纯代码模板模型(z-image/qwen-image 等)无 override 行也能跑(回落模板),这里一并落库便于运营调价。
+const IMG_SEED = [
+  // key, label, modelId, priceTier(=cost×35), realCost, maxImages, shapeTemplate, modes, sort
+  ['qwen-image',        '标准',            'qwen-image',         9,  0.25, 1, 'qwen-image',        'text2img',           0],
+  ['z-image',           '极速',            'z-image-turbo',      4,  0.10, 1, 'z-image',           'text2img',           1],
+  ['qwen-image-2.0',    '千问2.0',         'qwen-image-2.0',     7,  0.20, 6, 'qwen-image-2.0-pro','text2img',           2],
+  ['qwen-image-2.0-pro','专业 (千问2.0 Pro)','qwen-image-2.0-pro',18, 0.50, 6, 'qwen-image-2.0-pro','text2img,img2img',  3],
+  ['wan2.6-t2i',        '万相2.6',         'wan2.6-t2i',         7,  0.20, 4, 'wan2.2-flash',      'text2img',           4],
+  ['qwen-image-edit',   '图像编辑',         'qwen-image-edit',    11, 0.30, 1, 'qwen-image-edit',   'img2img',            5],
+  ['wan2.2-flash',      '万相2.2 极速',     'wan2.2-t2i-flash',   5,  0.14, 4, 'wan2.2-flash',      'text2img',           6],
+];
+const imgRowExists = db.prepare('SELECT 1 FROM image_model_override WHERE key=?');
+const insImg = db.prepare(
+  `INSERT INTO image_model_override (key,label,model_id,enabled,price_tier,real_cost_yuan,cost_source,max_images,shape_template,modes,sort_order,created_at)
+   VALUES (?,?,?,1,?,?,'doc',?,?,?,?,?)`,
+);
+let seeded = 0;
+for (const [key, label, modelId, tier, cost, maxImg, tmpl, modes, sort] of IMG_SEED) {
+  if (imgRowExists.get(key)) continue; // 已存在(含 admin 改过的)→ 不动
+  insImg.run(key, label, modelId, tier, cost, maxImg, tmpl, modes, sort, Date.now());
+  seeded++;
+}
+if (seeded) console.log(`图片模型定价已种子 ${seeded} 个(真实成本×35,cost_source=doc)`);
+
 // 强制 WAL checkpoint:让写入立即落主库,避免另起的服务进程读到旧快照
 try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch { /* noop */ }
 

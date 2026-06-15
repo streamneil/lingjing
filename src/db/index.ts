@@ -379,6 +379,10 @@ addColumnIfMissing('image_model_override', 'sort_order', `sort_order INTEGER NOT
 // resolutions:admin 录的分辨率列表 JSON([{ratio,width,height,isDefault}],照百炼官方推荐表)。
 //   空/null = 回落代码默认(imageSize 算法)。tier(计价档)由 width*height 自动推,不入表。
 addColumnIfMissing('image_model_override', 'resolutions', `resolutions TEXT`);
+// 成本驱动定价(2026-06):real_cost_yuan = 厂商真实元/张;price_tier 由 admin 写入时算 ceil(real×35) 落库。
+// cost_source:'doc'(价格页确价)|'estimate'(待校准,不得 enabled 上线)。
+addColumnIfMissing('image_model_override', 'real_cost_yuan', `real_cost_yuan REAL`);
+addColumnIfMissing('image_model_override', 'cost_source', `cost_source TEXT`);
 
 export interface ImageModelOverrideRow {
   key: string;
@@ -391,6 +395,8 @@ export interface ImageModelOverrideRow {
   modes: string | null; // CSV;null/空 = 用代码模板 modes
   sort_order: number;
   resolutions: string | null; // JSON [{ratio,width,height,isDefault}];null/空 = 回落代码默认
+  real_cost_yuan: number | null; // 厂商真实元/张(成本驱动定价源;null = 老行未录)
+  cost_source: string | null; // 'doc' | 'estimate';enabled 行不应为 estimate
   created_at: number;
 }
 

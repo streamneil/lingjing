@@ -1,7 +1,7 @@
 // 灵镜 — TTS 全 Qwen-TTS:无品质模型 + 扁价 + 情绪驱动 flash/instruct。
 //
 // 钱路重点(reserve==settle):
-//   - estimateTtsCost(len) 扁价 0.02/字(byte-identical)
+//   - estimateTtsCost(len) 扁价 0.0028/字(0.8元/万×3.5;byte-identical)
 //   - estimateTtsCost(len, pricePerChar) 仍按传入单价(遗留 job 快照回放)
 //   - costFor('tts') 有遗留快照按快照、无快照回落扁价
 //   - buildTtsJob 恒扁价、input 无 model/快照
@@ -43,8 +43,9 @@ beforeAll(async () => {
 }, 30000);
 
 describe('estimateTtsCost 扁价', () => {
-  it('默认单价 0.02:100字 × 0.02 = 2', () => {
-    expect(estimateTtsCost(100)).toBe(2);
+  it('默认单价 0.0028:100字 × 0.0028 = ceil(0.28) = 1', () => {
+    expect(estimateTtsCost(100)).toBe(1);
+    expect(estimateTtsCost(10000)).toBe(28); // 0.8元/万×3.5 = 28积分/万字
   });
   it('遗留快照单价仍生效:100字 × 0.05 = 5', () => {
     expect(estimateTtsCost(100, 0.05)).toBe(5);
@@ -59,7 +60,7 @@ describe("costFor('tts') 读快照", () => {
     expect(costFor('tts', { text: '字'.repeat(100), pricePerCharSnapshot: 0.05 })).toBe(5);
   });
   it('无快照 → 扁价', () => {
-    expect(costFor('tts', { text: '字'.repeat(100) })).toBe(2);
+    expect(costFor('tts', { text: '字'.repeat(100) })).toBe(1); // ceil(100×0.0028)=1
   });
 });
 
@@ -67,16 +68,16 @@ describe('POST /api/jobs (tts) 全扁价无品质模型', () => {
   it('cost 扁价 + input 无 model/快照(byte-identical)', async () => {
     const r = await client.post('/api/jobs', { type: 'tts', text: '字'.repeat(100), voiceRef: 'Cherry' });
     expect(r.status).toBe(202);
-    expect(r.body.cost).toBe(2);
+    expect(r.body.cost).toBe(1);
     const inp = JSON.parse(getJob(r.body.id)!.input_json);
     expect(inp.model).toBeUndefined();
     expect(inp.pricePerCharSnapshot).toBeUndefined();
   });
 
-  it('带情绪 → cost 仍扁价 2(情绪不影响计价)+ input 存 emotion', async () => {
+  it('带情绪 → cost 仍扁价 1(情绪不影响计价)+ input 存 emotion', async () => {
     const r = await client.post('/api/jobs', { type: 'tts', text: '字'.repeat(100), voiceRef: 'Cherry', emotion: 'cheerful' });
     expect(r.status).toBe(202);
-    expect(r.body.cost).toBe(2);
+    expect(r.body.cost).toBe(1);
     const inp = JSON.parse(getJob(r.body.id)!.input_json);
     expect(inp.emotion).toBe('cheerful');
     expect(inp.model).toBeUndefined();
@@ -87,7 +88,7 @@ describe('POST /api/jobs (tts) 全扁价无品质模型', () => {
     const est = await client.post('/api/jobs/estimate', body);
     const job = await client.post('/api/jobs', body);
     expect(est.body.cost).toBe(job.body.cost);
-    expect(est.body.cost).toBe(2);
+    expect(est.body.cost).toBe(1);
   });
 
   it('无 model 字段被接受(品质下拉已移除,旧 model 入参忽略不报错或不影响计价)', async () => {

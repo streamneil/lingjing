@@ -30,18 +30,19 @@ describe('AI 图片计价(costFor / estimateImageCost / clampImageCount)', () =>
     expect(clampImageCount(NaN)).toBe(1);
   });
 
-  it('estimateImageCost:图数 × 分辨率系数,n 先 clamp', () => {
-    expect(estimateImageCost(1, '1K')).toBe(4); // 1*4*1
-    expect(estimateImageCost(2, '1K')).toBe(8); // 2*4*1
-    expect(estimateImageCost(4, '2K')).toBe(24); // 4*4*1.5
-    expect(estimateImageCost(5, '1K')).toBe(16); // clamp 5→4 → 4*4*1
-    expect(estimateImageCost(1, '4K')).toBe(10); // 1*4*2.5
+  it('estimateImageCost:图数 × 单价(图片费用与分辨率无关,IMG_RES_FACTOR=1)', () => {
+    expect(estimateImageCost(1, '1K')).toBe(4); // 1*4
+    expect(estimateImageCost(2, '1K')).toBe(8); // 2*4
+    expect(estimateImageCost(4, '2K')).toBe(16); // 4*4(2K 不再 ×1.5 — 官方:费用与分辨率无关)
+    expect(estimateImageCost(5, '1K')).toBe(16); // clamp 5→4 → 4*4
+    expect(estimateImageCost(1, '4K')).toBe(4); // 1*4(4K 不再 ×2.5)
   });
 
-  it("costFor('ai_image') = estimateImageCost(count,resolution)", () => {
-    expect(costFor('ai_image', { count: 2, resolution: '1K' })).toBe(estimateImageCost(2, '1K'));
-    expect(costFor('ai_image', { count: 5, resolution: '2K' })).toBe(estimateImageCost(5, '2K')); // clamp
-    expect(costFor('ai_image', {})).toBe(estimateImageCost(1, '1K')); // 默认 1 张 1K
+  it("costFor('ai_image') = estimateImageCost(count,resolution,priceTier,maxImages)", () => {
+    // costFor 无 model → 解析默认模型 qwen-image(priceTier=9,maxImages=1):count 被 clamp 到 1。
+    expect(costFor('ai_image', { count: 2, resolution: '1K' })).toBe(9); // clamp 2→1,9/张
+    expect(costFor('ai_image', { count: 5, resolution: '2K' })).toBe(9); // 与分辨率无关
+    expect(costFor('ai_image', {})).toBe(9); // 默认 1 张
   });
 
   it("costFor('video') 与 estimateCost 一致(回归,视频计价不变)", () => {
@@ -58,11 +59,12 @@ describe('AI 图片计价(costFor / estimateImageCost / clampImageCount)', () =>
 
   it("costFor('ai_image', mode=img2img) 走编辑价(固定 1 张,外部声音 P1 mode 感知)", async () => {
     const { estimateImageEditCost } = await import('../src/credits/index.js');
-    expect(costFor('ai_image', { mode: 'img2img', resolution: '1K' })).toBe(estimateImageEditCost('1K'));
-    expect(costFor('ai_image', { mode: 'img2img', resolution: '2K' })).toBe(estimateImageEditCost('2K'));
+    // costFor 无 model + img2img → 默认编辑模型 qwen-image-edit(priceTier=11,固定1张)。
+    expect(costFor('ai_image', { mode: 'img2img', resolution: '1K' })).toBe(estimateImageEditCost('1K', 11));
+    expect(costFor('ai_image', { mode: 'img2img', resolution: '2K' })).toBe(estimateImageEditCost('2K', 11));
     // img2img 忽略 count(固定 1 张)→ 不受客户端传 count 影响,reserve==settle 不破
     expect(costFor('ai_image', { mode: 'img2img', count: 4, resolution: '1K' })).toBe(
-      estimateImageEditCost('1K'),
+      estimateImageEditCost('1K', 11),
     );
   });
 });
@@ -166,7 +168,9 @@ describe('sizeParams 按 sizeKind(E3 / 外部声音 P1-size)', () => {
 describe('resolutionAllowed(4K 不支持 → false,P2-4k)', () => {
   it('非 4K 模型拒 4K;4K 模型放行', () => {
     expect(resolutionAllowed(getImageModel('z-image'), '4K')).toBe(false); // maxRes 2K
-    expect(resolutionAllowed(getImageModel('qwen-image-2.0-pro'), '4K')).toBe(true);
+    // 2.0-pro 真实上限 2048²≈2K(文档:size 总像素 512²~2048²)→ 4K 应拒(虚标修正)。
+    expect(resolutionAllowed(getImageModel('qwen-image-2.0-pro'), '4K')).toBe(false);
+    expect(resolutionAllowed(getImageModel('qwen-image-2.0-pro'), '2K')).toBe(true);
     expect(resolutionAllowed(getImageModel('z-image'), '2K')).toBe(true);
   });
 });

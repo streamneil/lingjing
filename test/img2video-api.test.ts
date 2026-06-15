@@ -100,9 +100,10 @@ describe('POST /api/jobs/estimate (video_i2v) ≡ build', () => {
     expect(costFor('video_i2v', inp)).toBe(est.body.cost);
   });
 
-  it('估价 1080P = 2 × 720P', async () => {
+  it('估价按真实分辨率档(HH i2v 720P=32/秒、1080P=56/秒;5s)', async () => {
     const r720 = await client.post('/api/jobs/estimate', { type: 'video_i2v', model: 'happyhorse-1.0-i2v', task: 'first_frame', imageRefs: ['k1'], resolution: '720P', duration: 5 });
     const r1080 = await client.post('/api/jobs/estimate', { type: 'video_i2v', model: 'happyhorse-1.0-i2v', task: 'first_frame', imageRefs: ['k1'], resolution: '1080P', duration: 5 });
-    expect(r1080.body.cost).toBe(r720.body.cost * 2);
+    expect(r720.body.cost).toBe(5 * 32); // 160
+    expect(r1080.body.cost).toBe(5 * 56); // 280(真实比值 1.78,非 ×2)
   });
 });

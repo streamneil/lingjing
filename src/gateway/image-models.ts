@@ -41,6 +41,7 @@ export interface ImageModelDef {
   priceTier: number; // 每张计价(替代 PRICE_PER_IMAGE,非双乘 P2-a)
   resolutions?: ResolutionEntry[]; // admin 录的分辨率列表(百炼官方推荐表);空 → 用 imageSize 算
   supportsBbox?: boolean; // 支持 bbox_list 局部重绘(仅万相2.7;千问编辑不支持)
+  canSetSize?: boolean; // 是否可指定分辨率(缺省 true);false=随输入图(qwen-image-edit),UI 隐藏清晰度控件 + 提交不发 size
 }
 
 // 分辨率条目(admin 照百炼文档录 比例:宽*高;tier 计价档由像素自动推,不存)。
@@ -62,30 +63,34 @@ export function tierFromPixels(width: number, height: number): '1K' | '2K' | '4K
 
 // 精选 5 模型(全 S/A1,代码现成)。modelId 按用户给的百炼文档核实。
 export const IMAGE_MODELS: Record<string, ImageModelDef> = {
+  // priceTier 默认 = 真实单价×35(无 DB row 时回落用;DB override 赢)。z-image 关改写 0.1→4。
   'z-image': {
     key: 'z-image', label: '极速', modelId: 'z-image-turbo',
     shape: 'S', sizeKind: 'wh', modes: ['text2img'],
-    maxImages: 1, maxInputImages: 0, maxResolution: '2K', priceTier: 2,
+    maxImages: 1, maxInputImages: 0, maxResolution: '2K', priceTier: 4,
   },
+  // qwen-image 固定 1 张(文档:n>1 报 num_images_per_prompt must be 1)。0.25→9。
   'qwen-image': {
     key: 'qwen-image', label: '标准', modelId: 'qwen-image',
     shape: 'A1', sizeKind: 'wh', modes: ['text2img'],
-    maxImages: 4, maxInputImages: 0, maxResolution: '2K', priceTier: 4,
+    maxImages: 1, maxInputImages: 0, maxResolution: '2K', priceTier: 9,
   },
+  // 2.0 Pro 真实分辨率上限 2048²≈2K(不是 4K;文档:size 总像素 512²~2048²)。0.5→18。
   'qwen-image-2.0-pro': {
     key: 'qwen-image-2.0-pro', label: '专业 (千问2.0 Pro)', modelId: 'qwen-image-2.0-pro',
     shape: 'S', sizeKind: 'wh', modes: ['text2img', 'img2img'],
-    maxImages: 6, maxInputImages: 3, maxResolution: '4K', priceTier: 8,
+    maxImages: 6, maxInputImages: 3, maxResolution: '2K', priceTier: 18,
   },
   'wan2.2-flash': {
     key: 'wan2.2-flash', label: '万相2.2 极速', modelId: 'wan2.2-t2i-flash',
     shape: 'A1', sizeKind: 'wh', modes: ['text2img'],
-    maxImages: 4, maxInputImages: 0, maxResolution: '2K', priceTier: 3,
+    maxImages: 4, maxInputImages: 0, maxResolution: '2K', priceTier: 5,
   },
+  // 编辑:固定 1 张,分辨率不可指定(canSetSize=false;随输入图)。0.3→11。
   'qwen-image-edit': {
     key: 'qwen-image-edit', label: '图像编辑', modelId: 'qwen-image-edit',
     shape: 'S', sizeKind: 'wh', modes: ['img2img'],
-    maxImages: 1, maxInputImages: 3, maxResolution: '2K', priceTier: 6,
+    maxImages: 1, maxInputImages: 3, maxResolution: '2K', priceTier: 11, canSetSize: false,
   },
   // 万相2.7 编辑(异步含图,A_EDIT):支持 bbox_list 局部重绘 + 0-5 参考图 + n=1-4 出图。
   // size 走 keyword(编辑封顶 2K);提交 /image-generation/generation + X-DashScope-Async,轮询 /tasks/{id}。
@@ -231,6 +236,9 @@ export function sizeParams(
   resolution?: string,
   snap?: { width?: number; height?: number },
 ): Record<string, string> {
+  // canSetSize=false(qwen-image-edit:输出随输入图,文档不可指定 size)→ 不拼 size 参数,
+  // 与前端隐藏清晰度控件双保险(否则发了无效 size 可能报错/被忽略)。
+  if (def.canSetSize === false) return {};
   switch (def.sizeKind) {
     case 'wh':
       return { size: whSize(def, ratio, resolution, snap) };

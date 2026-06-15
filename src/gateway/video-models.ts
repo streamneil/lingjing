@@ -41,7 +41,12 @@ export interface VideoModelDef {
   durationRange: [number, number]; // [最短, 最长] 秒
   defaultDuration: number; // 默认时长
   maxPromptChars: number; // 提示词字数上限(逐模型,reserve 前校验)
-  priceTier: number; // 每秒计价基数(estimateVideoCost:ceil(duration × priceTier × resFactor))
+  // 每秒售价积分(= ceil(真实元/秒 × 35))。priceTier = 720P 基准;1080P/有声单列(真实比值随模型变)。
+  // deriveVideoT2VParams 按 resolution(+可灵 audio)选好后快照;estimateVideoCost 的 resFactor=1(价已编码完)。
+  priceTier: number; // 720P 无声 每秒售价积分
+  priceTier1080?: number; // 1080P 每秒售价积分(缺省回落 priceTier)
+  priceTierAudio?: number; // 可灵有声 720P 每秒售价积分(缺省回落 priceTier)
+  priceTierAudio1080?: number; // 可灵有声 1080P 每秒售价积分(缺省回落 priceTier1080)
   supportsAudio: boolean; // 支持有声视频(audio 布尔;本轮仅可灵开关可见,见 design D4/R6)
   supportsNegative: boolean; // 支持反向提示词(仅 wan2.7)
   supportsPromptExtend: boolean; // 支持 prompt 智能改写(仅 wan2.7)
@@ -67,7 +72,7 @@ export const VIDEO_MODELS: Record<string, VideoModelDef> = {
     ratios: ['16:9', '9:16', '1:1', '4:3', '3:4', '4:5', '5:4', '9:21', '21:9'],
     durationRange: [3, 15], defaultDuration: 5,
     maxPromptChars: 2500, // 文档「5000非中/2500中」→ 取安全下限(不做 CJK 拆分,本轮缓)
-    priceTier: 3,
+    priceTier: 32, priceTier1080: 56, // 真实 720P 0.9 / 1080P 1.6 元/秒 × 35
     supportsAudio: false, supportsNegative: false, supportsPromptExtend: false,
     tasks: [], // t2v:无 media 任务
   },
@@ -80,7 +85,7 @@ export const VIDEO_MODELS: Record<string, VideoModelDef> = {
     ratios: ['16:9', '9:16', '1:1', '4:3', '3:4'],
     durationRange: [2, 15], defaultDuration: 5,
     maxPromptChars: 5000,
-    priceTier: 5,
+    priceTier: 21, priceTier1080: 35, // 真实 720P 0.6 / 1080P 1.0 元/秒 × 35
     supportsAudio: false, // R6:audio_url 上传缓做,本轮无可见 audio 开关
     supportsNegative: true, supportsPromptExtend: true,
     tasks: [],
@@ -94,7 +99,8 @@ export const VIDEO_MODELS: Record<string, VideoModelDef> = {
     ratios: ['16:9', '9:16', '1:1'],
     durationRange: [3, 15], defaultDuration: 5,
     maxPromptChars: 2500,
-    priceTier: 6,
+    // 可灵真实(元/秒×35):无声 720P 0.6→21 / 1080P 0.8→28;有声 720P 0.9→32 / 1080P 1.2→42。
+    priceTier: 21, priceTier1080: 28, priceTierAudio: 32, priceTierAudio1080: 42,
     supportsAudio: true, // 可灵 audio 布尔本轮生效(design D4)
     supportsNegative: false, supportsPromptExtend: false,
     tasks: [],
@@ -110,7 +116,7 @@ export const VIDEO_MODELS: Record<string, VideoModelDef> = {
     ratios: [], // i2v 首帧:比例跟首帧,不传 ratio
     durationRange: [3, 15], defaultDuration: 5,
     maxPromptChars: 2500,
-    priceTier: 3,
+    priceTier: 32, priceTier1080: 56, // HH 首帧:720P 0.9 / 1080P 1.6 × 35
     supportsAudio: false, supportsNegative: false, supportsPromptExtend: false,
     tasks: ['first_frame'], promptRequired: false,
   },
@@ -122,7 +128,7 @@ export const VIDEO_MODELS: Record<string, VideoModelDef> = {
     ratios: ['16:9', '9:16', '1:1', '4:3', '3:4', '4:5', '5:4', '9:21', '21:9'],
     durationRange: [3, 15], defaultDuration: 5,
     maxPromptChars: 2500,
-    priceTier: 4,
+    priceTier: 32, priceTier1080: 56, // HH 参考生:720P 0.9 / 1080P 1.6 × 35
     supportsAudio: false, supportsNegative: false, supportsPromptExtend: false,
     tasks: ['reference'], maxRefImages: 9, promptRequired: true,
   },
@@ -134,7 +140,7 @@ export const VIDEO_MODELS: Record<string, VideoModelDef> = {
     ratios: [], // i2v 首帧/首尾帧:比例跟首帧
     durationRange: [2, 15], defaultDuration: 5,
     maxPromptChars: 5000,
-    priceTier: 5,
+    priceTier: 21, priceTier1080: 35, // 万相2.7 首帧/首尾帧:720P 0.6 / 1080P 1.0 × 35
     supportsAudio: false, supportsNegative: true, supportsPromptExtend: true,
     tasks: ['first_frame', 'first_last'], promptRequired: false,
   },
@@ -146,7 +152,7 @@ export const VIDEO_MODELS: Record<string, VideoModelDef> = {
     ratios: ['16:9', '9:16', '1:1', '4:3', '3:4'],
     durationRange: [2, 15], defaultDuration: 5,
     maxPromptChars: 5000,
-    priceTier: 6,
+    priceTier: 21, priceTier1080: 35, // 万相2.7 参考生:720P 0.6 / 1080P 1.0 × 35(按输入+输出秒计)
     supportsAudio: false, supportsNegative: true, supportsPromptExtend: true,
     tasks: ['reference'], maxRefImages: 5, promptRequired: true,
   },
@@ -161,7 +167,7 @@ export const VIDEO_MODELS: Record<string, VideoModelDef> = {
     ratios: [], // 编辑:输出比例跟输入视频,无 ratio 参数
     durationRange: [3, 60], defaultDuration: 5, // 编辑模型 durationRange 即输入视频时长界
     maxPromptChars: 2500, // 「5000非中/2500中」取安全下限(同 HH t2v 口径)
-    priceTier: 4,
+    priceTier: 32, priceTier1080: 56, // HH 视频编辑:720P 0.9 / 1080P 1.6 × 35(按输入+输出秒计)
     supportsAudio: false, supportsNegative: false, supportsPromptExtend: false,
     tasks: ['edit'], maxRefImages: 5, promptRequired: true,
     videoDurRange: [3, 60], videoMaxMB: 100, maxOutSeconds: 15, // 输入>15s → 输出截前 15
@@ -175,7 +181,7 @@ export const VIDEO_MODELS: Record<string, VideoModelDef> = {
     ratios: ['16:9', '9:16', '1:1', '4:3', '3:4'], // 可选:不传则跟原视频(前端首格「跟原视频」)
     durationRange: [2, 10], defaultDuration: 5,
     maxPromptChars: 5000,
-    priceTier: 6,
+    priceTier: 21, priceTier1080: 35, // 万相2.7 视频编辑:720P 0.6 / 1080P 1.0 × 35(按输入+输出秒计)
     supportsAudio: false, supportsNegative: true, supportsPromptExtend: true,
     tasks: ['edit'], maxRefImages: 4, promptRequired: false,
     videoDurRange: [2, 10], videoMaxMB: 100, // 输出=输入(或截断);无 15s 上限

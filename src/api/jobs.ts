@@ -27,6 +27,7 @@ import {
   estimateImageEditCost,
   estimateTtsCost,
   estimateVideoCost,
+  videoPriceTier,
   estimateAiMusicCost,
   AI_MUSIC_RESERVE_SECONDS,
   clampImageCount,
@@ -358,7 +359,8 @@ function deriveVideoT2VParams(def: ReturnType<typeof getVideoModel>, body: Recor
     ? klingModeToResolution(typeof body.mode === 'string' ? body.mode : undefined)
     : (typeof body.resolution === 'string' ? body.resolution : '720P');
   const audio = def.supportsAudio ? !!body.audio : false;
-  return { duration, resolution, audio, priceTier: def.priceTier };
+  // 每秒售价积分按(分辨率,有声)选(videoPriceTier 单一真源,与 costFor 无快照回落同规则)。
+  return { duration, resolution, audio, priceTier: videoPriceTier(def, resolution, audio) };
 }
 
 /** 校验并构建 video_t2v(文生视频)job 入参 + 计价。三模型(registry)+ shape 感知校验。 */
@@ -591,9 +593,10 @@ async function buildVideoEditJob(body: Record<string, unknown>): Promise<JobBuil
   if (def.supportsPromptExtend && typeof body.promptExtend === 'boolean')
     input.promptExtend = body.promptExtend;
   if (typeof body.seed === 'number') input.seed = body.seed;
-  // 快照(reserve==settle)
+  // 快照(reserve==settle)。编辑无声,按分辨率取每秒售价。
+  const editPrice = videoPriceTier(def, resolution, false);
   input.resSnapshot = resolution;
-  input.priceTierSnapshot = def.priceTier;
+  input.priceTierSnapshot = editPrice;
   input.audioSnapshot = false;
   input.inputDurationSnapshot = meta.duration;
   input.billableSecondsSnapshot = billable;
@@ -602,7 +605,7 @@ async function buildVideoEditJob(body: Record<string, unknown>): Promise<JobBuil
     ok: true,
     type: 'video_edit',
     input: input as unknown as Record<string, unknown>,
-    cost: estimateVideoCost(billable, def.priceTier, resolution, false),
+    cost: estimateVideoCost(billable, editPrice, resolution, false),
   };
 }
 
@@ -825,7 +828,7 @@ jobsRouter.post('/jobs/estimate', requireAuth, async (req: Request, res: Respons
     const billable = editBillableSeconds(def, meta.duration, truncate);
     const resolution = typeof body.resolution === 'string' && def.resolutions.includes(body.resolution as '720P' | '1080P')
       ? body.resolution : def.resolutions[0]!;
-    return res.json({ cost: estimateVideoCost(billable, def.priceTier, resolution, false), inputDuration: meta.duration });
+    return res.json({ cost: estimateVideoCost(billable, videoPriceTier(def, resolution, false), resolution, false), inputDuration: meta.duration });
   }
   if (type === 'tts') {
     // 全 Qwen-TTS 扁价(无品质模型);estimate≡build → reserve==settle。
@@ -855,6 +858,7 @@ jobsRouter.get('/image-models', requireAuth, (_req: Request, res: Response) => {
     maxImages: d.maxImages,
     maxInputImages: d.maxInputImages,
     maxResolution: d.maxResolution,
+    canSetSize: d.canSetSize !== false, // 前端据此显隐清晰度控件(false=随输入图,如 qwen-image-edit)
     supportsBbox: !!d.supportsBbox, // 前端据此显示/隐藏局部重绘画笔(仅万相2.7)
     // admin 录的分辨率表(前端比例下拉用;只吐 ratio/w/h/默认,不漏 priceTier/modelId)
     resolutions: (d.resolutions ?? []).map((r) => ({ ratio: r.ratio, width: r.width, height: r.height, isDefault: !!r.isDefault })),
