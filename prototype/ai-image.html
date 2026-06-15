@@ -652,10 +652,15 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     finally{ btn.innerHTML=prev; refreshBtn(); }
   });
 
-  // 探索页「演播室配图」带 ?sample=studio 进来 → 套用同款示范提示词(复用 useSample;未知 key 忽略)
+  // 探索页带预填提示词进来:
+  //   ?prompt=<原文> → 灵感库一键复用,直接填入真实提示词(本轮新增,优先)
+  //   ?sample=studio → 套用内置示范(旧;未知 key 忽略)
   const SAMPLE_PROMPTS={ studio:'新闻主播在现代化演播室,正面，专业演播灯光，4K 高清' };
   function applySampleFromQuery(){
-    const k=new URLSearchParams(location.search).get('sample');
+    const q=new URLSearchParams(location.search);
+    const p=q.get('prompt');
+    if(p){ useSample(p.slice(0,5000)); return; }  // 灵感库优先;裁到 maxlength 内
+    const k=q.get('sample');
     if(k && SAMPLE_PROMPTS[k]) useSample(SAMPLE_PROMPTS[k]);
   }
   LJ.me().then(()=>{ loadModels(); loadHistory().then(applySampleFromQuery); }).catch(()=>{});

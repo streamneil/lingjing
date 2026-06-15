@@ -50,7 +50,14 @@
   .ex-sec-h .more{ margin-left:auto; color:var(--t3); font-size:12.5px; text-decoration:none; transition:.18s }
   .ex-sec-h .more:hover{ color:var(--t1) }
 
-  /* ===== 2. 案例展示墙 ===== */
+  /* ===== 2. 灵感库 ===== */
+  .sc-filter{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px }
+  .sc-chip{ font-size:12.5px; color:var(--t3); background:var(--card); border:1px solid var(--line-soft);
+    border-radius:var(--r-pill); padding:6px 13px; cursor:pointer; transition:.16s; font-family:var(--f); white-space:nowrap }
+  .sc-chip:hover{ border-color:var(--line-hi); color:var(--t1) }
+  .sc-chip.on{ background:var(--t1); color:#0A0A0B; border-color:var(--t1); font-weight:600 }
+  .sc-chip:focus-visible{ outline:2px solid var(--blue); outline-offset:2px }
+  .demo .tag.prompt-tag{ background:rgba(77,141,255,.28); color:#cfe0ff }
   .showcase{ display:flex; gap:15px; overflow-x:auto; padding:6px 2px 12px; scroll-snap-type:x proximity; scrollbar-width:none }
   .showcase::-webkit-scrollbar{ display:none }
   .showcase:focus-visible{ outline:2px solid var(--blue); outline-offset:4px; border-radius:14px }
@@ -227,10 +234,11 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       </div>
     </section>
 
-    <!-- 2. 案例展示墙 -->
-    <section aria-label="案例展示">
-      <div class="ex-sec-h"><h3>看见可能</h3><span class="c">PRECISION · SHOWCASE</span></div>
-      <div class="showcase" id="showcase" role="region" aria-label="案例展示，可横向滚动" tabindex="0"></div>
+    <!-- 2. 灵感库(真实提示词 + 平台自产封面) -->
+    <section aria-label="灵感库">
+      <div class="ex-sec-h"><h3>灵感库</h3><span class="c" id="scCount">PROMPT · LIBRARY</span><a class="more" href="#" id="scShuffle">换一批 ↻</a></div>
+      <div class="sc-filter" id="scFilter" role="tablist" aria-label="按主题筛选灵感"></div>
+      <div class="showcase" id="showcase" role="region" aria-label="灵感库，可横向滚动" tabindex="0"></div>
     </section>
 
     <!-- 3. 一键开始 -->
@@ -275,6 +283,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
 </div>
 
 <script src="tools.js"></script>
+<script src="showcase-data.js"></script>
 <script src="api.js"></script>
 <script>
   // ============ 数据 ============
@@ -283,18 +292,26 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   function fmt(ts){ const d=new Date(ts); const p=n=>String(n).padStart(2,'0'); return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }
   function svg(inner){ return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`; }
 
-  // 案例展示墙(精选样例) — title/sub/tag/poster/video/toolKey/prefill
-  // prefill 必须带真预填参数(?template= 已在 create.html 接收),否则「用此模板」落空 —— 见 ui-exposed-but-not-wired 教训。
-  // 宣传片走 img2video.html:该页暂无参数接收端(P3 TODO),先裸跳并在文案上不承诺预填。
-  const F='https://images.unsplash.com/photo-';
-  const SHOWCASE = [
-    { title:'晚间新闻 · 数字主播', sub:'数字人视频 · 9:16', tag:'新闻播报', poster:F+'1544005313-94ddf0286df2?w=520&q=85&fit=crop&crop=faces', toolKey:'ai-avatar', prefill:'create.html?template=news' },
-    { title:'惠民政策 · 系列短片', sub:'数字人视频 · 16:9', tag:'政策解读', poster:F+'1438761681033-6461ffad8d80?w=520&q=85&fit=crop&crop=faces', toolKey:'ai-avatar', prefill:'create.html?template=policy' },
-    { title:'文化节现场 · 记者口播', sub:'数字人视频 · 9:16', tag:'出镜报道', poster:F+'1507003211169-0a1dd7228f2d?w=520&q=85&fit=crop&crop=faces', toolKey:'ai-avatar', prefill:'create.html?template=field' },
-    { title:'财经观察 · 每日早报', sub:'数字人视频 · 16:9', tag:'财经', poster:F+'1573497019940-1c28c88b4f3e?w=520&q=85&fit=crop&crop=faces', toolKey:'ai-avatar', prefill:'create.html?template=finance' },
-    { title:'城市形象 · 宣传短片', sub:'图片转影片 · 16:9', tag:'宣传片', poster:F+'1531123897727-8f129e1688ce?w=520&q=85&fit=crop&crop=faces', toolKey:'img2video', prefill:'img2video.html', noPrefill:true },
-    { title:'科普讲解 · 虚拟讲师', sub:'数字人视频 · 16:9', tag:'教育', poster:F+'1539571696357-5a69c17a67c6?w=520&q=85&fit=crop&crop=faces', toolKey:'ai-avatar', prefill:'create.html?template=news' },
-  ];
+  // 灵感库:真实提示词 + 平台自产封面(showcase-data.js / window.LJShowcase)。
+  // 每张卡 = 一条可一键复用的真实提示词;点「用这个提示词」→ 带 ?prompt= 进对应工具直接生成。
+  // 工具页接收端:ai-image / text2video 已支持 ?prompt=(本轮补)。
+  const SC_ALL = (window.LJShowcase || []).map(s=>({
+    title:s.title, sub:`${s.toolName} · ${s.theme}`, tag:s.theme, theme:s.theme,
+    poster:s.url, prompt:s.prompt, toolName:s.toolName,
+    prefill:`${s.page}?prompt=${encodeURIComponent(s.prompt)}`,
+  }));
+  let SHOWCASE = SC_ALL.slice(); // 当前筛选/抽样后的可见集
+  let SC_THEME = '全部';
+  const SC_VISIBLE = 12; // 一屏展示量,「换一批」洗牌
+
+  function scApplyFilter(){
+    let pool = SC_THEME==='全部' ? SC_ALL : SC_ALL.filter(s=>s.theme===SC_THEME);
+    // 轻量洗牌(不用 Math.random 也可,这里用时间种子的稳定打散:按 id 长度+索引错位)
+    pool = pool.slice().sort((a,b)=>(a.title.length%5)-(b.title.length%5));
+    SHOWCASE = pool.slice(0, SC_VISIBLE);
+    renderShowcase();
+    document.getElementById('scCount').textContent = `${pool.length} 条提示词`;
+  }
 
   // 一键开始(聚合 create/ai-image/ai-music 的发现内容)
   const STARTS = [
@@ -308,15 +325,25 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       icon:'<path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/>' },
   ];
 
-  // ============ 渲染:案例展示墙 ============
+  // ============ 渲染:灵感库筛选 chips ============
+  function renderScFilter(){
+    const themes = ['全部', ...[...new Set(SC_ALL.map(s=>s.theme))]];
+    const box = document.getElementById('scFilter');
+    box.innerHTML = themes.map(t=>`<button class="sc-chip${t===SC_THEME?' on':''}" role="tab" aria-selected="${t===SC_THEME}" data-theme="${esc(t)}">${esc(t)}</button>`).join('');
+    box.querySelectorAll('.sc-chip').forEach(c=>{
+      c.addEventListener('click', ()=>{ SC_THEME=c.dataset.theme; renderScFilter(); scApplyFilter(); });
+    });
+  }
+
+  // ============ 渲染:灵感库 ============
   function renderShowcase(){
     const el = document.getElementById('showcase');
     el.innerHTML = SHOWCASE.map((s,i)=>`
-      <div class="demo" tabindex="0" role="button" aria-label="预览案例：${esc(s.title)}" data-i="${i}">
+      <div class="demo" tabindex="0" role="button" aria-label="查看提示词：${esc(s.title)}" data-i="${i}">
         <div class="img" style="background-image:url('${esc(s.poster)}')"></div>
         <div class="veil"></div>
-        <span class="tag">${esc(s.tag)}</span>
-        <button class="play" tabindex="-1" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
+        <span class="tag prompt-tag">${esc(s.tag)}</span>
+        <button class="play" tabindex="-1" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
         <div class="cap-t"><div class="ttl">${esc(s.title)}</div><div class="sub">${esc(s.sub)}</div></div>
       </div>`).join('');
     el.querySelectorAll('.demo').forEach(card=>{
@@ -331,16 +358,16 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   function openPlayer(s){
     _lastFocus=document.activeElement;
     const view=document.getElementById('playerView');
-    // 样片视频缺省 → 用 poster 占位(运营后续补 sampleVideoUrl)
-    view.innerHTML = s.sampleVideoUrl
-      ? `<video src="${s.sampleVideoUrl}" controls autoplay playsinline></video>`
-      : `<div class="img" style="position:absolute;inset:0;background-size:cover;background-position:center;background-image:url('${esc(s.poster)}')"></div><div class="pph" style="position:relative;z-index:1">${svg('<circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4V8Z"/>')}<span>样片预览</span></div>`;
+    // 灵感库:展示平台自产封面(无 veil 文字遮挡,纯净大图)
+    view.innerHTML = `<div class="img" style="position:absolute;inset:0;background-size:cover;background-position:center;background-image:url('${esc(s.poster)}')"></div>`;
     document.getElementById('playerName').textContent=s.title;
-    document.getElementById('playerSub').textContent=s.sub;
+    // 副行展示真实提示词(截断),让用户一眼看到「这是怎么生成的」
+    const promptShort = (s.prompt||'').slice(0,90) + ((s.prompt||'').length>90?'…':'');
+    document.getElementById('playerSub').textContent = promptShort;
     const useBtn=document.getElementById('playerUse');
-    useBtn.href=s.prefill||LJTools.href(LJTools.get(s.toolKey)||{});
-    // 文案诚实:有真预填参数才说「用这个模板」,裸跳(noPrefill)只说「去创作」
-    useBtn.querySelector('.use-label').textContent = s.noPrefill ? '去创作' : '用这个模板';
+    useBtn.href=s.prefill;
+    // 灵感库每张都带真实提示词 + ?prompt= 预填,统一「用这个提示词」
+    useBtn.querySelector('.use-label').textContent = '用这个提示词';
     const ov=document.getElementById('player');
     ov.classList.add('show');
     document.getElementById('playerClose').focus();
@@ -455,7 +482,9 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   function reloadAll(){ loadAll(); }
 
   // ============ 启动 ============
-  renderShowcase();
+  renderScFilter();
+  scApplyFilter();
+  document.getElementById('scShuffle').addEventListener('click', e=>{ e.preventDefault(); scApplyFilter(); document.getElementById('showcase').scrollTo({left:0,behavior:'smooth'}); });
   renderStarts();
   renderTools();
   loadAll();

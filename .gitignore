@@ -25,3 +25,7 @@ build/
 probe-output.mp4
 probe-labeled.mp4
 .gitnexus
+
+# 探索/落地页样例封面:真图存 OSS 公网,本地 jpg 不入库(生产由 OSS/CDN 伺服)
+prototype/showcase/*.jpg
+prototype/showcase/probe-*.jpg
