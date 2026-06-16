@@ -534,6 +534,22 @@ function parseAdminResolutions(raw: string | null | undefined): { ratio: string;
 // 整数系数(禁 ×3.5×10 浮点多收);单一真源在 credits/pricing.ts:sellPrice。
 function creditsFromCost(realCostYuan: number): number { return sellPrice(realCostYuan); }
 
+// ── 统一定价表 model_pricing 收口写入(2026-06)──
+// 价格读路径已全部收口到 model_pricing(mergeDef/videoPriceTier/ttsPricePerChar)。故所有
+// admin 改价/启停入口必须同步 upsert 本表(否则改了旧表读不到)。各模态写旧表后调此函数同步。
+function upsertModelPricing(p: {
+  id: string; modelKey: string; modality: 'image' | 'video' | 'tts'; unit: string;
+  variant: string | null; realCostYuan: number; costSource: string; enabled: number; sortOrder?: number;
+}): void {
+  db.prepare(
+    `INSERT INTO model_pricing (id,model_key,modality,unit,variant,real_cost_yuan,cost_source,enabled,sort_order,updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(id) DO UPDATE SET model_key=excluded.model_key, modality=excluded.modality, unit=excluded.unit,
+       variant=excluded.variant, real_cost_yuan=excluded.real_cost_yuan, cost_source=excluded.cost_source,
+       enabled=excluded.enabled, sort_order=excluded.sort_order, updated_at=excluded.updated_at`,
+  ).run(p.id, p.modelKey, p.modality, p.unit, p.variant, p.realCostYuan, p.costSource, p.enabled, p.sortOrder ?? 0, Date.now());
+}
+
 function validModelBody(b: Record<string, unknown>): { ok: true; v: { label: string; modelId: string; enabled: number; priceTier: number; realCostYuan: number | null; costSource: string | null; maxImages: number; modes: string; sortOrder: number; resolutions: string | null } } | { ok: false; error: string } {
   const label = typeof b.label === 'string' ? b.label.trim() : '';
   const modelId = typeof b.modelId === 'string' ? b.modelId.trim() : '';
@@ -602,6 +618,11 @@ adminRouter.post('/api/image-models', requirePlatformAdmin, (req: Request, res: 
     `INSERT INTO image_model_override (key,label,model_id,enabled,price_tier,real_cost_yuan,cost_source,max_images,shape_template,modes,sort_order,resolutions,created_at)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   ).run(key, v.v.label, v.v.modelId, v.v.enabled, v.v.priceTier, v.v.realCostYuan, v.v.costSource, v.v.maxImages, shapeTemplate, v.v.modes, v.v.sortOrder, v.v.resolutions, Date.now());
+  // 收口:价格读路径在 model_pricing,同步 upsert(仅成本驱动行;遗留手填 priceTier 无成本不入统一表)。
+  if (v.v.realCostYuan != null) {
+    upsertModelPricing({ id: key, modelKey: key, modality: 'image', unit: '张', variant: null,
+      realCostYuan: v.v.realCostYuan, costSource: v.v.costSource ?? 'doc', enabled: v.v.enabled, sortOrder: v.v.sortOrder });
+  }
   writePlatformAudit(req.padmin!.id, 'image_model_create', PLATFORM_TENANT, key, padminIp(req));
   res.status(201).json({ ok: true });
 });
@@ -632,6 +653,15 @@ adminRouter.put('/api/image-models/:key', requirePlatformAdmin, (req: Request, r
        cost_source=excluded.cost_source, max_images=excluded.max_images,
        modes=excluded.modes, sort_order=excluded.sort_order, resolutions=excluded.resolutions`,
   ).run(key, v.v.label, v.v.modelId, v.v.enabled, v.v.priceTier, v.v.realCostYuan, v.v.costSource, v.v.maxImages, shapeTemplate, v.v.modes, v.v.sortOrder, v.v.resolutions, existing?.created_at ?? Date.now());
+  // 收口:同步 model_pricing(用生效成本 effCost = body 新值 ?? 既有行)。无成本(纯遗留手填价)不入统一表。
+  {
+    const effCost = v.v.realCostYuan ?? existing?.real_cost_yuan ?? null;
+    const effSrc = v.v.costSource ?? existing?.cost_source ?? 'doc';
+    if (effCost != null) {
+      upsertModelPricing({ id: key, modelKey: key, modality: 'image', unit: '张', variant: null,
+        realCostYuan: effCost, costSource: effSrc, enabled: v.v.enabled, sortOrder: v.v.sortOrder });
+    }
+  }
   writePlatformAudit(req.padmin!.id, 'image_model_update', PLATFORM_TENANT, key, padminIp(req));
   res.json({ ok: true });
 });
@@ -640,6 +670,7 @@ adminRouter.put('/api/image-models/:key', requirePlatformAdmin, (req: Request, r
 adminRouter.delete('/api/image-models/:key', requirePlatformAdmin, (req: Request, res: Response) => {
   const key = req.params.key!;
   db.prepare('DELETE FROM image_model_override WHERE key=?').run(key);
+  db.prepare('DELETE FROM model_pricing WHERE id=?').run(key); // 收口:同删统一定价行(代码内置删后回落代码 priceTier)
   writePlatformAudit(req.padmin!.id, 'image_model_delete', PLATFORM_TENANT, key, padminIp(req));
   res.json({ ok: true, note: IMAGE_MODELS[key] ? '已回落代码默认' : '已删除' });
 });
@@ -701,6 +732,11 @@ adminRouter.put('/api/pricing/video/:id', requirePlatformAdmin, (req: Request, r
   }
   db.prepare('UPDATE video_model_override SET real_cost_yuan=?, cost_source=?, enabled=?, updated_at=? WHERE id=?')
     .run(realCostYuan, costSource, enabled, Date.now(), id);
+  // 收口:同步 model_pricing(id 直接复用 "{key}:{variant}")。
+  {
+    const r = db.prepare('SELECT model_key, variant FROM video_model_override WHERE id=?').get(id) as { model_key: string; variant: string | null } | undefined;
+    if (r) upsertModelPricing({ id, modelKey: r.model_key, modality: 'video', unit: '秒', variant: r.variant, realCostYuan, costSource, enabled });
+  }
   writePlatformAudit(req.padmin!.id, 'pricing_video_update', PLATFORM_TENANT, id, padminIp(req));
   res.json({ ok: true });
 });
@@ -709,9 +745,66 @@ adminRouter.put('/api/pricing/video/:id', requirePlatformAdmin, (req: Request, r
 adminRouter.put('/api/pricing/tts', requirePlatformAdmin, (req: Request, res: Response) => {
   const cost = Number((req.body ?? {}).realCostYuan);
   if (!Number.isFinite(cost) || cost <= 0) return res.status(400).json({ error: '成本需为正数(元/字符)' });
-  setConfig('tts_cost_per_char', String(cost));
+  setConfig('tts_cost_per_char', String(cost)); // 兼容保留旧 key(迁移回落链)
+  upsertModelPricing({ id: 'tts', modelKey: 'tts', modality: 'tts', unit: '万字', variant: '每字', realCostYuan: cost, costSource: 'doc', enabled: 1 }); // 收口:统一表为读源
   writePlatformAudit(req.padmin!.id, 'pricing_tts_update', PLATFORM_TENANT, String(cost), padminIp(req));
   res.json({ ok: true });
+});
+
+// ── 统一定价(全模态单表;新 admin 左侧菜单「定价管理」页)──
+// 一张表管图片/视频/TTS 的价格+启停;后面新模型(seedance/nanobanana)入此表即被管理,交互不变。
+// 业务字段(label/modes…)仍各模态原表管;本页只调价/启停。
+/** 列出 model_pricing 全行(分模态分组),带售价积分 + 全局倍率/地板 + 亏损预警。 */
+adminRouter.get('/api/pricing/models', requirePlatformAdmin, (_req: Request, res: Response) => {
+  const markup = markupX35();
+  const floor = floorX35();
+  const sell = (cost: number) => Math.max(1, Math.ceil(cost * markup));
+  const rows = db.prepare('SELECT * FROM model_pricing ORDER BY modality, sort_order, id').all() as Array<{
+    id: string; model_key: string; modality: string; unit: string; variant: string | null;
+    real_cost_yuan: number; cost_source: string; enabled: number; sort_order: number;
+  }>;
+  const models = rows.map((r) => ({
+    id: r.id, modelKey: r.model_key, modality: r.modality, unit: r.unit, variant: r.variant,
+    realCostYuan: r.real_cost_yuan, sell: sell(r.real_cost_yuan), costSource: r.cost_source, enabled: r.enabled === 1,
+  }));
+  const alerts: string[] = [];
+  if (markup < floor) alerts.push(`全局倍率 ${markup / 10} < 地板 ${floor / 10},全场赔本!`);
+  for (const m of models) if (!(m.realCostYuan > 0)) alerts.push(`${m.id} 成本未录`);
+  res.json({ markup: markup / 10, floor: floor / 10, models, alerts });
+});
+
+/** 改某行真实成本 / 启停(统一入口,全模态)。启用时过 assertProfitable 闸。即时生效。
+ *  收口:本表是价格读源,故只写本表(图片/视频业务字段在各原表,不在此改)。 */
+adminRouter.put('/api/pricing/models/:id', requirePlatformAdmin, (req: Request, res: Response) => {
+  const id = req.params.id!;
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const row = db.prepare('SELECT * FROM model_pricing WHERE id=?').get(id) as {
+    id: string; model_key: string; modality: string; unit: string; variant: string | null;
+    real_cost_yuan: number; cost_source: string; enabled: number; sort_order: number;
+  } | undefined;
+  if (!row) return res.status(404).json({ error: '定价行不存在' });
+  const realCostYuan = b.realCostYuan !== undefined ? Number(b.realCostYuan) : row.real_cost_yuan;
+  if (!Number.isFinite(realCostYuan) || realCostYuan <= 0) return res.status(400).json({ error: '真实成本需为正数' });
+  const costSource = typeof b.costSource === 'string' && b.costSource === 'estimate' ? 'estimate' : 'doc';
+  const enabled = b.enabled === false || b.enabled === 0 ? 0 : 1;
+  if (enabled === 1) {
+    try { assertProfitable(realCostYuan, costSource); }
+    catch (e) { return res.status(400).json({ error: (e as Error).message }); }
+  }
+  upsertModelPricing({ id, modelKey: row.model_key, modality: row.modality as 'image' | 'video' | 'tts',
+    unit: row.unit, variant: row.variant, realCostYuan, costSource, enabled, sortOrder: row.sort_order });
+  // 双写旧表(过渡期保留:旧 admin 视图/迁移回落链仍读)。各模态写自己的旧表。
+  if (row.modality === 'image') {
+    db.prepare('UPDATE image_model_override SET real_cost_yuan=?, cost_source=?, enabled=?, price_tier=? WHERE key=?')
+      .run(realCostYuan, costSource, enabled, creditsFromCost(realCostYuan), id);
+  } else if (row.modality === 'video') {
+    db.prepare('UPDATE video_model_override SET real_cost_yuan=?, cost_source=?, enabled=?, updated_at=? WHERE id=?')
+      .run(realCostYuan, costSource, enabled, Date.now(), id);
+  } else if (row.modality === 'tts') {
+    setConfig('tts_cost_per_char', String(realCostYuan));
+  }
+  writePlatformAudit(req.padmin!.id, 'pricing_model_update', PLATFORM_TENANT, id, padminIp(req));
+  res.json({ ok: true, sell: creditsFromCost(realCostYuan) });
 });
 
 /** 排序:接收完整有序 keys 数组,按下标写 sort_order(用户端下拉/admin 列表都按此排)。

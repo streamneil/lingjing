@@ -434,6 +434,77 @@ export interface VideoModelOverrideRow {
   updated_at: number;
 }
 
+// ── model_pricing:全模态「价格+启停」统一真源(2026-06,/plan-ceo-review + /plan-eng-review)──
+// 为什么:旧定价散 3 套不兼容表(image_model_override 14列 / video_model_override 7列 / platform_config TTS),
+//   加新模型(seedance/nanobanana…)每次选错桶 + 写专属 UI。本表只管「价格(real_cost_yuan)+ enabled」,
+//   一张表统一图片/视频/TTS;业务字段(label/modes/resolutions…)仍留各自原表(价格统一 ≠ 字段统一)。
+// 读价点(mergeDef / videoPriceTier / ttsPricePerChar)统一经 lookupCost(credits/pricing.ts)读本表 → 收口双源。
+// 一模型多档=多行:id="{model_key}:{variant}"(无档则 variant=null,id=model_key)。enabled DEFAULT 0:
+//   「无行 = 不启用」(沿用 image isEnabled 修后的「默认不启用」语义,防占位价静默上线)。
+db.exec(`
+  CREATE TABLE IF NOT EXISTS model_pricing (
+    id              TEXT PRIMARY KEY,            -- "{model_key}" 或 "{model_key}:{variant}"
+    model_key       TEXT NOT NULL,
+    modality        TEXT NOT NULL,               -- 'image' | 'video' | 'tts'
+    unit            TEXT NOT NULL,               -- '张' | '秒' | '万字' 等(展示用)
+    variant         TEXT,                        -- 720P/audio-1080P/null
+    real_cost_yuan  REAL NOT NULL,               -- 厂商真实成本(售价=ceil(×markup_x35),见 pricing.ts:sellPrice)
+    cost_source     TEXT NOT NULL DEFAULT 'doc', -- 'doc'(价格页确价)| 'estimate'(待校准,不得 enabled)
+    enabled         INTEGER NOT NULL DEFAULT 0,  -- 无行/0 = 不启用(防占位价静默上线)
+    sort_order      INTEGER NOT NULL DEFAULT 0,
+    updated_at      INTEGER NOT NULL
+  )
+`);
+// 启动幂等迁移(eng-review E4):本表空时,从 3 套旧表各搬一次价格;幂等键 = model_pricing.id 已存在则跳。
+// 插入点必须在 image_model_override / video_model_override / platform_config 之后(读源表)—— 已满足(此处在三者后)。
+{
+  const empty = (db.prepare('SELECT COUNT(*) AS c FROM model_pricing').get() as { c: number }).c === 0;
+  if (empty) {
+    const ins = db.prepare(
+      `INSERT OR IGNORE INTO model_pricing (id,model_key,modality,unit,variant,real_cost_yuan,cost_source,enabled,sort_order,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    );
+    const ts = Date.now();
+    let migrated = 0;
+    // 图片:image_model_override(只搬有真实成本的 enabled 行;成本缺失行不搬 = 迁移后不启用,需 admin 录价)。
+    const imgRows = db.prepare(
+      `SELECT key, enabled, real_cost_yuan, cost_source, sort_order FROM image_model_override WHERE real_cost_yuan IS NOT NULL AND real_cost_yuan > 0`,
+    ).all() as { key: string; enabled: number; real_cost_yuan: number; cost_source: string | null; sort_order: number }[];
+    for (const r of imgRows) {
+      ins.run(r.key, r.key, 'image', '张', null, r.real_cost_yuan, r.cost_source ?? 'doc', r.enabled, r.sort_order ?? 0, ts);
+      migrated++;
+    }
+    // 视频:video_model_override(每档一行,id 直接复用 "{key}:{variant}")。
+    const vidRows = db.prepare(
+      `SELECT id, model_key, variant, real_cost_yuan, cost_source, enabled FROM video_model_override`,
+    ).all() as { id: string; model_key: string; variant: string | null; real_cost_yuan: number; cost_source: string; enabled: number }[];
+    for (const r of vidRows) {
+      ins.run(r.id, r.model_key, 'video', '秒', r.variant, r.real_cost_yuan, r.cost_source ?? 'doc', r.enabled, 0, ts);
+      migrated++;
+    }
+    // TTS:platform_config.tts_cost_per_char —— 该 key **只在 seed-demo 种,db/index.ts 没种**(eng-review E4 CRITICAL):
+    //   非 demo/生产库读到 NULL,故 `|| 0.00008` 硬兜底(= 0.8元/万字符真实成本),否则迁移搬 0 行音色价、静默退回代码常数。
+    const ttsCfg = db.prepare(`SELECT value FROM platform_config WHERE key='tts_cost_per_char'`).get() as { value?: string } | undefined;
+    const ttsCostVal = Number(ttsCfg?.value) || 0.00008;
+    ins.run('tts', 'tts', 'tts', '万字', '每字', ttsCostVal, 'doc', 1, 0, ts);
+    migrated++;
+    if (migrated) console.log(`[migrate] model_pricing 已从旧表搬入 ${migrated} 行(图片/视频/TTS 统一定价)`);
+  }
+}
+
+export interface ModelPricingRow {
+  id: string;
+  model_key: string;
+  modality: string; // 'image' | 'video' | 'tts'
+  unit: string;
+  variant: string | null;
+  real_cost_yuan: number;
+  cost_source: string; // 'doc' | 'estimate'
+  enabled: number;
+  sort_order: number;
+  updated_at: number;
+}
+
 // ── 积分套餐 + 意向线索(/plan-design-review + /plan-eng-review)──
 // pricing_plan:admin 后台动态管理的定价套餐,前端定价区只渲染。照 image_model_override 范式
 //   (代码不写死套餐,运营在后台填真实价/积分;改完即时生效)。price_yuan 可空 = 面议。

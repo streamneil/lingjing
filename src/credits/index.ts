@@ -13,7 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { db, type LedgerKind, type LedgerRow } from '../db/index.js';
 import { getImageModel } from '../gateway/image-models.js';
 import { getVideoModel, klingModeToResolution } from '../gateway/video-models.js';
-import { sellPrice, getConfig, markupX35 } from './pricing.js';
+import { sellPrice, getConfig, markupX35, lookupCost } from './pricing.js';
 
 const now = () => Date.now();
 
@@ -80,13 +80,12 @@ export function estimateVideoCost(duration: number, priceTier: number, resolutio
   return Math.max(MIN_COST, Math.ceil(cost));
 }
 
-// 视频后台改价:video_model_override 按 "{key}:{variant}" 存真实成本/秒;查到→sellPrice 算售价。
-// 惰性 prepare(避免早于建表)。variant 命名:audio-1080P / audio-720P / 1080P / 720P。
-let _vovStmt: import('better-sqlite3').Statement | null = null;
+// 视频后台改价:统一定价表 model_pricing 按 "{key}:{variant}" 存真实成本/秒;查到→sellPrice 算售价。
+// 2026-06 收口:从 video_model_override 改读 model_pricing(单一价格真源,lookupCost),只认 enabled 行。
+// variant 命名:audio-1080P / audio-720P / 1080P / 720P。
 function videoOverrideCost(modelKey: string, variant: string): number | null {
-  _vovStmt ??= db.prepare('SELECT real_cost_yuan FROM video_model_override WHERE id = ? AND enabled = 1');
-  const row = _vovStmt.get(`${modelKey}:${variant}`) as { real_cost_yuan: number } | undefined;
-  return row ? row.real_cost_yuan : null;
+  const mp = lookupCost(`${modelKey}:${variant}`);
+  return mp && mp.enabled ? mp.realCostYuan : null;
 }
 function videoVariant(resolution: string, audio: boolean): string {
   const res = resolution === '1080P' ? '1080P' : '720P';
@@ -119,8 +118,15 @@ const TTS_PRICE_PER_CHAR = 0.0028; // flash 档售价/字符(0.8元/万 × 3.5);
 // TTS 真实成本/字符(platform_config:tts_cost_per_char,默认 0.00008 = 0.8元/万)。
 // 售价/字 = 真实成本 × markup_x35(接全局倍率,后台改倍率 TTS 也随之变)。不在此 floor(floor 在每单总价)。
 function ttsPricePerChar(): number {
-  const cost = Number(getConfig('tts_cost_per_char'));
-  if (Number.isFinite(cost) && cost > 0) return cost * markupX35(); // 接全局倍率
+  // 2026-06 收口:TTS 成本从统一定价表 model_pricing(id='tts')读;售价/字 = 成本 × 全局倍率。
+  //   迁移前/未录 → 回落旧 platform_config.tts_cost_per_char → 再回落兜底常数。
+  const mp = lookupCost('tts');
+  const cost = mp && mp.enabled ? mp.realCostYuan : Number(getConfig('tts_cost_per_char'));
+  if (Number.isFinite(cost) && cost > 0) {
+    // 接全局倍率;round 到 1e-10 抹掉 IEEE-754 浮尘(0.00008×35=0.0028000000000000004 → 0.0028),
+    // 否则下游 ceil(10000×单价) 会把 28.0000…4 多收成 29(与整数 markup 同理的浮点多收)。
+    return Math.round(cost * markupX35() * 1e10) / 1e10;
+  }
   return TTS_PRICE_PER_CHAR; // 未配 → 兜底常数
 }
 /** TTS 费用预估:ceil(字数 × 每字单价)。pricePerChar 缺省 = 配置真实成本×倍率(无则兜底常数)。

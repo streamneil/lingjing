@@ -23,6 +23,7 @@
 
 import { imageSize } from './baichuan.js';
 import { db, type ImageModelOverrideRow } from '../db/index.js';
+import { lookupCost, sellPrice } from '../credits/pricing.js';
 
 export type ImageShape = 'S' | 'A1' | 'A2' | 'A_EDIT'; // S=同步多模态 A1=异步文生图 A2=异步图生成(缓) A_EDIT=异步含图编辑(万相2.7)
 export type SizeKind = 'wh' | 'keyword' | 'aspect_res'; // size 参数形状(aspect_res 本轮缓)
@@ -129,13 +130,17 @@ function mergeDef(key: string): ImageModelDef | undefined {
     if (!tmpl) return undefined; // 模板丢失(不该发生:模板是代码 key)
     // modes:管理员勾选的优先(用户选了「完全自由勾」);空 → 回落代码模板 modes。
     const ovModes = (ov.modes ?? '').split(',').map((s) => s.trim()).filter((s): s is ImageMode => s === 'text2img' || s === 'img2img');
+    // 价格收口(2026-06 统一定价):售价唯一真源 = model_pricing(lookupCost→sellPrice,接全局倍率)。
+    //   ov.price_tier 不再读(双源根已切断);仅当 model_pricing 无此行(迁移前/未录价)才回落旧列兜底。
+    const mp = lookupCost(key);
+    const priceTier = mp ? sellPrice(mp.realCostYuan) : ov.price_tier;
     const def: ImageModelDef = {
       ...tmpl, // shape/sizeKind/maxResolution/maxInputImages(技术契约)
       key,
       label: ov.label,
       modelId: ov.model_id,
       maxImages: ov.max_images,
-      priceTier: ov.price_tier,
+      priceTier,
       modes: ovModes.length ? ovModes : tmpl.modes, // 管理员勾选优先
     };
     const res = parseResolutions(ov.resolutions); // JSON 坏数据回落 undefined(P2-c)
@@ -168,8 +173,13 @@ function parseResolutions(raw: string | null): ResolutionEntry[] | undefined {
 // 注意:这只管「是否出现在 listEnabledModels / 默认兜底」;getImageModel(显式 key)仍返回
 // disabled 模型(在飞/老 job 兼容,见 getImageModel)。
 function isEnabled(key: string): boolean {
+  // 启停收口(2026-06 统一定价,eng-review E2):启用唯一真源 = model_pricing.enabled。
+  //   仅当 model_pricing 无此行(迁移前/未录价)才回落 image_model_override.enabled 兜底。
+  //   无任何行 → 不启用(防占位价静默上线;沿用「无行=不启用」语义)。
+  const mp = lookupCost(key);
+  if (mp) return mp.enabled;
   const ov = overrideRow(key);
-  return ov ? ov.enabled === 1 : false; // 无 DB 行 → 不启用(种子已给现有 7 个图片模型建 enabled=1 行)
+  return ov ? ov.enabled === 1 : false;
 }
 
 /** 取模型定义(代码 + DB override 合并);未知/缺省 → 按 mode 选默认。
