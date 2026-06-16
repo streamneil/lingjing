@@ -17,7 +17,7 @@ import { getMediaPublisher } from './media-publisher.js';
 import type { SyncImageGateway, ImageGenInput, ImageEditInput } from './types.js';
 
 const GEMINI_PROVIDER = 'google-ai-studio';
-const GEMINI_FALLBACK_BASE = 'https://generativelanguage.googleapis.com/v1';
+const GEMINI_FALLBACK_BASE = 'https://generativelanguage.googleapis.com/v1beta'; // v1beta:image-gen config 字段(实测 v1 不认)
 
 function geminiBaseUrl(): string {
   return getProviderBaseUrl(GEMINI_PROVIDER) || GEMINI_FALLBACK_BASE;
@@ -38,10 +38,16 @@ export class GeminiGateway implements SyncImageGateway {
   private async generate(modelId: string, prompt: string, inputUrls: string[], opts: { aspectRatio?: string; imageSize?: string }, signal: AbortSignal): Promise<string[]> {
     const parts: Array<Record<string, unknown>> = [{ text: prompt }];
     for (const u of inputUrls) parts.push({ inline_data: await urlToInlineData(u) });
+    // ⚠ 实测(真火山... Google API 探针)定位的正确形状:端点 v1beta + camelCase;
+    //   size 控制是 generationConfig.imageConfig(不是文档 SDK 示例里的 responseFormat —— 那是 SDK 抽象,
+    //   裸 REST 用 imageConfig 才被接受;responseFormat 会 400 Unknown/Invalid)。
     const generationConfig: Record<string, unknown> = { responseModalities: ['TEXT', 'IMAGE'] };
-    if (opts.aspectRatio || opts.imageSize) {
-      generationConfig.responseFormat = { image: { ...(opts.aspectRatio ? { aspectRatio: opts.aspectRatio } : {}), ...(opts.imageSize ? { imageSize: opts.imageSize } : {}) } };
-    }
+    // aspectRatio 所有模型支持;imageSize 仅 Gemini 3.x(2.5-flash 不吃,文档明示)。imageSize 大写 K。
+    const supportsImageSize = modelId.startsWith('gemini-3');
+    const imageCfg: Record<string, unknown> = {};
+    if (opts.aspectRatio) imageCfg.aspectRatio = opts.aspectRatio;
+    if (opts.imageSize && supportsImageSize) imageCfg.imageSize = opts.imageSize;
+    if (Object.keys(imageCfg).length) generationConfig.imageConfig = imageCfg;
     const res = await fetch(`${geminiBaseUrl()}/models/${modelId}:generateContent`, {
       method: 'POST',
       headers: { 'x-goog-api-key': getProviderKey(GEMINI_PROVIDER), 'Content-Type': 'application/json' },
@@ -53,12 +59,15 @@ export class GeminiGateway implements SyncImageGateway {
     try { json = JSON.parse(text); } catch { json = { _raw: text.slice(0, 800) }; }
     if (!res.ok) throw new Error(`Gemini 生成失败 HTTP ${res.status}: ${JSON.stringify(json?.error ?? json)}`);
     // 取所有候选里的图片 part(base64)。
-    const outParts: Array<{ inline_data?: { data?: string; mime_type?: string }; inlineData?: { data?: string; mimeType?: string } }> =
+    const outParts: Array<{ thought?: boolean; inline_data?: { data?: string; mime_type?: string }; inlineData?: { data?: string; mimeType?: string } }> =
       json?.candidates?.[0]?.content?.parts ?? [];
     const urls: string[] = [];
     const publisher = getMediaPublisher('hosted'); // 临时键转公网 URL;finalizeImageJob 再按 job 键重存
     let i = 0;
     for (const p of outParts) {
+      // ⚠ Gemini 3.x 是 thinking 模型(默认开,不可关):响应含中间「思考图」part(thought:true),
+      //   不是成品,必须跳过 —— 否则会把思考过程的中间图当成品返回(多张/错图)。文档明示。
+      if (p.thought === true) continue;
       // 兼容 snake_case(inline_data)与 camelCase(inlineData)两种返回风格。
       const b64 = p.inline_data?.data ?? p.inlineData?.data;
       const mime = p.inline_data?.mime_type ?? p.inlineData?.mimeType ?? 'image/png';

@@ -51,12 +51,12 @@ describe('GeminiGateway 请求/响应', () => {
     );
     expect(urls.length).toBe(1);
     expect(urls[0]).toContain('https://cdn/'); // 来自 publish 桩(base64→putObject→publish 转 URL)
-    expect(captured.url).toContain('/models/gemini-2.5-flash-image:generateContent');
+    expect(captured.url).toContain('/v1beta/models/gemini-2.5-flash-image:generateContent'); // v1beta(实测 v1 不认 image-gen)
     expect(captured.headers['x-goog-api-key']).toBe('gkey-test-123'); // 非 Bearer
     expect(captured.headers.Authorization).toBeUndefined();
     expect(captured.body.contents[0].parts[0]).toEqual({ text: '一只猫' });
     expect(captured.body.generationConfig.responseModalities).toEqual(['TEXT', 'IMAGE']);
-    expect(captured.body.generationConfig.responseFormat.image.aspectRatio).toBe('16:9');
+    expect(captured.body.generationConfig.imageConfig.aspectRatio).toBe('16:9');
   });
 
   it('editImage:输入图 URL → 拉取转 base64 inline_data', async () => {
@@ -80,6 +80,33 @@ describe('GeminiGateway 请求/响应', () => {
     const inlinePart = captured.contents[0].parts.find((p: any) => p.inline_data);
     expect(inlinePart.inline_data.mime_type).toBe('image/jpeg');
     expect(inlinePart.inline_data.data).toBe(Buffer.from('inputimg').toString('base64'));
+  });
+
+  it('thinking 模型:跳过 thought:true 中间图,只取最终成品', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      candidates: [{ content: { parts: [
+        { inline_data: { mime_type: 'image/png', data: Buffer.from('think1').toString('base64') }, thought: true },  // 中间思考图,跳过
+        { inline_data: { mime_type: 'image/png', data: Buffer.from('think2').toString('base64') }, thought: true },  // 中间思考图,跳过
+        { inline_data: { mime_type: 'image/png', data: Buffer.from('FINAL').toString('base64') }, thought_signature: 'sigB' }, // 成品
+      ] } }],
+    }), { status: 200 }) as any);
+    const urls = await new GeminiGateway().generateImageSync({ model: 'gemini-3-pro-image', prompt: 'x' }, new AbortController().signal);
+    expect(urls.length).toBe(1); // 只 1 张成品(2 张 thought 被跳过)
+  });
+
+  it('imageSize 仅 Gemini 3.x 发;2.5-flash 不发(只发 aspectRatio)', async () => {
+    let g3: any = null, g25: any = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_u, init: any) => {
+      const b = JSON.parse(init.body);
+      if (b.contents) { if (!g3) g3 = b; else g25 = b; }
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ inline_data: { mime_type: 'image/png', data: Buffer.from('x').toString('base64') } }] } }] }), { status: 200 });
+    });
+    await new GeminiGateway().generateImageSync({ model: 'gemini-3-pro-image', prompt: 'x', resolution: '2K', ratio: '16:9' }, new AbortController().signal);
+    await new GeminiGateway().generateImageSync({ model: 'gemini-2.5-flash-image', prompt: 'x', resolution: '2K', ratio: '16:9' }, new AbortController().signal);
+    expect(g3.generationConfig.imageConfig.imageSize).toBe('2K');   // 3.x 发 imageSize
+    expect(g3.generationConfig.imageConfig.aspectRatio).toBe('16:9');
+    expect(g25.generationConfig.imageConfig.imageSize).toBeUndefined(); // 2.5 不发 imageSize
+    expect(g25.generationConfig.imageConfig.aspectRatio).toBe('16:9'); // 但发 aspectRatio
   });
 
   it('camelCase 响应(inlineData)也能解析', async () => {
