@@ -121,11 +121,14 @@ const DOUBAO_SEED = [
   ['doubao-seedance-2.0:720P', 'doubao-seedance-2.0', 'video', '秒', '720P', 1.0],   // 4.97/5 秒 ≈ 1.0
   ['doubao-seedance-2.0:1080P', 'doubao-seedance-2.0', 'video', '秒', '1080P', 2.5], // 12.39/5 秒 ≈ 2.48→2.5
   ['doubao-seedance-2.0-fast:720P', 'doubao-seedance-2.0-fast', 'video', '秒', '720P', 0.8], // 4.0/5 秒 = 0.8
+  // Google Gemini(Nano Banana):美元×7.2 汇率折人民币(后台可调)。
+  ['gemini-2.5-flash-image', 'gemini-2.5-flash-image', 'image', '张', null, 0.28], // $0.039×7.2≈0.28→⌈×35⌉=10
+  ['gemini-3-pro-image', 'gemini-3-pro-image', 'image', '张', null, 0.96],         // $0.134×7.2≈0.96→⌈×35⌉=34
 ];
 for (const [id, key, modality, unit, variant, cost] of DOUBAO_SEED) {
   if (insMp.run(id, key, modality, unit, variant, cost, 1, 0, Date.now()).changes) mpSeeded++;
 }
-if (mpSeeded) console.log(`统一定价表 model_pricing 已种子 ${mpSeeded} 行(图片/视频/TTS/豆包)`);
+if (mpSeeded) console.log(`统一定价表 model_pricing 已种子 ${mpSeeded} 行(图片/视频/TTS/豆包/Gemini)`);
 
 // 强制 WAL checkpoint:让写入立即落主库,避免另起的服务进程读到旧快照
 try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch { /* noop */ }

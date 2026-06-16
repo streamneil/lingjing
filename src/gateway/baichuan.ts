@@ -14,6 +14,7 @@ import { getImageModel, sizeParams, isKnownModel } from './image-models.js';
 import { getVideoModel, isKnownVideoModel } from './video-models.js';
 import { getProviderKey } from './provider-keys.js'; // PR-1:key 从加密表取(回落 .env)
 import { ArkGateway } from './ark.js'; // PR-2a:火山(豆包)适配器
+import { GeminiGateway } from './gemini.js'; // PR-2a:Google AI Studio(Gemini / Nano Banana)适配器
 import type {
   CapabilityGateway,
   VideoSubmitUrls,
@@ -433,6 +434,7 @@ export function providerForModel(modelKey?: string): string {
 // 适配器单例(无状态,复用一份即可)。
 const _bailian = new BaichuanGateway();
 let _ark: ArkGateway | null = null;
+let _gemini: GeminiGateway | null = null;
 
 /**
  * 网关工厂 —— 按模型选 provider 适配器(PR-2a:多 provider 抽象)。
@@ -444,5 +446,8 @@ let _ark: ArkGateway | null = null;
 export function getGateway(modelKey?: string): CapabilityGateway {
   const provider = providerForModel(modelKey);
   if (provider === 'volc-ark') return (_ark ??= new ArkGateway());
+  // Gemini 仅实现 SyncImageGateway(图片同步,无视频/异步)。其模型 shape='S' → worker 只走同步图片路径
+  //   (456/483 处已 as SyncImageGateway 转型);此处 as 同口径返回(异步方法被调即类型不存在=用不到)。
+  if (provider === 'google-ai-studio') return (_gemini ??= new GeminiGateway()) as unknown as CapabilityGateway;
   return _bailian; // 默认百炼(s2v/未知/bailian 模型)
 }
