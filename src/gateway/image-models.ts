@@ -162,9 +162,14 @@ function parseResolutions(raw: string | null): ResolutionEntry[] | undefined {
 }
 
 /** 模型是否启用(DB override 优先;无 override 视为启用)。 */
+// 启用唯一真源 = DB override 行(2026-06 修「默认即启用」地雷):
+// 旧逻辑 `ov ? ... : !!IMAGE_MODELS[key]` 让无 override 行的代码模板模型默认上线,
+// wan2.7-image-pro 就是这样静默启用带占位价。现在:无 override 行 = 不启用。
+// 注意:这只管「是否出现在 listEnabledModels / 默认兜底」;getImageModel(显式 key)仍返回
+// disabled 模型(在飞/老 job 兼容,见 getImageModel)。
 function isEnabled(key: string): boolean {
   const ov = overrideRow(key);
-  return ov ? ov.enabled === 1 : !!IMAGE_MODELS[key];
+  return ov ? ov.enabled === 1 : false; // 无 DB 行 → 不启用(种子已给现有 7 个图片模型建 enabled=1 行)
 }
 
 /** 取模型定义(代码 + DB override 合并);未知/缺省 → 按 mode 选默认。

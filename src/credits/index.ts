@@ -13,6 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { db, type LedgerKind, type LedgerRow } from '../db/index.js';
 import { getImageModel } from '../gateway/image-models.js';
 import { getVideoModel, klingModeToResolution } from '../gateway/video-models.js';
+import { sellPrice, getConfig, markupX35 } from './pricing.js';
 
 const now = () => Date.now();
 
@@ -79,9 +80,26 @@ export function estimateVideoCost(duration: number, priceTier: number, resolutio
   return Math.max(MIN_COST, Math.ceil(cost));
 }
 
-/** 取(模型,分辨率,有声)对应的每秒售价积分(无快照时回落用;与 jobs.ts:videoPricePerSec 同规则)。
- *  价格已在 priceTier 系列字段编码(1080P/有声真实比值随模型变)。缺省回落:有声1080→有声720→1080→720。 */
+// 视频后台改价:video_model_override 按 "{key}:{variant}" 存真实成本/秒;查到→sellPrice 算售价。
+// 惰性 prepare(避免早于建表)。variant 命名:audio-1080P / audio-720P / 1080P / 720P。
+let _vovStmt: import('better-sqlite3').Statement | null = null;
+function videoOverrideCost(modelKey: string, variant: string): number | null {
+  _vovStmt ??= db.prepare('SELECT real_cost_yuan FROM video_model_override WHERE id = ? AND enabled = 1');
+  const row = _vovStmt.get(`${modelKey}:${variant}`) as { real_cost_yuan: number } | undefined;
+  return row ? row.real_cost_yuan : null;
+}
+function videoVariant(resolution: string, audio: boolean): string {
+  const res = resolution === '1080P' ? '1080P' : '720P';
+  return audio ? `audio-${res}` : res;
+}
+
+/** 取(模型,分辨率,有声)对应的每秒售价积分(无快照时回落用;与 jobs.ts 同规则)。
+ *  优先 video_model_override 真实成本 → sellPrice(后台可改、接全局倍率);无行则回落代码 priceTier 常数。
+ *  缺省档回落:有声1080→有声720→1080→720。 */
 export function videoPriceTier(def: ReturnType<typeof getVideoModel>, resolution: string, audio: boolean): number {
+  const ovCost = videoOverrideCost(def.key, videoVariant(resolution, audio));
+  if (ovCost != null) return sellPrice(ovCost); // 后台录了真实成本 → 自动售价(接倍率)
+  // 回落:代码常数(已是售价积分,迁移前/未录成本的兜底)
   const is1080 = resolution === '1080P';
   if (audio) {
     if (is1080) return def.priceTierAudio1080 ?? def.priceTierAudio ?? def.priceTier1080 ?? def.priceTier;
@@ -97,11 +115,19 @@ export function videoPriceTier(def: ReturnType<typeof getVideoModel>, resolution
 // 旧扁价 0.02 是真实成本的 ~7 倍(超收),订正为 0.0028。
 // 注:cosyvoice 高阶档(plus 1.5~2元/万)真实成本更高,分层售价(0.00525/0.007)待加 per-model 字段(TODO),
 // 当前扁价按主力 flash 档(0.0028)统一,高阶档暂亏本不上架。
-const TTS_PRICE_PER_CHAR = 0.0028; // flash 档售价/字符(0.8元/万 × 3.5);分层 TODO
-/** TTS 费用预估:ceil(字数 × 每字单价)。pricePerChar 缺省扁价。
+const TTS_PRICE_PER_CHAR = 0.0028; // flash 档售价/字符(0.8元/万 × 3.5);兜底常数
+// TTS 真实成本/字符(platform_config:tts_cost_per_char,默认 0.00008 = 0.8元/万)。
+// 售价/字 = 真实成本 × markup_x35(接全局倍率,后台改倍率 TTS 也随之变)。不在此 floor(floor 在每单总价)。
+function ttsPricePerChar(): number {
+  const cost = Number(getConfig('tts_cost_per_char'));
+  if (Number.isFinite(cost) && cost > 0) return cost * markupX35(); // 接全局倍率
+  return TTS_PRICE_PER_CHAR; // 未配 → 兜底常数
+}
+/** TTS 费用预估:ceil(字数 × 每字单价)。pricePerChar 缺省 = 配置真实成本×倍率(无则兜底常数)。
  *  pricePerChar 形参保留:遗留 job 的 costFor 读旧快照走它,保 reserve==settle(byte-identical)。 */
-export function estimateTtsCost(textLength: number, pricePerChar = TTS_PRICE_PER_CHAR): number {
-  return Math.max(MIN_COST, Math.ceil(textLength * pricePerChar));
+export function estimateTtsCost(textLength: number, pricePerChar?: number): number {
+  const per = typeof pricePerChar === 'number' ? pricePerChar : ttsPricePerChar();
+  return Math.max(MIN_COST, Math.ceil(textLength * per));
 }
 
 // ── AI 音乐(Fun-Music)按秒计价 ──

@@ -55,11 +55,13 @@ describe('默认兜底(P1-default:禁用默认 → 跳 enabled)', () => {
 
   it('默认模型被禁用 → getImageModel(undefined) 返回首个 enabled,非 disabled 默认', () => {
     addOv({ key: DEFAULT_IMAGE_MODEL, label: 'x', model_id: 'x', price_tier: 4, max_images: 4, enabled: 0, shape_template: DEFAULT_IMAGE_MODEL });
+    // 新规则(2026-06):enabled 唯一真源=DB 行。需显式给一个备选 enabled text2img 模型,否则全不启用。
+    addOv({ key: 'wan2.2-flash', label: 'y', model_id: 'wan2.2-t2i-flash', price_tier: 5, max_images: 4, enabled: 1, shape_template: 'wan2.2-flash' });
     const d = getImageModel(undefined, 'text2img');
     expect(d.modes).toContain('text2img');
     // 不应是被禁用的默认(它 enabled=0);应是另一个 enabled text2img 模型
     const ov = db.prepare('SELECT enabled FROM image_model_override WHERE key=?').get(d.key) as { enabled: number } | undefined;
-    expect(ov?.enabled ?? 1).toBe(1);
+    expect(ov?.enabled ?? 0).toBe(1); // 注:默认改为0(无行=不启用)
   });
 
   it('显式取 disabled 模型仍允许(在飞/老 job 兼容)', () => {
@@ -95,11 +97,14 @@ describe('sort_order 排序(listEnabledModels)', () => {
 
 describe('listEnabledModels / isKnownModel', () => {
   beforeEach(clearOv);
-  it('listEnabledModels 只列 enabled', () => {
+  it('listEnabledModels 只列 enabled(无 DB 行=不启用,2026-06 新规则)', () => {
     addOv({ key: 'z-image', label: 'x', model_id: 'x', price_tier: 2, max_images: 1, enabled: 0, shape_template: 'z-image' });
+    addOv({ key: 'qwen-image', label: 'x', model_id: 'qwen-image', price_tier: 9, max_images: 1, enabled: 1, shape_template: 'qwen-image' });
     const keys = listEnabledModels().map((d) => d.key);
     expect(keys).not.toContain('z-image'); // 被禁
-    expect(keys).toContain('qwen-image'); // 仍启用
+    expect(keys).toContain('qwen-image'); // 有 enabled 行 → 启用
+    // 无 DB 行的代码模板模型不再默认启用(治"默认即启用"地雷)
+    expect(keys).not.toContain('wan2.7-image-pro');
   });
   it('isKnownModel:代码 key + DB 新增 key', () => {
     expect(isKnownModel('z-image')).toBe(true);

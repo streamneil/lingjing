@@ -184,6 +184,27 @@
       </table>
     </div>
 
+    <!-- ── 定价管理(全局倍率 + 视频/TTS 成本)── -->
+    <div class="ph" style="margin-top:34px">
+      <div><h1>定价管理</h1><p>全局毛利倍率(一改全场重算)+ 视频/TTS 真实成本。售价 = ⌈成本×倍率×10⌉ 自动算。图片定价在上方「AI 图片模型」。改完即时生效(在飞任务不受影响)。</p></div>
+    </div>
+    <div id="priceAlert" style="display:none;margin:0 0 14px;padding:10px 14px;border-radius:10px;background:#3a1d1d;border:1px solid #6e2b2b;color:#ffb4b4;font-size:13px"></div>
+    <div class="tbl" style="margin-bottom:18px">
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 16px">
+        <label style="font-weight:600">全局毛利倍率</label>
+        <input id="markupInput" type="number" min="1" step="0.1" style="width:90px" oninput="syncMarkupPreview()">
+        <span style="font-size:12.5px;color:#7d8590">倍(售价 = 成本×此倍率×10积分;地板 <b id="markupFloor">1.0</b>,低于会赔本被拒)</span>
+        <span id="markupPreview" style="font-size:12.5px;color:var(--blue)"></span>
+        <button class="btn-new" style="margin-left:auto" onclick="saveMarkup()">保存倍率</button>
+      </div>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>模态</th><th>模型</th><th>档位</th><th>真实成本(元)</th><th>售价(自动)</th><th>来源</th><th>启用</th><th style="text-align:right">操作</th></tr></thead>
+        <tbody id="vovRows"><tr><td colspan="8" class="empty">加载中…</td></tr></tbody>
+      </table>
+    </div>
+
     <!-- ── 积分套餐管理 ── -->
     <div class="ph" style="margin-top:34px">
       <div><h1>积分套餐</h1><p>管理定价页展示的套餐:价格 / 积分 / 赠送 / 卖点 / 推荐标签 / 启用 / 排序。改完即时生效到前台定价页。价格留空 = 面议。</p></div>
@@ -469,6 +490,7 @@
           </div></td>
         </tr>`).join('');
       await loadModels();
+      await loadPricing();
       await loadPlans();
       await loadLeads();
       await loadOrders();
@@ -956,6 +978,66 @@
   function startMonPoll(){ stopMonPoll(); loadMonitor(); monTimer=setInterval(loadMonitor,10000); }
   function stopMonPoll(){ if(monTimer){ clearInterval(monTimer); monTimer=null; } }
   document.addEventListener('visibilitychange',()=>{ if(document.hidden) stopMonPoll(); else startMonPoll(); });
+
+  // ── 定价管理(全局倍率 + 视频/TTS 成本)──
+  let pricingCache=null;
+  async function loadPricing(){
+    const tb=document.getElementById('vovRows');
+    try{
+      const d=await PA('GET','/api/pricing'); pricingCache=d;
+      document.getElementById('markupInput').value=d.markup;
+      document.getElementById('markupFloor').textContent=d.floor;
+      syncMarkupPreview();
+      const al=document.getElementById('priceAlert');
+      if(d.alerts&&d.alerts.length){ al.style.display=''; al.innerHTML='⚠ '+d.alerts.map(esc).join(' / '); }
+      else al.style.display='none';
+      const rows=[];
+      for(const r of d.videoRows){
+        rows.push(`<tr>
+          <td>视频</td><td>${esc(r.model)}</td><td>${esc(r.variant||'-')}</td>
+          <td><input type="number" min="0" step="0.01" value="${r.realCostYuan}" style="width:90px" id="vc_${esc(r.id)}"></td>
+          <td><b id="vs_${esc(r.id)}">${r.sell}</b> 积分/秒</td>
+          <td><span style="font-size:11px;color:${r.costSource==='estimate'?'#d08770':'#7d8590'}">${r.costSource}</span></td>
+          <td>${r.enabled?'✓':'✗'}</td>
+          <td style="text-align:right"><button class="act pri" onclick="saveVideoCost('${esc(r.id)}')">保存</button></td>
+        </tr>`);
+      }
+      const t=d.ttsRow;
+      rows.push(`<tr>
+        <td>语音</td><td>${esc(t.model)}</td><td>每字</td>
+        <td><input type="number" min="0" step="0.00001" value="${t.realCostYuan}" style="width:110px" id="vc_tts"></td>
+        <td><b id="vs_tts">${t.sellPer10k}</b> 积分/万字</td>
+        <td><span style="font-size:11px;color:#7d8590">doc</span></td>
+        <td>✓</td>
+        <td style="text-align:right"><button class="act pri" onclick="saveTtsCost()">保存</button></td>
+      </tr>`);
+      tb.innerHTML=rows.join('')||'<tr><td colspan="8" class="empty">无可计费模型</td></tr>';
+    }catch(e){ tb.innerHTML='<tr><td colspan="8" class="empty">加载失败</td></tr>'; }
+  }
+  function syncMarkupPreview(){
+    const m=Number(document.getElementById('markupInput').value);
+    const fl=Number(document.getElementById('markupFloor').textContent)||1;
+    const el=document.getElementById('markupPreview');
+    if(!(m>0)){ el.textContent=''; return; }
+    el.textContent = m<fl ? `⚠ 低于地板 ${fl},会赔本(保存会被拒)` : `示例:成本0.5元 → 售价 ⌈0.5×${m}×10⌉=${Math.ceil(0.5*m*10)} 积分`;
+    el.style.color = m<fl ? '#ffb4b4' : 'var(--blue)';
+  }
+  async function saveMarkup(){
+    const m=Number(document.getElementById('markupInput').value);
+    try{ await PA('PUT','/api/pricing/markup',{markup:m}); toast('✓ 倍率已保存,全场重算'); await loadPricing(); }
+    catch(e){ toast('✗ '+(e.message||'保存失败')); }
+  }
+  window.saveVideoCost=async(id)=>{
+    const cost=Number(document.getElementById('vc_'+id).value);
+    try{ await PA('PUT','/api/pricing/video/'+encodeURIComponent(id),{realCostYuan:cost,costSource:'doc'}); toast('✓ 已保存'); await loadPricing(); }
+    catch(e){ toast('✗ '+(e.message||'保存失败')); }
+  };
+  window.saveTtsCost=async()=>{
+    const cost=Number(document.getElementById('vc_tts').value);
+    try{ await PA('PUT','/api/pricing/tts',{realCostYuan:cost}); toast('✓ 已保存'); await loadPricing(); }
+    catch(e){ toast('✗ '+(e.message||'保存失败')); }
+  };
+  window.syncMarkupPreview=syncMarkupPreview; window.saveMarkup=saveMarkup;
 
   // ── 积分套餐管理 ──
   let editingPlan=null, plansCache=[];
