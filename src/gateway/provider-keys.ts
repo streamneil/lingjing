@@ -88,3 +88,15 @@ export function setProviderKey(providerId: string, plainKey: string): void {
 export function clearProviderKeyCache(): void {
   _cache.clear();
 }
+
+/** 取某 provider 的接入地址(base_url)。无行返回 undefined(调用方兜底)。
+ *  PR-2a:多 provider 网关按此拼端点(火山 ark.cn-beijing.volces.com/api/v3)。 */
+export function getProviderBaseUrl(providerId: string): string | undefined {
+  return providerRow(providerId)?.base_url;
+}
+
+/** provider 是否启用(admin 停用某厂商后,getGateway 可据此拒绝)。无行视为启用(代码兜底)。 */
+export function isProviderEnabled(providerId: string): boolean {
+  const row = providerRow(providerId);
+  return row ? row.enabled === 1 : true;
+}

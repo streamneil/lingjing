@@ -34,7 +34,8 @@ export type VideoTask = 'first_frame' | 'first_last' | 'reference' | 'edit';
 export interface VideoModelDef {
   key: string; // 内部 key(input.model 存它)
   label: string; // UI 标签
-  modelId: string; // 百炼实际 model 名(可灵带 'kling/' 前缀)
+  modelId: string; // 厂商实际 model 名(可灵带 'kling/' 前缀;豆包如 doubao-seedance-2.0)
+  provider?: string; // 接入厂商(model-access-platform PR-2a);缺省 'bailian'。豆包='volc-ark'。
   shape: VideoShape;
   resolutions: ('720P' | '1080P')[]; // 支持的分辨率档(可灵经 mode 映射:std→720P、pro→1080P)
   ratios: string[]; // 支持的宽高比(i2v 首帧/首尾帧跟首帧自动 → 空数组)
@@ -186,6 +187,35 @@ export const VIDEO_MODELS: Record<string, VideoModelDef> = {
     tasks: ['edit'], maxRefImages: 4, promptRequired: false,
     videoDurRange: [2, 10], videoMaxMB: 100, // 输出=输入(或截断);无 15s 上限
     supportsTruncate: true, supportsAudioOrigin: true,
+  },
+
+  // ── 火山引擎 豆包 Seedance(PR-2a;provider='volc-ark',走 ark.ts 适配器)──
+  // shape 复用 V_DASH 占位(ark 适配器自建请求体,不读 shape)。文本+图(首帧/首尾帧/参考生)+ 有声。
+  // ⚠ 价格未录(火山按 token 计,非每秒固定价)→ priceTier 占位、cost_source 待用户在 admin 录真实成本前不启用。
+  'doubao-seedance-2.0': {
+    key: 'doubao-seedance-2.0', label: '豆包 Seedance 2.0', modelId: 'doubao-seedance-2.0', provider: 'volc-ark',
+    shape: 'V_DASH',
+    resolutions: ['720P', '1080P'],
+    ratios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
+    durationRange: [4, 15], defaultDuration: 5,
+    maxPromptChars: 500,
+    // 火山价格示例(5秒720p)折每秒:720P 4.97/5≈1.0→⌈1.0×35⌉=35;1080P 12.39/5≈2.5→⌈2.5×35⌉=88(model_pricing 为准)。
+    priceTier: 35, priceTier1080: 88,
+    supportsAudio: true, // generate_audio
+    supportsNegative: false, supportsPromptExtend: false,
+    tasks: ['first_frame', 'first_last', 'reference'], maxRefImages: 9, promptRequired: false,
+  },
+  'doubao-seedance-2.0-fast': {
+    key: 'doubao-seedance-2.0-fast', label: '豆包 Seedance 2.0 Fast', modelId: 'doubao-seedance-2.0-fast', provider: 'volc-ark',
+    shape: 'V_DASH',
+    resolutions: ['720P'], // Fast 不支持 1080P
+    ratios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
+    durationRange: [4, 15], defaultDuration: 5,
+    maxPromptChars: 500,
+    priceTier: 28, // 4.0/5 秒=0.8→⌈0.8×35⌉=28
+    supportsAudio: true,
+    supportsNegative: false, supportsPromptExtend: false,
+    tasks: ['first_frame', 'first_last', 'reference'], maxRefImages: 9, promptRequired: false,
   },
 };
 

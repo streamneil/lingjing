@@ -17,12 +17,12 @@ const { BaichuanGateway } = await import('../src/gateway/baichuan.js');
 afterEach(() => vi.restoreAllMocks());
 
 describe('i2v registry 自洽性', () => {
-  it('4 模型 tasks 合法 / modelId 非空 / 全 V_DASH', () => {
+  it('i2v 模型 tasks 合法 / modelId 非空 / 全 V_DASH(含豆包 seedance)', () => {
     const i2v = listI2VModels();
-    expect(i2v.length).toBe(4);
+    expect(i2v.length).toBe(6); // 万相2.7 i2v/r2v + HappyHorse i2v/r2v + 豆包 seedance 2.0 / 2.0-fast(PR-2a)
     const valid = new Set(['first_frame', 'first_last', 'reference']);
     for (const d of i2v) {
-      expect(d.shape).toBe('V_DASH'); // 本轮 4 模型全 V_DASH(可灵 i2v 降范围)
+      expect(d.shape).toBe('V_DASH'); // 全 V_DASH(豆包 seedance 复用 V_DASH 占位,走 ark 适配器)
       expect(d.modelId.length).toBeGreaterThan(0);
       expect(d.tasks.length).toBeGreaterThan(0);
       expect(d.tasks.every((t) => valid.has(t))).toBe(true);
