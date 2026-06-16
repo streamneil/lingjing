@@ -109,7 +109,23 @@ for (const [key, variant, cost] of VIDEO_SEED) {
   if (insMp.run(`${key}:${variant}`, key, 'video', '秒', variant, cost, 1, 0, Date.now()).changes) mpSeeded++;
 }
 if (insMp.run('tts', 'tts', 'tts', '万字', '每字', 0.00008, 1, 0, Date.now()).changes) mpSeeded++;
-if (mpSeeded) console.log(`统一定价表 model_pricing 已种子 ${mpSeeded} 行(图片/视频/TTS)`);
+
+// ── 火山豆包真实定价(PR-2a;火山文档价格示例折算)──
+// 图片:固定元/张(doc)。视频:5秒 720p 价格示例折每秒(2.0=4.97/5≈1.0、fast=4.0/5=0.8)。
+// 真实成本入库 → sellPrice=⌈成本×35⌉ 自动算 → isEnabled=true 上线。
+const DOUBAO_SEED = [
+  // [id, model_key, modality, unit, variant, realCost]
+  ['doubao-seedream-4.0', 'doubao-seedream-4.0', 'image', '张', null, 0.20],
+  ['doubao-seedream-4.5', 'doubao-seedream-4.5', 'image', '张', null, 0.25],
+  ['doubao-seedream-5.0-lite', 'doubao-seedream-5.0-lite', 'image', '张', null, 0.22],
+  ['doubao-seedance-2.0:720P', 'doubao-seedance-2.0', 'video', '秒', '720P', 1.0],   // 4.97/5 秒 ≈ 1.0
+  ['doubao-seedance-2.0:1080P', 'doubao-seedance-2.0', 'video', '秒', '1080P', 2.5], // 12.39/5 秒 ≈ 2.48→2.5
+  ['doubao-seedance-2.0-fast:720P', 'doubao-seedance-2.0-fast', 'video', '秒', '720P', 0.8], // 4.0/5 秒 = 0.8
+];
+for (const [id, key, modality, unit, variant, cost] of DOUBAO_SEED) {
+  if (insMp.run(id, key, modality, unit, variant, cost, 1, 0, Date.now()).changes) mpSeeded++;
+}
+if (mpSeeded) console.log(`统一定价表 model_pricing 已种子 ${mpSeeded} 行(图片/视频/TTS/豆包)`);
 
 // 强制 WAL checkpoint:让写入立即落主库,避免另起的服务进程读到旧快照
 try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch { /* noop */ }

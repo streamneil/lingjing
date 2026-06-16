@@ -32,7 +32,8 @@ export type ImageMode = 'text2img' | 'img2img';
 export interface ImageModelDef {
   key: string; // 内部 key(input.model 存它)
   label: string; // UI 标签
-  modelId: string; // 百炼实际 model 名
+  modelId: string; // 厂商实际 model 名(豆包如 doubao-seedream-4.0)
+  provider?: string; // 接入厂商(model-access-platform PR-2a);缺省 'bailian'。豆包='volc-ark'。
   shape: ImageShape;
   sizeKind: SizeKind;
   modes: ImageMode[]; // 支持的模式
@@ -105,6 +106,27 @@ export const IMAGE_MODELS: Record<string, ImageModelDef> = {
     shape: 'A_EDIT', sizeKind: 'keyword', modes: ['text2img', 'img2img'],
     // 真实成本 0.50 元/张 × 35 = 18(原 10 是偏低占位,会亏:只收 2 倍成本而非 3.5 倍)。
     maxImages: 4, maxInputImages: 5, maxResolution: '2K', priceTier: 18, supportsBbox: true,
+  },
+
+  // ── 火山引擎 豆包 Seedream(PR-2a;provider='volc-ark',走 ark.ts SyncImageGateway)──
+  // shape='S':同步生成(走 generateImageSync/editImage,与百炼 S 形状同 worker 路径)。
+  // sizeKind='keyword':size 传 '2K'/'4K' 档(ark 适配器透传)。文生图 + 多图融合(img2img)。
+  // ⚠ 价格未录(火山按 token 计)→ priceTier 占位、admin 录真实成本前不启用。
+  // 火山真实固定价(元/张):4.0=0.2→⌈×35⌉=7;4.5=0.25→9;5.0-lite=0.22→8(model_pricing 为准)。
+  'doubao-seedream-4.0': {
+    key: 'doubao-seedream-4.0', label: '豆包 Seedream 4.0', modelId: 'doubao-seedream-4.0', provider: 'volc-ark',
+    shape: 'S', sizeKind: 'keyword', modes: ['text2img', 'img2img'],
+    maxImages: 1, maxInputImages: 5, maxResolution: '4K', priceTier: 7,
+  },
+  'doubao-seedream-4.5': {
+    key: 'doubao-seedream-4.5', label: '豆包 Seedream 4.5', modelId: 'doubao-seedream-4.5', provider: 'volc-ark',
+    shape: 'S', sizeKind: 'keyword', modes: ['text2img', 'img2img'],
+    maxImages: 1, maxInputImages: 5, maxResolution: '4K', priceTier: 9,
+  },
+  'doubao-seedream-5.0-lite': {
+    key: 'doubao-seedream-5.0-lite', label: '豆包 Seedream 5.0 Lite', modelId: 'doubao-seedream-5.0-lite', provider: 'volc-ark',
+    shape: 'S', sizeKind: 'keyword', modes: ['text2img', 'img2img'],
+    maxImages: 1, maxInputImages: 5, maxResolution: '4K', priceTier: 8,
   },
 };
 

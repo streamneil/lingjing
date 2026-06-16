@@ -174,7 +174,7 @@ async function renderSegment(
   // 2. 网关提交(wan2.2-s2v:image_url + audio_url)
   const submitRes: '480P' | '720P' = input.resolution === '480P' ? '480P' : '720P';
   const urls: VideoSubmitUrls = { imageUrl, audioUrl, resolution: submitRes };
-  const gateway = getGateway(job.tenant_id);
+  const gateway = getGateway(); // s2v 数字人固定百炼 wan2.2-s2v(无 model 字段)
   const providerTaskId = await gateway.submitVideo(urls);
   setProviderTaskId(job.id, providerTaskId);
 
@@ -266,7 +266,7 @@ async function runVideoT2VJob(job: JobRow): Promise<void> {
   if (!pre.allowed) throw new Error(`送审拒绝:${pre.reason}`);
 
   // 2. 网关提交(按 shape 组体,返回 task_id)
-  const gateway = getGateway(job.tenant_id);
+  const gateway = getGateway(input.model);
   const providerTaskId = await gateway.submitVideoT2V(input);
   setProviderTaskId(job.id, providerTaskId);
 
@@ -363,7 +363,7 @@ async function runMediaVideoJob(
   if (refs.length) input.imageRefs = await Promise.all(refs.map((k) => publisher.publish(k)));
 
   // 3. 网关提交(按 task 组 media)+ 轮询
-  const gateway = getGateway(job.tenant_id);
+  const gateway = getGateway(input.model);
   const providerTaskId = await gateway.submitVideoT2V(input);
   setProviderTaskId(job.id, providerTaskId);
 
@@ -416,7 +416,7 @@ async function runImageGenJob(job: JobRow): Promise<void> {
   const pre = await moderatePrompt(input.prompt);
   if (!pre.allowed) throw new Error(`送审拒绝:${pre.reason}`);
 
-  const gateway = getGateway(job.tenant_id);
+  const gateway = getGateway(input.model);
   const providerTaskId = await gateway.submitImage(input);
   setProviderTaskId(job.id, providerTaskId);
 
@@ -453,7 +453,7 @@ async function runImageEditJob(job: JobRow): Promise<void> {
   const imageUrls = await Promise.all(refs.map((k) => publisher.publish(k)));
 
   // 同步调:AbortController 硬超时(jobTimeoutMs)。超时→abort→fetch 抛 AbortError→冒泡标 failed+release。
-  const gateway = getGateway(job.tenant_id) as unknown as import('../gateway/types.js').SyncImageGateway;
+  const gateway = getGateway(input.model) as unknown as import('../gateway/types.js').SyncImageGateway;
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), config.baichuan.jobTimeoutMs);
   let resultUrls: string[];
@@ -480,7 +480,7 @@ async function runImageGenSyncJob(job: JobRow): Promise<void> {
   const pre = await moderatePrompt(input.prompt);
   if (!pre.allowed) throw new Error(`送审拒绝:${pre.reason}`);
 
-  const gateway = getGateway(job.tenant_id) as unknown as import('../gateway/types.js').SyncImageGateway;
+  const gateway = getGateway(input.model) as unknown as import('../gateway/types.js').SyncImageGateway;
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), config.baichuan.jobTimeoutMs);
   let resultUrls: string[];
@@ -514,7 +514,7 @@ async function runImageEditAsyncJob(job: JobRow): Promise<void> {
   const publisher = getMediaPublisher(tenantDelivery(job.tenant_id));
   input.imageRefs = await Promise.all(refs.map((k) => publisher.publish(k)));
 
-  const gateway = getGateway(job.tenant_id);
+  const gateway = getGateway(input.model);
   const providerTaskId = await gateway.submitImageEdit(input);
   setProviderTaskId(job.id, providerTaskId);
 

@@ -48,7 +48,7 @@ describe('edit registry 自洽 + 三向互斥', () => {
     const i2v = listI2VModels().map((d) => d.key);
     const edit = listEditModels().map((d) => d.key);
     expect(t2v.length).toBe(3);
-    expect(i2v.length).toBe(4); // 不含 edit
+    expect(i2v.length).toBe(6); // 万相2.7 i2v/r2v + HappyHorse i2v/r2v + 豆包 seedance 2.0 / 2.0-fast(PR-2a);不含 edit
     expect(edit.length).toBe(2);
     const inter = (a: string[], b: string[]) => a.filter((k) => b.includes(k));
     expect(inter(t2v, i2v)).toEqual([]);

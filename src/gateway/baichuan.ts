@@ -10,9 +10,10 @@
 // 参考:https://help.aliyun.com/zh/model-studio/wan-s2v-api
 
 import { config } from '../config.js';
-import { getImageModel, sizeParams } from './image-models.js';
-import { getVideoModel } from './video-models.js';
+import { getImageModel, sizeParams, isKnownModel } from './image-models.js';
+import { getVideoModel, isKnownVideoModel } from './video-models.js';
 import { getProviderKey } from './provider-keys.js'; // PR-1:key 从加密表取(回落 .env)
+import { ArkGateway } from './ark.js'; // PR-2a:火山(豆包)适配器
 import type {
   CapabilityGateway,
   VideoSubmitUrls,
@@ -421,11 +422,27 @@ export function imageSize(ratio?: string, resolution?: string): string {
   return `${w}*${h}`;
 }
 
+/** 解析模型 key 的接入厂商(PR-2a)。查 image/video 注册表的 provider 字段;缺省/未知 → 'bailian'。 */
+export function providerForModel(modelKey?: string): string {
+  if (!modelKey) return 'bailian';
+  if (isKnownVideoModel(modelKey)) return getVideoModel(modelKey).provider ?? 'bailian';
+  if (isKnownModel(modelKey)) return getImageModel(modelKey).provider ?? 'bailian';
+  return 'bailian'; // 未知 key 走百炼(老 job 兼容)
+}
+
+// 适配器单例(无状态,复用一份即可)。
+const _bailian = new BaichuanGateway();
+let _ark: ArkGateway | null = null;
+
 /**
- * 网关工厂 —— 厂商凭证/实现的切换点(护城河:一套代码两种交付)。
- * Slice1 单租户:返回平台百炼网关。
- * Slice2 多租户 + 私有化:按 tenant 的厂商凭证配置返回对应网关(客户自有 key)。
+ * 网关工厂 —— 按模型选 provider 适配器(PR-2a:多 provider 抽象)。
+ * 入参从 tenantId 改为 modelKey(eng-review:7 处 worker 调用点同步改)。
+ *   - 模型 provider='bailian'(或未指定/未知)→ 百炼适配器(行为与改造前完全一致,零变更)。
+ *   - 模型 provider='volc-ark' → 火山(豆包)适配器。
+ * 返回类型仍是 CapabilityGateway(接口不变);同步图片走 SyncImageGateway(两适配器都实现)。
  */
-export function getGateway(_tenantId: string = config.defaultTenantId): CapabilityGateway {
-  return new BaichuanGateway();
+export function getGateway(modelKey?: string): CapabilityGateway {
+  const provider = providerForModel(modelKey);
+  if (provider === 'volc-ark') return (_ark ??= new ArkGateway());
+  return _bailian; // 默认百炼(s2v/未知/bailian 模型)
 }

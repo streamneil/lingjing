@@ -491,6 +491,9 @@ db.exec(`
     migrated++;
     if (migrated) console.log(`[migrate] model_pricing 已从旧表搬入 ${migrated} 行(图片/视频/TTS 统一定价)`);
   }
+  // 注:豆包真实定价由 seed-demo 种(同所有产品模型),不在此启动迁移里种 —— 否则会污染测试 :memory: 库
+  //   (测试不跑 seed-demo,旧图片模型无 model_pricing 行,若此处单种豆包会让豆包成为唯一 enabled 图片模型,
+  //    破 getImageModel 默认兜底契约)。存量生产库补豆包:重跑 seed-demo 或 admin 定价页录价。
 }
 
 export interface ModelPricingRow {
@@ -550,6 +553,12 @@ db.exec(`CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEX
     db.prepare(`INSERT OR REPLACE INTO schema_meta (key,value) VALUES ('provider_migrated','1')`).run();
     console.log(`[migrate] provider 表已种子 bailian(${cipher ? '密钥已加密入库' : '密钥留 .env 回落(未配 MASTER_KEY)'})`);
   }
+  // 火山引擎方舟(豆包,PR-2a):独立 INSERT OR IGNORE,存量库(已有 bailian)也补这行。
+  //   key 不预置(用户在 admin 厂商页贴);enabled=1(provider 启用 ≠ 模型启用,模型各自 enabled 控)。
+  db.prepare(
+    `INSERT OR IGNORE INTO provider (id,name,adapter_key,base_url,key_version,enabled,updated_at)
+     VALUES ('volc-ark','火山引擎(豆包)','volc-ark','https://ark.cn-beijing.volces.com/api/v3',1,1,?)`,
+  ).run(Date.now());
 }
 
 export interface ProviderRow {
