@@ -95,6 +95,22 @@ if (vSeeded) console.log(`视频模型成本已种子 ${vSeeded} 行(真实元/�
 // ── TTS 真实成本/字符 + 全局参数兜底(platform_config 建表时已 seed markup;这里补 TTS 成本)──
 db.prepare(`INSERT OR IGNORE INTO platform_config (key,value) VALUES ('tts_cost_per_char','0.00008')`).run(); // 0.8元/万字符
 
+// ── model_pricing:全模态统一定价表直种(2026-06,新装直种免依赖 db/index.ts 迁移)──
+// 复用上面 IMG_SEED / VIDEO_SEED 的真实成本;TTS 单行。INSERT OR IGNORE 幂等(已有则不动 admin 改过的)。
+const insMp = db.prepare(
+  `INSERT OR IGNORE INTO model_pricing (id,model_key,modality,unit,variant,real_cost_yuan,cost_source,enabled,sort_order,updated_at)
+   VALUES (?,?,?,?,?,?,'doc',?,?,?)`,
+);
+let mpSeeded = 0;
+for (const [key, , , , cost, , , , sort] of IMG_SEED) {
+  if (insMp.run(key, key, 'image', '张', null, cost, 1, sort ?? 0, Date.now()).changes) mpSeeded++;
+}
+for (const [key, variant, cost] of VIDEO_SEED) {
+  if (insMp.run(`${key}:${variant}`, key, 'video', '秒', variant, cost, 1, 0, Date.now()).changes) mpSeeded++;
+}
+if (insMp.run('tts', 'tts', 'tts', '万字', '每字', 0.00008, 1, 0, Date.now()).changes) mpSeeded++;
+if (mpSeeded) console.log(`统一定价表 model_pricing 已种子 ${mpSeeded} 行(图片/视频/TTS)`);
+
 // 强制 WAL checkpoint:让写入立即落主库,避免另起的服务进程读到旧快照
 try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch { /* noop */ }
 

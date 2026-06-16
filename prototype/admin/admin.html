@@ -27,7 +27,19 @@
   .top .right{display:flex;align-items:center;gap:14px;font-size:13px;color:var(--t3)}
   .logout{background:none;border:1px solid var(--line);color:var(--t2);padding:7px 14px;border-radius:999px;font-family:var(--f);font-size:12.5px;cursor:pointer;transition:.15s}
   .logout:hover{border-color:var(--line-hi);color:var(--t1)}
-  .page{max-width:1080px;margin:0 auto;padding:30px}
+  /* 左侧菜单 + 内容区布局 */
+  .shell{display:flex;align-items:flex-start}
+  .sidenav{position:sticky;top:61px;align-self:flex-start;width:200px;flex:0 0 200px;height:calc(100vh - 61px);overflow-y:auto;border-right:1px solid var(--line);padding:18px 12px;background:var(--bg)}
+  .sidenav .nav-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:none;color:var(--t2);font-family:var(--f);font-size:13.5px;font-weight:500;padding:10px 12px;border-radius:10px;cursor:pointer;transition:.15s;margin-bottom:2px}
+  .sidenav .nav-item:hover{background:var(--card);color:var(--t1)}
+  .sidenav .nav-item.on{background:var(--card-hi);color:var(--t1);font-weight:600}
+  .sidenav .nav-item.on .nav-dot{background:var(--amber)}
+  .sidenav .nav-dot{width:6px;height:6px;border-radius:50%;background:var(--t4);flex:0 0 6px;transition:.15s}
+  .sidenav .nav-badge{margin-left:auto;background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:1px 7px;border-radius:999px;display:none}
+  /* 内容区:占满剩余宽度,内部仍居中限宽 */
+  .page{flex:1;min-width:0;max-width:1080px;margin:0 auto;padding:30px}
+  .sec{display:none}
+  .sec.on{display:block}
   .ph{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:22px}
   .ph h1{font-size:24px;font-weight:700;letter-spacing:-.4px}
   .ph p{font-size:13px;color:var(--t3);margin-top:5px}
@@ -126,8 +138,23 @@
     <div class="right"><span id="who"></span><button class="logout" id="logoutBtn">登出</button></div>
   </div>
 
+  <div class="shell">
+  <!-- ── 左侧菜单(SPA 分区导航,hash 路由)── -->
+  <nav class="sidenav" id="sidenav">
+    <button class="nav-item" data-nav="monitor"><span class="nav-dot"></span>运营监控</button>
+    <button class="nav-item" data-nav="tenants"><span class="nav-dot"></span>租户管理</button>
+    <button class="nav-item" data-nav="image-models"><span class="nav-dot"></span>AI 图片模型</button>
+    <button class="nav-item" data-nav="pricing"><span class="nav-dot"></span>定价管理</button>
+    <button class="nav-item" data-nav="plans"><span class="nav-dot"></span>积分套餐</button>
+    <button class="nav-item" data-nav="leads"><span class="nav-dot"></span>意向线索<span class="nav-badge" id="navLeadBadge"></span></button>
+    <button class="nav-item" data-nav="orders"><span class="nav-dot"></span>对公收款</button>
+    <button class="nav-item" data-nav="invoices"><span class="nav-dot"></span>发票开具</button>
+    <button class="nav-item" data-nav="audit"><span class="nav-dot"></span>平台审计</button>
+  </nav>
+
   <div class="page">
     <!-- ── 运营监控驾驶舱 ── -->
+    <section class="sec" data-sec="monitor" id="sec-monitor">
     <div class="ph">
       <div>
         <h1>运营监控</h1>
@@ -161,8 +188,11 @@
         <tbody id="monTenantRows"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
+    </section>
 
-    <div class="ph" style="margin-top:40px">
+    <!-- ── 租户管理 ── -->
+    <section class="sec" data-sec="tenants" id="sec-tenants">
+    <div class="ph">
       <div><h1>租户管理</h1><p id="subline">管理机构、开设账号、充值点数</p></div>
       <button class="btn-new" onclick="openTenant()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>新建租户</button>
     </div>
@@ -172,8 +202,11 @@
         <tbody id="rows"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
+    </section>
 
-    <div class="ph" style="margin-top:34px">
+    <!-- ── AI 图片模型 ── -->
+    <section class="sec" data-sec="image-models" id="sec-image-models">
+    <div class="ph">
       <div><h1>AI 图片模型</h1><p>管理显示名 / 模型名 / 支持模式(文生图·图生图)/ 启用 / 价格 / 张数 / 排序。同步异步等底层契约由代码定义。</p></div>
       <button class="btn-new" onclick="openModel()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>新增模型</button>
     </div>
@@ -183,10 +216,26 @@
         <tbody id="modelRows"><tr><td colspan="9" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
+    </section>
+
+    <!-- ── 定价管理 ── -->
+    <section class="sec" data-sec="pricing" id="sec-pricing">
+
+    <!-- 统一定价(全模态)—— 未来主推入口,对接 /api/pricing/models 新路由 -->
+    <div class="ph">
+      <div><h1>统一定价(全模态)</h1><p>图片 / 视频 / 语音一张表统一管理:真实成本(可编辑)→ 售价积分(后端按毛利自动算)+ 启停。启用时后端过保本闸,亏本会被拒。</p></div>
+    </div>
+    <div id="uniAlert" style="display:none;margin:0 0 14px;padding:10px 14px;border-radius:10px;background:#3a1d1d;border:1px solid #6e2b2b;color:#ffb4b4;font-size:13px"></div>
+    <div class="tbl" style="margin-bottom:30px">
+      <table>
+        <thead><tr><th>模态</th><th>模型</th><th>档位</th><th>单位</th><th>真实成本(元)</th><th>售价(积分)</th><th>启用</th><th style="text-align:right">操作</th></tr></thead>
+        <tbody id="uniRows"><tr><td colspan="8" class="empty">加载中…</td></tr></tbody>
+      </table>
+    </div>
 
     <!-- ── 定价管理(全局倍率 + 视频/TTS 成本)── -->
     <div class="ph" style="margin-top:34px">
-      <div><h1>定价管理</h1><p>全局毛利倍率(一改全场重算)+ 视频/TTS 真实成本。售价 = ⌈成本×倍率×10⌉ 自动算。图片定价在上方「AI 图片模型」。改完即时生效(在飞任务不受影响)。</p></div>
+      <div><h1>定价管理(经典)</h1><p>全局毛利倍率(一改全场重算)+ 视频/TTS 真实成本。售价 = ⌈成本×倍率×10⌉ 自动算。图片定价在「AI 图片模型」。改完即时生效(在飞任务不受影响)。</p></div>
     </div>
     <div id="priceAlert" style="display:none;margin:0 0 14px;padding:10px 14px;border-radius:10px;background:#3a1d1d;border:1px solid #6e2b2b;color:#ffb4b4;font-size:13px"></div>
     <div class="tbl" style="margin-bottom:18px">
@@ -204,9 +253,11 @@
         <tbody id="vovRows"><tr><td colspan="8" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
+    </section>
 
     <!-- ── 积分套餐管理 ── -->
-    <div class="ph" style="margin-top:34px">
+    <section class="sec" data-sec="plans" id="sec-plans">
+    <div class="ph">
       <div><h1>积分套餐</h1><p>管理定价页展示的套餐:价格 / 积分 / 赠送 / 卖点 / 推荐标签 / 启用 / 排序。改完即时生效到前台定价页。价格留空 = 面议。</p></div>
       <button class="btn-new" onclick="openPlan()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>新增套餐</button>
     </div>
@@ -216,9 +267,11 @@
         <tbody id="planRows"><tr><td colspan="8" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
+    </section>
 
     <!-- ── 意向线索 ── -->
-    <div class="ph" style="margin-top:34px">
+    <section class="sec" data-sec="leads" id="sec-leads">
+    <div class="ph">
       <div><h1 id="leadHdr">意向线索</h1><p>用户点「购买 / 申请扩容 / 企业定制」记录的意向。不接支付,确认付款后在租户「管理」里手动充值。</p></div>
       <div class="bl-seg" id="leadSeg" style="display:flex;gap:6px">
         <button class="act on" data-s="">全部</button>
@@ -233,9 +286,11 @@
         <tbody id="leadRows"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
+    </section>
 
     <!-- ── 对公收款核对 ── -->
-    <div class="ph" style="margin-top:34px">
+    <section class="sec" data-sec="orders" id="sec-orders">
+    <div class="ph">
       <div><h1>对公收款核对</h1><p>用户提交「我已打款」的充值订单。核对对公账户实际到账后点「确认到账」,积分自动入账(只发一次)。</p></div>
       <button class="btn-new" onclick="openPayee()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>对公收款信息</button>
     </div>
@@ -245,9 +300,11 @@
         <tbody id="orderRows"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
+    </section>
 
     <!-- ── 发票开具 ── -->
-    <div class="ph" style="margin-top:34px">
+    <section class="sec" data-sec="invoices" id="sec-invoices">
+    <div class="ph">
       <div><h1>发票开具</h1><p>租户管理员申请开票(可多单合并)。<b>开具前请核对所含订单均已到账、金额无误</b>,确认后回填发票号、上传 PDF 置「已开票」。</p></div>
     </div>
     <div class="tbl">
@@ -256,9 +313,11 @@
         <tbody id="invRows"><tr><td colspan="5" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
+    </section>
 
     <!-- ── 平台审计日志 ── -->
-    <div class="ph" style="margin-top:34px">
+    <section class="sec" data-sec="audit" id="sec-audit">
+    <div class="ph">
       <div><h1>平台审计日志</h1><p>所有平台超管操作的追溯台账(开户 / 充值 / 订单确认 / 发票 / 套餐 / 收款配置)。仅平台可见,绝不出现在租户审计页。</p></div>
     </div>
     <div class="tbl">
@@ -267,7 +326,9 @@
         <tbody id="paudRows"><tr><td colspan="5" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
-  </div>
+    </section>
+  </div><!-- /.page -->
+  </div><!-- /.shell -->
 
   <!-- 对公收款信息配置 -->
   <div class="ov" id="payeeOv">
@@ -404,7 +465,7 @@
   <!-- 租户详情管理(改名/席位/交付 + 用户列表)-->
   <div class="ov" id="manageOv">
     <div class="modal mwide">
-      <h3 id="mTitle">租户管理</h3>
+      <h3 id="mgTitle">租户管理</h3>
       <p class="mdesc" id="mSub"></p>
 
       <div class="msec">
@@ -469,12 +530,21 @@
 
   let curTenant=null; // 开户/充值的目标租户
 
-  async function load(){
+  // bootstrap:页面初始化时立即跑(含 401 跳转闸,必须最早跑)。只做鉴权 + who,不再级联拉各 section。
+  async function bootstrap(){
     try{
       const me=await PA('GET','/api/me');
       document.getElementById('who').textContent='超管 · '+me.username;
+    }catch(e){ /* 401 已跳转 */ }
+  }
+  // load:保留为向后兼容的别名 = bootstrap(不再级联 7 个 loader;各 section 改懒加载)。
+  async function load(){ await bootstrap(); }
+
+  // 租户表 loader(原 load 内的租户渲染抽出,独立可单独刷新)。
+  async function loadTenants(){
+    const rows=document.getElementById('rows');
+    try{
       const { tenants }=await PA('GET','/api/tenants');
-      const rows=document.getElementById('rows');
       if(!tenants.length){ rows.innerHTML='<tr><td colspan="6" class="empty">还没有租户,点右上「新建租户」开始</td></tr>'; return; }
       rows.innerHTML=tenants.map(t=>`
         <tr>
@@ -489,14 +559,7 @@
             <button class="act" onclick='openManage(${JSON.stringify(t.id)})'>管理</button>
           </div></td>
         </tr>`).join('');
-      await loadModels();
-      await loadPricing();
-      await loadPlans();
-      await loadLeads();
-      await loadOrders();
-      await loadInvoices();
-      await loadPlatformAudit();
-    }catch(e){ /* 401 已跳转 */ }
+    }catch(e){ rows.innerHTML='<tr><td colspan="6" class="empty">加载失败</td></tr>'; }
   }
 
   // ── 对公收款核对 ──
@@ -521,7 +584,7 @@
   }
   async function confirmOrder(id, no){
     if(!confirm(`确认订单 ${no} 已到账?积分将自动入账(不可撤销)。`)) return;
-    try{ await PA('POST',`/api/recharge-orders/${id}/confirm`); toast('✓ 已确认到账,积分已入账'); await loadOrders(); await load(); }
+    try{ await PA('POST',`/api/recharge-orders/${id}/confirm`); toast('✓ 已确认到账,积分已入账'); await loadOrders(); await loadTenants(); }
     catch(e){ toast(e.message||'确认失败'); }
   }
   async function rejectOrder(id){
@@ -768,7 +831,7 @@
     const msg=document.getElementById('tMsg');
     if(!name){ msg.textContent='机构名称不能为空'; return; }
     const ok=document.getElementById('tOk'); ok.disabled=true;
-    try{ await PA('POST','/api/tenants',{name}); closeOv('tenantOv'); toast('✓ 租户已创建'); await load(); }
+    try{ await PA('POST','/api/tenants',{name}); closeOv('tenantOv'); toast('✓ 租户已创建'); await loadTenants(); }
     catch(e){ msg.textContent=e.message; } finally{ ok.disabled=false; }
   }
 
@@ -782,7 +845,7 @@
     if(!username||!password){ msg.textContent='用户名和密码必填'; return; }
     if(password.length<6){ msg.textContent='密码至少 6 位'; return; }
     const ok=document.getElementById('uOk'); ok.disabled=true;
-    try{ const u=await PA('POST',`/api/tenants/${curTenant}/users`,{username,password,role}); closeOv('userOv'); toast(`✓ 已开通 ${u.username}`); await load(); }
+    try{ const u=await PA('POST',`/api/tenants/${curTenant}/users`,{username,password,role}); closeOv('userOv'); toast(`✓ 已开通 ${u.username}`); await loadTenants(); }
     catch(e){ msg.textContent=e.message; } finally{ ok.disabled=false; }
   }
 
@@ -794,7 +857,7 @@
     const msg=document.getElementById('gMsg');
     if(!amount||amount<=0){ msg.textContent='请输入正整数'; return; }
     const ok=document.getElementById('gOk'); ok.disabled=true; ok.textContent='充值中…'; // 防双击（D6）
-    try{ const r=await PA('POST',`/api/tenants/${curTenant}/grant`,{amount}); closeOv('grantOv'); toast(`✓ 已充值 ${fmtN(amount)} 点，当前余额 ${fmtN(r.balance)}`); await load(); }
+    try{ const r=await PA('POST',`/api/tenants/${curTenant}/grant`,{amount}); closeOv('grantOv'); toast(`✓ 已充值 ${fmtN(amount)} 点，当前余额 ${fmtN(r.balance)}`); await loadTenants(); }
     catch(e){ msg.textContent=e.message; } finally{ ok.disabled=false; ok.textContent='确认充值'; }
   }
 
@@ -808,7 +871,7 @@
     const t=tenants.find(x=>x.id===id);
     if(!t){ toast('租户不存在'); return; }
     mgTenant=t;
-    document.getElementById('mTitle').textContent='管理 · '+t.name;
+    document.getElementById('mgTitle').textContent='管理 · '+t.name;
     document.getElementById('mSub').textContent='机构 ID '+t.id;
     document.getElementById('mName').value=t.name;
     document.getElementById('mSeats').value=t.max_creator_seats;
@@ -827,8 +890,8 @@
       await PA('PUT',`/api/tenants/${mgTenant.id}`,{name,maxCreatorSeats}); // 交付模式不在 admin 设置
       msg.style.color='var(--green)'; msg.textContent='✓ 已保存';
       mgTenant.name=name; mgTenant.max_creator_seats=maxCreatorSeats;
-      document.getElementById('mTitle').textContent='管理 · '+name;
-      await load(); // 刷新主表
+      document.getElementById('mgTitle').textContent='管理 · '+name;
+      await loadTenants(); // 刷新租户表
       setTimeout(()=>{ msg.textContent=''; msg.style.color='var(--red)'; },1500);
     }catch(e){ msg.style.color='var(--red)'; msg.textContent=e.message; }
     finally{ btn.disabled=false; }
@@ -870,7 +933,7 @@
     catch(e){ msg.textContent=e.message; } finally{ ok.disabled=false; }
   }
   async function toggleUser(uid,action){
-    try{ await PA('POST',`/api/tenants/${mgTenant.id}/users/${uid}/${action}`); toast(action==='disable'?'✓ 已停用':'✓ 已启用'); await loadTenantUsers(); await load(); }
+    try{ await PA('POST',`/api/tenants/${mgTenant.id}/users/${uid}/${action}`); toast(action==='disable'?'✓ 已停用':'✓ 已启用'); await loadTenantUsers(); await loadTenants(); }
     catch(e){ toast(e.message); }
   }
 
@@ -900,6 +963,9 @@
       // new 意向线索待跟进:在「意向线索」标题旁挂红点计数(咨询式购买无通知,给运营可见信号)
       const lh=document.getElementById('leadHdr');
       if(lh) lh.innerHTML='意向线索'+(ov.newLeads>0?` <span style="background:var(--red);color:#fff;font-size:11px;font-weight:700;padding:1px 8px;border-radius:999px;vertical-align:middle">${ov.newLeads} 待跟进</span>`:'');
+      // 左菜单「意向线索」红点计数(运营全局可见信号)
+      const nb=document.getElementById('navLeadBadge');
+      if(nb){ if(ov.newLeads>0){ nb.style.display=''; nb.textContent=ov.newLeads; } else nb.style.display='none'; }
       // 瓶颈诊断(区分 worker 吞吐 vs 百炼配额)
       const diag=document.getElementById('monDiag');
       if(ov.level==='red'){
@@ -973,15 +1039,21 @@
     }catch(e){ box.innerHTML='<div class="empty" style="padding:20px">加载失败</div>'; }
   };
 
-  // 10 秒轮询;离页暂停(复用 works.html 模式,省请求)。
+  // 10 秒轮询;仅在「运营监控」section 且页面可见时才转(其余 section / 离页都停,避免隐藏面板空转)。
   let monTimer=null;
   function startMonPoll(){ stopMonPoll(); loadMonitor(); monTimer=setInterval(loadMonitor,10000); }
   function stopMonPoll(){ if(monTimer){ clearInterval(monTimer); monTimer=null; } }
-  document.addEventListener('visibilitychange',()=>{ if(document.hidden) stopMonPoll(); else startMonPoll(); });
+  // 综合判定:当前在 monitor section + 页面可见 → 轮询,否则停。
+  function syncMonPoll(){
+    if(curSec==='monitor' && !document.hidden){ if(!monTimer) startMonPoll(); }
+    else { stopMonPoll(); }
+  }
+  document.addEventListener('visibilitychange',syncMonPoll);
 
   // ── 定价管理(全局倍率 + 视频/TTS 成本)──
   let pricingCache=null;
   async function loadPricing(){
+    loadUnifiedPricing(); // 追加:统一定价(全模态)新表,对接 /api/pricing/models 新路由
     const tb=document.getElementById('vovRows');
     try{
       const d=await PA('GET','/api/pricing'); pricingCache=d;
@@ -1038,6 +1110,44 @@
     catch(e){ toast('✗ '+(e.message||'保存失败')); }
   };
   window.syncMarkupPreview=syncMarkupPreview; window.saveMarkup=saveMarkup;
+
+  // ── 统一定价(全模态)—— 对接 GET/PUT /api/pricing/models 新路由 ──
+  const UNI_MODALITY_CN={image:'图片',video:'视频',tts:'语音'};
+  async function loadUnifiedPricing(){
+    const tb=document.getElementById('uniRows');
+    try{
+      const d=await PA('GET','/api/pricing/models');
+      // 顶部告警条(复用 priceAlert 同款红条样式)
+      const al=document.getElementById('uniAlert');
+      if(d.alerts&&d.alerts.length){ al.style.display=''; al.innerHTML='⚠ '+d.alerts.map(esc).join(' / '); }
+      else al.style.display='none';
+      const models=d.models||[];
+      if(!models.length){ tb.innerHTML='<tr><td colspan="8" class="empty">暂无统一定价模型</td></tr>'; return; }
+      // 按模态分组:图片 → 视频 → 语音
+      const order={image:0,video:1,tts:2};
+      const sorted=[...models].sort((a,b)=>(order[a.modality]??9)-(order[b.modality]??9));
+      tb.innerHTML=sorted.map(m=>`<tr>
+        <td>${UNI_MODALITY_CN[m.modality]||esc(m.modality)}</td>
+        <td><div class="tn">${esc(m.modelKey)}</div><div class="tid">${esc(m.id)}</div></td>
+        <td>${esc(m.variant||'-')}</td>
+        <td style="font-size:12px;color:var(--t3)">${esc(m.unit||'-')}</td>
+        <td><input type="number" min="0" step="0.00001" value="${m.realCostYuan}" style="width:110px" id="uc_${esc(m.id)}"></td>
+        <td><b id="us_${esc(m.id)}" style="color:var(--blue)">${fmtN(m.sell)}</b></td>
+        <td><label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" ${m.enabled?'checked':''} id="ue_${esc(m.id)}" style="width:auto">${m.enabled?'启用':'停用'}</label></td>
+        <td style="text-align:right"><button class="act pri" onclick='saveUniModel(${JSON.stringify(m.id)})'>保存</button></td>
+      </tr>`).join('');
+    }catch(e){ tb.innerHTML='<tr><td colspan="8" class="empty">加载失败</td></tr>'; }
+  }
+  window.saveUniModel=async(id)=>{
+    const body={
+      realCostYuan:Number(document.getElementById('uc_'+id).value),
+      costSource:'doc',
+      enabled:document.getElementById('ue_'+id).checked,
+    };
+    try{ const r=await PA('PUT','/api/pricing/models/'+encodeURIComponent(id),body); toast('✓ 已保存,售价 '+fmtN(r.sell)+' 积分'); await loadUnifiedPricing(); }
+    catch(e){ toast('✗ '+(e.message||'保存失败')); } // 启用时后端保本闸失败会返 400
+  };
+  window.loadUnifiedPricing=loadUnifiedPricing;
 
   // ── 积分套餐管理 ──
   let editingPlan=null, plansCache=[];
@@ -1158,8 +1268,48 @@
     b.classList.add('on'); leadFilter=b.dataset.s; loadLeads();
   });
 
-  load();
-  startMonPoll();
+  // ── 左侧菜单 SPA 路由(hash 决定当前 section,刷新保持,懒加载各 section)──
+  const SECTIONS=['monitor','tenants','image-models','pricing','plans','leads','orders','invoices','audit'];
+  // 各 section 首次进入时调用对应 loader(切回已加载的不重拉,靠 loaded 标记防重复)
+  const SEC_LOADERS={
+    monitor:loadMonitor,        // 监控由轮询接管,这里也兜底首拉一次
+    tenants:loadTenants,
+    'image-models':loadModels,
+    pricing:loadPricing,        // 内部会追加 loadUnifiedPricing
+    plans:loadPlans,
+    leads:loadLeads,
+    orders:loadOrders,
+    invoices:loadInvoices,
+    audit:loadPlatformAudit,
+  };
+  const loaded={};   // section → 是否已首次加载
+  let curSec='monitor';
+
+  function showSection(key){
+    if(!SECTIONS.includes(key)) key='monitor';
+    curSec=key;
+    // 切换 section 显隐
+    document.querySelectorAll('.sec').forEach(s=>s.classList.toggle('on',s.dataset.sec===key));
+    // 高亮菜单
+    document.querySelectorAll('#sidenav .nav-item').forEach(b=>b.classList.toggle('on',b.dataset.nav===key));
+    // 首次进入触发 loader(否则 tbody 占位「加载中…」会永久卡住)
+    if(!loaded[key]){ loaded[key]=true; const fn=SEC_LOADERS[key]; if(fn) fn(); }
+    // 监控轮询绑 section:进 monitor 才转,离开就停
+    syncMonPoll();
+  }
+  function routeFromHash(){
+    const key=(location.hash||'').replace(/^#/,'')||'monitor';
+    showSection(key);
+  }
+  // 点菜单 → 改 hash(由 hashchange 统一切换)
+  document.querySelectorAll('#sidenav .nav-item').forEach(b=>{
+    b.addEventListener('click',()=>{ location.hash='#'+b.dataset.nav; });
+  });
+  window.addEventListener('hashchange',routeFromHash);
+
+  // 启动:bootstrap 必须 eager(含 401 闸,最早跑);再按 hash 进入对应 section 并懒加载。
+  bootstrap();
+  routeFromHash();
 </script>
 </body>
 </html>

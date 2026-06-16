@@ -13,7 +13,12 @@ function resetCfg() {
   setConfig('markup_x35', '35');
   setConfig('floor_x35', '10');
 }
-function clearVov() { db.prepare('DELETE FROM video_model_override').run(); }
+function clearVov() { db.prepare('DELETE FROM video_model_override').run(); db.prepare('DELETE FROM model_pricing').run(); }
+// 2026-06 收口:videoPriceTier 读价从 video_model_override 改到统一表 model_pricing。测试改插统一表。
+function insVideoPricing(id: string, modelKey: string, variant: string, cost: number) {
+  db.prepare(`INSERT OR REPLACE INTO model_pricing (id,model_key,modality,unit,variant,real_cost_yuan,cost_source,enabled,sort_order,updated_at)
+              VALUES (?,?,'video','秒',?,?,'doc',1,0,0)`).run(id, modelKey, variant, cost);
+}
 
 describe('sellPrice = ⌈成本 × markup_x35⌉(整数,禁浮点多收)', () => {
   beforeEach(resetCfg);
@@ -57,18 +62,18 @@ describe('assertProfitable 三道闸', () => {
   });
 });
 
-describe('videoPriceTier 接 video_model_override + 全局倍率', () => {
+describe('videoPriceTier 接 model_pricing 统一表 + 全局倍率', () => {
   beforeEach(() => { resetCfg(); clearVov(); });
-  it('录了真实成本 → sellPrice 算售价(后台可改)', () => {
-    db.prepare(`INSERT INTO video_model_override (id,model_key,variant,real_cost_yuan,cost_source,enabled,updated_at) VALUES ('wan2.7-t2v:720P','wan2.7-t2v','720P',0.6,'doc',1,0)`).run();
-    expect(videoPriceTier(getVideoModel('wan2.7-t2v'), '720P', false)).toBe(21); // ⌈0.6×35⌉
+  it('录了真实成本(成本≠回落值)→ sellPrice 算售价(后台可改)', () => {
+    insVideoPricing('wan2.7-t2v:720P', 'wan2.7-t2v', '720P', 0.8); // 0.8 ≠ 代码回落 0.6,验证确实读了统一表
+    expect(videoPriceTier(getVideoModel('wan2.7-t2v'), '720P', false)).toBe(28); // ⌈0.8×35⌉
   });
   it('改全局倍率 → 视频售价随之变', () => {
-    db.prepare(`INSERT INTO video_model_override (id,model_key,variant,real_cost_yuan,cost_source,enabled,updated_at) VALUES ('wan2.7-t2v:720P','wan2.7-t2v','720P',0.6,'doc',1,0)`).run();
+    insVideoPricing('wan2.7-t2v:720P', 'wan2.7-t2v', '720P', 0.6);
     setConfig('markup_x35', '40');
     expect(videoPriceTier(getVideoModel('wan2.7-t2v'), '720P', false)).toBe(24); // ⌈0.6×40⌉
   });
-  it('无 override 行 → 回落代码常数(迁移前兜底)', () => {
+  it('无统一表行 → 回落代码常数(迁移前兜底)', () => {
     // 不插行;回落 def.priceTier(代码里 wan2.7-t2v 720P=21)
     expect(videoPriceTier(getVideoModel('wan2.7-t2v'), '720P', false)).toBe(21);
   });

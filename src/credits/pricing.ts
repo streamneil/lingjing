@@ -49,6 +49,25 @@ export function sellPrice(realCostYuan: number): number {
   return Math.max(1, Math.ceil(realCostYuan * markupX35()));
 }
 
+// ── model_pricing 读价(全模态统一真源)──
+// lookupCost 是「唯一读价点」:mergeDef / videoPriceTier / ttsPricePerChar 全经此读 model_pricing → 收口双源。
+// pricing.ts 在依赖图上是 db 的叶子(只 import db),lookupCost 放这里不引入环依赖(eng-review 确认)。
+let _mpStmt: import('better-sqlite3').Statement | null = null;
+export interface PricingLookup {
+  id: string;
+  realCostYuan: number;
+  costSource: string;
+  enabled: boolean;
+}
+/** 读某模型档的统一定价行。id = "{model_key}" 或 "{model_key}:{variant}"。无行返回 undefined。
+ *  惰性 prepare(绝不在模块顶 prepare,否则早于建表 no-such-table)。 */
+export function lookupCost(id: string): PricingLookup | undefined {
+  _mpStmt ??= db.prepare('SELECT id, real_cost_yuan, cost_source, enabled FROM model_pricing WHERE id = ?');
+  const row = _mpStmt.get(id) as { id: string; real_cost_yuan: number; cost_source: string; enabled: number } | undefined;
+  if (!row) return undefined;
+  return { id: row.id, realCostYuan: row.real_cost_yuan, costSource: row.cost_source, enabled: row.enabled === 1 };
+}
+
 /**
  * 上架自检闸:启用任何可计费模型行前必过。
  * 拦三类赔本/未校准:① 成本驱动行成本≤0 ② estimate 占位价 ③ 全局倍率被改到地板以下。
