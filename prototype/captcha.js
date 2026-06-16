@@ -16,7 +16,8 @@ window.LJCaptcha = (function () {
     if (styleInjected) return; styleInjected = true;
     const css = `
     .ljc{position:relative;height:46px;border-radius:12px;background:var(--field,#101012);border:1px solid var(--line,#232327);overflow:hidden;user-select:none;touch-action:none}
-    .ljc-fill{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,rgba(77,141,255,.10),rgba(77,141,255,.22));border-right:1px solid var(--blue,#4D8DFF);transition:none}
+    .ljc-fill{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,rgba(77,141,255,.10),rgba(77,141,255,.22));border-right:0 solid var(--blue,#4D8DFF);transition:none}
+    .ljc.dragging .ljc-fill,.ljc.ok .ljc-fill{border-right-width:1px}
     .ljc-hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--t3,#717179);pointer-events:none;letter-spacing:.3px;padding-left:${HANDLE_W}px}
     .ljc-hint .arrows{display:inline-flex;margin-left:8px;color:var(--t4,#4A4A51);animation:ljc-nudge 1.4s var(--ease,ease) infinite}
     @keyframes ljc-nudge{0%,100%{transform:translateX(0);opacity:.5}50%{transform:translateX(4px);opacity:1}}
@@ -88,6 +89,7 @@ window.LJCaptcha = (function () {
     async function release() {
       if (!dragging) return;
       dragging = false;
+      root.classList.remove('dragging'); // 松手:.ok 态由专属规则保留边线,其余回到无边线
       const max = maxTravel();
       // 没拖到底:直接弹回,不打服务端(省一次请求 + 不消费 challenge)
       if (curX < max - 4) { snapBack(); return; }
@@ -118,6 +120,7 @@ window.LJCaptcha = (function () {
     function onDown(e) {
       if (token) return;
       dragging = true;
+      root.classList.add('dragging'); // 拖动时才显示填充右边线,静止 width=0 不留竖线
       startX = (e.touches ? e.touches[0].clientX : e.clientX) - curX;
     }
     function onMove(e) {
