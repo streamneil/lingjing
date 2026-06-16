@@ -44,6 +44,8 @@ import type { LeadStatus } from '../db/index.js';
 import { countLeadsByStatus } from '../pricing/index.js';
 import { IMAGE_MODELS } from '../gateway/image-models.js';
 import type { ImageModelOverrideRow } from '../db/index.js';
+import { setProviderKey, ProviderKeyError } from '../gateway/provider-keys.js';
+import type { ProviderRow } from '../db/index.js';
 import { writePlatformAudit, PLATFORM_TENANT, listPlatformAudit } from '../audit/index.js';
 import {
   platformLogin,
@@ -748,6 +750,45 @@ adminRouter.put('/api/pricing/tts', requirePlatformAdmin, (req: Request, res: Re
   setConfig('tts_cost_per_char', String(cost)); // 兼容保留旧 key(迁移回落链)
   upsertModelPricing({ id: 'tts', modelKey: 'tts', modality: 'tts', unit: '万字', variant: '每字', realCostYuan: cost, costSource: 'doc', enabled: 1 }); // 收口:统一表为读源
   writePlatformAudit(req.padmin!.id, 'pricing_tts_update', PLATFORM_TENANT, String(cost), padminIp(req));
+  res.json({ ok: true });
+});
+
+// ── Provider 管理(各厂商 + 加密 key;model-access-platform PR-1)──
+// key 加密存库(AES-256-GCM,MASTER_KEY),admin 永不见明文,只回显 last4。
+/** 列出 provider:base_url/启停/last4(绝不返明文 key)。 */
+adminRouter.get('/api/providers', requirePlatformAdmin, (_req: Request, res: Response) => {
+  const rows = db.prepare('SELECT id,name,adapter_key,base_url,api_key_last4,key_version,enabled,updated_at FROM provider ORDER BY id').all() as Array<
+    Pick<ProviderRow, 'id' | 'name' | 'adapter_key' | 'base_url' | 'api_key_last4' | 'key_version' | 'enabled' | 'updated_at'>
+  >;
+  const masterKeySet = !!process.env.MASTER_KEY;
+  res.json({
+    providers: rows.map((r) => ({
+      id: r.id, name: r.name, adapterKey: r.adapter_key, baseUrl: r.base_url,
+      keyLast4: r.api_key_last4, keyVersion: r.key_version, enabled: r.enabled === 1, hasCipher: !!r.api_key_last4,
+    })),
+    masterKeySet, // 未配 MASTER_KEY 时前端提示「贴 key 会失败,请先配主密钥」
+  });
+});
+
+/** 改 provider:base_url / 启停 / 贴新 key(贴 key 走 setProviderKey 加密;空 key 不动原 key)。 */
+adminRouter.put('/api/providers/:id', requirePlatformAdmin, (req: Request, res: Response) => {
+  const id = req.params.id!;
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const row = db.prepare('SELECT * FROM provider WHERE id=?').get(id) as ProviderRow | undefined;
+  if (!row) return res.status(404).json({ error: 'provider 不存在' });
+  const baseUrl = typeof b.baseUrl === 'string' && b.baseUrl.trim() ? b.baseUrl.trim() : row.base_url;
+  const enabled = b.enabled === false || b.enabled === 0 ? 0 : 1;
+  db.prepare('UPDATE provider SET base_url=?, enabled=?, updated_at=? WHERE id=?').run(baseUrl, enabled, Date.now(), id);
+  // 贴了新 key 才加密覆盖(空 = 只改 base_url/启停,不动 key)。
+  const newKey = typeof b.apiKey === 'string' ? b.apiKey.trim() : '';
+  if (newKey) {
+    try { setProviderKey(id, newKey); }
+    catch (e) {
+      const msg = e instanceof ProviderKeyError ? e.message : (e as Error).message;
+      return res.status(400).json({ error: msg }); // 多为 MASTER_KEY 未配
+    }
+  }
+  writePlatformAudit(req.padmin!.id, 'provider_update', PLATFORM_TENANT, id, padminIp(req));
   res.json({ ok: true });
 });
 

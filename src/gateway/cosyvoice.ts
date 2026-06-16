@@ -7,6 +7,7 @@
 // 随模型/参数而异 → 双解析,统一返 Buffer(worker 统一 putObject 拿公网 URL 喂 wan2.2-s2v)。
 
 import { config } from '../config.js';
+import { getProviderKey } from './provider-keys.js'; // PR-1:key 从加密表取(回落 .env)
 
 export interface TtsParams {
   text: string;
@@ -22,7 +23,7 @@ export interface TtsParams {
  * 双解析:优先 output.audio.url(fetch),否则 output.audio.data(base64 decode)。
  */
 export async function synthesizeSpeechHttp(params: TtsParams): Promise<Buffer> {
-  const apiKey = config.baichuan.apiKey();
+  const apiKey = getProviderKey('bailian');
   const res = await fetch(
     `${config.baichuan.baseUrl}/services/aigc/multimodal-generation/generation`,
     {
@@ -71,7 +72,7 @@ export async function synthesizeSpeechHttp(params: TtsParams): Promise<Buffer> {
 /** 创建复刻音色(Qwen VC)。audioUrl 须公网可达(OSS 签名 URL);prefix 作 preferred_name。
  *  返回 Qwen voice id,存库后合成时当 voice 用(model=vcModel,http)。 */
 export async function createClonedVoice(audioUrl: string, prefix: string): Promise<string> {
-  const apiKey = config.baichuan.apiKey();
+  const apiKey = getProviderKey('bailian');
   const res = await fetch(`${config.baichuan.baseUrl}/services/audio/tts/customization`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -114,7 +115,7 @@ export async function createDesignedVoice(
   previewText: string,
   preferredName: string,
 ): Promise<DesignedVoiceResult> {
-  const apiKey = config.baichuan.apiKey();
+  const apiKey = getProviderKey('bailian');
   const res = await fetch(`${config.baichuan.baseUrl}/services/audio/tts/customization`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },

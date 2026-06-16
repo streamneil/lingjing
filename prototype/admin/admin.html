@@ -144,6 +144,7 @@
     <button class="nav-item" data-nav="monitor"><span class="nav-dot"></span>运营监控</button>
     <button class="nav-item" data-nav="tenants"><span class="nav-dot"></span>租户管理</button>
     <button class="nav-item" data-nav="image-models"><span class="nav-dot"></span>AI 图片模型</button>
+    <button class="nav-item" data-nav="providers"><span class="nav-dot"></span>厂商 / Key</button>
     <button class="nav-item" data-nav="pricing"><span class="nav-dot"></span>定价管理</button>
     <button class="nav-item" data-nav="plans"><span class="nav-dot"></span>积分套餐</button>
     <button class="nav-item" data-nav="leads"><span class="nav-dot"></span>意向线索<span class="nav-badge" id="navLeadBadge"></span></button>
@@ -219,6 +220,17 @@
     </section>
 
     <!-- ── 定价管理 ── -->
+    <section class="sec" data-sec="providers" id="sec-providers">
+      <div class="ph"><div><h1>厂商 / Key 管理</h1><p>各模型厂商的接入地址与 API Key。Key 加密存库(AES-256-GCM),这里只显示尾号,明文不可见;改 base_url、贴新 key、启停即时生效。</p></div></div>
+      <div id="provAlert" style="display:none;margin:0 0 14px;padding:10px 14px;border-radius:10px;background:#3a1d1d;border:1px solid #6e2b2b;color:#ffb4b4;font-size:13px"></div>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>厂商</th><th>接入地址(base_url)</th><th>当前 Key</th><th>贴新 Key</th><th>启用</th><th style="text-align:right">操作</th></tr></thead>
+          <tbody id="provRows"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
     <section class="sec" data-sec="pricing" id="sec-pricing">
 
     <!-- 统一定价(全模态)—— 未来主推入口,对接 /api/pricing/models 新路由 -->
@@ -1268,13 +1280,43 @@
     b.classList.add('on'); leadFilter=b.dataset.s; loadLeads();
   });
 
+  // ── 厂商 / Key 管理(PR-1:key 加密存库,只显尾号)──
+  async function loadProviders(){
+    const tb=document.getElementById('provRows');
+    try{
+      const d=await PA('GET','/api/providers');
+      const al=document.getElementById('provAlert');
+      if(!d.masterKeySet){ al.style.display=''; al.innerHTML='⚠ 服务端未配置 MASTER_KEY,贴新 Key 会失败。请先在部署环境设置 MASTER_KEY(openssl rand -base64 32)。'; }
+      else al.style.display='none';
+      const ps=d.providers||[];
+      if(!ps.length){ tb.innerHTML='<tr><td colspan="6" class="empty">暂无厂商</td></tr>'; return; }
+      tb.innerHTML=ps.map(p=>`<tr>
+        <td><div class="tn">${esc(p.name)}</div><div class="tid">${esc(p.id)}</div></td>
+        <td><input type="text" value="${esc(p.baseUrl)}" style="width:260px" id="pb_${esc(p.id)}"></td>
+        <td style="font-family:var(--f-mono);font-size:12px;color:var(--t3)">${p.keyLast4?esc(p.keyLast4)+' (v'+p.keyVersion+')':'<span style="color:var(--amber)">.env 回落</span>'}</td>
+        <td><input type="password" placeholder="留空=不改" style="width:150px" id="pk_${esc(p.id)}"></td>
+        <td><label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" ${p.enabled?'checked':''} id="pe_${esc(p.id)}" style="width:auto">${p.enabled?'启用':'停用'}</label></td>
+        <td style="text-align:right"><button class="act pri" onclick='saveProvider(${JSON.stringify(p.id)})'>保存</button></td>
+      </tr>`).join('');
+    }catch(e){ tb.innerHTML='<tr><td colspan="6" class="empty">加载失败</td></tr>'; }
+  }
+  window.saveProvider=async(id)=>{
+    const body={ baseUrl:document.getElementById('pb_'+id).value, enabled:document.getElementById('pe_'+id).checked };
+    const k=document.getElementById('pk_'+id).value.trim();
+    if(k) body.apiKey=k; // 仅贴了新 key 才传(空=不动原 key)
+    try{ await PA('PUT','/api/providers/'+encodeURIComponent(id),body); toast('✓ 已保存'); await loadProviders(); }
+    catch(e){ toast('✗ '+(e.message||'保存失败')); } // MASTER_KEY 未配等返 400
+  };
+  window.loadProviders=loadProviders;
+
   // ── 左侧菜单 SPA 路由(hash 决定当前 section,刷新保持,懒加载各 section)──
-  const SECTIONS=['monitor','tenants','image-models','pricing','plans','leads','orders','invoices','audit'];
+  const SECTIONS=['monitor','tenants','image-models','providers','pricing','plans','leads','orders','invoices','audit'];
   // 各 section 首次进入时调用对应 loader(切回已加载的不重拉,靠 loaded 标记防重复)
   const SEC_LOADERS={
     monitor:loadMonitor,        // 监控由轮询接管,这里也兜底首拉一次
     tenants:loadTenants,
     'image-models':loadModels,
+    providers:loadProviders,    // 厂商/Key 管理(PR-1)
     pricing:loadPricing,        // 内部会追加 loadUnifiedPricing
     plans:loadPlans,
     leads:loadLeads,
