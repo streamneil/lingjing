@@ -29,6 +29,25 @@ import type {
 const ARK_PROVIDER = 'volc-ark';
 const ARK_FALLBACK_BASE = 'https://ark.cn-beijing.volces.com/api/v3';
 
+// 豆包 seedream 各型号支持的分辨率档(火山文档)。平台 UI 只给 1K/2K/4K + 上限校验,不拦下限;
+// 这里按型号托底:用户选了型号不支持的低档(如 4.5 选 1K)→ 自动抬到该型号最低支持档,绝不报错。
+const SEEDREAM_SIZES: Record<string, string[]> = {
+  'doubao-seedream-4-0-250828': ['1K', '2K', '4K'],
+  'doubao-seedream-4-5-251128': ['2K', '4K'],
+  'doubao-seedream-5-0-260128': ['2K', '3K', '4K'],
+};
+const SIZE_ORDER = ['1K', '2K', '3K', '4K'];
+/** 把请求 size clamp 到该 modelId 支持的档;不支持的低档抬到最低支持档。非档位值(如 2048x2048)原样透传。 */
+function clampSeedreamSize(modelId: string, size?: string): string | undefined {
+  if (!size) return undefined;
+  const allowed = SEEDREAM_SIZES[modelId];
+  if (!allowed) return size; // 非 seedream / 未知型号:原样
+  if (allowed.includes(size)) return size; // 支持:原样
+  if (!SIZE_ORDER.includes(size)) return size; // 像素值(WxH)不动,交给厂商校验
+  // 档位但不支持(低于该型号最低档)→ 抬到最低支持档。
+  return allowed[0];
+}
+
 function arkBaseUrl(): string {
   return getProviderBaseUrl(ARK_PROVIDER) || ARK_FALLBACK_BASE;
 }
@@ -146,10 +165,14 @@ export class ArkGateway implements CapabilityGateway, SyncImageGateway {
       prompt,
       watermark: false,
       response_format: 'url',
+      // 锁单图输出:不传则豆包可能按 prompt 自主判断返回组图(多图),与本平台「单图」语义不符。
+      //   本平台暂不暴露组图,显式 disabled 保证 data[] 恒 1 张(文档「多图融合」示例同款)。
+      sequential_image_generation: 'disabled',
     };
     if (images.length === 1) body.image = images[0];
-    else if (images.length > 1) body.image = images; // 多图融合
-    if (opts.size) body.size = opts.size; // 如 '2K' 或 '2048x2048'
+    else if (images.length > 1) body.image = images; // 多图融合(多输入图 → 单输出图)
+    const size = clampSeedreamSize(modelId, opts.size); // 按型号托底(4.5/5.0-lite 选 1K → 抬到 2K)
+    if (size) body.size = size; // 如 '2K' 或 '2048x2048'
     const { status, json } = await arkHttp('POST', '/images/generations', body, signal);
     if (status !== 200) throw new Error(`火山图片生成失败 HTTP ${status}: ${JSON.stringify(json?.error ?? json)}`);
     const data: Array<{ url?: string; error?: unknown }> = json?.data ?? [];

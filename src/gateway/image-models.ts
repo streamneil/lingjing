@@ -114,17 +114,17 @@ export const IMAGE_MODELS: Record<string, ImageModelDef> = {
   // ⚠ 价格未录(火山按 token 计)→ priceTier 占位、admin 录真实成本前不启用。
   // 火山真实固定价(元/张):4.0=0.2→⌈×35⌉=7;4.5=0.25→9;5.0-lite=0.22→8(model_pricing 为准)。
   'doubao-seedream-4.0': {
-    key: 'doubao-seedream-4.0', label: '豆包 Seedream 4.0', modelId: 'doubao-seedream-4.0', provider: 'volc-ark',
+    key: 'doubao-seedream-4.0', label: '豆包 Seedream 4.0', modelId: 'doubao-seedream-4-0-250828', provider: 'volc-ark',
     shape: 'S', sizeKind: 'keyword', modes: ['text2img', 'img2img'],
     maxImages: 1, maxInputImages: 5, maxResolution: '4K', priceTier: 7,
   },
   'doubao-seedream-4.5': {
-    key: 'doubao-seedream-4.5', label: '豆包 Seedream 4.5', modelId: 'doubao-seedream-4.5', provider: 'volc-ark',
+    key: 'doubao-seedream-4.5', label: '豆包 Seedream 4.5', modelId: 'doubao-seedream-4-5-251128', provider: 'volc-ark',
     shape: 'S', sizeKind: 'keyword', modes: ['text2img', 'img2img'],
     maxImages: 1, maxInputImages: 5, maxResolution: '4K', priceTier: 9,
   },
   'doubao-seedream-5.0-lite': {
-    key: 'doubao-seedream-5.0-lite', label: '豆包 Seedream 5.0 Lite', modelId: 'doubao-seedream-5.0-lite', provider: 'volc-ark',
+    key: 'doubao-seedream-5.0-lite', label: '豆包 Seedream 5.0 Lite', modelId: 'doubao-seedream-5-0-260128', provider: 'volc-ark',
     shape: 'S', sizeKind: 'keyword', modes: ['text2img', 'img2img'],
     maxImages: 1, maxInputImages: 5, maxResolution: '4K', priceTier: 8,
   },

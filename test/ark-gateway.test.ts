@@ -115,11 +115,12 @@ describe('ArkGateway 图片:同步生成', () => {
     );
     expect(urls).toEqual(['https://img/gen1.jpg']);
     expect(captured.url).toContain('/images/generations');
-    expect(captured.body.model).toBe('doubao-seedream-4.0');
+    expect(captured.body.model).toBe('doubao-seedream-4-0-250828'); // 适配器用 registry.modelId(带版本号)
     expect(captured.body.size).toBe('2K');
+    expect(captured.body.sequential_image_generation).toBe('disabled'); // 锁单图输出(文档要求)
   });
 
-  it('editImage 多图融合:image 传数组', async () => {
+  it('editImage 多图融合:image 传数组 + sequential disabled', async () => {
     let captured: any = null;
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (_u, init: any) => {
       captured = JSON.parse(init.body);
@@ -130,6 +131,18 @@ describe('ArkGateway 图片:同步生成', () => {
       new AbortController().signal,
     );
     expect(captured.image).toEqual(['https://a.png', 'https://b.png']);
+    expect(captured.sequential_image_generation).toBe('disabled');
+  });
+
+  it('分辨率托底:4.5/5.0-lite 选 1K → 抬到 2K(火山不支持 1K);4.0 保留 1K', async () => {
+    const grab = () => { let c: any = null; vi.spyOn(globalThis, 'fetch').mockImplementation(async (_u, init: any) => { c = JSON.parse(init.body); return new Response(JSON.stringify({ data: [{ url: 'https://x' }] }), { status: 200 }); }); return () => c; };
+    let get = grab();
+    await new ArkGateway().generateImageSync({ model: 'doubao-seedream-4.5', prompt: 'x', resolution: '1K' }, new AbortController().signal);
+    expect(get().size).toBe('2K'); // 4.5 不支持 1K → 抬到 2K
+    vi.restoreAllMocks(); setProviderKey('volc-ark', 'sk-ark-test-key');
+    get = grab();
+    await new ArkGateway().generateImageSync({ model: 'doubao-seedream-4.0', prompt: 'x', resolution: '1K' }, new AbortController().signal);
+    expect(get().size).toBe('1K'); // 4.0 支持 1K → 原样
   });
 
   it('图片无 url 返回 → 抛错(不静默)', async () => {
