@@ -13,17 +13,6 @@ process.env.DB_FILE = ':memory:';
 process.env.DASHSCOPE_API_KEY = 'sk-test';
 
 const { BaichuanGateway } = await import('../src/gateway/baichuan.js');
-const { db } = await import('../src/db/index.js');
-
-// wan2.6-image 必须走 S 形状(同步 multimodal-generation),与真实 admin override 一致:
-//   key=wan2.6-t2i、model_id=wan2.6-image、shape_template=qwen-image-2.0-pro(S+wh)。
-//   ⚠ 关键:模板必须是 S 形状,worker 才走 runImageGenSyncJob→generateImageSync(interleave 分支);
-//   若用 A1 模板(如 qwen-image)会走异步 image-synthesis 端点 → 复现 url error 400。
-db.prepare(
-  `INSERT OR REPLACE INTO image_model_override
-     (key, model_id, label, shape_template, modes, max_images, price_tier, resolutions, enabled, created_at)
-   VALUES ('wan2.6-t2i','wan2.6-image','万相2.6','qwen-image-2.0-pro','text2img',4,7,NULL,1,'2026-06-16T00:00:00Z')`,
-).run();
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -136,40 +125,6 @@ describe('同步文生图 generateImageSync(S+text2img,eng 外部声音 P1-a/P3-
     await expect(
       gw.generateImageSync({ model: 'qwen-image-2.0-pro', prompt: 'x' }, ac.signal),
     ).rejects.toThrow();
-  });
-
-  // Regression: wan2.6 文生图 url error 400 — admin override 用了错 model_id(wan2.6-t2i)+错端点模板
-  //   (wan2.2-flash/async image-synthesis)。修:model_id=wan2.6-image + S 形状(multimodal-generation)
-  //   + 纯文生图自动 enable_interleave=true(否则按图像编辑模式要求传输入图)。
-  // Found by /qa on 2026-06-16. Report: 用户报「百炼文生图提交失败 HTTP 400 url error」。
-  it('wan2.6-image 文生图:enable_interleave=true、用 max_images 不发 n、走 multimodal-generation', async () => {
-    const gw = new BaichuanGateway();
-    let sentUrl = '';
-    let sentBody: Record<string, unknown> = {};
-    vi.spyOn(globalThis, 'fetch').mockImplementation((url, opts) => {
-      sentUrl = String(url);
-      sentBody = JSON.parse((opts as RequestInit).body as string);
-      return Promise.resolve(
-        new Response(
-          JSON.stringify({ output: { choices: [{ message: { content: [{ image: 'https://gen/wan26.png' }] } }] } }),
-          { status: 200 },
-        ),
-      );
-    });
-    const urls = await gw.generateImageSync(
-      { model: 'wan2.6-t2i', prompt: '番茄炒蛋', ratio: '1:1', resolution: '1K', count: 3 },
-      new AbortController().signal,
-    );
-    expect(urls).toEqual(['https://gen/wan26.png']);
-    // shape 必须 S:否则 worker 走异步 image-synthesis 端点(复现 url error 400)。锁死路由。
-    const { getImageModel } = await import('../src/gateway/image-models.js');
-    expect(getImageModel('wan2.6-t2i').shape).toBe('S');
-    expect(sentUrl).toContain('/services/aigc/multimodal-generation/generation'); // 正确端点(非 image-synthesis)
-    expect(sentBody.model).toBe('wan2.6-image'); // 真实模型名(非 wan2.6-t2i)
-    const params = sentBody.parameters as Record<string, unknown>;
-    expect(params.enable_interleave).toBe(true); // 纯文生图必须 true(否则当图像编辑要输入图)
-    expect(params.max_images).toBe(3); // 张数走 max_images
-    expect(params.n).toBeUndefined(); // interleave 模式 n 固定 1 → 不发
   });
 });
 

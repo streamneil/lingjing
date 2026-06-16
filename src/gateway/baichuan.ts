@@ -326,22 +326,10 @@ export class BaichuanGateway implements CapabilityGateway, SyncImageGateway {
     const def = getImageModel(input.model);
     const content: Array<{ text: string }> = [{ text: input.prompt }];
     const n = Math.min(def.maxImages, Math.max(1, Math.floor(input.count ?? 1)));
-    const size = sizeParams(def, input.ratio, input.resolution, { width: (input as ImageGenInput).width, height: (input as ImageGenInput).height });
-    // wan2.6-image 纯文生图(无输入图):必须 enable_interleave=true 才走「图文混排/文生图」模式;
-    //   默认 false 是图像编辑模式,会要求传 1~4 张输入图 → 否则报 url/参数错。
-    //   该模式下 n 固定为 1(传其他值接口报错),用 max_images 控制张数上限。
-    if (def.modelId.startsWith('wan2.6-image')) {
-      return callMultimodalSync(
-        def.modelId,
-        content,
-        { enable_interleave: 'true', max_images: String(n), ...size, ...seedParam(input.seed) },
-        signal,
-      );
-    }
     return callMultimodalSync(
       def.modelId,
       content,
-      { n: String(n), ...size, ...seedParam(input.seed) },
+      { n: String(n), ...sizeParams(def, input.ratio, input.resolution, { width: (input as ImageGenInput).width, height: (input as ImageGenInput).height }), ...seedParam(input.seed) },
       signal,
     );
   }
@@ -356,12 +344,7 @@ async function callMultimodalSync(
   signal: AbortSignal,
 ): Promise<string[]> {
   const params: Record<string, unknown> = { watermark: false, ...extraParams };
-  // wan2.6-image 图文混排模式:enable_interleave=bool、max_images=int、无 n(n 固定 1,由接口默认)。
-  if (params.enable_interleave !== undefined) {
-    params.enable_interleave = params.enable_interleave === true || params.enable_interleave === 'true';
-    if (params.max_images !== undefined) params.max_images = Number(params.max_images);
-    delete params.n; // 该模式 n 必须为 1,显式不发,走接口默认
-  } else if (params.n !== undefined) params.n = Number(params.n);
+  if (params.n !== undefined) params.n = Number(params.n);
   else params.n = 1;
   const { status, json } = await httpJson(
     'POST',

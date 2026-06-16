@@ -32,7 +32,7 @@ if (userExists('demoadmin') && userExists('editor')) {
 
 // ── 图片模型定价 + 能力(成本驱动,2026-06 价格页确价)──
 // 幂等:只插缺失的行,绝不覆盖 admin 已改的价/能力。price_tier = ceil(真实元/张 × 35)。
-// 含 DB-only 模型(qwen-image-2.0 / wan2.6-t2i 无代码模板,靠 shape_template 指向模板);
+// 含 DB-only 模型(qwen-image-2.0 无代码模板,靠 shape_template 指向模板);
 // 纯代码模板模型(z-image/qwen-image 等)无 override 行也能跑(回落模板),这里一并落库便于运营调价。
 const IMG_SEED = [
   // key, label, modelId, priceTier(=cost×35), realCost, maxImages, shapeTemplate, modes, sort
@@ -40,10 +40,8 @@ const IMG_SEED = [
   ['z-image',           '极速',            'z-image-turbo',      4,  0.10, 1, 'z-image',           'text2img',           1],
   ['qwen-image-2.0',    '千问2.0',         'qwen-image-2.0',     7,  0.20, 6, 'qwen-image-2.0-pro','text2img',           2],
   ['qwen-image-2.0-pro','专业 (千问2.0 Pro)','qwen-image-2.0-pro',18, 0.50, 6, 'qwen-image-2.0-pro','text2img,img2img',  3],
-  // 万相2.6 = wan2.6-image:同步 multimodal-generation(非异步 image-synthesis)。必须用 S 形状模板
-  //   (qwen-image-2.0-pro=S+wh),否则 worker 走异步端点报「url error 400」。纯文生图由 generateImageSync
-  //   自动加 enable_interleave=true(文档:false 是图像编辑模式要传输入图)。modelId 真实名是 wan2.6-image。
-  ['wan2.6-t2i',        '万相2.6',         'wan2.6-image',       7,  0.20, 4, 'qwen-image-2.0-pro','text2img',           4],
+  // 万相2.6(wan2.6-image)已移除:纯文生图只支持 SSE 流式 interleave 路径,本平台网关全是非流式
+  //   同步/异步,无法对接 → 删除,不在 AI 图片下拉出现。详见 2026-06-16 QA。
   ['qwen-image-edit',   '图像编辑',         'qwen-image-edit',    11, 0.30, 1, 'qwen-image-edit',   'img2img',            5],
   ['wan2.2-flash',      '万相2.2 极速',     'wan2.2-t2i-flash',   5,  0.14, 4, 'wan2.2-flash',      'text2img',           6],
   // 万相2.7 编辑/Pro:旧靠"代码模板默认启用"上线,现 isEnabled 需 DB 行 → 必须种子(否则下线)。
