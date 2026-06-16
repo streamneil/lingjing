@@ -128,3 +128,21 @@
 - **Fix:** builder 加校验:imageRef 必须 `image-inputs/<本租户>/` 前缀 **且** 存在对应 authorization 行(本租户)。回归测试入 `test/account-isolation.test.ts`(creator A 拿 B 的 imageRef 建 job → 拒)。
 - **Context:** 发现于探索页多模态 eng-review。该轮原计划的 `?img=` 预填会把此旁路产品化,已改降级方案(只填文本)规避,但底层缺陷仍在。既有缺陷,非该轮引入。
 - **Depends on / blocked by:** 无。独立于探索页 PR。
+
+### T-RATE-LIMIT:三个 gateway 加 429/退避重试(调高并发的前置)
+- **What:** baichuan/ark/gemini 三个 gateway 现均无 429/Throttling 处理。在 pollUntilDone + 同步调用路径加 429 检测 + 指数退避重试(复用现有 job deadline)。
+- **Why:** worker 改并发池后(2026-06-16 CEO review),prod POOL_SIZE=16 不撞百炼/火山账号级 RPM/TPM 额度(账号级配额远高,见 help.aliyun.com/zh/model-studio/rate-limit);但若以后调更高并发、或厂商降额度,无退避会让任务直接 failed。这是「调更高并发」的前置安全网。
+- **Pros:** 解锁安全地把 POOL_SIZE 调到几十;限流时透明重试而非报错给用户。
+- **Cons:** 三处 gateway 都改;需区分可重试(429/5xx)vs 不可重试(4xx 参数错)。
+- **Context:** 来自 2026-06-16 /plan-ceo-review 外部声音 #5。CEO plan: ~/.gstack/projects/digital-human/ceo-plans/2026-06-16-worker-concurrency.md。本轮 prod=16 不做也安全。
+- **Effort:** M(human)→ S(CC)。**Priority:** P2。
+- **Depends on / blocked by:** 无;但「把 POOL_SIZE 调到 >16」依赖它先落地。
+
+### T-POOL-HOTCONFIG:admin 热调 worker 并发池大小(免重启)
+- **What:** POOL_SIZE 现为环境变量 WORKER_POOL_SIZE(改值需重启)。改为存 platform_config 表 + admin 运营页加滑块,worker 循环每轮读最新值 → 不重启即时改并发。
+- **Why:** 运营高峰临时扩容/缩容不必走部署重启,与现有「运营监控」驾驶舱(admin.ts)体验一致。
+- **Pros:** 运营自助调并发;配合「进行中 N/容量 M」看板形成闭环。
+- **Cons:** 多一个配置表 + API + 前端控件 + requirePlatformAdmin 越权校验。
+- **Context:** 来自 2026-06-16 /plan-ceo-review(SELECTIVE EXPANSION cherry-pick,延后)。环境变量先够用。CEO plan 同上。
+- **Effort:** M(human)→ S(CC)。**Priority:** P3。
+- **Depends on / blocked by:** 并发池基线 PR 先落地。
