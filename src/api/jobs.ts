@@ -201,9 +201,15 @@ function buildImageJob(body: Record<string, unknown>): JobBuildResult {
     sizeSnap = { width: hit.width, height: hit.height };
     effRes = tierFromPixels(hit.width, hit.height); // 计价档从像素自动推
   } else {
-    // 无表:旧 4K 守卫(P1-b 保留)
+    // 无表:档守卫。seedream 用 resolutionTiers 精确档集(报支持的档);其余按 maxResolution(P1-b 保留)。
     if (!resolutionAllowed(def, res))
-      return { ok: false, status: 400, error: `该模型最高支持 ${def.maxResolution}` };
+      return {
+        ok: false,
+        status: 400,
+        error: def.resolutionTiers?.length
+          ? `该模型支持的清晰度:${def.resolutionTiers.join(' / ')}`
+          : `该模型最高支持 ${def.maxResolution}`,
+      };
   }
 
   // 提交时快照(P3 + P1-c):priceTier/maxImages + 所选分辨率 W×H,worker settle/生成读快照,
@@ -858,6 +864,7 @@ jobsRouter.get('/image-models', requireAuth, (_req: Request, res: Response) => {
     maxImages: d.maxImages,
     maxInputImages: d.maxInputImages,
     maxResolution: d.maxResolution,
+    resolutionTiers: d.resolutionTiers, // 该模型支持的精确清晰度档集(火山 seedream:4.0=1K/2K/4K、4.5=2K/4K、5.0-lite=2K/3K/4K);无→前端按 maxResolution 回落
     canSetSize: d.canSetSize !== false, // 前端据此显隐清晰度控件(false=随输入图,如 qwen-image-edit)
     supportsBbox: !!d.supportsBbox, // 前端据此显示/隐藏局部重绘画笔(仅万相2.7)
     // admin 录的分辨率表(前端比例下拉用;只吐 ratio/w/h/默认,不漏 priceTier/modelId)

@@ -40,6 +40,10 @@ export interface ImageModelDef {
   maxImages: number; // 出图张数上限(z-image 固定1、qwen-2.0 6)
   maxInputImages: number; // img2img 输入图上限(text2img 模型 0);v1 封顶 3(上传端点写死,P2-c)
   maxResolution: '1K' | '2K' | '4K'; // 最高分辨率档
+  // 该模型支持的清晰度档集(精确,非「≤maxResolution」)。火山 seedream 各型号档不同:
+  //   5.0-lite=2K/3K/4K、4.5=2K/4K、4.0=1K/2K/4K(跳档,maxResolution 表达不了)。
+  //   空 → 前端回落 ['1K','2K','4K'].filter(≤maxResolution) 旧逻辑。
+  resolutionTiers?: string[];
   priceTier: number; // 每张计价(替代 PRICE_PER_IMAGE,非双乘 P2-a)
   resolutions?: ResolutionEntry[]; // admin 录的分辨率列表(百炼官方推荐表);空 → 用 imageSize 算
   supportsBbox?: boolean; // 支持 bbox_list 局部重绘(仅万相2.7;千问编辑不支持)
@@ -113,20 +117,21 @@ export const IMAGE_MODELS: Record<string, ImageModelDef> = {
   // sizeKind='keyword':size 传 '2K'/'4K' 档(ark 适配器透传)。文生图 + 多图融合(img2img)。
   // ⚠ 价格未录(火山按 token 计)→ priceTier 占位、admin 录真实成本前不启用。
   // 火山真实固定价(元/张):4.0=0.2→⌈×35⌉=7;4.5=0.25→9;5.0-lite=0.22→8(model_pricing 为准)。
+  // resolutionTiers:火山文档精确档集(各型号不同);ark 适配器按 (型号,档,比例) 查像素表发精确 size。
   'doubao-seedream-4.0': {
     key: 'doubao-seedream-4.0', label: '豆包 Seedream 4.0', modelId: 'doubao-seedream-4-0-250828', provider: 'volc-ark',
     shape: 'S', sizeKind: 'keyword', modes: ['text2img', 'img2img'],
-    maxImages: 1, maxInputImages: 5, maxResolution: '4K', priceTier: 7,
+    maxImages: 1, maxInputImages: 5, maxResolution: '4K', resolutionTiers: ['1K', '2K', '4K'], priceTier: 7,
   },
   'doubao-seedream-4.5': {
     key: 'doubao-seedream-4.5', label: '豆包 Seedream 4.5', modelId: 'doubao-seedream-4-5-251128', provider: 'volc-ark',
     shape: 'S', sizeKind: 'keyword', modes: ['text2img', 'img2img'],
-    maxImages: 1, maxInputImages: 5, maxResolution: '4K', priceTier: 9,
+    maxImages: 1, maxInputImages: 5, maxResolution: '4K', resolutionTiers: ['2K', '4K'], priceTier: 9,
   },
   'doubao-seedream-5.0-lite': {
     key: 'doubao-seedream-5.0-lite', label: '豆包 Seedream 5.0 Lite', modelId: 'doubao-seedream-5-0-260128', provider: 'volc-ark',
     shape: 'S', sizeKind: 'keyword', modes: ['text2img', 'img2img'],
-    maxImages: 1, maxInputImages: 5, maxResolution: '4K', priceTier: 8,
+    maxImages: 1, maxInputImages: 5, maxResolution: '4K', resolutionTiers: ['2K', '3K', '4K'], priceTier: 8,
   },
 
   // ── Google AI Studio Gemini(Nano Banana,PR-2a;provider='google-ai-studio',走 gemini.ts)──
@@ -257,9 +262,11 @@ export function listEnabledModels(): ImageModelDef[] {
 }
 
 /** 分辨率档位排序,用于 maxResolution 上限校验。 */
-const RES_ORDER: Record<string, number> = { '1K': 1, '2K': 2, '4K': 3 };
-/** 该模型是否支持所选分辨率(4K 不支持→false,调用方 400,P2-4k 不 clamp)。 */
+const RES_ORDER: Record<string, number> = { '1K': 1, '2K': 2, '3K': 3, '4K': 4 };
+/** 该模型是否支持所选分辨率。
+ *  有 resolutionTiers(火山 seedream)→ 精确档集成员校验(3K/跳档可表达);否则旧「≤maxResolution」逻辑。 */
 export function resolutionAllowed(def: ImageModelDef, resolution?: string): boolean {
+  if (def.resolutionTiers?.length) return def.resolutionTiers.includes(resolution ?? def.resolutionTiers[0]!);
   const want = RES_ORDER[resolution ?? '1K'] ?? 1;
   return want <= (RES_ORDER[def.maxResolution] ?? 2);
 }

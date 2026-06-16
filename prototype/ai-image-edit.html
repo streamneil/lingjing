@@ -522,10 +522,18 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   // 清晰度控件按模型 canSetSize 显隐:qwen-image-edit 不可设(随输入图)→ 隐藏;万相2.7 编辑可设 1K/2K。
   function canSetSize(){ const m=curModel(); return !m || m.canSetSize !== false; }
   function effRes(){ return canSetSize() ? res : undefined; } // 不可设时提交体不发 resolution
+  const ERES_ORDER={'1K':1,'2K':2,'3K':3,'4K':4};
   function renderEditRes(){
     const seg=document.getElementById('resSeg'); const lbl=seg.previousElementSibling;
-    const show=canSetSize();
+    const m=curModel(); const show=canSetSize();
     seg.style.display=show?'':'none'; if(lbl&&lbl.classList.contains('pop-label')) lbl.style.display=show?'':'none';
+    if(!show) return;
+    // 清晰度档按模型动态:优先 resolutionTiers(火山 seedream 各型号不同档),无则按 ≤maxResolution。
+    const hasTiers=!!(m && m.resolutionTiers && m.resolutionTiers.length);
+    const opts=hasTiers ? m.resolutionTiers : ['1K','2K','4K'].filter(r=>ERES_ORDER[r]<=(ERES_ORDER[m?m.maxResolution:'2K']||2));
+    if(!opts.includes(res)) res=hasTiers ? opts[0] : opts[opts.length-1];
+    seg.innerHTML=opts.map(r=>`<div class="seg${r===res?' on':''}" data-res="${r}">${r}</div>`).join('');
+    seg.querySelectorAll('.seg').forEach(s=>s.onclick=()=>{ seg.querySelectorAll('.seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); res=s.dataset.res; syncPills(); scheduleEstimate(); });
   }
   function renderCount(){
     const m=curModel(); const maxN=m?(m.maxImages||1):1;

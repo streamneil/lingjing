@@ -237,7 +237,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   const feedList=document.querySelector('.feed-list');
   let count=1, res='1K', ratio='1:1', mode='text2img', model='', allModels=[], seed='';
 
-  const RES_ORDER={'1K':1,'2K':2,'4K':3};
+  const RES_ORDER={'1K':1,'2K':2,'3K':3,'4K':4}; // 3K:火山 seedream 5.0-lite 支持
   // ── 模型下拉(单一真相源:GET /image-models,自绘深色 popover)。按当前 mode 过滤 ──
   const modelOpts=document.getElementById('modelOpts');
   async function loadModels(){
@@ -270,9 +270,12 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       return;
     }
     resSeg.style.display=''; if(resLbl&&resLbl.classList.contains('pop-label')) resLbl.style.display='';
-    const maxR=RES_ORDER[m?m.maxResolution:'2K']||2;
-    const opts=['1K','2K','4K'].filter(r=>RES_ORDER[r]<=maxR);
-    if(!opts.includes(res)) res=opts[opts.length-1];
+    // 优先用模型声明的精确档集(火山 seedream:5.0-lite=2K/3K/4K、4.5=2K/4K、4.0=1K/2K/4K,跳档);
+    //   无则回落「≤maxResolution」旧逻辑(百炼系)。
+    const hasTiers=!!(m && m.resolutionTiers && m.resolutionTiers.length);
+    const opts=hasTiers ? m.resolutionTiers : ['1K','2K','4K'].filter(r=>RES_ORDER[r]<=(RES_ORDER[m?m.maxResolution:'2K']||2));
+    // 切到不支持当前档的模型 → seedream 落首档(最低,如 4.5 从 1K→2K);百炼回落系保留旧「最高档」默认。
+    if(!opts.includes(res)) res=hasTiers ? opts[0] : opts[opts.length-1];
     resSeg.innerHTML=opts.map(r=>`<div class="seg${r===res?' on':''}" data-res="${r}">${r}</div>`).join('');
     resSeg.querySelectorAll('.seg').forEach(s=>s.onclick=()=>{ resSeg.querySelectorAll('.seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); res=s.dataset.res; syncPills(); scheduleEstimate(); });
   }

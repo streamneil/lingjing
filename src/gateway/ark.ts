@@ -29,23 +29,41 @@ import type {
 const ARK_PROVIDER = 'volc-ark';
 const ARK_FALLBACK_BASE = 'https://ark.cn-beijing.volces.com/api/v3';
 
-// 豆包 seedream 各型号支持的分辨率档(火山文档)。平台 UI 只给 1K/2K/4K + 上限校验,不拦下限;
-// 这里按型号托底:用户选了型号不支持的低档(如 4.5 选 1K)→ 自动抬到该型号最低支持档,绝不报错。
-const SEEDREAM_SIZES: Record<string, string[]> = {
-  'doubao-seedream-4-0-250828': ['1K', '2K', '4K'],
-  'doubao-seedream-4-5-251128': ['2K', '4K'],
-  'doubao-seedream-5-0-260128': ['2K', '3K', '4K'],
+// 豆包 seedream 精确宽高像素表(火山文档「推荐宽高像素值」)。按 (档,比例) → "WxH"。
+// 2K/4K 三型号一致;1K 仅 4.0;3K 仅 5.0-lite。用户选的「档+比例」查此表发精确 size,
+// 比例真正生效(原来只发档名让模型自定比例 → 用户选 16:9 也可能出 1:1)。
+const SEEDREAM_2K: Record<string, string> = {
+  '1:1': '2048x2048', '3:4': '1728x2304', '4:3': '2304x1728', '16:9': '2848x1600',
+  '9:16': '1600x2848', '3:2': '2496x1664', '2:3': '1664x2496', '21:9': '3136x1344',
 };
-const SIZE_ORDER = ['1K', '2K', '3K', '4K'];
-/** 把请求 size clamp 到该 modelId 支持的档;不支持的低档抬到最低支持档。非档位值(如 2048x2048)原样透传。 */
-function clampSeedreamSize(modelId: string, size?: string): string | undefined {
-  if (!size) return undefined;
-  const allowed = SEEDREAM_SIZES[modelId];
-  if (!allowed) return size; // 非 seedream / 未知型号:原样
-  if (allowed.includes(size)) return size; // 支持:原样
-  if (!SIZE_ORDER.includes(size)) return size; // 像素值(WxH)不动,交给厂商校验
-  // 档位但不支持(低于该型号最低档)→ 抬到最低支持档。
-  return allowed[0];
+const SEEDREAM_4K: Record<string, string> = {
+  '1:1': '4096x4096', '3:4': '3520x4704', '4:3': '4704x3520', '16:9': '5504x3040',
+  '9:16': '3040x5504', '2:3': '3328x4992', '3:2': '4992x3328', '21:9': '6240x2656',
+};
+const SEEDREAM_1K: Record<string, string> = { // 仅 4.0
+  '1:1': '1024x1024', '3:4': '864x1152', '4:3': '1152x864', '16:9': '1312x736',
+  '9:16': '736x1312', '2:3': '832x1248', '3:2': '1248x832', '21:9': '1568x672',
+};
+const SEEDREAM_3K: Record<string, string> = { // 仅 5.0-lite
+  '1:1': '3072x3072', '3:4': '2592x3456', '4:3': '3456x2592', '16:9': '4096x2304',
+  '9:16': '2304x4096', '2:3': '2496x3744', '3:2': '3744x2496', '21:9': '4704x2016',
+};
+// 各型号支持的档 → 该档的像素表。
+const SEEDREAM_PIXELS: Record<string, Record<string, Record<string, string>>> = {
+  'doubao-seedream-4-0-250828': { '1K': SEEDREAM_1K, '2K': SEEDREAM_2K, '4K': SEEDREAM_4K },
+  'doubao-seedream-4-5-251128': { '2K': SEEDREAM_2K, '4K': SEEDREAM_4K },
+  'doubao-seedream-5-0-260128': { '2K': SEEDREAM_2K, '3K': SEEDREAM_3K, '4K': SEEDREAM_4K },
+};
+/** 把 (型号, 档, 比例) 解析为火山精确像素 size('2848x1600')。
+ *  非 seedream → 原样返回 size 档名;查不到(档/比例不支持)→ 回落该型号最低档的该比例,再回落档名。 */
+function seedreamSize(modelId: string, tier?: string, ratio?: string): string | undefined {
+  const table = SEEDREAM_PIXELS[modelId];
+  if (!table) return tier; // 非 seedream:原样(其他厂商不走这)
+  const tiers = Object.keys(table);
+  const effTier = tier && table[tier] ? tier : tiers[0]!; // 不支持的档(如 4.5 选 1K)→ 回落最低支持档
+  const byRatio = table[effTier]!;
+  const r = ratio && byRatio[ratio] ? ratio : '1:1'; // 不支持的比例 → 回落 1:1
+  return byRatio[r];
 }
 
 function arkBaseUrl(): string {
@@ -159,7 +177,7 @@ export class ArkGateway implements CapabilityGateway, SyncImageGateway {
 
   // ── SyncImageGateway:同步文生图 / 图生图 ──
   /** 火山同步图片生成核心:POST /images/generations,返 data[].url。signal 做硬超时。 */
-  private async generate(modelId: string, prompt: string, images: string[], opts: { size?: string; count?: number }, signal: AbortSignal): Promise<string[]> {
+  private async generate(modelId: string, prompt: string, images: string[], opts: { tier?: string; ratio?: string; count?: number }, signal: AbortSignal): Promise<string[]> {
     const body: Record<string, unknown> = {
       model: modelId,
       prompt,
@@ -171,8 +189,9 @@ export class ArkGateway implements CapabilityGateway, SyncImageGateway {
     };
     if (images.length === 1) body.image = images[0];
     else if (images.length > 1) body.image = images; // 多图融合(多输入图 → 单输出图)
-    const size = clampSeedreamSize(modelId, opts.size); // 按型号托底(4.5/5.0-lite 选 1K → 抬到 2K)
-    if (size) body.size = size; // 如 '2K' 或 '2048x2048'
+    // size 发火山精确像素(档+比例 → "2848x1600"),用户选的比例真正生效(原来只发档名让模型自定比例)。
+    const size = seedreamSize(modelId, opts.tier, opts.ratio);
+    if (size) body.size = size;
     const { status, json } = await arkHttp('POST', '/images/generations', body, signal);
     if (status !== 200) throw new Error(`火山图片生成失败 HTTP ${status}: ${JSON.stringify(json?.error ?? json)}`);
     const data: Array<{ url?: string; error?: unknown }> = json?.data ?? [];
@@ -183,14 +202,12 @@ export class ArkGateway implements CapabilityGateway, SyncImageGateway {
 
   async generateImageSync(input: ImageGenInput, signal: AbortSignal): Promise<string[]> {
     const def = getImageModel(input.model, 'text2img');
-    // 火山 size:优先用 resolution 档(2K/4K),否则模型默认。
-    const size = input.resolution || undefined;
-    return this.generate(def.modelId, input.prompt, [], { size, count: input.count }, signal);
+    // 档(resolution)+ 比例(ratio)→ 火山精确像素 size(seedreamSize 查表)。
+    return this.generate(def.modelId, input.prompt, [], { tier: input.resolution, ratio: input.ratio, count: input.count }, signal);
   }
 
   async editImage(input: ImageEditInput, signal: AbortSignal): Promise<string[]> {
     const def = getImageModel(input.model, 'img2img');
-    const size = input.resolution || undefined;
-    return this.generate(def.modelId, input.prompt, input.imageUrls ?? [], { size, count: input.count }, signal);
+    return this.generate(def.modelId, input.prompt, input.imageUrls ?? [], { tier: input.resolution, ratio: input.ratio, count: input.count }, signal);
   }
 }

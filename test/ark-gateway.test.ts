@@ -116,7 +116,7 @@ describe('ArkGateway 图片:同步生成', () => {
     expect(urls).toEqual(['https://img/gen1.jpg']);
     expect(captured.url).toContain('/images/generations');
     expect(captured.body.model).toBe('doubao-seedream-4-0-250828'); // 适配器用 registry.modelId(带版本号)
-    expect(captured.body.size).toBe('2K');
+    expect(captured.body.size).toBe('2048x2048'); // 2K + 默认 1:1 → 火山精确像素(矩阵)
     expect(captured.body.sequential_image_generation).toBe('disabled'); // 锁单图输出(文档要求)
   });
 
@@ -134,15 +134,36 @@ describe('ArkGateway 图片:同步生成', () => {
     expect(captured.sequential_image_generation).toBe('disabled');
   });
 
-  it('分辨率托底:4.5/5.0-lite 选 1K → 抬到 2K(火山不支持 1K);4.0 保留 1K', async () => {
-    const grab = () => { let c: any = null; vi.spyOn(globalThis, 'fetch').mockImplementation(async (_u, init: any) => { c = JSON.parse(init.body); return new Response(JSON.stringify({ data: [{ url: 'https://x' }] }), { status: 200 }); }); return () => c; };
+  const grab = () => { let c: any = null; vi.spyOn(globalThis, 'fetch').mockImplementation(async (_u, init: any) => { c = JSON.parse(init.body); return new Response(JSON.stringify({ data: [{ url: 'https://x' }] }), { status: 200 }); }); return () => c; };
+
+  it('档托底:4.5 不支持 1K → 回落最低支持档 2K;4.0 支持 1K → 保留(均按 1:1 出精确像素)', async () => {
     let get = grab();
     await new ArkGateway().generateImageSync({ model: 'doubao-seedream-4.5', prompt: 'x', resolution: '1K' }, new AbortController().signal);
-    expect(get().size).toBe('2K'); // 4.5 不支持 1K → 抬到 2K
+    expect(get().size).toBe('2048x2048'); // 4.5 无 1K 档 → 回落 2K，1:1
     vi.restoreAllMocks(); setProviderKey('volc-ark', 'sk-ark-test-key');
     get = grab();
     await new ArkGateway().generateImageSync({ model: 'doubao-seedream-4.0', prompt: 'x', resolution: '1K' }, new AbortController().signal);
-    expect(get().size).toBe('1K'); // 4.0 支持 1K → 原样
+    expect(get().size).toBe('1024x1024'); // 4.0 有 1K 档 → 保留，1:1
+  });
+
+  it('比例真正生效:档+比例 → 火山矩阵精确像素(原来比例被丢)', async () => {
+    let get = grab();
+    await new ArkGateway().generateImageSync({ model: 'doubao-seedream-4.0', prompt: 'x', resolution: '2K', ratio: '16:9' }, new AbortController().signal);
+    expect(get().size).toBe('2848x1600'); // 2K × 16:9
+    vi.restoreAllMocks(); setProviderKey('volc-ark', 'sk-ark-test-key');
+    get = grab();
+    await new ArkGateway().generateImageSync({ model: 'doubao-seedream-4.0', prompt: 'x', resolution: '4K', ratio: '9:16' }, new AbortController().signal);
+    expect(get().size).toBe('3040x5504'); // 4K × 9:16
+  });
+
+  it('3K 档仅 5.0-lite:5.0-lite 选 3K 生效;4.0 选 3K → 回落最低档 1K', async () => {
+    let get = grab();
+    await new ArkGateway().generateImageSync({ model: 'doubao-seedream-5.0-lite', prompt: 'x', resolution: '3K', ratio: '4:3' }, new AbortController().signal);
+    expect(get().size).toBe('3456x2592'); // 5.0-lite 有 3K 档 × 4:3
+    vi.restoreAllMocks(); setProviderKey('volc-ark', 'sk-ark-test-key');
+    get = grab();
+    await new ArkGateway().generateImageSync({ model: 'doubao-seedream-4.0', prompt: 'x', resolution: '3K', ratio: '4:3' }, new AbortController().signal);
+    expect(get().size).toBe('1152x864'); // 4.0 无 3K → 回落最低档 1K × 4:3
   });
 
   it('图片无 url 返回 → 抛错(不静默)', async () => {
