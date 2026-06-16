@@ -43,6 +43,9 @@ const IMG_SEED = [
   ['wan2.6-t2i',        '万相2.6',         'wan2.6-t2i',         7,  0.20, 4, 'wan2.2-flash',      'text2img',           4],
   ['qwen-image-edit',   '图像编辑',         'qwen-image-edit',    11, 0.30, 1, 'qwen-image-edit',   'img2img',            5],
   ['wan2.2-flash',      '万相2.2 极速',     'wan2.2-t2i-flash',   5,  0.14, 4, 'wan2.2-flash',      'text2img',           6],
+  // 万相2.7 编辑/Pro:旧靠"代码模板默认启用"上线,现 isEnabled 需 DB 行 → 必须种子(否则下线)。
+  ['wan2.7-image',      '万相2.7 编辑',     'wan2.7-image',       7,  0.20, 4, 'wan2.7-image',      'text2img,img2img',   7],
+  ['wan2.7-image-pro',  '万相2.7 编辑 Pro', 'wan2.7-image-pro',   18, 0.50, 4, 'wan2.7-image-pro',  'text2img,img2img',   8],
 ];
 const imgRowExists = db.prepare('SELECT 1 FROM image_model_override WHERE key=?');
 const insImg = db.prepare(
@@ -56,6 +59,41 @@ for (const [key, label, modelId, tier, cost, maxImg, tmpl, modes, sort] of IMG_S
   seeded++;
 }
 if (seeded) console.log(`图片模型定价已种子 ${seeded} 个(真实成本×35,cost_source=doc)`);
+
+// ── 视频模型真实成本(video_model_override;按文档真实元/秒,非 ÷35 反推)──
+// 一模型多档=多行,id="{key}:{variant}";enabled=1(视频现状全部可用,种子保持)。
+// variant:720P/1080P/audio-720P/audio-1080P。售价由 sellPrice(成本×倍率) 实时算,这里只存成本。
+const VIDEO_SEED = [
+  // 大师(万相2.7)t2v/i2v/r2v/编辑:720P 0.6、1080P 1.0 元/秒
+  ['wan2.7-t2v','720P',0.6],['wan2.7-t2v','1080P',1.0],
+  ['wan2.7-i2v','720P',0.6],['wan2.7-i2v','1080P',1.0],
+  ['wan2.7-r2v','720P',0.6],['wan2.7-r2v','1080P',1.0],
+  ['wan2.7-videoedit','720P',0.6],['wan2.7-videoedit','1080P',1.0],
+  // HappyHorse t2v/i2v/r2v/编辑:720P 0.9、1080P 1.6 元/秒
+  ['happyhorse-1.0-t2v','720P',0.9],['happyhorse-1.0-t2v','1080P',1.6],
+  ['happyhorse-1.0-i2v','720P',0.9],['happyhorse-1.0-i2v','1080P',1.6],
+  ['happyhorse-1.0-r2v','720P',0.9],['happyhorse-1.0-r2v','1080P',1.6],
+  ['happyhorse-1.0-video-edit','720P',0.9],['happyhorse-1.0-video-edit','1080P',1.6],
+  // 可灵 V3:无声 720P 0.6 / 1080P 0.8;有声 720P 0.9 / 1080P 1.2
+  ['kling-v3-t2v','720P',0.6],['kling-v3-t2v','1080P',0.8],
+  ['kling-v3-t2v','audio-720P',0.9],['kling-v3-t2v','audio-1080P',1.2],
+];
+const vovExists = db.prepare('SELECT 1 FROM video_model_override WHERE id=?');
+const insVov = db.prepare(
+  `INSERT INTO video_model_override (id,model_key,variant,real_cost_yuan,cost_source,enabled,updated_at)
+   VALUES (?,?,?,?, 'doc', 1, ?)`,
+);
+let vSeeded = 0;
+for (const [key, variant, cost] of VIDEO_SEED) {
+  const id = `${key}:${variant}`;
+  if (vovExists.get(id)) continue;
+  insVov.run(id, key, variant, cost, Date.now());
+  vSeeded++;
+}
+if (vSeeded) console.log(`视频模型成本已种子 ${vSeeded} 行(真实元/秒,enabled=1)`);
+
+// ── TTS 真实成本/字符 + 全局参数兜底(platform_config 建表时已 seed markup;这里补 TTS 成本)──
+db.prepare(`INSERT OR IGNORE INTO platform_config (key,value) VALUES ('tts_cost_per_char','0.00008')`).run(); // 0.8元/万字符
 
 // 强制 WAL checkpoint:让写入立即落主库,避免另起的服务进程读到旧快照
 try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch { /* noop */ }

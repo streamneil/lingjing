@@ -400,6 +400,40 @@ export interface ImageModelOverrideRow {
   created_at: number;
 }
 
+// ── 定价管理(2026-06:全模态后台调价)──
+// platform_config:全局参数 key-value。markup_x35 = 毛利倍率×10积分/元 的整数(默认35=3.5倍);
+//   floor_x35 = 倍率地板(默认10=保本);用整数避免 ×3.5×10 浮点多收(见 credits/pricing.ts)。
+db.exec(`CREATE TABLE IF NOT EXISTS platform_config (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
+{
+  const seedCfg = db.prepare(`INSERT OR IGNORE INTO platform_config (key,value) VALUES (?,?)`);
+  seedCfg.run('markup_x35', '35'); // 3.5 倍毛利 × 10 积分/元
+  seedCfg.run('credits_per_yuan', '10');
+  seedCfg.run('floor_x35', '10'); // 倍率地板:markup_x35 ≥ 10 才保本(建议运营设 ≥30 守毛利)
+}
+// video_model_override:视频/数字人后台可改成本+启停(照 image_model_override 范式)。
+//   一模型多档=多行(id="{key}:{variant}");enabled 默认 1 —— 视频现状全部可用,默认0会误杀生成。
+db.exec(`
+  CREATE TABLE IF NOT EXISTS video_model_override (
+    id              TEXT PRIMARY KEY,
+    model_key       TEXT NOT NULL,
+    variant         TEXT,
+    real_cost_yuan  REAL NOT NULL,
+    cost_source     TEXT NOT NULL,
+    enabled         INTEGER NOT NULL DEFAULT 1,
+    updated_at      INTEGER NOT NULL
+  )
+`);
+
+export interface VideoModelOverrideRow {
+  id: string;
+  model_key: string;
+  variant: string | null; // 720P/1080P/audio-720P… ;null=无档
+  real_cost_yuan: number;
+  cost_source: string; // 'doc' | 'estimate'
+  enabled: number;
+  updated_at: number;
+}
+
 // ── 积分套餐 + 意向线索(/plan-design-review + /plan-eng-review)──
 // pricing_plan:admin 后台动态管理的定价套餐,前端定价区只渲染。照 image_model_override 范式
 //   (代码不写死套餐,运营在后台填真实价/积分;改完即时生效)。price_yuan 可空 = 面议。

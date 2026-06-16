@@ -26,6 +26,7 @@ import {
   setUserStatus,
 } from '../auth/index.js';
 import { grant, balance } from '../credits/index.js';
+import { sellPrice, assertProfitable, markupX35, floorX35, getConfig, setConfig } from '../credits/pricing.js';
 import {
   listPlans,
   getPlan,
@@ -529,8 +530,9 @@ function parseAdminResolutions(raw: string | null | undefined): { ratio: string;
   try { const a = JSON.parse(raw); return Array.isArray(a) ? a : []; } catch { return []; }
 }
 
-// 售价积分 = ceil(真实成本元 × 35)。整数系数 35(=3.5倍毛利 × 10积分/元);禁 ×3.5×10 浮点多收。
-function creditsFromCost(realCostYuan: number): number { return Math.max(1, Math.ceil(realCostYuan * 35)); }
+// 售价积分 = ⌈真实成本元 × markup_x35⌉。接全局倍率(platform_config),后台改倍率全场随之重算。
+// 整数系数(禁 ×3.5×10 浮点多收);单一真源在 credits/pricing.ts:sellPrice。
+function creditsFromCost(realCostYuan: number): number { return sellPrice(realCostYuan); }
 
 function validModelBody(b: Record<string, unknown>): { ok: true; v: { label: string; modelId: string; enabled: number; priceTier: number; realCostYuan: number | null; costSource: string | null; maxImages: number; modes: string; sortOrder: number; resolutions: string | null } } | { ok: false; error: string } {
   const label = typeof b.label === 'string' ? b.label.trim() : '';
@@ -591,6 +593,11 @@ adminRouter.post('/api/image-models', requirePlatformAdmin, (req: Request, res: 
   if (!SHAPE_TEMPLATES.includes(shapeTemplate)) return res.status(400).json({ error: '无效 shape 模板' });
   const v = validModelBody(b);
   if (!v.ok) return res.status(400).json({ error: v.error });
+  // 上架自检闸:启用时拦赔本/未校准(成本≤0/estimate/倍率<地板)。
+  if (v.v.enabled === 1) {
+    try { assertProfitable(v.v.realCostYuan, v.v.costSource, v.v.priceTier); }
+    catch (e) { return res.status(400).json({ error: (e as Error).message }); }
+  }
   db.prepare(
     `INSERT INTO image_model_override (key,label,model_id,enabled,price_tier,real_cost_yuan,cost_source,max_images,shape_template,modes,sort_order,resolutions,created_at)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -608,6 +615,13 @@ adminRouter.put('/api/image-models/:key', requirePlatformAdmin, (req: Request, r
   if (!codeDef && !existing) return res.status(404).json({ error: '模型不存在' });
   const v = validModelBody(b);
   if (!v.ok) return res.status(400).json({ error: v.error });
+  // 上架自检闸:启用时拦赔本/未校准。body 未带 realCostYuan 时回落已有行的成本(只改别的字段不该被拦)。
+  if (v.v.enabled === 1) {
+    const effCost = v.v.realCostYuan ?? existing?.real_cost_yuan ?? null;
+    const effSrc = v.v.costSource ?? existing?.cost_source ?? null;
+    try { assertProfitable(effCost, effSrc, v.v.priceTier); }
+    catch (e) { return res.status(400).json({ error: (e as Error).message }); }
+  }
   // 代码内置改 → upsert(shape_template=自身,技术契约取自身);DB 新增改 → 保留原 shape_template。
   const shapeTemplate: string | null = existing?.shape_template ?? (codeDef ? key : null);
   db.prepare(
@@ -628,6 +642,76 @@ adminRouter.delete('/api/image-models/:key', requirePlatformAdmin, (req: Request
   db.prepare('DELETE FROM image_model_override WHERE key=?').run(key);
   writePlatformAudit(req.padmin!.id, 'image_model_delete', PLATFORM_TENANT, key, padminIp(req));
   res.json({ ok: true, note: IMAGE_MODELS[key] ? '已回落代码默认' : '已删除' });
+});
+
+// ── 定价管理(全局倍率 + 视频/TTS 成本)──
+/** 读定价管理数据:全局倍率/地板、视频 override 行、TTS 成本、亏损预警。 */
+adminRouter.get('/api/pricing', requirePlatformAdmin, (_req: Request, res: Response) => {
+  const markupX35Val = Number(getConfig('markup_x35')) || 35;
+  const floorX35Val = Number(getConfig('floor_x35')) || 10;
+  const ttsCost = Number(getConfig('tts_cost_per_char')) || 0.00008;
+  const sell = (cost: number) => Math.max(1, Math.ceil(cost * markupX35Val));
+  const vids = db.prepare('SELECT * FROM video_model_override ORDER BY model_key, variant').all() as Array<{
+    id: string; model_key: string; variant: string | null; real_cost_yuan: number; cost_source: string; enabled: number;
+  }>;
+  const videoRows = vids.map((r) => ({
+    id: r.id, modality: 'video', model: r.model_key, variant: r.variant,
+    realCostYuan: r.real_cost_yuan, sell: sell(r.real_cost_yuan), costSource: r.cost_source, enabled: r.enabled === 1,
+  }));
+  // TTS 单行(扁价/字符);售价/字 = 成本×倍率(亚 1 积分,展示用 万字 价更直观)。
+  // 售价/万字 = 每字售价(成本×倍率)× 10000。先把每字售价定到合理精度再放大,避免浮点 28→29 多1。
+  const ttsPerChar = Math.round(ttsCost * markupX35Val * 1e8) / 1e8;
+  const ttsRow = {
+    id: 'tts', modality: 'tts', model: 'Qwen-TTS / CosyVoice', variant: '每字',
+    realCostYuan: ttsCost, sellPer10k: Math.ceil(ttsPerChar * 10000), costSource: 'doc', enabled: true,
+  };
+  // 预警:倍率 < 地板;或视频成本 ≤ 0
+  const alerts: string[] = [];
+  if (markupX35Val < floorX35Val) alerts.push(`全局倍率 ${markupX35Val/10} < 地板 ${floorX35Val/10},全场赔本!`);
+  for (const r of videoRows) if (!(r.realCostYuan > 0)) alerts.push(`视频 ${r.id} 成本未录`);
+  res.json({ markup: markupX35Val / 10, floor: floorX35Val / 10, videoRows, ttsRow, alerts });
+});
+
+/** 改全局毛利倍率(地板硬拦:低于地板拒绝,防全场集体赔本)。即时生效,在飞 job 读快照不受影响。 */
+adminRouter.put('/api/pricing/markup', requirePlatformAdmin, (req: Request, res: Response) => {
+  const markup = Number((req.body ?? {}).markup);
+  if (!Number.isFinite(markup) || markup <= 0) return res.status(400).json({ error: '倍率需为正数' });
+  const x35 = Math.round(markup * 10); // 存整数 markup_x35
+  const floorX35Val = Number(getConfig('floor_x35')) || 10;
+  if (x35 < floorX35Val) return res.status(400).json({ error: `倍率 ${markup} 低于地板 ${floorX35Val/10},会赔本,拒绝保存` });
+  setConfig('markup_x35', String(x35));
+  writePlatformAudit(req.padmin!.id, 'pricing_markup_update', PLATFORM_TENANT, String(markup), padminIp(req));
+  res.json({ ok: true, markupX35: x35 });
+});
+
+/** 改视频档位真实成本 / 启停。启用时过 assertProfitable。即时生效。 */
+adminRouter.put('/api/pricing/video/:id', requirePlatformAdmin, (req: Request, res: Response) => {
+  const id = req.params.id!;
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const row = db.prepare('SELECT * FROM video_model_override WHERE id=?').get(id) as
+    { real_cost_yuan: number; cost_source: string; enabled: number } | undefined;
+  if (!row) return res.status(404).json({ error: '档位不存在' });
+  const realCostYuan = b.realCostYuan !== undefined ? Number(b.realCostYuan) : row.real_cost_yuan;
+  if (!Number.isFinite(realCostYuan) || realCostYuan <= 0) return res.status(400).json({ error: '真实成本需为正数(元)' });
+  const costSource = typeof b.costSource === 'string' && b.costSource === 'estimate' ? 'estimate' : 'doc';
+  const enabled = b.enabled === false || b.enabled === 0 ? 0 : 1;
+  if (enabled === 1) {
+    try { assertProfitable(realCostYuan, costSource); }
+    catch (e) { return res.status(400).json({ error: (e as Error).message }); }
+  }
+  db.prepare('UPDATE video_model_override SET real_cost_yuan=?, cost_source=?, enabled=?, updated_at=? WHERE id=?')
+    .run(realCostYuan, costSource, enabled, Date.now(), id);
+  writePlatformAudit(req.padmin!.id, 'pricing_video_update', PLATFORM_TENANT, id, padminIp(req));
+  res.json({ ok: true });
+});
+
+/** 改 TTS 真实成本/字符。即时生效。 */
+adminRouter.put('/api/pricing/tts', requirePlatformAdmin, (req: Request, res: Response) => {
+  const cost = Number((req.body ?? {}).realCostYuan);
+  if (!Number.isFinite(cost) || cost <= 0) return res.status(400).json({ error: '成本需为正数(元/字符)' });
+  setConfig('tts_cost_per_char', String(cost));
+  writePlatformAudit(req.padmin!.id, 'pricing_tts_update', PLATFORM_TENANT, String(cost), padminIp(req));
+  res.json({ ok: true });
 });
 
 /** 排序:接收完整有序 keys 数组,按下标写 sort_order(用户端下拉/admin 列表都按此排)。
