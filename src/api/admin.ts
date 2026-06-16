@@ -17,6 +17,7 @@ import { Router, type Request, type Response } from 'express';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { db, type TenantRow } from '../db/index.js';
+import { config } from '../config.js';
 import {
   createTenant,
   createUser,
@@ -195,6 +196,8 @@ adminRouter.get('/api/metrics/overview', requirePlatformAdmin, (_req: Request, r
   return res.json({
     queued,
     running,
+    capacity: config.worker.poolSize, // 并发池容量:前端显「进行中 N / 容量 M」,一眼看饱和度
+    tenantMaxConcurrent: config.worker.tenantMaxConcurrent, // 单租户公平上限
     todayDone,
     todayFailed,
     failRate,

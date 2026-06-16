@@ -966,7 +966,12 @@
       // 健康条
       document.getElementById('msQueued').textContent=fmtN(ov.queued);
       document.getElementById('msQueued').className='ms-v'+(ov.queued>15?' bad':ov.queued>5?' warn':'');
-      document.getElementById('msRunning').textContent=fmtN(ov.running);
+      // 进行中 N / 容量 M(并发池):满了变红、接近满变黄,一眼看饱和度。
+      const runEl=document.getElementById('msRunning');
+      if(ov.capacity){
+        runEl.innerHTML=fmtN(ov.running)+` <small>/ ${fmtN(ov.capacity)}</small>`;
+        runEl.className='ms-v'+(ov.running>=ov.capacity?' bad':ov.running>=ov.capacity*0.8?' warn':'');
+      } else { runEl.textContent=fmtN(ov.running); runEl.className='ms-v'; }
       document.getElementById('msDone').textContent=fmtN(ov.todayDone);
       const failEl=document.getElementById('msFailed');
       failEl.innerHTML=fmtN(ov.todayFailed)+(ov.todayDone+ov.todayFailed>0?` <small>${(ov.failRate*100).toFixed(1)}%</small>`:'');
@@ -983,7 +988,7 @@
       if(ov.level==='red'){
         diag.style.display=''; diag.className='mon-diag';
         if(ov.failRate>0.1){ diag.innerHTML='🔴 <b>失败率偏高</b>。多为生成失败——优先排查百炼 API(配额/限流/AccessDenied),而非扩服务器。点租户「明细」看具体错误。'; }
-        else { diag.innerHTML='🔴 <b>队列拥堵</b>(排队 '+ov.queued+',平均等待 '+fmtDur(ov.avgQueueWaitMs)+')。进行中='+ov.running+':若 running 不高,是单 worker 吞吐瓶颈 → 拆多 worker;若 running 也高,是百炼并发配额到顶 → 加配额。'; }
+        else { diag.innerHTML='🔴 <b>队列拥堵</b>(排队 '+ov.queued+',平均等待 '+fmtDur(ov.avgQueueWaitMs)+')。进行中 '+ov.running+'/'+(ov.capacity||'?')+':若已贴容量 → 调大 WORKER_POOL_SIZE(并配 429 退避);若没贴容量但仍堵,是厂商配额/限流到顶 → 加配额。'; }
       } else if(ov.level==='amber'){
         diag.style.display=''; diag.className='mon-diag amber';
         diag.innerHTML='🟡 <b>排队偏高</b>(排队 '+ov.queued+',平均等待 '+fmtDur(ov.avgQueueWaitMs)+')。还能撑,建议开始评估拆多 worker。';

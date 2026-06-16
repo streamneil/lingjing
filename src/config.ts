@@ -115,6 +115,20 @@ export const config = {
     password: () => required('SUPERADMIN_PASS'),
   },
 
+  // ── worker 并发（2026-06-16 并发改造）──
+  worker: {
+    // 同时在飞的 job 上限。job 是 I/O 密集（轮询远程厂商，~零 CPU），一个 Node 进程能扛数十个。
+    // 真正上限是厂商账号级配额（百炼/火山 RPM/TPM，远高于此），非本机 CPU。默认 16；调更高前先补 429 退避（见 TODOS）。
+    poolSize: Math.max(1, Number(optional('WORKER_POOL_SIZE', '16')) || 16),
+    // 单租户最大同时在飞 job（公平闸门，防大客户占满整池饿死小客户）。
+    // 默认 ceil(poolSize/2)。未来接入套餐分级后，可改为 min(套餐配额, 此值)。
+    tenantMaxConcurrent: (() => {
+      const pool = Math.max(1, Number(optional('WORKER_POOL_SIZE', '16')) || 16);
+      const override = Number(optional('WORKER_TENANT_MAX', ''));
+      return override > 0 ? override : Math.ceil(pool / 2);
+    })(),
+  },
+
   // ── 数据库（Slice1 用 SQLite，够单租户单机；Slice2 多租户可换 Postgres）──
   db: {
     file: optional('DB_FILE', 'lingjing.db'),

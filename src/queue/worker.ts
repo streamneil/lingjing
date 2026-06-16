@@ -48,6 +48,26 @@ import {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** 关机中断哨兵:pollUntilDone 在收到停止信号时抛它。
+ *  捕获方据此「不标 failed、不退预扣」—— job 留 running,交启动重调归位(eng-review Finding 1)。 */
+export class WorkerStoppingError extends Error {
+  constructor() {
+    super('worker 关机中,任务留待重启重调');
+    this.name = 'WorkerStoppingError';
+  }
+}
+
+/** 提交或续跑(2026-06-16 并发改造,单任务异步 runner 共用)。
+ *  崩溃重启后 recoverStuckJobs 把在飞 job 重入队,重跑时 job 已带 baichuan_task_id →
+ *  跳过 submit、直接续跑现有厂商任务,避免双提交双扣费(eng-review Finding 2)。
+ *  注:仅适用「一个 job 一个厂商任务」的 runner;分段 s2v 一 job 多任务,不走此路(重入队从头跑)。 */
+async function submitOrResume(job: JobRow, submit: () => Promise<string>): Promise<string> {
+  if (job.baichuan_task_id) return job.baichuan_task_id;
+  const taskId = await submit();
+  setProviderTaskId(job.id, taskId);
+  return taskId;
+}
+
 /** 厂商任务轮询循环关心的最小字段(各 fetch 返回的具体类型须结构兼容它)。 */
 interface PollShape {
   status: ProviderJobStatus;
@@ -80,6 +100,9 @@ export async function pollUntilDone<T extends PollShape>(
 ): Promise<T> {
   let sawRunning = false;
   for (;;) {
+    // 优雅关机:收到停止信号则提前跳出,job 留 running,交启动重调归位(eng-review Finding 1)。
+    //   不标 failed、不退预扣 —— 厂商任务可能仍在跑,重启后按 task_id 重调才知道真实结果。
+    if (stopped) throw new WorkerStoppingError();
     if (Date.now() > deadline) {
       throw new Error(
         sawRunning
@@ -265,10 +288,9 @@ async function runVideoT2VJob(job: JobRow): Promise<void> {
   const pre = await moderatePrompt(input.prompt ?? '');
   if (!pre.allowed) throw new Error(`送审拒绝:${pre.reason}`);
 
-  // 2. 网关提交(按 shape 组体,返回 task_id)
+  // 2. 网关提交(按 shape 组体,返回 task_id);resume 守卫:已有 task_id 续跑不重提交。
   const gateway = getGateway(input.model);
-  const providerTaskId = await gateway.submitVideoT2V(input);
-  setProviderTaskId(job.id, providerTaskId);
+  const providerTaskId = await submitOrResume(job, () => gateway.submitVideoT2V(input));
 
   // 3. 轮询(t2v 专用更长超时:1-5 分生成 + 免费档并发=1 排队,eng A1)。取归一 r.videoUrl(R2)。
   const deadline = Date.now() + config.baichuan.videoT2vTimeoutMs;
@@ -362,10 +384,9 @@ async function runMediaVideoJob(
   }
   if (refs.length) input.imageRefs = await Promise.all(refs.map((k) => publisher.publish(k)));
 
-  // 3. 网关提交(按 task 组 media)+ 轮询
+  // 3. 网关提交(按 task 组 media)+ 轮询;resume 守卫:已有 task_id 续跑不重提交。
   const gateway = getGateway(input.model);
-  const providerTaskId = await gateway.submitVideoT2V(input);
-  setProviderTaskId(job.id, providerTaskId);
+  const providerTaskId = await submitOrResume(job, () => gateway.submitVideoT2V(input));
 
   const deadline = Date.now() + config.baichuan.videoT2vTimeoutMs;
   const done = await pollUntilDone(
@@ -417,8 +438,9 @@ async function runImageGenJob(job: JobRow): Promise<void> {
   if (!pre.allowed) throw new Error(`送审拒绝:${pre.reason}`);
 
   const gateway = getGateway(input.model);
-  const providerTaskId = await gateway.submitImage(input);
-  setProviderTaskId(job.id, providerTaskId);
+  // resume 守卫(2026-06-16 并发改造):崩溃重启后 recoverStuckJobs 把在飞 job 重入队;
+  //   已有 task_id 则跳过 submit、直接轮询现有任务,避免双提交双扣费(eng-review Finding 2)。
+  const providerTaskId = await submitOrResume(job, () => gateway.submitImage(input));
 
   // eng-review CQ1:走共享 pollUntilDone(进度封顶 99,留成功后置 100 的余地)。
   const deadline = Date.now() + config.baichuan.jobTimeoutMs;
@@ -515,8 +537,8 @@ async function runImageEditAsyncJob(job: JobRow): Promise<void> {
   input.imageRefs = await Promise.all(refs.map((k) => publisher.publish(k)));
 
   const gateway = getGateway(input.model);
-  const providerTaskId = await gateway.submitImageEdit(input);
-  setProviderTaskId(job.id, providerTaskId);
+  // resume 守卫:已有 task_id 续跑不重提交(eng-review Finding 2)。
+  const providerTaskId = await submitOrResume(job, () => gateway.submitImageEdit(input));
 
   // eng-review CQ1:走共享 pollUntilDone(进度封顶 99)。
   const deadline = Date.now() + config.baichuan.jobTimeoutMs;
@@ -672,59 +694,150 @@ let stopped = false;
  * processJob 无论怎么抛,都只标当前 job failed,循环继续拉下一个。
  */
 /**
- * 启动恢复:把上次进程退出时卡在 running 的 job 标 failed + 释放预扣积分。
+ * 启动恢复(2026-06-16 并发改造重写,eng-review Finding 2 + 外部声音 #3/#4)。
  *
- * 为什么需要:单进程跑到一半被 docker restart / OOM / 部署更新杀掉,
- * 该 job 永远停在 running —— claimNextJob 只领 queued,永不重领它,
- * 用户预扣的积分也不会 release(收入/信任问题,Docker 部署就绪 D11)。
+ * 为什么需要:进程跑到一半被 docker restart / OOM / 部署更新杀掉,job 卡在 running —
+ * claimNextJob 只领 queued 永不重领它,用户预扣积分也不释放。
  *
- * 单进程模型下 startWorker 时不会有"真正在跑"的 running,所以这里看到的
- * running 一定是上次崩溃的残留,安全地全部标失败。复用 catch 分支同款
- * markFailed + release(per-(tenant,job),故先 SELECT 拿 tenant_id)。
+ * 旧实现「盲标 failed + release」是 bug:厂商任务可能在重启窗口已生成完,盲标会
+ * 误杀已完成作品 + 错退款。串行时一次炸 1 个,并发池一次炸最多 poolSize 个。
+ *
+ * 现为「重新入队」让 runner 续跑(复用全套 runner + finalize,最大 DRY):
+ *   - 有 baichuan_task_id → 留着,runner 的 submitOrResume 跳过 submit、续跑现有厂商任务。
+ *     轮询立刻拿到 succeeded → 走正常 finalize 落地;仍在跑则继续轮询;查不到则正常标 failed+release。
+ *   - 无 task_id(同步图片 job claim 后秒级未提交 / 异步 claim 后崩在 submit 前)→ 重入队从头跑。
+ *     reserve 已预扣未 settle,重跑安全(双生成最多浪费一次厂商调用,不双扣费)。
+ *
+ * 启动时 active=0 且单进程,这里看到的 running 一定是上次残留,安全重入队。
+ * 重入队不动 baichuan_task_id / created_at(保 FIFO 与续跑能力),只把 status 回 queued。
  */
 export function recoverStuckJobs(): void {
   const rows = db
-    .prepare(`SELECT id, tenant_id FROM job WHERE status='running'`)
-    .all() as { id: string; tenant_id: string }[];
-  for (const r of rows) {
-    markFailed(r.id, '服务重启中断,请重新发起生成');
-    release(r.tenant_id, r.id); // 释放预扣积分(失败不扣)
-  }
-  if (rows.length) console.log(`[worker] 启动恢复:${rows.length} 个中断的 running 任务已标失败 + 释放积分`);
+    .prepare(`SELECT id, baichuan_task_id FROM job WHERE status='running'`)
+    .all() as { id: string; baichuan_task_id: string | null }[];
+  if (!rows.length) return;
+  const t = Date.now();
+  const requeue = db.prepare(`UPDATE job SET status='queued', started_at=NULL, updated_at=? WHERE id=? AND status='running'`);
+  const tx = db.transaction(() => {
+    for (const r of rows) requeue.run(t, r.id);
+  });
+  tx();
+  const withTask = rows.filter((r) => r.baichuan_task_id).length;
+  console.log(
+    `[worker] 启动恢复:${rows.length} 个中断任务重新入队(${withTask} 个带厂商 task_id 将续跑,${rows.length - withTask} 个从头跑)`,
+  );
 }
 
+// 当前在飞 job 数(并发池槽占用)。dashboard「进行中 N / 容量 M」与测试读它。
+let active = 0;
+/** 当前在飞 job 数(并发池实占槽)。 */
+export function activeJobCount(): number {
+  return active;
+}
+/** 并发池容量(同时可跑的 job 上限)。 */
+export function workerPoolSize(): number {
+  return config.worker.poolSize;
+}
+
+/**
+ * 启动 worker 并发池(2026-06-16 并发改造)。
+ *
+ * 旧实现是单循环 `claim(); await processJob()` —— 串行,进行中永远=1。
+ * 现为 N 槽池:维持最多 poolSize 个 processJob 在飞,每槽跑完即领下一个。
+ * job 是 I/O 密集(轮询远程,~零 CPU),一个 Node 进程并行数十个没问题。
+ * claimNextJob 已单语句原子 + per-tenant cap,多槽同 tick 领取安全。
+ *
+ *   ┌──────────────────────────────────────────────────────┐
+ *   │ while(!stopped):                                      │
+ *   │   while active < poolSize 且 claimNextJob() 有 job:   │  ← 尽量填满槽
+ *   │     active++; processJob(job).finally(active--)       │  ← 不 await,并发跑
+ *   │   await sleep(无 job 时 1000ms,否则短歇)             │
+ *   └──────────────────────────────────────────────────────┘
+ */
 export function startWorker(): void {
   if (running) return;
   running = true;
   stopped = false;
 
-  recoverStuckJobs(); // 进队列循环前先清理上次崩溃残留
+  recoverStuckJobs(); // 进池前先归位上次崩溃残留(此时 active=0,单进程)
+  installShutdownHandlers(); // 优雅关机:SIGTERM/SIGINT 停领 + 让在飞 job 留 running 待重调
+
+  const runOne = (job: JobRow): void => {
+    active++;
+    // Promise.resolve().then 包一层:即便 processJob 同步抛(promise 创建前),
+    // .finally 也一定执行 → active 不泄漏(eng-review Finding:sync-throw 防 desync)。
+    Promise.resolve()
+      .then(() => processJob(job))
+      .catch((err) => {
+        // 关机中断:job 留 running(不标 failed、不退预扣),启动重调归位。
+        if (err instanceof WorkerStoppingError) return;
+        // 失败隔离:单 job 异常只影响它自己,池不中断。
+        const msg = err instanceof Error ? err.message : String(err);
+        markFailed(job.id, msg);
+        release(job.tenant_id, job.id); // 失败释放预扣,失败不扣(设计文档积分语义)
+      })
+      .finally(() => {
+        active--;
+      });
+  };
 
   (async () => {
     while (!stopped) {
-      let job: JobRow | null = null;
-      try {
-        job = claimNextJob();
-        if (!job) {
-          await sleep(1000); // 无任务,空转等待
-          continue;
+      let claimedThisRound = false;
+      // 填槽:有空位且有 queued + 未被 cap 挡住,就一直领。
+      while (!stopped && active < config.worker.poolSize) {
+        let job: JobRow | null = null;
+        try {
+          job = claimNextJob();
+        } catch {
+          break; // claim 本身异常(极少),歇一下下一轮再试,避免热循环
         }
-        await processJob(job);
-      } catch (err) {
-        // 失败隔离:单 job 异常只影响它自己,循环不中断。
-        const msg = err instanceof Error ? err.message : String(err);
-        if (job) {
-          markFailed(job.id, msg);
-          release(job.tenant_id, job.id); // 失败释放预扣,失败不扣(设计文档积分语义)
-        } else await sleep(1000); // claim 本身异常,稍等再试,避免热循环
+        if (!job) break; // 无可领(队列空 / 全被 cap 挡)
+        claimedThisRound = true;
+        runOne(job);
       }
+      // 有活在跑就短歇(快速回来补槽);全空闲就长歇(省 CPU)。
+      await sleep(claimedThisRound || active > 0 ? 150 : 1000);
     }
     running = false;
   })();
 }
 
+/**
+ * 停止领新任务(优雅关机第一步)。在飞 job 不强杀:
+ *   - 同步图片 job(秒级)会自然跑完;
+ *   - 长视频 job 的 pollUntilDone 检测到 stopped 会跳出,job 留 running,
+ *     交给下次启动的 recoverStuckJobs 按 task_id 重调归位(不在此标 failed)。
+ * 真正的安全网是启动重调,而非排空等待(eng-review Finding 1)。
+ */
 export function stopWorker(): void {
   stopped = true;
+}
+
+/** worker 是否已收到停止信号(pollUntilDone 据此提前跳出)。 */
+export function isStopping(): boolean {
+  return stopped;
+}
+
+let shutdownInstalled = false;
+/**
+ * 优雅关机(eng-review Finding 1:重调为主、排空尽力而为)。
+ * SIGTERM(部署/容器停)/ SIGINT(Ctrl-C)→ stopWorker():
+ *   - 停领新任务;
+ *   - 在飞同步图片 job(秒级)自然跑完;
+ *   - 长视频 job 的 pollUntilDone 检测 stopped 跳出 → 留 running,下次启动 recoverStuckJobs 续跑。
+ * 短 grace 等接近完成的同步 job(容器默认 SIGKILL 前有几秒);长 job 排不空是预期,靠重调兜底。
+ * 不在 handler 里强制 exit:让进程管理器/容器按自己的 grace 收尾,避免与其他清理竞争。
+ */
+function installShutdownHandlers(): void {
+  if (shutdownInstalled) return;
+  shutdownInstalled = true;
+  const onSignal = (sig: string) => {
+    console.log(`[worker] 收到 ${sig},停止领取新任务,在飞任务留待重调...`);
+    stopWorker();
+  };
+  process.once('SIGTERM', () => onSignal('SIGTERM'));
+  process.once('SIGINT', () => onSignal('SIGINT'));
 }
 
 /** 测试用:处理恰好一个任务(若有),返回是否处理了任务。 */
@@ -736,6 +849,7 @@ export async function tick(): Promise<boolean> {
     await processJob(job);
     return true;
   } catch (err) {
+    if (err instanceof WorkerStoppingError) return true; // 关机中断:job 留 running
     const msg = err instanceof Error ? err.message : String(err);
     if (job) {
       markFailed(job.id, msg);

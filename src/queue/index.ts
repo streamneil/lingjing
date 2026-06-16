@@ -34,30 +34,38 @@ export function enqueueVideo(input: VideoGenInput, tenantId: string = config.def
 }
 
 /**
- * 原子领取下一个 queued 任务并置为 running。
- * 用事务保证:即使多 worker 并发,同一 job 只被一个 worker 领走(条件 UPDATE 命中行数=1)。
- * 返回领取到的 JobRow,无可领取任务时返回 null。
+ * 原子领取下一个 queued 任务并置为 running。返回领取到的 JobRow,无可领取时返回 null。
+ *
+ * 单语句原子领取(2026-06-16 并发改造,eng-review CRITICAL #1):
+ *   并发池 N 个槽会同 tick 调本函数。旧实现是事务内 SELECT-then-UPDATE,DEFERRED 事务下
+ *   per-tenant cap 的 COUNT 读与 UPDATE 写不共享写锁 → 两槽都过 cap → cap 形同虚设。
+ *   改为一条 UPDATE...WHERE id=(子查询带 cap)...RETURNING:整条在单个写锁内完成,
+ *   cap 与领取真正原子。better-sqlite3 同步 + Node 单线程,连续调用天然不交错。
+ *
+ * per-tenant 公平闸门:跳过「该租户已 running 数 ≥ tenantMaxConcurrent」的 job,
+ *   防大客户一口气提满整池饿死小客户(单租户上限 = ceil(poolSize/2),可 env 覆盖)。
+ *
+ * rowid 作 created_at 次级排序键:同毫秒入队的多条用 rowid(单调递增)保证严格 FIFO。
  */
-export const claimNextJob = db.transaction((): JobRow | null => {
-  // 用 rowid 作 created_at 的次级排序键:Date.now() 毫秒精度下同毫秒入队的多条
-  // 会并列,单凭 created_at 排序非确定。rowid 随插入单调递增,保证严格 FIFO。
-  const candidate = db
-    .prepare(`SELECT * FROM job WHERE status = 'queued' ORDER BY created_at, rowid LIMIT 1`)
-    .get() as JobRow | undefined;
-  if (!candidate) return null;
-
+const TENANT_MAX = config.worker.tenantMaxConcurrent;
+export function claimNextJob(): JobRow | null {
   const t = now();
-  const res = db
+  const row = db
     .prepare(
-      `UPDATE job SET status='running', started_at=?, updated_at=?, attempts=attempts+1
-       WHERE id=? AND status='queued'`,
+      `UPDATE job SET status='running', started_at=@t, updated_at=@t, attempts=attempts+1
+         WHERE id = (
+           SELECT j.id FROM job AS j
+            WHERE j.status='queued'
+              AND (SELECT COUNT(*) FROM job AS r
+                    WHERE r.tenant_id = j.tenant_id AND r.status='running') < @cap
+            ORDER BY j.created_at, j.rowid
+            LIMIT 1
+         )
+       RETURNING *`,
     )
-    .run(t, t, candidate.id);
-
-  // 条件未命中(被别的 worker 抢先)→ 视为无可领取,下一轮再试。
-  if (res.changes !== 1) return null;
-  return { ...candidate, status: 'running', started_at: t, attempts: candidate.attempts + 1 };
-});
+    .get({ t, cap: TENANT_MAX }) as JobRow | undefined;
+  return row ?? null;
+}
 
 // worker 内部用:不带 tenant(worker 处理所有租户的任务)
 export function getJob(id: string): JobRow | undefined {
@@ -98,7 +106,16 @@ export function setProviderTaskId(id: string, providerTaskId: string): void {
   );
 }
 
+// 进度写节流(2026-06-16 并发改造,eng-review Finding):better-sqlite3 写同步阻塞事件循环;
+//   并发池 N 个 job 每 3s 各写一次进度会拖垮共进程的 Express。只在跨「5% 桶」时写,且 100 必写。
+//   per-job 记上次写入的桶号;终态写后清理,防 Map 泄漏。
+const _lastProgressBucket = new Map<string, number>();
 export function updateProgress(id: string, progress: number): void {
+  const bucket = Math.floor(progress / 5);
+  const last = _lastProgressBucket.get(id);
+  if (progress < 100 && last === bucket) return; // 同桶且非终态 → 跳过(省一次同步写)
+  _lastProgressBucket.set(id, bucket);
+  if (progress >= 100) _lastProgressBucket.delete(id); // 终态:清理(markDone 也会置 100)
   db.prepare(`UPDATE job SET progress=?, updated_at=? WHERE id=?`).run(progress, now(), id);
 }
 

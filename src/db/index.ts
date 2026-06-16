@@ -267,6 +267,9 @@ addColumnIfMissing('voice', 'created_by', `created_by TEXT`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_job_tenant_creator ON job(tenant_id, created_by);`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_avatar_tenant_creator ON avatar(tenant_id, created_by);`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_voice_tenant_creator ON voice(tenant_id, created_by);`);
+// 并发改造(2026-06-16):claimNextJob 的 per-tenant cap COUNT 与 admin 看板都按 status 过滤活跃 job。
+//   部分索引只收录 queued/running 行 → 比全 (tenant_id,status) 索引小得多,正好服务这两个热查询。
+db.exec(`CREATE INDEX IF NOT EXISTS idx_job_tenant_active ON job(tenant_id, status) WHERE status IN ('queued','running');`);
 // ③ viewer → creator 迁移(角色精简为 admin/creator)。幂等;零行也安全。
 //   必须在任何 resolveSession 读 role 前跑(import 期天然满足);DB 列无 CHECK,残留 viewer 会处处 403。
 db.prepare(`UPDATE user SET role='creator' WHERE role='viewer'`).run();
