@@ -12,6 +12,7 @@
 import { config } from '../config.js';
 import { getImageModel, sizeParams } from './image-models.js';
 import { getVideoModel } from './video-models.js';
+import { getProviderKey } from './provider-keys.js'; // PR-1:key 从加密表取(回落 .env)
 import type {
   CapabilityGateway,
   VideoSubmitUrls,
@@ -26,7 +27,7 @@ import type {
 
 function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
   return {
-    Authorization: `Bearer ${config.baichuan.apiKey()}`,
+    Authorization: `Bearer ${getProviderKey('bailian')}`,
     'Content-Type': 'application/json',
     ...extra,
   };

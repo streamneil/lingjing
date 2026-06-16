@@ -7,6 +7,7 @@
 import Database from 'better-sqlite3';
 import { randomBytes } from 'node:crypto';
 import { config } from '../config.js';
+import { encryptKey, masterKey, lastFour } from '../gateway/key-crypto.js'; // 叶子(纯 node:crypto,无 db/config 依赖,防环)
 
 export const db = new Database(config.db.file);
 db.pragma('journal_mode = WAL'); // 并发读 + 单写,适合 worker 轮询拉任务
@@ -502,6 +503,66 @@ export interface ModelPricingRow {
   cost_source: string; // 'doc' | 'estimate'
   enabled: number;
   sort_order: number;
+  updated_at: number;
+}
+
+// ── provider:厂商 + 加密 API Key(2026-06,model-access-platform PR-1)──
+// 各厂商模型 key 原在 .env 易泄露 → AES-256-GCM 加密存库(密钥 MASTER_KEY 走环境变量,不进库/git)。
+// admin 永不见明文,只回显 last4;解密只在网关调用时(见 gateway/provider-keys.ts)。
+// cipher/iv/tag = GCM 三件套;key_version = 主密钥版本(轮转脚本按版本分批);AAD=id 防行间搬移。
+db.exec(`
+  CREATE TABLE IF NOT EXISTS provider (
+    id              TEXT PRIMARY KEY,            -- 'bailian' | 'volc-ark' | 'google-ai-studio'
+    name            TEXT NOT NULL,               -- 展示名「阿里百炼」
+    adapter_key     TEXT NOT NULL,               -- 代码适配器标识(gateway 按此分发)
+    base_url        TEXT NOT NULL,
+    api_key_cipher  BLOB,                        -- AES-256-GCM 密文(null = 未配,回落 .env)
+    api_key_iv      BLOB,
+    api_key_tag     BLOB,
+    key_version     INTEGER NOT NULL DEFAULT 1,  -- 主密钥版本(轮转用)
+    api_key_last4   TEXT,                        -- 脱敏尾号(admin 只看这个)
+    enabled         INTEGER NOT NULL DEFAULT 1,
+    updated_at      INTEGER NOT NULL
+  )
+`);
+// schema_meta:迁移版本标记(eng 外部声音 P3)。让迁移可识别「已跑/未跑」,避免重复/半态。
+db.exec(`CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
+// 启动幂等迁移:provider 表空时种子 bailian。base_url 取现 config 默认;
+//   key 从 .env 的 DASHSCOPE_API_KEY 加密搬入(仅当 MASTER_KEY 配置;否则 cipher 留空、运行时回落 .env)。
+{
+  const empty = (db.prepare('SELECT COUNT(*) AS c FROM provider').get() as { c: number }).c === 0;
+  if (empty) {
+    const ts = Date.now();
+    const baseUrl = process.env.DASHSCOPE_BASE_URL || 'https://dashscope.aliyuncs.com/api/v1';
+    const dashKey = process.env.DASHSCOPE_API_KEY || '';
+    let cipher: Buffer | null = null, iv: Buffer | null = null, tag: Buffer | null = null, last4: string | null = null, ver = 1;
+    // 有主密钥 + 有 .env key → 加密搬入(否则 cipher 留 null,getProviderKey 回落 .env)。
+    if (dashKey && masterKey()) {
+      try {
+        const b = encryptKey(dashKey, 'bailian'); // AAD = provider.id
+        cipher = b.cipher; iv = b.iv; tag = b.tag; ver = b.keyVersion; last4 = lastFour(dashKey);
+      } catch { /* 加密失败不阻断启动:留 null 回落 .env */ }
+    }
+    db.prepare(
+      `INSERT INTO provider (id,name,adapter_key,base_url,api_key_cipher,api_key_iv,api_key_tag,key_version,api_key_last4,enabled,updated_at)
+       VALUES ('bailian','阿里百炼','bailian',?,?,?,?,?,?,1,?)`,
+    ).run(baseUrl, cipher, iv, tag, ver, last4, ts);
+    db.prepare(`INSERT OR REPLACE INTO schema_meta (key,value) VALUES ('provider_migrated','1')`).run();
+    console.log(`[migrate] provider 表已种子 bailian(${cipher ? '密钥已加密入库' : '密钥留 .env 回落(未配 MASTER_KEY)'})`);
+  }
+}
+
+export interface ProviderRow {
+  id: string;
+  name: string;
+  adapter_key: string;
+  base_url: string;
+  api_key_cipher: Buffer | null;
+  api_key_iv: Buffer | null;
+  api_key_tag: Buffer | null;
+  key_version: number;
+  api_key_last4: string | null;
+  enabled: number;
   updated_at: number;
 }
 

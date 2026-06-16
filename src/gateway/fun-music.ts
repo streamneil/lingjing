@@ -9,6 +9,7 @@
 // 本轮只做非流式(不发 X-DashScope-SSE);SSE 流式留后续。
 
 import { config } from '../config.js';
+import { getProviderKey } from './provider-keys.js'; // PR-1:key 从加密表取(回落 .env)
 
 export interface MusicGenParams {
   model: string; // fun-music-preview / fun-music-v1
@@ -30,7 +31,7 @@ export interface MusicGenResult {
  * 错误处理与 cosyvoice.synthesizeSpeechHttp 同口径:非 200 抛可读错误(透传邀测/地域原文)。
  */
 export async function generateMusic(params: MusicGenParams): Promise<MusicGenResult> {
-  const apiKey = config.baichuan.apiKey();
+  const apiKey = getProviderKey('bailian');
   const res = await fetch(`${config.baichuan.baseUrl}/services/audio/music/generation`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
