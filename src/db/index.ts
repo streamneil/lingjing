@@ -559,6 +559,11 @@ db.exec(`CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEX
     `INSERT OR IGNORE INTO provider (id,name,adapter_key,base_url,key_version,enabled,updated_at)
      VALUES ('volc-ark','火山引擎(豆包)','volc-ark','https://ark.cn-beijing.volces.com/api/v3',1,1,?)`,
   ).run(Date.now());
+  // Google AI Studio(Gemini / Nano Banana,PR-2a):同上幂等补行;key 用户在 admin 厂商页贴。
+  db.prepare(
+    `INSERT OR IGNORE INTO provider (id,name,adapter_key,base_url,key_version,enabled,updated_at)
+     VALUES ('google-ai-studio','Google AI Studio','google-ai-studio','https://generativelanguage.googleapis.com/v1',1,1,?)`,
+  ).run(Date.now());
 }
 
 export interface ProviderRow {
