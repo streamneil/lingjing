@@ -562,7 +562,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEX
   // Google AI Studio(Gemini / Nano Banana,PR-2a):同上幂等补行;key 用户在 admin 厂商页贴。
   db.prepare(
     `INSERT OR IGNORE INTO provider (id,name,adapter_key,base_url,key_version,enabled,updated_at)
-     VALUES ('google-ai-studio','Google AI Studio','google-ai-studio','https://generativelanguage.googleapis.com/v1',1,1,?)`,
+     VALUES ('google-ai-studio','Google AI Studio','google-ai-studio','https://generativelanguage.googleapis.com/v1beta',1,1,?)`,
   ).run(Date.now());
 }
 
