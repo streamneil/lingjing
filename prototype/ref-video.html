@@ -83,10 +83,17 @@
   .consent { display:flex; gap:9px; align-items:flex-start; margin-top:12px; font-size:11.5px; color:var(--t3); line-height:1.5; }
   .consent input { width:auto; margin-top:2px; }
 
-  /* 多模态参考:图/视频/音频三组(各自上传区 + tile 网格)*/
-  .mm-group { margin-bottom:14px; }
-  .mm-group .mm-h { display:flex; align-items:center; justify-content:space-between; font-size:12px; color:var(--t3); margin:0 0 7px; }
-  .mm-group .mm-h .cnt { font-family:var(--f-mono); color:var(--t4); }
+  /* 多模态参考:单一上传区 — 空态大 dropzone;有素材后混合缩略网格 + 头部计数 + 追加按钮 */
+  .mm-card { border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:14px; }
+  /* 空态:整块大上传区(图标 + 文字 + 数量提示按钮),与其他模板蓝色选中态一致 */
+  .mm-drop { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; min-height:148px; box-sizing:border-box; border:1.5px dashed var(--line-hi); border-radius:12px; background:var(--field); cursor:pointer; color:var(--t3); transition:.15s; padding:18px 16px; text-align:center; }
+  .mm-drop:hover, .mm-drop.drag { border-color:var(--blue); background:var(--card-hi); color:var(--t1); }
+  .mm-drop .di svg { width:36px; height:36px; color:var(--t3); }
+  .mm-drop .dt { font-size:14px; color:var(--t2); }
+  .mm-drop .dh { font-size:11.5px; color:var(--t4); font-family:var(--f-mono); }
+  /* 有素材:头部(计数)+ 混合缩略网格(末尾追加 add-tile)*/
+  .mm-head { display:flex; align-items:center; justify-content:space-between; font-size:12px; color:var(--t3); margin:0 0 9px; }
+  .mm-head .cnt { font-family:var(--f-mono); color:var(--t4); }
   .mm-tiles { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
   .mm-tile { position:relative; aspect-ratio:1/1; border-radius:10px; overflow:hidden; border:1px solid var(--line); background:var(--field); }
   .mm-tile img, .mm-tile video { width:100%; height:100%; object-fit:cover; display:block; }
@@ -97,10 +104,6 @@
   .mm-tile .rmx { position:absolute; top:5px; right:5px; width:20px; height:20px; background:rgba(0,0,0,.6); border-radius:50%; display:grid; place-items:center; color:#fff; font-size:12px; line-height:1; cursor:pointer; border:none; padding:0; z-index:1; }
   .mm-add { aspect-ratio:1/1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; border:1.5px dashed var(--line-hi); border-radius:10px; color:var(--t3); cursor:pointer; transition:.15s; }
   .mm-add:hover, .mm-add.drag { border-color:var(--blue); color:var(--t1); background:var(--card); }
-  /* 空组(只有 add-tile,无素材):add-tile 不撑成大方块,横铺整宽 + 矮高(避免三组叠起 ~700px)*/
-  .mm-group.empty .mm-tiles { grid-template-columns:1fr; }
-  .mm-group.empty .mm-add { aspect-ratio:auto; height:84px; flex-direction:row; gap:8px; }
-  .mm-group.empty .mm-add .plus { font-size:20px; }
   .mm-add .plus { font-size:24px; font-weight:300; line-height:1; }
   .mm-add .lbl { font-size:11px; }
   /* 素材引用助手:可点击芯片插入 [图片N]/[视频N]/[音频N] */
@@ -131,7 +134,7 @@
 <span class="logo-mark" id="lj-brand-mark"><svg viewBox="0 0 100 100" fill="none"><circle cx="37" cy="50" r="29" stroke="#0E0E0E" stroke-width="5"/><circle cx="63" cy="50" r="29" stroke="#0E0E0E" stroke-width="5"/><path d="M50 24.08 A29 29 0 0 1 50 75.92 A29 29 0 0 1 50 24.08 Z" fill="#0E0E0E"/></svg></span>
 <span class="nm">Lingjing</span><span class="cjk">灵镜</span>
 </a>
-<nav class="sb-nav"><a class="sb-item" data-page="explore" href="explore.html" data-label="探索"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m15 9-3.5 1.5L10 14l3.5-1.5L15 9Z"/></svg><span>探索</span></a><a class="sb-item" data-page="assets" href="assets.html" data-label="我的资产"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg><span>我的资产</span></a><div class="sb-group">创作工具</div><div id="sb-tools"><a class="sb-item sb-tool active" data-page="ref-video" href="ref-video.html" data-label="参考生成影片" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="14" rx="2"/><path d="m17 9 4-2v10l-4-2"/><path d="m8 10 2 2-2 2"/></svg><span>参考生成影片</span><span class="nbadge">新</span></a><a class="sb-item sb-tool" data-page="img2video" href="img2video.html" data-label="图片转影片" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="14" height="14" rx="2"/><circle cx="8" cy="9" r="1.6"/><path d="m4 16 4-4 3 3"/><path d="m17 10 4-2v10l-4-2"/></svg><span>图片转影片</span></a><a class="sb-item sb-tool" data-page="text2video" href="text2video.html" data-label="文字转影片" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6h14M9 6v12M7 18h4"/><path d="m16 11 4-2v8l-4-2"/></svg><span>文字转影片</span></a><a class="sb-item sb-tool" data-page="ai-image" href="ai-image.html" data-label="AI 图片" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="9" cy="9" r="1.6"/><path d="m5 17 4-4 3 3 3-3 4 4"/></svg><span>AI 图片</span><span class="nano">Nano Banana</span></a><a class="sb-item sb-tool" data-page="ai-image-edit" href="ai-image-edit.html" data-label="AI 图片编辑器" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="13" height="13" rx="2"/><path d="m5 15 3-3 2 2"/><path d="M14 18.5 19 13.5l2.5 2.5-5 5H14v-2.5Z"/></svg><span>AI 图片编辑器</span></a><a class="sb-item sb-tool" data-page="ai-video-edit" href="video-edit.html" data-label="AI 影片编辑器" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="13" rx="2"/><path d="m8 9 4 2.5L8 14V9Z"/><path d="M15 18.5 20 13.5l2 2-5 5H15v-2.5Z"/></svg><span>AI 影片编辑器</span></a><a class="sb-item sb-tool" data-page="ai-avatar" href="avatars.html" data-label="AI 虚拟人" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg><span>AI 虚拟人</span></a><a class="sb-item sb-tool" data-page="ai-music" href="tool.html?tool=ai-music" data-label="AI 音乐" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg><span>AI 音乐</span><span class="soon">即将上线</span></a><a class="sb-item sb-tool" data-page="tts" href="tts.html" data-label="文字转语音" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg><span>文字转语音</span></a></div><div class="sb-group">财务中心</div><a class="sb-item" data-page="billing" href="billing.html" data-label="用量计费"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 14 3-4 4 3 4-6"/></svg><span>用量计费</span></a><a class="sb-item" data-page="orders" href="orders.html" data-label="充值订单"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/></svg><span>充值订单</span></a><a class="sb-item" data-page="invoices" href="invoices.html" data-label="发票管理"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h11l3 3v15l-2-1.2L15 21l-2-1.2L11 21l-2-1.2L7 21l-2-1.2V3Z"/><path d="M8 8h7M8 12h7M8 16h4"/></svg><span>发票管理</span></a><div class="sb-group">经营管理</div><a class="sb-item" data-page="members" href="members.html" data-label="成员与权限"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg><span>成员与权限</span></a><a class="sb-item" data-page="settings" href="settings.html" data-label="系统设置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H1a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 2.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H7a1.6 1.6 0 0 0 1-1.5V1a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V7a1.6 1.6 0 0 0 1.5 1H23a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z"/></svg><span>系统设置</span></a></nav>
+<nav class="sb-nav"><a class="sb-item" data-page="explore" href="explore.html" data-label="探索"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m15 9-3.5 1.5L10 14l3.5-1.5L15 9Z"/></svg><span>探索</span></a><a class="sb-item" data-page="assets" href="assets.html" data-label="我的资产"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg><span>我的资产</span></a><div class="sb-group">创作工具</div><div id="sb-tools"><a class="sb-item sb-tool active" data-page="ref-video" href="ref-video.html" data-label="参考生成影片" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="14" rx="2"/><path d="m17 9 4-2v10l-4-2"/><path d="m8 10 2 2-2 2"/></svg><span>参考生成影片</span><span class="nbadge">新</span></a><a class="sb-item sb-tool" data-page="img2video" href="img2video.html" data-label="图片转影片" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="14" height="14" rx="2"/><circle cx="8" cy="9" r="1.6"/><path d="m4 16 4-4 3 3"/><path d="m17 10 4-2v10l-4-2"/></svg><span>图片转影片</span></a><a class="sb-item sb-tool" data-page="text2video" href="text2video.html" data-label="文字转影片" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6h14M9 6v12M7 18h4"/><path d="m16 11 4-2v8l-4-2"/></svg><span>文字转影片</span></a><a class="sb-item sb-tool" data-page="ai-image" href="ai-image.html" data-label="AI 图片" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="9" cy="9" r="1.6"/><path d="m5 17 4-4 3 3 3-3 4 4"/></svg><span>AI 图片</span><span class="nano">Nano Banana</span></a><a class="sb-item sb-tool" data-page="ai-image-edit" href="ai-image-edit.html" data-label="AI 图片编辑器" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="13" height="13" rx="2"/><path d="m5 15 3-3 2 2"/><path d="M14 18.5 19 13.5l2.5 2.5-5 5H14v-2.5Z"/></svg><span>AI 图片编辑器</span></a><a class="sb-item sb-tool" data-page="ai-video-edit" href="video-edit.html" data-label="AI 影片编辑器" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="13" rx="2"/><path d="m8 9 4 2.5L8 14V9Z"/><path d="M15 18.5 20 13.5l2 2-5 5H15v-2.5Z"/></svg><span>AI 影片编辑器</span></a><a class="sb-item sb-tool" data-page="ai-avatar" href="avatars.html" data-label="AI 虚拟人" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg><span>AI 虚拟人</span></a><a class="sb-item sb-tool" data-page="ai-music" href="ai-music.html" data-label="AI 音乐" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg><span>AI 音乐</span></a><a class="sb-item sb-tool" data-page="tts" href="tts.html" data-label="文字转语音" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg><span>文字转语音</span></a></div><div class="sb-group">财务中心</div><a class="sb-item" data-page="billing" href="billing.html" data-label="用量计费"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 14 3-4 4 3 4-6"/></svg><span>用量计费</span></a><a class="sb-item" data-page="orders" href="orders.html" data-label="充值订单"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/></svg><span>充值订单</span></a><a class="sb-item" data-page="invoices" href="invoices.html" data-label="发票管理"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h11l3 3v15l-2-1.2L15 21l-2-1.2L11 21l-2-1.2L7 21l-2-1.2V3Z"/><path d="M8 8h7M8 12h7M8 16h4"/></svg><span>发票管理</span></a><div class="sb-group">经营管理</div><a class="sb-item" data-page="members" href="members.html" data-label="成员与权限"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg><span>成员与权限</span></a><a class="sb-item" data-page="settings" href="settings.html" data-label="系统设置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H1a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 2.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H7a1.6 1.6 0 0 0 1-1.5V1a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V7a1.6 1.6 0 0 0 1.5 1H23a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z"/></svg><span>系统设置</span></a></nav>
 <div class="sb-foot"><div class="deploy-tag"><span class="d"></span><span>云端服务 · 运行中</span></div></div>
 </aside>
 <script>/* 品牌即时渲染:此内联脚本紧跟 .sb-brand,解析到此即同步执行(早于首次绘制),
@@ -151,12 +154,10 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   <div class="cfg">
     <div class="cfg-h"><span class="dot"></span>参考生成影片 AI</div>
 
-    <!-- 多模态参考输入区:图片(0-9)+ 视频(0-3)+ 音频(0-3),各自上传分组 -->
+    <!-- 多模态参考输入区:单一大上传区,图(0-9)+视频(0-3)+音频(0-3)混合,按类型自动归位 -->
     <div id="mmArea"></div>
-    <div class="fmt-hint">图 JPG/PNG/WEBP ≤10MB · 视频 MP4/MOV ≤100MB · 音频 MP3/WAV/M4A ≤20MB。混合输入生成新影片(不支持纯音频/文本+音频)。</div>
-    <input type="file" id="imgPick" accept="image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif" multiple style="display:none">
-    <input type="file" id="vidPick" accept="video/mp4,video/quicktime,.mp4,.mov" multiple style="display:none">
-    <input type="file" id="audPick" accept="audio/mpeg,audio/wav,audio/mp4,audio/aac,.mp3,.wav,.m4a,.aac" multiple style="display:none">
+    <div class="fmt-hint">支持 图片 ≤9 · 视频 ≤3 · 音频 ≤3 混合上传,自动识别类型。图 JPG/PNG/WEBP ≤10MB · 视频 MP4/MOV ≤100MB · 音频 MP3/WAV/M4A ≤20MB。需至少 1 图或 1 视频(不支持纯音频)。</div>
+    <input type="file" id="mmPick" accept="image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif,video/mp4,video/quicktime,.mp4,.mov,audio/mpeg,audio/wav,audio/mp4,audio/aac,.mp3,.wav,.m4a,.aac" multiple style="display:none">
 
     <!-- 提示词 + 素材引用助手 -->
     <div class="cfg-label" id="promptLabel">提示(参考生必填,用 [图片N]/[视频N]/[音频N] 指代素材)</div>
@@ -224,8 +225,9 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       <!-- 茶广告多模态示范(文档旗舰示例;素材转存平台 OSS)-->
       <div class="demo-card" id="demoCard" style="margin-top:14px;display:none">
         <div class="dh">🍵 示范:多模态参考(茶广告)</div>
-        <div class="ds">文本 + 2 图 + 1 视频 + 1 音频 → 第一人称果茶广告。点下方套用提示词,体验多模态参考生成。</div>
+        <div class="ds">文本 + 2 图 + 1 视频 + 1 音频 → 第一人称果茶广告。下方为示范成片,点「套用示范提示词」体验多模态参考生成。</div>
         <video class="fvid" id="demoVid" controls preload="metadata" style="margin-bottom:12px;display:none"></video>
+        <div class="ds" id="demoVidFallback" style="display:none;margin:0 0 12px;padding:14px;border:1px dashed var(--line);border-radius:10px;text-align:center">示范成片加载中…若长时间无画面,套用提示词后上传素材即可生成同款。</div>
         <button type="button" class="dbtn" id="demoApply">套用示范提示词</button>
       </div>
     </div>
@@ -265,29 +267,42 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     modelOpts.querySelectorAll('.pop-opt[data-k]').forEach(el=>el.onclick=()=>{ model=el.dataset.k; renderAll(); closePops(); });
   }
 
-  // ── 多模态输入区:图/视频/音频三组 ──
-  const imgPick=document.getElementById('imgPick'), vidPick=document.getElementById('vidPick'), audPick=document.getElementById('audPick');
+  // ── 多模态输入区:单一上传区,按 MIME 自动归类到 图/视频/音频 三数组(后端仍分类型)──
+  const mmPick=document.getElementById('mmPick');
   const AUD_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
-  function groupHtml(title, kind, files, max, addLabel, tileFn){
-    const tiles=files.map((f,i)=>tileFn(f,i)).join('');
-    const add=files.length<max ? `<div class="mm-add" data-add="${kind}"><span class="plus">+</span><span class="lbl">${addLabel}</span></div>` : '';
-    const emptyCls=files.length===0?' empty':''; // 空组:add-tile 横铺矮高,不撑成大方块
-    return `<div class="mm-group${emptyCls}"><div class="mm-h"><span>${title}</span><span class="cnt">${files.length}/${max}</span></div><div class="mm-tiles">${tiles}${add}</div></div>`;
+  const UP_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0 4 4m-4-4-4 4"/><path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/></svg>';
+  // 按文件类型判定归属数组(图/视频/音频);无法识别归 null
+  function kindOf(file){
+    const t=(file.type||'').toLowerCase(), n=(file.name||'').toLowerCase();
+    if(t.startsWith('image/')||/\.(jpe?g|png|webp|bmp|tiff?|gif)$/.test(n)) return 'img';
+    if(t.startsWith('video/')||/\.(mp4|mov)$/.test(n)) return 'vid';
+    if(t.startsWith('audio/')||/\.(mp3|wav|m4a|aac)$/.test(n)) return 'aud';
+    return null;
   }
   function renderMMArea(){
     const m=curModel(); if(!m){ document.getElementById('mmArea').innerHTML=''; return; }
     const maxImg=m.maxRefImages||9, maxVid=m.maxVideoRefs||3, maxAud=m.maxAudioRefs||3;
+    const total=imgFiles.length+vidFiles.length+audFiles.length;
+    const maxTotal=maxImg+maxVid+maxAud;
+    const area=document.getElementById('mmArea');
+    if(total===0){
+      // 空态:整块大上传区
+      area.innerHTML=`<div class="mm-card"><div class="mm-drop" id="mmDrop"><div class="di">${UP_SVG}</div><div class="dt">点击或拖放上传参考素材</div><div class="dh">图片 ≤${maxImg} · 视频 ≤${maxVid} · 音频 ≤${maxAud}</div></div></div>`;
+      const drop=document.getElementById('mmDrop');
+      drop.onclick=()=>mmPick.click(); bindDrop(drop, fs=>addFiles(fs));
+      return;
+    }
+    // 有素材:头部计数 + 混合缩略网格(图/视频/音频按各自编号),末尾追加按钮
     const imgT=(f,i)=>`<div class="mm-tile"><span class="num">图片${i+1}</span><img src="${f.url}"><button type="button" class="rmx" data-rm="img:${i}">×</button></div>`;
     const vidT=(f,i)=>`<div class="mm-tile"><span class="num">视频${i+1}</span><video src="${f.url}" muted></video><button type="button" class="rmx" data-rm="vid:${i}">×</button></div>`;
     const audT=(f,i)=>`<div class="mm-tile aud"><span class="num">音频${i+1}</span>${AUD_SVG}<span class="nm">${esc(f.file.name||'音频')}</span><button type="button" class="rmx" data-rm="aud:${i}">×</button></div>`;
-    document.getElementById('mmArea').innerHTML =
-      groupHtml('图片参考', 'img', imgFiles, maxImg, '点击 / 拖放', imgT) +
-      groupHtml('视频参考', 'vid', vidFiles, maxVid, '点击 / 拖放', vidT) +
-      groupHtml('音频参考', 'aud', audFiles, maxAud, '点击 / 拖放', audT);
-    const area=document.getElementById('mmArea');
-    area.querySelectorAll('[data-add]').forEach(el=>{ const k=el.dataset.add;
-      el.onclick=()=>{ ({img:imgPick,vid:vidPick,aud:audPick})[k].click(); };
-      bindDrop(el, fs=>addFiles(fs,k)); });
+    const tiles=imgFiles.map(imgT).join('')+vidFiles.map(vidT).join('')+audFiles.map(audT).join('');
+    const canAdd=imgFiles.length<maxImg||vidFiles.length<maxVid||audFiles.length<maxAud;
+    const add=canAdd?`<div class="mm-add" id="mmAdd"><span class="plus">+</span><span class="lbl">继续添加</span></div>`:'';
+    const parts=[]; if(imgFiles.length)parts.push(`图${imgFiles.length}`); if(vidFiles.length)parts.push(`视频${vidFiles.length}`); if(audFiles.length)parts.push(`音频${audFiles.length}`);
+    area.innerHTML=`<div class="mm-card"><div class="mm-head"><span>参考素材 · ${parts.join(' · ')}</span><span class="cnt">${total}/${maxTotal}</span></div><div class="mm-tiles">${tiles}${add}</div></div>`;
+    const addEl=document.getElementById('mmAdd');
+    if(addEl){ addEl.onclick=()=>mmPick.click(); bindDrop(addEl, fs=>addFiles(fs)); }
     area.querySelectorAll('.rmx[data-rm]').forEach(el=>el.onclick=()=>{ const [k,i]=el.dataset.rm.split(':');
       ({img:imgFiles,vid:vidFiles,aud:audFiles})[k].splice(Number(i),1); afterChange(); });
   }
@@ -296,19 +311,23 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     el.addEventListener('dragleave',()=>el.classList.remove('drag'));
     el.addEventListener('drop',e=>{ e.preventDefault(); el.classList.remove('drag'); handler(Array.from(e.dataTransfer.files||[])); });
   }
-  function addFiles(files, kind){
+  // 混合添加:按 MIME 自动分流到 图/视频/音频,各自满则提示
+  function addFiles(files){
     const m=curModel(); if(!m) return;
-    const arr=({img:imgFiles,vid:vidFiles,aud:audFiles})[kind];
-    const max=({img:m.maxRefImages||9,vid:m.maxVideoRefs||3,aud:m.maxAudioRefs||3})[kind];
+    const max={img:m.maxRefImages||9,vid:m.maxVideoRefs||3,aud:m.maxAudioRefs||3};
+    const arrs={img:imgFiles,vid:vidFiles,aud:audFiles};
+    const label={img:'图片',vid:'视频',aud:'音频'};
+    let rejected=false;
     for(const f of files){
-      if(arr.length>=max){ window.LJToast&&LJToast(`最多 ${max} 个`,'err'); break; }
-      arr.push({ file:f, url:kind==='aud'?'':URL.createObjectURL(f) });
+      const k=kindOf(f);
+      if(!k){ window.LJToast&&LJToast(`不支持的文件:${f.name||''}`,'err'); rejected=true; continue; }
+      if(arrs[k].length>=max[k]){ window.LJToast&&LJToast(`${label[k]}最多 ${max[k]} 个`,'err'); rejected=true; continue; }
+      arrs[k].push({ file:f, url:k==='aud'?'':URL.createObjectURL(f) });
     }
     afterChange();
+    return rejected;
   }
-  imgPick.onchange=()=>{ addFiles(Array.from(imgPick.files||[]),'img'); imgPick.value=''; };
-  vidPick.onchange=()=>{ addFiles(Array.from(vidPick.files||[]),'vid'); vidPick.value=''; };
-  audPick.onchange=()=>{ addFiles(Array.from(audPick.files||[]),'aud'); audPick.value=''; };
+  mmPick.onchange=()=>{ addFiles(Array.from(mmPick.files||[])); mmPick.value=''; };
   function afterChange(){ renderMMArea(); renderRefHelper(); refreshBtn(); scheduleEstimate(); }
 
   // ── 素材引用助手:点击芯片把 [图片N]/[视频N]/[音频N] 插入提示词末尾 ──
@@ -534,9 +553,19 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
 
   // ── 茶广告多模态示范(文档旗舰示例)──
   const DEMO_PROMPT='全程使用视频1的第一视角构图,全程使用音频1作为背景音乐。第一人称视角果茶宣传广告,seedance牌「苹苹安安」苹果果茶限定款;首帧为图片1,你的手摘下一颗带晨露的阿克苏红苹果;6-8 秒第一人称手持举杯,将图片2中的果茶举到镜头前,尾帧定格为图片2。背景声音统一为女生音色。';
+  // 文档「多模态参考」公开示范成片(火山 TOS 公开 URL,不依赖平台 OSS 转存)
+  const DEMO_OUTPUT_URL='https://p9-arcosite.byteimg.com/obj/tos-cn-i-goo7wpa0wc/dab46ce2289a4a8ead76711bb02f2e1d';
   function initDemo(){
     const card=document.getElementById('demoCard'); if(!card) return;
     card.style.display=''; // 空态时显示(有作品后 emptyHint 与示范卡一起被 renderCard 隐;此处仅初始显)
+    // 示范成片:能加载就显视频,失败回落文字提示(不让卡片「没界面」)
+    const vid=document.getElementById('demoVid'), fb=document.getElementById('demoVidFallback');
+    if(vid){
+      vid.onloadeddata=()=>{ vid.style.display=''; if(fb)fb.style.display='none'; };
+      vid.onerror=()=>{ vid.style.display='none'; if(fb)fb.style.display=''; };
+      if(fb)fb.style.display=''; // 加载期间先占位,避免空白
+      vid.src=DEMO_OUTPUT_URL;
+    }
     document.getElementById('demoApply').onclick=()=>{
       ta.value=DEMO_PROMPT.slice(0,500); cnt.textContent=ta.value.length;
       ratio='16:9'; renderRatios(); syncPills(); refreshBtn(); scheduleEstimate();
