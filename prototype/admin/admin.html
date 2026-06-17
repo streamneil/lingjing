@@ -48,7 +48,7 @@
   .tbl{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden}
   table{width:100%;border-collapse:collapse}
   th{text-align:left;font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:14px 18px;border-bottom:1px solid var(--line);font-family:var(--f-en)}
-  td{padding:15px 18px;border-bottom:1px solid var(--line-soft);font-size:13.5px;vertical-align:middle}
+  td{padding:13px 18px;border-bottom:1px solid var(--line);font-size:13.5px;vertical-align:middle}
   tr:last-child td{border-bottom:none}
   tr:hover td{background:var(--card-hi)}
   .tn{font-weight:600}
@@ -222,7 +222,7 @@
     <!-- 并发趋势 -->
     <div class="mon-chart">
       <div class="mc-head"><span>并发趋势 · 近 24 小时</span><span class="mc-legend" id="mcPeak"></span></div>
-      <svg id="monSpark" viewBox="0 0 720 120" preserveAspectRatio="none" width="100%" height="120"></svg>
+      <svg id="monSpark" viewBox="0 0 720 120" preserveAspectRatio="xMinYMid meet" width="100%" height="120"></svg>
     </div>
 
     <!-- 租户维度表 -->
@@ -1044,18 +1044,21 @@
   async function loadConcurrency(){
     try{
       const { series }=await PA('GET','/api/metrics/concurrency?range=24h');
-      const svg=document.getElementById('monSpark'); const W=720,H=120,pad=6;
+      const svg=document.getElementById('monSpark'); const W=720,H=120,pad=8,base=H-pad; // base=柱基线
       const vals=series.map(p=>p.active); const peak=Math.max(1,...vals);
       document.getElementById('mcPeak').textContent='峰值并发 '+peak;
-      const n=series.length; const bw=(W-pad*2)/n;
-      // 柱状:active 高度;failed 部分染红
-      let bars='';
+      const n=series.length; const slot=(W-pad*2)/n; const bw=Math.min(slot-3,16); // 柱宽封顶 16,稀疏数据不再被拉成大色块
+      const usableH=H-pad*2;
+      // 基线(x 轴);柱状:active 高度,failed 部分染红;空桶画 1px 占位点保持节奏感。
+      let bars=`<line x1="${pad}" y1="${base}" x2="${W-pad}" y2="${base}" stroke="var(--line-hi)" stroke-width="1"/>`;
       series.forEach((p,i)=>{
-        const x=pad+i*bw; const h=(p.active/peak)*(H-pad*2);
+        const x=pad+i*slot+(slot-bw)/2; // 柱居中于时间槽
+        const h=(p.active/peak)*usableH;
         const fh=p.active?(p.failed/p.active)*h:0;
-        const y=H-pad-h;
-        bars+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(bw-2).toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" fill="var(--blue)" opacity="0.85"><title>${fmtTime(p.hourStart)} 活跃${p.active} 完成${p.done} 失败${p.failed}</title></rect>`;
-        if(fh>0.5) bars+=`<rect x="${x.toFixed(1)}" y="${(H-pad-fh).toFixed(1)}" width="${(bw-2).toFixed(1)}" height="${fh.toFixed(1)}" rx="1.5" fill="var(--red)"></rect>`;
+        if(h<0.5){ bars+=`<circle cx="${(x+bw/2).toFixed(1)}" cy="${base.toFixed(1)}" r="1" fill="var(--t4)"/>`; return; }
+        const y=base-h;
+        bars+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="var(--blue)" opacity="0.9"><title>${fmtTime(p.hourStart)} 活跃${p.active} 完成${p.done} 失败${p.failed}</title></rect>`;
+        if(fh>0.5) bars+=`<rect x="${x.toFixed(1)}" y="${(base-fh).toFixed(1)}" width="${bw.toFixed(1)}" height="${fh.toFixed(1)}" rx="2" fill="var(--red)"></rect>`;
       });
       svg.innerHTML=bars;
     }catch(e){}
