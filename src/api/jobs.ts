@@ -867,6 +867,14 @@ jobsRouter.get('/image-models', requireAuth, (_req: Request, res: Response) => {
     resolutionTiers: d.resolutionTiers, // 该模型支持的精确清晰度档集(火山 seedream:4.0=1K/2K/4K、4.5=2K/4K、5.0-lite=2K/3K/4K);无→前端按 maxResolution 回落
     canSetSize: d.canSetSize !== false, // 前端据此显隐清晰度控件(false=随输入图,如 qwen-image-edit)
     supportsBbox: !!d.supportsBbox, // 前端据此显示/隐藏局部重绘画笔(仅万相2.7)
+    // 该模型支持的比例集(前端比例选项)。语义三态(renderRatios 据此分支):
+    //   非空数组 → 只显这些比例(pixelMatrix 模型,如千问 2.0 系:取首档的 ratio 键)
+    //   空数组 [] → 隐藏比例框(keyword 模型,如万相:输出比例随输入图,选了也被后端丢弃)
+    //   undefined → 前端回落硬编码 8 比例(无 pixelMatrix 且非 keyword,如 wan2.2/gemini/z-image*)
+    //   * z-image 有 pixelMatrix → 会得到其 7 比例(顺带修:此前硬编码 8 含 21:9 未在矩阵会静默回落 1:1)
+    ratios: d.pixelMatrix
+      ? Object.keys(d.pixelMatrix[Object.keys(d.pixelMatrix)[0]!]!)
+      : (d.sizeKind === 'keyword' ? [] : undefined),
     // admin 录的分辨率表(前端比例下拉用;只吐 ratio/w/h/默认,不漏 priceTier/modelId)
     resolutions: (d.resolutions ?? []).map((r) => ({ ratio: r.ratio, width: r.width, height: r.height, isDefault: !!r.isDefault })),
   }));

@@ -48,6 +48,16 @@ describe('getImageModel DB 合并', () => {
     expect(d.shape).toBe(IMAGE_MODELS['qwen-image']!.shape); // A1
     expect(d.sizeKind).toBe(IMAGE_MODELS['qwen-image']!.sizeKind);
   });
+
+  it('DB 模型 shape_template=qwen-image-2.0-pro → 继承 pixelMatrix(真实 qwen-image-2.0 配法)', () => {
+    // 线上 qwen-image-2.0 即此形态:override 行 shape_template 指向 pro 模板。
+    // pixelMatrix 是代码模板字段(override 无此列),经 mergeDef ...tmpl 自动继承 → 发官方对齐尺寸。
+    addOv({ key: 'qwen-image-2.0', label: '千问2.0', model_id: 'qwen-image-2.0', price_tier: 7, max_images: 6, shape_template: 'qwen-image-2.0-pro', modes: 'text2img,img2img' });
+    const d = getImageModel('qwen-image-2.0', 'img2img');
+    expect(d.pixelMatrix).toBeTruthy();
+    expect(sizeParams(d, '3:4', '1K').size).toBe('960*1280');
+    expect(sizeParams(d, '16:9', '2K').size).toBe('1920*1080');
+  });
 });
 
 describe('默认兜底(P1-default:禁用默认 → 跳 enabled)', () => {

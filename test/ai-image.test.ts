@@ -230,6 +230,45 @@ describe('万相2.7 registry(A_EDIT 异步含图编辑 + bbox)', () => {
   });
 });
 
+describe('千问 2.0 系列 pixelMatrix(档×比例→官方推荐尺寸,非偏小公式)', () => {
+  it('qwen-image-2.0-pro 有 pixelMatrix,发官方对齐尺寸', () => {
+    const pro = getImageModel('qwen-image-2.0-pro', 'img2img');
+    expect(pro.pixelMatrix).toBeTruthy();
+    expect(sizeParams(pro, '16:9', '2K').size).toBe('1920*1080');
+    expect(sizeParams(pro, '1:1', '1K').size).toBe('1024*1024');
+    expect(sizeParams(pro, '21:9', '2K').size).toBe('2048*872');
+  });
+  it('无比例/无档时回落首档 1:1(默认接近 1024²)', () => {
+    const pro = getImageModel('qwen-image-2.0-pro', 'img2img');
+    expect(sizeParams(pro).size).toBe('1024*1024');
+  });
+  // 注:qwen-image-2.0(DB override,shape_template=pro)继承 pixelMatrix 的验证见
+  // image-models-db.test.ts(那里有 addOv 种 override 行的基建;本文件用 :memory: 无 override 行)。
+});
+
+describe('万相 2.7 编辑分辨率档(pro 开到 4K,非 pro 封 2K)', () => {
+  it('wan2.7-image-pro: resolutionTiers 含 4K、resolutionAllowed 4K=true', () => {
+    const wp = getImageModel('wan2.7-image-pro', 'img2img');
+    expect(wp.resolutionTiers).toEqual(['1K', '2K', '4K']);
+    expect(resolutionAllowed(wp, '4K')).toBe(true);
+    expect(sizeParams(wp, undefined, '4K').size).toBe('4K');
+  });
+  it('wan2.7-image: 仅 1K/2K,4K 不允许', () => {
+    const w = getImageModel('wan2.7-image', 'img2img');
+    expect(w.resolutionTiers).toEqual(['1K', '2K']);
+    expect(resolutionAllowed(w, '4K')).toBe(false);
+  });
+});
+
+describe('qwen-image-edit 标准编辑(canSetSize=false:不发 size、随输入图)', () => {
+  it('canSetSize=false 且 sizeParams 返回空(不拼 size/ratio)', () => {
+    const e = getImageModel('qwen-image-edit', 'img2img');
+    expect(e.canSetSize).toBe(false);
+    expect(e.maxImages).toBe(1);
+    expect(sizeParams(e, '16:9', '2K')).toEqual({});
+  });
+});
+
 describe('validateBboxList(不信前端:对齐 + 框数 + 整数边界)', () => {
   it('合法:长度=图数,每图 ≤2 框,整数 0≤x1<x2', () => {
     const v = validateBboxList([[[10, 10, 50, 50]], []], 2);

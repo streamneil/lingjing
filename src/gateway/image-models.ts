@@ -79,6 +79,14 @@ const ZIMAGE_PIXELS: Record<string, Record<string, string>> = {
   '2K': { '1:1': '1536*1536', '16:9': '2048*1152', '9:16': '1152*2048', '4:3': '1728*1296', '3:4': '1296*1728', '3:2': '1872*1248', '2:3': '1248*1872' },
 };
 
+// 千问 2.0 系列(qwen-image-2.0 / qwen-image-2.0-pro)官方「常见比例推荐分辨率」表。
+// 文档:总像素 512²~2048²,默认接近 1024²,指定 size 时系统调到最近的 16 倍数。
+// UI 档:1K→左列(~1024²)、2K→右列(更大,~1536²/官方推荐高分)。8 比例覆盖平台全部档位。
+const QWEN20_PIXELS: Record<string, Record<string, string>> = {
+  '1K': { '1:1': '1024*1024', '2:3': '768*1152', '3:2': '1152*768', '3:4': '960*1280', '4:3': '1280*960', '9:16': '720*1280', '16:9': '1280*720', '21:9': '1344*576' },
+  '2K': { '1:1': '1536*1536', '2:3': '1024*1536', '3:2': '1536*1024', '3:4': '1080*1440', '4:3': '1440*1080', '9:16': '1080*1920', '16:9': '1920*1080', '21:9': '2048*872' },
+};
+
 export const IMAGE_MODELS: Record<string, ImageModelDef> = {
   // priceTier 默认 = 真实单价×35(无 DB row 时回落用;DB override 赢)。z-image 关改写 0.1→4。
   // pixelMatrix:官方推荐尺寸表(替代偏小的通用公式,16:9 从 1024×576 修到 1280×720 等)。
@@ -95,10 +103,13 @@ export const IMAGE_MODELS: Record<string, ImageModelDef> = {
     maxImages: 1, maxInputImages: 0, maxResolution: '2K', priceTier: 9,
   },
   // 2.0 Pro 真实分辨率上限 2048²≈2K(不是 4K;文档:size 总像素 512²~2048²)。0.5→18。
+  // pixelMatrix:官方「常见比例推荐分辨率」表(档×比例→精确像素),前端比例选项 + 后端发对齐尺寸。
+  // qwen-image-2.0(DB override,shape_template=本模板)经 mergeDef ...tmpl 自动继承此 pixelMatrix。
   'qwen-image-2.0-pro': {
     key: 'qwen-image-2.0-pro', label: '专业 (千问2.0 Pro)', modelId: 'qwen-image-2.0-pro',
     shape: 'S', sizeKind: 'wh', modes: ['text2img', 'img2img'],
     maxImages: 6, maxInputImages: 3, maxResolution: '2K', priceTier: 18,
+    pixelMatrix: QWEN20_PIXELS,
   },
   'wan2.2-flash': {
     key: 'wan2.2-flash', label: '万相2.2 极速', modelId: 'wan2.2-t2i-flash',
@@ -113,16 +124,18 @@ export const IMAGE_MODELS: Record<string, ImageModelDef> = {
   },
   // 万相2.7 编辑(异步含图,A_EDIT):支持 bbox_list 局部重绘 + 0-5 参考图 + n=1-4 出图。
   // size 走 keyword(编辑封顶 2K);提交 /image-generation/generation + X-DashScope-Async,轮询 /tasks/{id}。
+  // size 为 keyword 档(1K/2K),输出比例随输入图自动决定(用户不选比例;sizeParams 对 keyword 丢弃 ratio)。
   'wan2.7-image': {
     key: 'wan2.7-image', label: '万相2.7 编辑', modelId: 'wan2.7-image',
     shape: 'A_EDIT', sizeKind: 'keyword', modes: ['text2img', 'img2img'],
-    maxImages: 4, maxInputImages: 5, maxResolution: '2K', priceTier: 7, supportsBbox: true,
+    maxImages: 4, maxInputImages: 5, maxResolution: '2K', resolutionTiers: ['1K', '2K'], priceTier: 7, supportsBbox: true,
   },
+  // Pro 按官方文档支持 1K/2K/4K(文生图到 4K;编辑场景厂商接受 1K/2K/4K size 档,本平台开放全档)。
   'wan2.7-image-pro': {
     key: 'wan2.7-image-pro', label: '万相2.7 编辑 Pro', modelId: 'wan2.7-image-pro',
     shape: 'A_EDIT', sizeKind: 'keyword', modes: ['text2img', 'img2img'],
     // 真实成本 0.50 元/张 × 35 = 18(原 10 是偏低占位,会亏:只收 2 倍成本而非 3.5 倍)。
-    maxImages: 4, maxInputImages: 5, maxResolution: '2K', priceTier: 18, supportsBbox: true,
+    maxImages: 4, maxInputImages: 5, maxResolution: '4K', resolutionTiers: ['1K', '2K', '4K'], priceTier: 18, supportsBbox: true,
   },
 
   // ── 火山引擎 豆包 Seedream(PR-2a;provider='volc-ark',走 ark.ts SyncImageGateway)──
