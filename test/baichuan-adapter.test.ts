@@ -251,7 +251,8 @@ describe('submitVideoT2V 体形(按 shape 组体)', () => {
     expect(taskId).toBe('t-1');
     const { body, url } = get();
     expect(url).toContain('/services/aigc/video-generation/video-synthesis');
-    expect(body.model).toBe('wan2.7-t2v');
+    // 入参 model 用内部 key 'wan2.7-t2v',但发给百炼的 body.model 是厂商真实 modelId(带日期版本)
+    expect(body.model).toBe('wan2.7-t2v-2026-04-25');
     expect((body.input as any).prompt).toBe('一只猫');
     expect((body.input as any).negative_prompt).toBe('花朵');
     const p = body.parameters as Record<string, unknown>;

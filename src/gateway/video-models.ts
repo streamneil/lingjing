@@ -80,7 +80,7 @@ export const VIDEO_MODELS: Record<string, VideoModelDef> = {
   // 万相2.7:大师模型,支持音频生成/反向提示词/prompt 智能改写。res 720P/1080P。
   // 注:audio 本轮靠 audio_url 上传(已缓,前端不暴露)→ supportsAudio 标 false,无可见开关(R6)。
   'wan2.7-t2v': {
-    key: 'wan2.7-t2v', label: '大师 (万相2.7)', modelId: 'wan2.7-t2v',
+    key: 'wan2.7-t2v', label: '大师 (万相2.7)', modelId: 'wan2.7-t2v-2026-04-25',
     shape: 'V_DASH',
     resolutions: ['720P', '1080P'],
     ratios: ['16:9', '9:16', '1:1', '4:3', '3:4'],
