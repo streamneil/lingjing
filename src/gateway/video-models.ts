@@ -61,6 +61,11 @@ export interface VideoModelDef {
   maxOutSeconds?: number; // 输出时长上限(HH=15:输入>15s 截前 15;wan 无上限=跟输入/截断)
   supportsTruncate?: boolean; // 支持 duration 截断参数(仅 wan 编辑,2-10s)
   supportsAudioOrigin?: boolean; // 支持 audio_setting=origin(保留原声;两编辑模型都支持)
+  // ── 参考生影片多模态(video_r2v;仅 Seedance 2.0)──
+  // 能力门控(eng-review P1#2):只有声明这两个上限的模型才接受 video/audio 参考。
+  // 缺省 undefined = 不支持(wan/HH r2v 不声明 → video/audio refs 被拒,不泄漏)。
+  maxVideoRefs?: number; // 参考视频上限(Seedance 3)
+  maxAudioRefs?: number; // 参考音频上限(Seedance 3)
 }
 
 // 三模型(纯文生视频打平)。modelId 按用户给的百炼文档核实。
@@ -201,9 +206,13 @@ export const VIDEO_MODELS: Record<string, VideoModelDef> = {
     maxPromptChars: 500,
     // 火山价格示例(5秒720p)折每秒:720P 4.97/5≈1.0→⌈1.0×35⌉=35;1080P 12.39/5≈2.5→⌈2.5×35⌉=88(model_pricing 为准)。
     priceTier: 35, priceTier1080: 88,
+    // 有声(generate_audio)价档(eng-review P1#1:reference task 开音频不能按无声计价 → 漏钱)。
+    // token 计价无固定有声系数 → 暂取无声×1.2 占位,标注 admin 录真实成本前需校准。
+    priceTierAudio: 42, priceTierAudio1080: 106,
     supportsAudio: true, // generate_audio
     supportsNegative: false, supportsPromptExtend: false,
     tasks: ['first_frame', 'first_last', 'reference'], maxRefImages: 9, promptRequired: false,
+    maxVideoRefs: 3, maxAudioRefs: 3, // 多模态参考(video_r2v):0-3 视频 + 0-3 音频
   },
   'doubao-seedance-2.0-fast': {
     key: 'doubao-seedance-2.0-fast', label: '豆包 Seedance 2.0 Fast', modelId: 'doubao-seedance-2-0-fast-260128', provider: 'volc-ark',
@@ -213,9 +222,11 @@ export const VIDEO_MODELS: Record<string, VideoModelDef> = {
     durationRange: [4, 15], defaultDuration: 5,
     maxPromptChars: 500,
     priceTier: 28, // 4.0/5 秒=0.8→⌈0.8×35⌉=28
+    priceTierAudio: 34, // 有声占位(28×1.2);admin 录真实成本前需校准
     supportsAudio: true,
     supportsNegative: false, supportsPromptExtend: false,
     tasks: ['first_frame', 'first_last', 'reference'], maxRefImages: 9, promptRequired: false,
+    maxVideoRefs: 3, maxAudioRefs: 3,
   },
 };
 
@@ -263,6 +274,23 @@ export function getI2VModel(key?: string): VideoModelDef {
     return VIDEO_MODELS[key]!;
   }
   return VIDEO_MODELS[DEFAULT_I2V_MODEL]!;
+}
+
+// ── 参考生影片多模态(r2v;仅 Seedance 2.0 声明 maxVideoRefs/maxAudioRefs)──
+// 能力门控:r2v 模型 = 声明了 maxVideoRefs 的模型(只有它们接受 video/audio 参考)。
+export const DEFAULT_R2V_MODEL = 'doubao-seedance-2.0';
+
+/** 多模态参考生模型清单(声明 maxVideoRefs;前端 ref-video 下拉真相源)。 */
+export function listR2VModels(): VideoModelDef[] {
+  return Object.values(VIDEO_MODELS).filter((d) => typeof d.maxVideoRefs === 'number');
+}
+
+/** 取 r2v 模型(多模态参考生);未知/缺省/非 r2v → 默认 r2v 模型。 */
+export function getR2VModel(key?: string): VideoModelDef {
+  if (key && isKnownVideoModel(key) && typeof VIDEO_MODELS[key]!.maxVideoRefs === 'number') {
+    return VIDEO_MODELS[key]!;
+  }
+  return VIDEO_MODELS[DEFAULT_R2V_MODEL]!;
 }
 
 // ── 视频编辑(edit)──

@@ -27,7 +27,7 @@
     {
       key: 'ref-video', label: '参考生成影片',
       icon: '<rect x="3" y="5" width="14" height="14" rx="2"/><path d="m17 9 4-2v10l-4-2"/><path d="m8 10 2 2-2 2"/>',
-      badge: { text: '新', kind: 'new' }, enabled: false, outputKind: 'video', tier: 'later',
+      badge: { text: '新', kind: 'new' }, enabled: true, outputKind: 'video', page: 'ref-video.html', tier: 'live',
     },
     {
       key: 'img2video', label: '图片转影片',
@@ -64,8 +64,8 @@
     {
       key: 'ai-music', label: 'AI 音乐',
       icon: '<path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/>',
-      // 2026-06 隐藏:Fun-Music 模型暂未开放(用户定)。enabled=false → 不渲染入口;后端网关保留,开放翻 true。
-      enabled: false, outputKind: 'audio', page: 'ai-music.html', tier: 'live',
+      // 2026-06 放开:后端(buildAiMusicJob/worker/计价/ai-music.html)早已完成,先前仅隐入口,现开放。
+      enabled: true, outputKind: 'audio', page: 'ai-music.html', tier: 'live',
     },
     {
       key: 'tts', label: '文字转语音',

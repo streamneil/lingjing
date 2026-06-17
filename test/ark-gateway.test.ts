@@ -79,6 +79,27 @@ describe('ArkGateway 视频:请求体组装 + 响应解析', () => {
     expect(img.role).toBe('first_frame');
   });
 
+  it('submitVideoT2V 多模态参考(r2v):图/视频/音频 → typed content + role + ratio', async () => {
+    let captured: any = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_u, init: any) => {
+      captured = JSON.parse(init.body);
+      return new Response(JSON.stringify({ id: 'cgt-r2v' }), { status: 200 });
+    });
+    await new ArkGateway().submitVideoT2V({
+      model: 'doubao-seedance-2.0', prompt: '[图片1][视频1][音频1]', task: 'reference',
+      imageRefs: ['https://img/a.png', 'https://img/b.png'], videoRefs: ['https://vid/v.mp4'], audioRefs: ['https://aud/a.mp3'],
+      ratio: '16:9', audio: true,
+    });
+    const imgs = captured.content.filter((c: any) => c.type === 'image_url');
+    const vids = captured.content.filter((c: any) => c.type === 'video_url');
+    const auds = captured.content.filter((c: any) => c.type === 'audio_url');
+    expect(imgs.map((c: any) => c.role)).toEqual(['reference_image', 'reference_image']);
+    expect(vids[0]).toEqual({ type: 'video_url', video_url: { url: 'https://vid/v.mp4' }, role: 'reference_video' });
+    expect(auds[0]).toEqual({ type: 'audio_url', audio_url: { url: 'https://aud/a.mp3' }, role: 'reference_audio' });
+    expect(captured.ratio).toBe('16:9');
+    expect(captured.generate_audio).toBe(true);
+  });
+
   it('fetchJobStatus:小写 status 归一 + 取 content.video_url', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ status: 'succeeded', content: { video_url: 'https://v/out.mp4' } }), { status: 200 }) as any,

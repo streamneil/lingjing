@@ -193,8 +193,10 @@ export function costFor(toolType: string, input: Record<string, unknown>): numbe
       return estimateVideoCost(billable, priceTier, resolution, false);
     }
     case 'video_t2v':
-    case 'video_i2v': {
-      // 文生视频 / 图转影片:同计价(秒×档×tier;i2v audio 恒 false)。读快照(reserve==settle);
+    case 'video_i2v':
+    case 'video_r2v': {
+      // 文生视频 / 图转影片 / 多模态参考生:同计价(秒×档×tier)。i2v audio 恒 false;
+      // r2v audio 由快照决定(Seedance generate_audio,eng-review P1#1:不硬编码 false → 不漏钱)。读快照(reserve==settle);
       // 无快照(老 job)回落实时派生(同 build 规则,R5.1 DRY)。
       const def = getVideoModel(typeof input.model === 'string' ? input.model : undefined);
       const duration = typeof input.durationSnapshot === 'number'
