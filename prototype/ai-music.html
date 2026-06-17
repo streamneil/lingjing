@@ -15,8 +15,9 @@
   .mode-seg { display:flex; gap:4px; padding:4px; background:var(--field); border:1px solid var(--line); border-radius:12px; }
   .mode-seg button { flex:1; padding:9px 0; border:none; border-radius:9px; background:transparent; color:var(--t3); font-size:13.5px; font-weight:600; cursor:pointer; transition:.15s; font-family:var(--f); }
   .mode-seg button.active { background:var(--card-hi); color:var(--t1); }
-  /* 提示词/歌词文本框底部按钮(复用 TTS 的 + 歌词 风格) */
-  .ta-acts { display:flex; gap:8px; margin-top:8px; }
+  /* 提示词/歌词文本框底部按钮(复用 TTS 的 + 歌词 风格)。
+     固定行高:纯音乐模式隐藏「歌词」按钮时,此行仍占位,避免切 tab 提示区高度跳动。 */
+  .ta-acts { display:flex; align-items:center; gap:8px; margin-top:8px; min-height:34px; }
   .ta-acts button { display:inline-flex; align-items:center; gap:5px; font-size:12.5px; color:var(--t2); background:var(--field); border:1px solid var(--line); border-radius:9px; padding:7px 12px; cursor:pointer; transition:.15s; }
   .ta-acts button:hover { border-color:var(--line-hi); color:var(--t1); }
   .ta-acts button svg { width:14px; height:14px; }
@@ -56,6 +57,14 @@
   .aud-ic svg { width:20px; height:20px; }
   .aud audio { flex:1; min-width:0; height:38px; color-scheme:dark; }
   .aud-empty { margin-top:8px; padding:14px; color:var(--t4); background:var(--field); border:1px solid var(--line); border-radius:12px; }
+  /* 示范卡(空态;复用 ref-video .demo-card 语言)*/
+  .demo-card { border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:16px; margin-top:14px; }
+  .demo-card .dh { font-size:13px; font-weight:700; color:var(--t1); margin-bottom:4px; }
+  .demo-card .ds { font-size:12px; color:var(--t4); line-height:1.6; margin-bottom:12px; }
+  .demo-sec-label { font-size:11px; color:var(--t4); margin:0 0 5px; }
+  .demo-box { font-size:12px; color:var(--t2); background:var(--field); border:1px solid var(--line); border-radius:9px; padding:10px 12px; margin-bottom:12px; line-height:1.6; }
+  .demo-box.demo-lyrics { white-space:pre-wrap; max-height:200px; overflow-y:auto; font-family:var(--f-mono,inherit); font-size:11.5px; color:var(--t3); }
+  .demo-card .dbtn { display:inline-flex; align-items:center; gap:6px; font-size:12.5px; color:var(--blue); background:var(--blue-bg,rgba(77,141,255,.12)); border:1px solid var(--blue); border-radius:9px; padding:8px 14px; cursor:pointer; }
 </style>
 <script defer src="shell.js"></script>
 </head>
@@ -111,21 +120,12 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       <div class="script"><textarea id="lyrics" maxlength="2000" placeholder="在此添加你的歌词（与提示词二选一，同填以歌词为准）。例如：&#10;[verse]&#10;清晨的阳光穿过窗帘&#10;[chorus]&#10;慢慢来不着急"></textarea></div>
     </div>
 
-    <!-- 更多选项:人声性别 + 模型(纯音乐隐藏人声性别)+ 风格 chips -->
-    <div class="cfg-grid2">
-      <div class="cf-cell" id="genderCell">
-        <div class="cfg-label">人声性别</div>
-        <div class="pop-anchor">
-          <div class="cpill" id="genderPill" onclick="togglePop('gender')"><span class="v" id="genderPillV">女声</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
-          <div class="pop" id="pop-gender" style="min-width:auto;left:0;right:0"><div class="pop-label">人声性别</div><div id="genderOpts"></div></div>
-        </div>
-      </div>
-      <div class="cf-cell">
-        <div class="cfg-label">模型</div>
-        <div class="pop-anchor">
-          <div class="cpill" id="modelPill" onclick="togglePop('model')"><span class="v" id="modelPillV">fun-music-v1</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
-          <div class="pop" id="pop-model" style="min-width:auto;left:0;right:0"><div class="pop-label">模型</div><div id="modelOpts"></div></div>
-        </div>
+    <!-- 更多选项:人声性别(纯音乐隐藏)+ 风格 chips。模型仅 fun-music-v1,无需选择,已隐藏。 -->
+    <div class="cf-cell" id="genderCell">
+      <div class="cfg-label">人声性别</div>
+      <div class="pop-anchor">
+        <div class="cpill" id="genderPill" onclick="togglePop('gender')"><span class="v" id="genderPillV">女声</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+        <div class="pop" id="pop-gender" style="min-width:auto;left:0;right:0"><div class="pop-label">人声性别</div><div id="genderOpts"></div></div>
       </div>
     </div>
     <div class="cfg-label">风格（点击加入提示词）</div>
@@ -154,6 +154,16 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
           <div class="t">还没有音乐</div>
           <div class="s">描述风格或写一段歌词,点「创建」就能生成第一首音乐。</div>
         </div>
+      </div>
+      <!-- 示范卡(空态):不知道怎么写?一键套用《风吹过的夏天》示例提示词 + 歌词 -->
+      <div class="demo-card" id="demoCard" style="display:none">
+        <div class="dh">🎵 示范:校园民谣《风吹过的夏天》</div>
+        <div class="ds">不知道怎么写?点下方「套用示范」,自动填入下面这段提示词与完整歌词,改一改就能生成同款治愈系民谣。</div>
+        <div class="demo-sec-label">提示词</div>
+        <div class="demo-box" id="demoPromptBox"></div>
+        <div class="demo-sec-label">歌词</div>
+        <div class="demo-box demo-lyrics" id="demoLyricsBox"></div>
+        <button type="button" class="dbtn" id="demoApply">套用示范</button>
       </div>
     </div>
   </div>
@@ -217,13 +227,12 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     box.querySelectorAll('.pop-opt[data-v]').forEach(el=>el.onclick=()=>{ onPick(el.dataset.v); closePops(); });
   }
 
-  // 人声性别 + 模型(选中态重渲染,避免「无法选中」)
-  let selGender = 'female', selModel = 'fun-music-v1';
+  // 人声性别(选中态重渲染,避免「无法选中」)。模型固定 fun-music-v1(仅此一个,UI 已隐藏选择)。
+  let selGender = 'female';
+  const selModel = 'fun-music-v1';
   const GENDERS = [{value:'female',label:'女声'},{value:'male',label:'男声'}];
-  const MODELS = [{value:'fun-music-v1',label:'fun-music-v1'},{value:'fun-music-preview',label:'fun-music-preview（预览）'}];
   function refreshGender(){ renderPopOpts('genderOpts', GENDERS, selGender, (v)=>{ selGender=v; refreshGender(); }); document.getElementById('genderPillV').textContent = (GENDERS.find(g=>g.value===selGender)||{label:'女声'}).label; }
-  function refreshModel(){ renderPopOpts('modelOpts', MODELS, selModel, (v)=>{ selModel=v; refreshModel(); }); document.getElementById('modelPillV').textContent = (MODELS.find(m=>m.value===selModel)||{label:'fun-music-v1'}).label; }
-  refreshGender(); refreshModel();
+  refreshGender();
 
   // ── 预估 ──
   let estTimer = null;
@@ -262,6 +271,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   }
   function renderCard(job){
     document.getElementById('feedEmpty').style.display='none';
+    const dc=document.getElementById('demoCard'); if(dc) dc.style.display='none'; // 有作品后隐藏示范卡
     if(job.prompt!==undefined||job.lyrics!==undefined) musicMeta[job.id]={prompt:job.prompt||'', lyrics:job.lyrics||''};
     const meta = musicMeta[job.id]||{}; const pt = meta.prompt||job.prompt||''; const lt = meta.lyrics||job.lyrics||'';
     let card=document.getElementById('job-'+job.id); const existed=!!card;
@@ -342,7 +352,67 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     arr.forEach(addStyle);
     window.LJToast && window.LJToast('✓ 已套用片头风格,可改后生成');
   }
-  LJ.me().then(()=>{ loadHistory(); }).catch(()=>{});
+  // ── 示范卡:《风吹过的夏天》校园民谣(提示词 + 完整歌词,一键套用)──
+  const DEMO_PROMPT='校园民谣,流行抒情,清脆吉他独奏,温暖钢琴,微甜,怀旧,情绪递进,治愈系女声,温柔编曲,纯净感。';
+  const DEMO_LYRICS=`歌曲名称：《风吹过的夏天》
+[Intro]
+(Acoustic guitar plucking, gentle and warm)
+吉他弦动，拨开落叶一片。
+那年夏天，我们好久不见。
+
+[Verse 1]
+操场跑道，圈着跑不完的年少。
+橘色晚霞，刚好落在你的嘴角。
+手里的汽水，冒着气泡在傻笑。
+你说长大的梦，希望我能先拿到。
+
+[Verse 2]
+黑板擦过，留下青春的符号。
+毕业合照，谁在偷偷红了眼角。
+课桌的角落，刻下长不大的记号。
+那时候的我们，总以为永远很长。
+
+[Chorus]
+青春是不散的晚宴，举杯敬昨天的倔强。
+就算泪水模糊了视线，转过身依然有光。
+遗憾是微风的微凉，吹散了青涩的脸庞。
+我们带着骄傲奔跑，去成为彼此的太阳。
+
+[Bridge]
+(Music swells, emotional strings join)
+时光列车催促着起航，站台拉长了背影。
+可那些一起追过的星，永远在心底长明。
+
+[Chorus]
+青春是不散的晚宴，举杯敬昨天的倔强。
+就算泪水模糊了视线，转过身依然有光。
+遗憾是微风的微凉，吹散了青涩的脸庞。
+我们带着骄傲奔跑，去成为彼此的太阳。
+
+[Outro]
+(Music fades out slowly, solo piano)
+晚风吹过，蝉鸣留在夏天。
+各自奔赴，我们高处相见。
+(Fade to silence)`;
+  function initDemo(){
+    const card=document.getElementById('demoCard'); if(!card) return;
+    document.getElementById('demoPromptBox').textContent=DEMO_PROMPT;
+    document.getElementById('demoLyricsBox').textContent=DEMO_LYRICS;
+    document.getElementById('demoApply').onclick=()=>{
+      switchMode('song');                       // 歌词仅歌曲模式;先切到歌曲
+      pa.value=DEMO_PROMPT.slice(0,2000); cnt.textContent=pa.value.length;
+      if(!lyricsOpen) toggleLyrics();            // 展开歌词区
+      ly.value=DEMO_LYRICS.slice(0,2000);
+      refreshBtn(); scheduleEstimate();
+      pa.scrollIntoView({behavior:'smooth',block:'center'}); pa.focus();
+      window.LJToast&&window.LJToast('✓ 已套用示范提示词与歌词,可直接点「创建」或自行修改');
+    };
+  }
+  // 空态(无作品)才显示示范卡;loadHistory 渲染出作品会在 renderCard 里隐藏
+  function maybeShowDemo(){ const hasJob=!!document.querySelector('.feed-list .fitem[id^=job-]'); const dc=document.getElementById('demoCard'); if(dc) dc.style.display=hasJob?'none':''; }
+
+  initDemo();
+  LJ.me().then(()=>loadHistory()).then(()=>maybeShowDemo()).catch(()=>maybeShowDemo());
   switchMode('song'); refreshBtn(); scheduleEstimate();
   applyStyleFromQuery();
 </script>
