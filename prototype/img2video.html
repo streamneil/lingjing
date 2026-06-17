@@ -33,8 +33,8 @@
   .task-tab.on { background:var(--card-hi); color:var(--t1); box-shadow:0 1px 0 rgba(0,0,0,.15); }
 
   /* 输入图区 — 与 AI 图片「图片转图片」同款:外卡 var(--card) + 1:1 方格 tiles + 空态 170px 大上传区 */
-  /* 图片区固定高(172px):开始图/图片间/参考图三 tab 与空/有图各态等高,切换不跳动、不超屏 */
-  .img-tiles-card { border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:14px; height:172px; box-sizing:border-box; display:flex; flex-direction:column; }
+  /* 图片区固定高(196px):三 tab 与空/有图各态等高不跳;196 给空态上传区(图标+文字+按钮)留足舒展空间,不贴边 */
+  .img-tiles-card { border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:14px; height:196px; box-sizing:border-box; display:flex; flex-direction:column; }
   .img-tiles-card > #imgArea { flex:1; min-height:0; display:flex; flex-direction:column; } /* imgArea 撑满卡;内含 .img-tiles + 可选 .area-hint */
   .img-tiles { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; flex:1; min-height:0; }
   .img-tiles.empty { display:block; height:100%; } /* 空态:大上传区占满整高整宽 */
@@ -46,14 +46,12 @@
   .img-tile .rmx { position:absolute; top:6px; right:6px; width:22px; height:22px; background:rgba(0,0,0,.6); border-radius:50%; display:grid; place-items:center; color:#fff; font-size:13px; line-height:1; cursor:pointer; border:none; padding:0; }
   .img-tile .num { position:absolute; top:6px; left:6px; font-size:11px; background:rgba(0,0,0,.62); color:#fff; padding:1px 7px; border-radius:6px; z-index:1; }
   .img-tile.add { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; border:1.5px dashed var(--line-hi); cursor:pointer; color:var(--t3); transition:.15s; }
-  .img-tile.add:hover { border-color:var(--t4); color:var(--t1); background:var(--card); } /* hover 柔和:灰亮边,不抢眼 */
-  .img-tile.add.drag { border-color:var(--blue); color:var(--t1); background:var(--card); } /* 仅拖拽中给蓝边(投放目标反馈) */
+  .img-tile.add:hover, .img-tile.add.drag { border-color:var(--blue); color:var(--t1); background:var(--card); }
   .img-tile.add .plus { font-size:30px; font-weight:300; line-height:1; }
   .img-tile.add .lbl { font-size:12.5px; }
   /* 空态高度 = 一行 tile 高度 = (容器宽 - 2*gap)/3,与有图态完全等高,切换不跳动 */
   .img-drop { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; height:100%; box-sizing:border-box; border:1.5px dashed var(--line-hi); border-radius:12px; background:var(--field); cursor:pointer; color:var(--t3); transition:.15s; padding:12px 16px; text-align:center; }
-  .img-drop:hover { border-color:var(--t4); background:var(--card-hi); } /* hover 柔和:灰亮边,不抢眼蓝 */
-  .img-drop.drag { border-color:var(--blue); background:var(--card-hi); } /* 仅拖拽中给蓝边(投放目标反馈) */
+  .img-drop:hover, .img-drop.drag { border-color:var(--blue); background:var(--card-hi); }
   .img-drop .di svg { width:38px; height:38px; color:var(--t3); }
   .img-drop .dt { font-size:14px; color:var(--t2); }
   .img-drop .da { display:inline-flex; align-items:center; gap:6px; font-size:12.5px; color:var(--t3); background:var(--card); border:1px solid var(--line); border-radius:9px; padding:8px 14px; }
