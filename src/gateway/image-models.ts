@@ -46,6 +46,10 @@ export interface ImageModelDef {
   resolutionTiers?: string[];
   priceTier: number; // 每张计价(替代 PRICE_PER_IMAGE,非双乘 P2-a)
   resolutions?: ResolutionEntry[]; // admin 录的分辨率列表(百炼官方推荐表);空 → 用 imageSize 算
+  // 精确像素矩阵(tier → ratio → "W*H")。模型官方给「档×比例→推荐像素」时用它,
+  //   whSize 直接查表发官方推荐尺寸,不走偏小的通用公式。z-image 文档即此形态。
+  //   UI 档(1K/2K)映射到表内 tier:见各模型注释。
+  pixelMatrix?: Record<string, Record<string, string>>;
   supportsBbox?: boolean; // 支持 bbox_list 局部重绘(仅万相2.7;千问编辑不支持)
   canSetSize?: boolean; // 是否可指定分辨率(缺省 true);false=随输入图(qwen-image-edit),UI 隐藏清晰度控件 + 提交不发 size
 }
@@ -68,12 +72,21 @@ export function tierFromPixels(width: number, height: number): '1K' | '2K' | '4K
 }
 
 // 精选 5 模型(全 S/A1,代码现成)。modelId 按用户给的百炼文档核实。
+// z-image 官方推荐分辨率(文档「size参数设置」)。tier 映射:UI 1K→1024 tier、2K→1536 tier(最高推荐档)。
+// 仅收平台 7 个标准比例(文档还有 7:9/9:7/9:21/21:9,UI 未暴露,略)。
+const ZIMAGE_PIXELS: Record<string, Record<string, string>> = {
+  '1K': { '1:1': '1024*1024', '16:9': '1280*720', '9:16': '720*1280', '4:3': '1152*864', '3:4': '864*1152', '3:2': '1248*832', '2:3': '832*1248' },
+  '2K': { '1:1': '1536*1536', '16:9': '2048*1152', '9:16': '1152*2048', '4:3': '1728*1296', '3:4': '1296*1728', '3:2': '1872*1248', '2:3': '1248*1872' },
+};
+
 export const IMAGE_MODELS: Record<string, ImageModelDef> = {
   // priceTier 默认 = 真实单价×35(无 DB row 时回落用;DB override 赢)。z-image 关改写 0.1→4。
+  // pixelMatrix:官方推荐尺寸表(替代偏小的通用公式,16:9 从 1024×576 修到 1280×720 等)。
   'z-image': {
     key: 'z-image', label: '极速', modelId: 'z-image-turbo',
     shape: 'S', sizeKind: 'wh', modes: ['text2img'],
     maxImages: 1, maxInputImages: 0, maxResolution: '2K', priceTier: 4,
+    pixelMatrix: ZIMAGE_PIXELS,
   },
   // qwen-image 固定 1 张(文档:n>1 报 num_images_per_prompt must be 1)。0.25→9。
   'qwen-image': {
@@ -275,12 +288,19 @@ export function resolutionAllowed(def: ImageModelDef, resolution?: string): bool
 function whSize(def: ImageModelDef, ratio?: string, resolution?: string, snap?: { width?: number; height?: number }): string {
   // 1. 快照优先(P1-c:admin mid-flight 改不影响在飞 job)。
   if (snap && Number.isFinite(snap.width) && Number.isFinite(snap.height)) return `${snap.width}*${snap.height}`;
-  // 2. 查 admin 录的分辨率表(官方推荐,不猜)。
+  // 2. 官方像素矩阵(tier×ratio→精确推荐尺寸,如 z-image)。档/比例缺省回落首档+1:1。
+  if (def.pixelMatrix) {
+    const tiers = Object.keys(def.pixelMatrix);
+    const tier = resolution && def.pixelMatrix[resolution] ? resolution : tiers[0]!;
+    const byRatio = def.pixelMatrix[tier]!;
+    return byRatio[ratio ?? '1:1'] ?? byRatio['1:1'] ?? Object.values(byRatio)[0]!;
+  }
+  // 3. 查 admin 录的分辨率表(官方推荐,不猜)。
   if (def.resolutions?.length) {
     const hit = def.resolutions.find((r) => r.ratio === (ratio ?? '1:1')) ?? def.resolutions.find((r) => r.isDefault) ?? def.resolutions[0];
     if (hit) return `${hit.width}*${hit.height}`;
   }
-  // 3. 回落 imageSize 算(老 job/未配模型兼容)。
+  // 4. 回落 imageSize 算(老 job/未配模型兼容)。
   return imageSize(ratio, resolution);
 }
 

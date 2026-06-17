@@ -203,3 +203,37 @@ describe('sizeParams 读 resolutions 表(快照优先 → 查表 → imageSize �
     expect(sizeParams(d, '1:1', '1K').size).toMatch(/^\d+\*\d+$/);
   });
 });
+
+// z-image 官方推荐尺寸矩阵(pixelMatrix)——修偏小公式(16:9 1024×576 → 文档 1280×720)。
+describe('z-image pixelMatrix 官方推荐尺寸', () => {
+  beforeEach(() => clearOv()); // 纯代码 def(无 override),走 pixelMatrix
+  it('1K 档按文档:16:9=1280*720(非公式的 1024*576)、1:1=1024*1024', () => {
+    const d = getImageModel('z-image');
+    expect(d.pixelMatrix).toBeDefined();
+    expect(sizeParams(d, '16:9', '1K').size).toBe('1280*720');
+    expect(sizeParams(d, '1:1', '1K').size).toBe('1024*1024');
+    expect(sizeParams(d, '9:16', '1K').size).toBe('720*1280');
+    expect(sizeParams(d, '3:4', '1K').size).toBe('864*1152');
+  });
+  it('2K 档映到文档 1536 tier:16:9=2048*1152、1:1=1536*1536', () => {
+    const d = getImageModel('z-image');
+    expect(sizeParams(d, '16:9', '2K').size).toBe('2048*1152');
+    expect(sizeParams(d, '1:1', '2K').size).toBe('1536*1536');
+  });
+  it('未知比例/缺省档回落 1:1 / 首档,不抛错', () => {
+    const d = getImageModel('z-image');
+    expect(sizeParams(d, undefined, undefined).size).toBe('1024*1024'); // 首档 1K + 1:1
+    expect(sizeParams(d, '21:9', '1K').size).toBe('1024*1024'); // UI 无此比例 → 回落 1:1
+  });
+  it('所有 z-image 推荐尺寸都在 [512*512, 2048*2048] 合法范围', () => {
+    const d = getImageModel('z-image');
+    for (const tier of Object.values(d.pixelMatrix!)) {
+      for (const wh of Object.values(tier)) {
+        const parts = wh.split('*').map(Number);
+        const px = parts[0]! * parts[1]!;
+        expect(px).toBeGreaterThanOrEqual(512 * 512);
+        expect(px).toBeLessThanOrEqual(2048 * 2048);
+      }
+    }
+  });
+});
