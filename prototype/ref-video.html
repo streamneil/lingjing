@@ -562,7 +562,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   }
   function renderCard(job){
     document.getElementById('emptyHint').style.display='none';
-    const dc=document.getElementById('demoCard'); if(dc) dc.style.display='none';
+    // 示范卡常显(不随生成记录隐藏);留在记录列底部供随时参考。
     if(job.input) jobInputs[job.id]=job.input;
     let card=document.getElementById('job-'+job.id); const existed=!!card;
     if(!card){ card=document.createElement('div'); card.className='fitem'; card.id='job-'+job.id; feedList.insertBefore(card, feedList.firstChild); }
@@ -663,7 +663,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   }
   function initDemo(){
     const card=document.getElementById('demoCard'); if(!card) return;
-    card.style.display=''; // 空态时显示(有作品后 emptyHint 与示范卡一起被 renderCard 隐;此处仅初始显)
+    card.style.display=''; // 常显:无论有无生成记录都展示示范(renderCard 不再隐藏它)
     renderDemoRefs(); // 输入参考缩略(2图/1视频/1音频)
     // 示范成片:能加载就显视频,失败回落文字提示(不让卡片「没界面」)
     const vid=document.getElementById('demoVid'), fb=document.getElementById('demoVidFallback');
