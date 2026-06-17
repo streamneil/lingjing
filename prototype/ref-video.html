@@ -124,10 +124,9 @@
   .demo-ref.aud svg { width:20px; height:20px; }
   .demo-ref .tag { position:absolute; top:4px; left:4px; font-size:9px; background:rgba(0,0,0,.62); color:#fff; padding:1px 5px; border-radius:4px; }
 
-  /* 弹框定位修正:setPill 弹框比锚点宽,默认 left:0 会被浏览器右对齐成负 left → 溢出到左侧菜单下方。
-     强制 left:0 / right:auto 向右展开,并定宽不撑过头(seed 保持窄+右对齐)。*/
-  .cfg #pop-set { left:0; right:auto; width:360px; min-width:0; max-width:none; }
-  .cfg #pop-model { left:0; right:auto; }
+  /* 弹框与 AI 图片一致:#pop-set/#pop-seed 沿用 app.css 全局 right:0 右对齐(贴 pill 右沿向左铺,
+     落在 cfg 列内、不溢出右侧 feed)。仅提升层级到 feed 之上,确保「弹在最上层」不被记录列盖住。*/
+  .cfg .pop { z-index:120; }
 
   /* 本页滚动条隐藏但仍可滚(问题2):页面整体滚动条 + .cfg/.feed 内部滚动条都隐 */
   html { scrollbar-width:none; -ms-overflow-style:none; }
