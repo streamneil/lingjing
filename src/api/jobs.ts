@@ -41,7 +41,7 @@ import { getEmotion, EMOTIONS, getSpeed, SPEEDS, getLanguage, LANGUAGES } from '
 import { db } from '../db/index.js';
 import type { VideoGenInput, ImageGenInput, TtsGenInput, VideoGenT2VInput, AiMusicGenInput } from '../gateway/types.js';
 import { getImageModel, resolutionAllowed, isKnownModel, listEnabledModels, DEFAULT_IMAGE_MODEL, tierFromPixels } from '../gateway/image-models.js';
-import { getVideoModel, isKnownVideoModel, listVideoModels, klingModeToResolution, getI2VModel, listI2VModels, getEditModel, listEditModels, getR2VModel, type VideoTask, type VideoModelDef } from '../gateway/video-models.js';
+import { getVideoModel, isKnownVideoModel, listVideoModels, klingModeToResolution, getI2VModel, listI2VModels, getEditModel, listEditModels, getR2VModel, listR2VModels, type VideoTask, type VideoModelDef } from '../gateway/video-models.js';
 import { probeVideoMeta, type VideoMeta } from '../pipeline/ai-label.js';
 import { readFile, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -1060,6 +1060,25 @@ jobsRouter.get('/i2v-models', requireAuth, (_req: Request, res: Response) => {
     promptRequired: d.promptRequired, // 参考生 prompt 必填
   }));
   res.json({ models, default: getI2VModel().key });
+});
+
+// 参考生影片模型清单 — ref-video 页下拉真相源(多模态:吐 maxRefImages/maxVideoRefs/maxAudioRefs + supportsAudio)。
+jobsRouter.get('/r2v-models', requireAuth, (_req: Request, res: Response) => {
+  const models = listR2VModels().map((d) => ({
+    key: d.key,
+    label: d.label,
+    resolutions: d.resolutions,
+    ratios: d.ratios,
+    durationRange: d.durationRange,
+    defaultDuration: d.defaultDuration,
+    maxPromptChars: d.maxPromptChars,
+    supportsAudio: d.supportsAudio, // generate_audio 开关
+    maxRefImages: d.maxRefImages,   // 图≤9
+    maxVideoRefs: d.maxVideoRefs,   // 视频≤3
+    maxAudioRefs: d.maxAudioRefs,   // 音频≤3
+    promptRequired: d.promptRequired,
+  }));
+  res.json({ models, default: getR2VModel().key });
 });
 
 // 视频编辑模型清单 — video-edit 页下拉真相源(吐输入视频约束供前端校验/文案,不漏 priceTier)。
