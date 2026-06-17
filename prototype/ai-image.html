@@ -600,7 +600,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     await window.LJDownloadAll(Array.from({length:n},(_,i)=>({url:`/api/jobs/${id}/download/${i}`, filename:`lingjing-${id}-${i+1}.png`})));
   };
 
-  async function track(id, prompt){ try{ await LJ.pollJob(id, (job)=>renderCard({...job, prompt, ...(jobInputs[id]?{modelLabel:findLabel(jobInputs[id].model),ratio:jobInputs[id].ratio,resolution:jobInputs[id].resolution}:{})})); }catch(e){} }
+  async function track(id, prompt){ try{ await LJ.pollJob(id, (job)=>renderCard({...job, prompt, ...(jobInputs[id]?{modelLabel:findLabel(jobInputs[id].model),ratio:jobInputs[id].ratio,resolution:jobInputs[id].resolution,inputUrls:jobInputs[id].inputUrls,imageRefs:jobInputs[id].imageRefs}:{})})); }catch(e){} }
 
   async function loadHistory(){
     let jobs=[]; try{ jobs=await LJ.listJobs(); }catch(e){ return; }
@@ -639,15 +639,20 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       if(mode==='img2img'){
         btn.textContent='上传中…';
         const imageRefs=await uploadInputImages();
-        payload={ type:'ai_image', source:'ai-image', model, mode:'img2img', prompt, imageRefs, resolution:res, count, seed:seed||undefined };
+        // ratio 也发:千问2.0 Pro / 万相2.7 等图生图模型支持指定比例,卡片要据此显示比例并按比例渲染图
+        payload={ type:'ai_image', source:'ai-image', model, mode:'img2img', prompt, imageRefs, resolution:res, ratio, count, seed:seed||undefined };
       } else {
         payload={ type:'ai_image', source:'ai-image', model, mode:'text2img', prompt, count, resolution:res, ratio, seed:seed||undefined };
       }
       btn.textContent='提交中…';
       const res2=await LJ.createJob(payload);
+      // 输入图缩略 URL:复用态用原 OSS URL;本地上传用 dataURL(base64,刷新不失效,可持久存内存)。
+      // 二者皆供:① 卡片立即显输入图缩略;② 之后「重新提示」时把图回填到上传区(reuseUrls)。
+      const localUrls = imgFiles.map(f=>imgPreviewUrls.get(f)).filter(Boolean);
+      const inputUrls = (reuseUrls&&reuseUrls.length) ? reuseUrls.slice() : (localUrls.length?localUrls:undefined);
       // 记录归本页(source='ai-image'),正常渲染到右侧记录流。
-      jobInputs[res2.id]={ model:payload.model, mode:payload.mode, source:'ai-image', prompt, imageRefs:payload.imageRefs, inputUrls:reuseUrls&&reuseUrls.length?reuseUrls.slice():undefined, count:payload.count, resolution:payload.resolution, ratio:payload.ratio, seed:payload.seed };
-      renderCard({ id:res2.id, status:'queued', progress:0, prompt, modelLabel:findLabel(model), ratio:(mode==='img2img'?undefined:ratio), resolution:res, count, inputUrls:(reuseUrls&&reuseUrls.length?reuseUrls.slice():undefined) });
+      jobInputs[res2.id]={ model:payload.model, mode:payload.mode, source:'ai-image', prompt, imageRefs:payload.imageRefs, inputUrls, count:payload.count, resolution:payload.resolution, ratio:payload.ratio, seed:payload.seed };
+      renderCard({ id:res2.id, status:'queued', progress:0, prompt, modelLabel:findLabel(model), ratio, resolution:res, count, inputUrls });
       track(res2.id, prompt);
       ta.value=''; cnt.textContent='0';
       if(mode==='img2img'){ imgFiles=[]; clearReuse(); renderTiles(); document.getElementById('consentChk').checked=false; }
