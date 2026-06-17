@@ -79,6 +79,7 @@
   .mbtns button{flex:1;padding:11px;border-radius:999px;font-size:14px;font-weight:600;font-family:var(--f);cursor:pointer}
   .mbtns .cancel{border:1px solid var(--line);background:none;color:var(--t2)}
   .mbtns .ok{border:none;background:var(--amber);color:#0A0A0B}
+  .mbtns .ok.danger{background:var(--red);color:#fff}
   .mbtns .ok:disabled{opacity:.5;cursor:not-allowed}
   .rcp-close{background:var(--field,#121214);border:1px solid var(--line);color:var(--t1);border-radius:999px;padding:10px 28px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--f);min-height:40px}
   .rcp-close:hover{border-color:var(--line-hi)}
@@ -385,6 +386,19 @@
   </div><!-- /.page -->
   </div><!-- /.shell -->
 
+  <!-- 通用 确认 / 输入 弹框(替代原生 confirm/prompt,风格统一)。askConfirm/askPrompt 驱动。 -->
+  <div class="ov" id="askOv">
+    <div class="modal">
+      <h3 id="askTitle">确认</h3>
+      <p class="mdesc" id="askMsg"></p>
+      <input id="askInput" style="display:none">
+      <div class="mbtns">
+        <button class="cancel" id="askCancel">取消</button>
+        <button class="ok" id="askOk">确认</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 对公收款信息配置 -->
   <div class="ov" id="payeeOv">
     <div class="modal">
@@ -580,6 +594,35 @@
   }
   function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); }
   function closeOv(id){ document.getElementById(id).classList.remove('on'); }
+
+  // 通用确认/输入弹框(替代原生 confirm/prompt;返回 Promise)。同一弹框复用,danger 时 OK 染红。
+  let _askResolve=null;
+  function _askClose(val){ const ov=document.getElementById('askOv'); ov.classList.remove('on'); const r=_askResolve; _askResolve=null; if(r) r(val); }
+  function askConfirm({title='确认操作',msg='',okText='确认',danger=false}={}){
+    return new Promise(resolve=>{
+      _askResolve=resolve;
+      document.getElementById('askTitle').textContent=title;
+      document.getElementById('askMsg').textContent=msg;
+      document.getElementById('askInput').style.display='none';
+      const ok=document.getElementById('askOk'); ok.textContent=okText; ok.classList.toggle('danger',danger);
+      document.getElementById('askOk').onclick=()=>_askClose(true);
+      document.getElementById('askCancel').onclick=()=>_askClose(false);
+      document.getElementById('askOv').classList.add('on');
+    });
+  }
+  function askPrompt({title='请输入',msg='',placeholder='',okText='确认',danger=false}={}){
+    return new Promise(resolve=>{
+      _askResolve=resolve;
+      document.getElementById('askTitle').textContent=title;
+      document.getElementById('askMsg').textContent=msg;
+      const inp=document.getElementById('askInput'); inp.style.display=''; inp.value=''; inp.placeholder=placeholder;
+      const ok=document.getElementById('askOk'); ok.textContent=okText; ok.classList.toggle('danger',danger);
+      document.getElementById('askOk').onclick=()=>{ const v=inp.value.trim(); if(!v){ inp.focus(); return; } _askClose(v); };
+      document.getElementById('askCancel').onclick=()=>_askClose(null);
+      document.getElementById('askOv').classList.add('on');
+      setTimeout(()=>inp.focus(),50);
+    });
+  }
   function fmtN(n){ return (n||0).toLocaleString('zh-CN'); }
   function fmtDate(ts){ const d=new Date(ts); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 
@@ -659,14 +702,14 @@
     b.classList.add('on'); orderStatus=b.dataset.s; loadOrders();
   });
   async function confirmOrder(id, no){
-    if(!confirm(`确认订单 ${no} 已到账?积分将自动入账(不可撤销)。`)) return;
+    if(!await askConfirm({title:'确认到账',msg:`确认订单 ${no} 已到账?积分将自动入账(不可撤销)。`,okText:'确认到账'})) return;
     try{ await PA('POST',`/api/recharge-orders/${id}/confirm`); toast('✓ 已确认到账,积分已入账'); await loadOrders(); await loadTenants(); }
     catch(e){ toast(e.message||'确认失败'); }
   }
   async function rejectOrder(id){
-    const note=prompt('驳回原因(用户可见):');
-    if(note==null||!note.trim()) return;
-    try{ await PA('POST',`/api/recharge-orders/${id}/reject`,{note:note.trim()}); toast('✓ 已驳回'); await loadOrders(); }
+    const note=await askPrompt({title:'驳回打款',msg:'驳回原因(用户可见):',placeholder:'如:回单金额与订单不符',okText:'确认驳回',danger:true});
+    if(note==null) return;
+    try{ await PA('POST',`/api/recharge-orders/${id}/reject`,{note}); toast('✓ 已驳回'); await loadOrders(); }
     catch(e){ toast(e.message||'驳回失败'); }
   }
 
@@ -720,7 +763,7 @@
     document.getElementById('receiptOv').classList.add('on');
   }
   async function rejectInvoice(id){
-    if(!confirm('驳回该开票申请?用户可重新提交。')) return;
+    if(!await askConfirm({title:'驳回开票',msg:'驳回该开票申请?用户可重新提交。',okText:'确认驳回',danger:true})) return;
     try{ await PA('POST',`/api/admin-invoices/${id}/reject`); toast('✓ 已驳回'); await loadInvoices(); }
     catch(e){ toast(e.message||'驳回失败'); }
   }
@@ -894,7 +937,7 @@
   }
   window.submitModel=submitModel;
   window.delModel=async(key,isCode)=>{
-    if(!confirm(isCode?'还原此模型为代码默认?':'删除此自定义模型?')) return;
+    if(!await askConfirm({title:isCode?'还原模型':'删除模型',msg:isCode?'还原此模型为代码默认?':'删除此自定义模型?',okText:isCode?'还原':'删除',danger:!isCode})) return;
     try{ await PA('DELETE',`/api/image-models/${encodeURIComponent(key)}`); toast('✓ 已操作'); await loadModels(); }
     catch(e){ toast(e.message||'操作失败','err'); }
   };
@@ -1350,7 +1393,7 @@
   }
   window.submitPlan=submitPlan;
   window.delPlan=async(id,name)=>{
-    if(!confirm(`删除套餐「${name}」?前台定价页将不再展示。已落的线索仍保留快照。`)) return;
+    if(!await askConfirm({title:'删除套餐',msg:`删除套餐「${name}」?前台定价页将不再展示。已落的线索仍保留快照。`,okText:'删除',danger:true})) return;
     try{ await PA('DELETE',`/api/pricing-plans/${id}`); toast('✓ 已删除'); await loadPlans(); }catch(e){ toast(e.message||'删除失败'); }
   };
 
