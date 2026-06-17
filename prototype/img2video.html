@@ -327,7 +327,8 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     if(task==='first_frame'){
       const url=slotView('first');
       if(!url){
-        area.innerHTML=`<div class="img-tiles empty">${dropZoneHtml()}</div>`;
+        // 带 area-hint(与参考图/图片间 tab 一致:dropzone 等高 + 下方说明,布局统一)
+        area.innerHTML=`<div class="img-tiles empty">${dropZoneHtml()}</div><div class="area-hint">上传一张图作为影片首帧。</div>`;
         const dz=area.querySelector('#imgDrop'); dz.onclick=()=>pick('first');
         bindDrop(dz, fs=>addFile(fs[0],'first'));
       } else {
