@@ -199,3 +199,89 @@ describe('concurrency 趋势', () => {
     expect(r.body.series.length).toBe(24);
   });
 });
+
+// ── 运营数据 /api/metrics/ops(2026-06-17 看板扩展)──
+// 验口径铁律(spec/eng-review 抓的两个炸弹):消耗=reserve+release(非settle)、充值=credited(非grant)。
+describe('运营数据 ops 端点', () => {
+  let opsTenant: string;
+  let opsTenant2: string;
+  const today2 = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
+  const month0 = (() => { const d = new Date(); d.setHours(0,0,0,0); d.setDate(1); return d.getTime(); })();
+  let lseq = 0;
+  function ledger(tenant: string, kind: string, amount: number, createdAt: number) {
+    db.prepare(`INSERT INTO credit_ledger (id,tenant_id,kind,amount,created_at) VALUES (?,?,?,?,?)`)
+      .run(`led-${++lseq}`, tenant, kind, amount, createdAt);
+  }
+  let oseq = 0;
+  function order(tenant: string, status: string, credits: number, bonus: number, yuan: number, confirmedAt: number) {
+    db.prepare(
+      `INSERT INTO recharge_order (id,tenant_id,created_by,order_no,plan_name,price_yuan,credits,bonus_credits,status,confirmed_at,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ).run(`ord-${++oseq}`, tenant, 'u', `NO${oseq}`, 'P', yuan, credits, bonus, status, confirmedAt, confirmedAt, confirmedAt);
+  }
+
+  beforeAll(() => {
+    opsTenant = createTenant('运营A').id;
+    opsTenant2 = createTenant('运营B').id;
+    // 消耗:reserve −100(本月内,今天)+ release +30(退款)→ 净消耗 70。settle 写 0(应被忽略)。grant +500(不算消耗)。
+    ledger(opsTenant, 'reserve', -100, today2 + 1000);
+    ledger(opsTenant, 'release', 30, today2 + 2000);
+    ledger(opsTenant, 'settle', 0, today2 + 3000);       // 干扰:settle 不应计入消耗
+    ledger(opsTenant, 'grant', 500, today2 + 4000);      // 干扰:grant 不是消耗
+    // 昨天:reserve −40
+    ledger(opsTenant, 'reserve', -40, today2 - 12 * 60 * 60 * 1000);
+    // 另一租户本月消耗 −200(测 Top 排序:运营B > 运营A)
+    ledger(opsTenant2, 'reserve', -200, today2 + 1000);
+    // 充值:credited 才算。credited 100+赠10 / ¥50;pending 不算。
+    order(opsTenant, 'credited', 100, 10, 50, today2 + 5000);
+    order(opsTenant, 'pending_payment', 999, 0, 999, today2 + 6000); // 干扰:未到账不算
+  });
+
+  it('消耗口径 = reserve+release(非 settle、非 grant)', async () => {
+    const c = await padminLogin();
+    const r = await c.get('/admin/api/metrics/ops');
+    expect(r.status).toBe(200);
+    // 今日消耗:运营A 70(reserve100−release30)+ 运营B 200 = 270(全租户合计)
+    expect(r.body.consumption.today).toBe(270);
+    // settle=0、grant=500 都没污染 → 若误用 settle 今日会是 0,误把 grant 当消耗会变负
+    expect(r.body.consumption.yesterday).toBeGreaterThanOrEqual(40); // 运营A 昨日 40
+    expect(r.body.consumption.month).toBeGreaterThanOrEqual(270);
+  });
+
+  it('充值口径 = recharge_order credited(非 grant、非 pending)', async () => {
+    const c = await padminLogin();
+    const r = await c.get('/admin/api/metrics/ops');
+    // 本月充值:credited 110 积分(100+10)/ ¥50;pending 的 999 不算
+    expect(r.body.recharge.credits).toBe(110);
+    expect(r.body.recharge.yuan).toBe(50);
+    expect(r.body.recharge.orders).toBe(1);
+  });
+
+  it('Top 消费租户:按消耗降序、JOIN 租户名', async () => {
+    const c = await padminLogin();
+    const r = await c.get('/admin/api/metrics/ops');
+    const month = r.body.topTenants.month;
+    expect(month.length).toBeGreaterThanOrEqual(2);
+    expect(month[0].used).toBeGreaterThanOrEqual(month[1].used); // 降序
+    const names = month.map((t: { name: string }) => t.name);
+    expect(names).toContain('运营A');
+    expect(names).toContain('运营B');
+  });
+
+  it('每租户余额 + 续航;无消耗租户续航为 null(防 ÷0)', async () => {
+    const c = await padminLogin();
+    const r = await c.get('/admin/api/metrics/ops');
+    const rw = r.body.tenantRunway;
+    expect(Array.isArray(rw)).toBe(true);
+    // 余额升序(快断流在前)
+    for (let i = 1; i < rw.length; i++) expect(rw[i].balance).toBeGreaterThanOrEqual(rw[i - 1].balance);
+    // 存在一个曾有 job 但无近 7 日消耗的租户(如 tenantB,只有 job 无 ledger)→ runwayDays=null
+    const noBurn = rw.find((t: { runwayDays: number | null; dailyBurn: number }) => t.dailyBurn === 0);
+    if (noBurn) expect(noBurn.runwayDays).toBeNull();
+  });
+
+  it('未登录打 ops → 401', async () => {
+    const r = await new Client(app).get('/admin/api/metrics/ops');
+    expect(r.status).toBe(401);
+  });
+});

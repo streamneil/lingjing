@@ -136,6 +136,34 @@ function startOfTodayMs(): number {
   d.setHours(0, 0, 0, 0);
   return d.getTime();
 }
+/** 本月 1 号零点(本地时区)。运营「本月消耗/充值」口径起点。 */
+function startOfMonthMs(): number {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(1);
+  return d.getTime();
+}
+
+// ── 运营数据(钱/Top租户/余额续航)——只读聚合,口径单一来源(2026-06-17 CEO+Eng review)──
+//
+// ⚠ 消耗口径(铁律,真库实证):消耗 = credit_ledger 里 kind IN('reserve','release') 之和取负。
+//   绝不用 settle —— settle 写的是 diff=reserved−actualCost,稳态恒 0(credits.ts:settle),
+//   真消耗在 reserve(负,提交预扣)净掉 release(正,失败退款)。用 settle 会全显 0。
+//   真库验证:消耗(reserve+release)=2378,settle 全期=0。
+//
+/** 时间窗 [sinceMs, untilMs) 内的消耗积分(可选限租户)。消耗口径的唯一定义处。 */
+function consumptionInWindow(sinceMs: number, untilMs: number, tenantId?: string): number {
+  const tenantClause = tenantId ? ' AND tenant_id = ?' : '';
+  const params = tenantId ? [sinceMs, untilMs, tenantId] : [sinceMs, untilMs];
+  const row = db
+    .prepare(
+      `SELECT COALESCE(SUM(CASE WHEN kind IN ('reserve','release') THEN amount END), 0) * -1 AS used
+         FROM credit_ledger
+        WHERE created_at >= ? AND created_at < ?${tenantClause}`,
+    )
+    .get(...params) as { used: number };
+  return row.used;
+}
 
 /** 瓶颈灯阈值(规划轮定稿):把"何时扩容"从拍脑袋变成数据驱动。
  *  green=健康 / amber=排队偏高(考虑拆多 worker)/ red=已达瓶颈(扩容或查百炼配额)。 */
@@ -205,6 +233,74 @@ adminRouter.get('/api/metrics/overview', requirePlatformAdmin, (_req: Request, r
     avgQueueWaitMs,
     level,
     newLeads,
+  });
+});
+
+/** 运营数据驾驶舱(钱 / Top 租户 / 余额续航)。全只读聚合,口径走 consumptionInWindow 单一来源。
+ *  消耗=reserve+release(非 settle);充值=recharge_order status='credited'(非 grant,grant 含赠送/试用)。 */
+adminRouter.get('/api/metrics/ops', requirePlatformAdmin, (_req: Request, res: Response) => {
+  const now = Date.now();
+  const todayStart = startOfTodayMs();
+  const yesterdayStart = todayStart - DAY_MS;
+  const monthStart = startOfMonthMs();
+
+  // 消耗快照(积分):今天 / 昨天 / 本月。
+  const consumeToday = consumptionInWindow(todayStart, now);
+  const consumeYesterday = consumptionInWindow(yesterdayStart, todayStart);
+  const consumeMonth = consumptionInWindow(monthStart, now);
+
+  // 本月充值(只认到账订单 credited):积分(含赠送)+ 金额(¥)。
+  const rechargeMonth = db
+    .prepare(
+      `SELECT COALESCE(SUM(credits + bonus_credits), 0) AS credits,
+              COALESCE(SUM(price_yuan), 0) AS yuan,
+              COUNT(*) AS orders
+         FROM recharge_order
+        WHERE status='credited' AND confirmed_at >= ?`,
+    )
+    .get(monthStart) as { credits: number; yuan: number; orders: number };
+
+  // Top 消费租户(封顶 10):本月 + 昨日两个窗,各按消耗降序。JOIN tenant 取名,孤儿 id 兜底短码。
+  const topByWindow = (sinceMs: number, untilMs: number) =>
+    (
+      db
+        .prepare(
+          `SELECT l.tenant_id AS tenantId,
+                  COALESCE(t.name, '租户 ' || substr(l.tenant_id, 1, 8)) AS name,
+                  SUM(CASE WHEN l.kind IN ('reserve','release') THEN l.amount END) * -1 AS used
+             FROM credit_ledger l
+             LEFT JOIN tenant t ON t.id = l.tenant_id
+            WHERE l.created_at >= ? AND l.created_at < ?
+            GROUP BY l.tenant_id
+           HAVING used > 0
+            ORDER BY used DESC
+            LIMIT 10`,
+        )
+        .all(sinceMs, untilMs) as { tenantId: string; name: string; used: number }[]
+    );
+  const topMonth = topByWindow(monthStart, now);
+  const topYesterday = topByWindow(yesterdayStart, todayStart);
+
+  // 每租户 余额 + 续航天数(余额 / 近7日日均消耗;日均=0 → null 表「—」,防 ÷0)。按余额升序(快断流的在前)。
+  const tenants = db.prepare(`SELECT id, name FROM tenant`).all() as { id: string; name: string }[];
+  const sevenDayStart = now - 7 * DAY_MS;
+  const tenantRunway = tenants
+    .map((t) => {
+      const bal = balance(t.id);
+      const last7 = consumptionInWindow(sevenDayStart, now, t.id);
+      const dailyBurn = last7 / 7;
+      const runwayDays = dailyBurn > 0 ? Math.floor(bal / dailyBurn) : null; // null = 无消耗,显「—」
+      return { tenantId: t.id, name: t.name, balance: bal, dailyBurn: Math.round(dailyBurn), runwayDays };
+    })
+    .sort((a, b) => a.balance - b.balance);
+
+  return res.json({
+    consumption: { today: consumeToday, yesterday: consumeYesterday, month: consumeMonth },
+    recharge: { credits: rechargeMonth.credits, yuan: rechargeMonth.yuan, orders: rechargeMonth.orders },
+    // 体感条:本月 收(¥)/ 耗(积分)/ 净(¥ − 消耗折算?口径上收是钱、耗是积分,不同量纲 → 前端分开显,不做净额减法)
+    summary: { monthYuan: rechargeMonth.yuan, monthConsumeCredits: consumeMonth, monthRechargeCredits: rechargeMonth.credits },
+    topTenants: { month: topMonth, yesterday: topYesterday },
+    tenantRunway,
   });
 });
 

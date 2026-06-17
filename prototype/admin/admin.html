@@ -122,6 +122,17 @@
   .mon-chart{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 18px}
   .mc-head{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--t3);font-weight:600;margin-bottom:8px;font-family:var(--f-en);text-transform:uppercase;letter-spacing:.5px}
   .mc-legend{color:var(--t2);text-transform:none;letter-spacing:0;font-family:var(--f-mono)}
+  /* ── 运营数据 ── */
+  #opsStats{grid-template-columns:repeat(4,1fr)}
+  .ops-strip{display:flex;gap:24px;flex-wrap:wrap;background:var(--card-hi);border:1px solid var(--line-hi);border-radius:14px;padding:16px 20px;margin-bottom:16px}
+  .ops-item{display:flex;flex-direction:column;gap:4px}
+  .ops-k{font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;font-family:var(--f-en)}
+  .ops-v{font-size:24px;font-weight:800;font-family:var(--f-en);letter-spacing:-.5px}
+  .ops-v.ops-money{color:var(--green)}
+  .ops-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:4px}
+  .ops-tbl-head{font-size:12px;color:var(--t3);font-weight:600;padding:12px 14px 0;font-family:var(--f-en);text-transform:uppercase;letter-spacing:.5px}
+  #opsRunway tr{cursor:pointer} #opsRunway tr:hover{background:var(--card-hi)}
+  .ops-runway-low{color:var(--red);font-weight:700}
   .jobs-list{margin-top:10px;display:flex;flex-direction:column;gap:7px;max-height:54vh;overflow-y:auto}
   .jrow{display:flex;align-items:center;gap:12px;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 13px;font-size:13px}
   .jrow .jst{flex:0 0 60px;font-weight:600;font-size:11.5px}
@@ -171,6 +182,38 @@
       <div class="mstat"><div class="ms-k">今日完成</div><div class="ms-v" id="msDone">—</div></div>
       <div class="mstat"><div class="ms-k">今日失败</div><div class="ms-v" id="msFailed">—</div></div>
       <div class="mstat"><div class="ms-k">平均耗时</div><div class="ms-v" id="msDur">—</div></div>
+    </div>
+
+    <!-- ── 运营数据(钱 / Top租户 / 余额续航)── -->
+    <div class="ops-strip" id="opsStrip">
+      <div class="ops-item"><span class="ops-k">本月收入</span><span class="ops-v ops-money" id="opsMonthYuan">—</span></div>
+      <div class="ops-item"><span class="ops-k">本月消耗积分</span><span class="ops-v" id="opsMonthConsume">—</span></div>
+      <div class="ops-item"><span class="ops-k">本月充值积分</span><span class="ops-v" id="opsMonthRecharge">—</span></div>
+    </div>
+    <div class="mon-stats" id="opsStats">
+      <div class="mstat"><div class="ms-k">今日消耗</div><div class="ms-v" id="opsToday">—</div></div>
+      <div class="mstat"><div class="ms-k">昨日消耗</div><div class="ms-v" id="opsYesterday">—</div></div>
+      <div class="mstat"><div class="ms-k">本月消耗</div><div class="ms-v" id="opsMonth">—</div></div>
+      <div class="mstat"><div class="ms-k">本月充值</div><div class="ms-v" id="opsRecharge">—</div></div>
+    </div>
+    <div class="ops-grid">
+      <!-- Top 消费租户 -->
+      <div class="tbl">
+        <div class="ops-tbl-head">Top 消费租户 · 本月</div>
+        <table><tbody id="opsTopMonth"><tr><td colspan="2" class="empty">加载中…</td></tr></tbody></table>
+      </div>
+      <div class="tbl">
+        <div class="ops-tbl-head">Top 消费租户 · 昨日</div>
+        <table><tbody id="opsTopYesterday"><tr><td colspan="2" class="empty">加载中…</td></tr></tbody></table>
+      </div>
+    </div>
+    <!-- 租户余额 + 续航(快断流的在前,点击跳租户) -->
+    <div class="tbl" style="margin-top:14px">
+      <div class="ops-tbl-head">租户余额 / 续航(余额低在前 — 催充值)</div>
+      <table>
+        <thead><tr><th>租户</th><th style="text-align:right">余额</th><th style="text-align:right">日均消耗</th><th style="text-align:right">续航</th></tr></thead>
+        <tbody id="opsRunway"><tr><td colspan="4" class="empty">加载中…</td></tr></tbody>
+      </table>
     </div>
 
     <!-- 瓶颈诊断提示(red/amber 时出) -->
@@ -1056,9 +1099,45 @@
     }catch(e){ box.innerHTML='<div class="empty" style="padding:20px">加载失败</div>'; }
   };
 
+  // ── 运营数据(钱 / Top租户 / 余额续航)──
+  async function loadOps(){
+    try{
+      const d=await PA('GET','/api/metrics/ops');
+      // 体感条
+      document.getElementById('opsMonthYuan').textContent='¥'+fmtN(d.summary.monthYuan);
+      document.getElementById('opsMonthConsume').textContent=fmtN(d.summary.monthConsumeCredits);
+      document.getElementById('opsMonthRecharge').textContent=fmtN(d.summary.monthRechargeCredits);
+      // 消耗/充值 4 卡
+      document.getElementById('opsToday').textContent=fmtN(d.consumption.today);
+      document.getElementById('opsYesterday').textContent=fmtN(d.consumption.yesterday);
+      document.getElementById('opsMonth').textContent=fmtN(d.consumption.month);
+      document.getElementById('opsRecharge').innerHTML=fmtN(d.recharge.credits)+` <small>¥${fmtN(d.recharge.yuan)}</small>`;
+      // Top 租户(本月/昨日)
+      const topRows=(list)=> list.length
+        ? list.map(t=>`<tr><td>${esc(t.name)}</td><td style="text-align:right;font-family:var(--f-mono)">${fmtN(t.used)}</td></tr>`).join('')
+        : '<tr><td colspan="2" class="empty">暂无消耗</td></tr>';
+      document.getElementById('opsTopMonth').innerHTML=topRows(d.topTenants.month);
+      document.getElementById('opsTopYesterday').innerHTML=topRows(d.topTenants.yesterday);
+      // 余额 / 续航(余额低在前,点击跳租户管理)
+      const rw=document.getElementById('opsRunway');
+      rw.innerHTML=d.tenantRunway.length
+        ? d.tenantRunway.map(t=>{
+            const low=t.runwayDays!=null&&t.runwayDays<=7;
+            const runTxt=t.runwayDays==null?'—':(t.runwayDays+' 天');
+            return `<tr data-tid="${esc(t.tenantId)}"><td>${esc(t.name)}</td>`
+              +`<td style="text-align:right;font-family:var(--f-mono)">${fmtN(t.balance)}</td>`
+              +`<td style="text-align:right;font-family:var(--f-mono);color:var(--t3)">${fmtN(t.dailyBurn)}</td>`
+              +`<td style="text-align:right" class="${low?'ops-runway-low':''}">${runTxt}</td></tr>`;
+          }).join('')
+        : '<tr><td colspan="4" class="empty">暂无租户</td></tr>';
+      rw.querySelectorAll('tr[data-tid]').forEach(tr=>tr.onclick=()=>{ location.hash='#tenants'; });
+    }catch(e){ /* 运营数据失败不阻塞监控页其余部分 */ }
+  }
+
   // 10 秒轮询;仅在「运营监控」section 且页面可见时才转(其余 section / 离页都停,避免隐藏面板空转)。
   let monTimer=null;
-  function startMonPoll(){ stopMonPoll(); loadMonitor(); monTimer=setInterval(loadMonitor,10000); }
+  function pollMonitor(){ loadMonitor(); loadOps(); }
+  function startMonPoll(){ stopMonPoll(); pollMonitor(); monTimer=setInterval(pollMonitor,10000); }
   function stopMonPoll(){ if(monTimer){ clearInterval(monTimer); monTimer=null; } }
   // 综合判定:当前在 monitor section + 页面可见 → 轮询,否则停。
   function syncMonPoll(){
@@ -1318,7 +1397,7 @@
   const SECTIONS=['monitor','tenants','image-models','providers','pricing','plans','leads','orders','invoices','audit'];
   // 各 section 首次进入时调用对应 loader(切回已加载的不重拉,靠 loaded 标记防重复)
   const SEC_LOADERS={
-    monitor:loadMonitor,        // 监控由轮询接管,这里也兜底首拉一次
+    monitor:pollMonitor,        // 监控由轮询接管,这里也兜底首拉一次(loadMonitor + loadOps)
     tenants:loadTenants,
     'image-models':loadModels,
     providers:loadProviders,    // 厂商/Key 管理(PR-1)
