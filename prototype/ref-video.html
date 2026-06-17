@@ -124,10 +124,6 @@
   .demo-ref.aud svg { width:20px; height:20px; }
   .demo-ref .tag { position:absolute; top:4px; left:4px; font-size:9px; background:rgba(0,0,0,.62); color:#fff; padding:1px 5px; border-radius:4px; }
 
-  /* setPill 等弹框:JS portal 到 body + fixed 定位(逃离 .cfg transform 包含块与 overflow 裁剪)。
-     portal 到 body 后失去 .cfg 宽度约束,需显式定宽(否则 ratio-row 撑到 92vw)。seed 弹框 JS 覆写更窄。*/
-  .pop.pop-fixed { position:fixed; right:auto; width:360px; min-width:0; max-width:calc(100vw - 24px); z-index:120; }
-  .pop.pop-fixed#pop-seed { width:200px; }
   /* 本页滚动条隐藏但仍可滚(问题2):页面整体滚动条 + .cfg/.feed 内部滚动条都隐 */
   html { scrollbar-width:none; -ms-overflow-style:none; }
   html::-webkit-scrollbar, .cfg::-webkit-scrollbar, .feed::-webkit-scrollbar { width:0; height:0; display:none; }
@@ -137,6 +133,16 @@
   .lightbox { position:fixed; inset:0; background:rgba(0,0,0,.88); backdrop-filter:blur(4px); z-index:500; display:none; align-items:center; justify-content:center; padding:40px; cursor:zoom-out; }
   .lightbox.on { display:flex; }
   .lightbox img { max-width:92vw; max-height:88vh; border-radius:12px; cursor:default; }
+  .lightbox video { max-width:92vw; max-height:88vh; border-radius:12px; background:#000; cursor:default; }
+  #lightboxAud { display:flex; flex-direction:column; align-items:center; gap:18px; color:#fff; background:var(--card); border:1px solid var(--line-hi); border-radius:16px; padding:36px 40px; cursor:default; }
+  #lightboxAud > svg { width:56px; height:56px; color:var(--t2); }
+  #lightboxAud #lightboxAudName { font-size:13px; color:var(--t3); max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #lightboxAud audio { width:320px; }
+  /* 视频/音频缩略上的播放按钮:点击在 lightbox 内预览 */
+  .play-ov { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:1; }
+  .play-ov .pbtn { width:34px; height:34px; border-radius:50%; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.35); display:grid; place-items:center; transition:.15s; }
+  .play-ov:hover .pbtn { background:rgba(0,0,0,.78); transform:scale(1.08); }
+  .play-ov .pbtn svg { width:15px; height:15px; color:#fff; margin-left:1px; }
   .lightbox .lb-x { position:absolute; top:22px; right:26px; width:42px; height:42px; border-radius:50%; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.18); display:grid; place-items:center; cursor:pointer; }
   .lightbox .lb-x svg { width:22px; height:22px; color:#fff; }
 </style>
@@ -258,7 +264,13 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
 <!-- 大图查看器 -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
   <div class="lb-x" onclick="closeLightbox()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
-  <img id="lightboxImg" src="" alt="" onclick="event.stopPropagation()">
+  <img id="lightboxImg" src="" alt="" onclick="event.stopPropagation()" style="display:none">
+  <video id="lightboxVid" controls playsinline onclick="event.stopPropagation()" style="display:none"></video>
+  <div id="lightboxAud" onclick="event.stopPropagation()" style="display:none">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+    <span id="lightboxAudName">音频</span>
+    <audio id="lightboxAudEl" controls></audio>
+  </div>
 </div>
 
 <script src="tools.js"></script>
@@ -290,6 +302,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   // ── 多模态输入区:单一上传区,按 MIME 自动归类到 图/视频/音频 三数组(后端仍分类型)──
   const mmPick=document.getElementById('mmPick');
   const AUD_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+  const PLAY_SVG='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
   const UP_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0 4 4m-4-4-4 4"/><path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/></svg>';
   // 按文件类型判定归属数组(图/视频/音频);无法识别归 null
   function kindOf(file){
@@ -312,10 +325,11 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       drop.onclick=()=>mmPick.click(); bindDrop(drop, fs=>addFiles(fs));
       return;
     }
-    // 有素材:头部计数 + 混合缩略网格(图/视频/音频按各自编号),末尾追加按钮
-    const imgT=(f,i)=>`<div class="mm-tile"><span class="num">图片${i+1}</span><img src="${f.url}"><button type="button" class="rmx" data-rm="img:${i}">×</button></div>`;
-    const vidT=(f,i)=>`<div class="mm-tile"><span class="num">视频${i+1}</span><video src="${f.url}" muted></video><button type="button" class="rmx" data-rm="vid:${i}">×</button></div>`;
-    const audT=(f,i)=>`<div class="mm-tile aud"><span class="num">音频${i+1}</span>${AUD_SVG}<span class="nm">${esc(f.file.name||'音频')}</span><button type="button" class="rmx" data-rm="aud:${i}">×</button></div>`;
+    // 有素材:头部计数 + 混合缩略网格(图/视频/音频按各自编号),末尾追加按钮。
+    // 图点击放大;视频/音频盖播放按钮,点击在 lightbox 预览。
+    const imgT=(f,i)=>`<div class="mm-tile"><span class="num">图片${i+1}</span><img src="${f.url}" data-prev="img:${i}"><button type="button" class="rmx" data-rm="img:${i}">×</button></div>`;
+    const vidT=(f,i)=>`<div class="mm-tile"><span class="num">视频${i+1}</span><video src="${f.url}" muted preload="metadata"></video><div class="play-ov" data-prev="vid:${i}"><span class="pbtn">${PLAY_SVG}</span></div><button type="button" class="rmx" data-rm="vid:${i}">×</button></div>`;
+    const audT=(f,i)=>`<div class="mm-tile aud"><span class="num">音频${i+1}</span>${AUD_SVG}<span class="nm">${esc(f.file.name||'音频')}</span><div class="play-ov" data-prev="aud:${i}"><span class="pbtn">${PLAY_SVG}</span></div><button type="button" class="rmx" data-rm="aud:${i}">×</button></div>`;
     const tiles=imgFiles.map(imgT).join('')+vidFiles.map(vidT).join('')+audFiles.map(audT).join('');
     const canAdd=imgFiles.length<maxImg||vidFiles.length<maxVid||audFiles.length<maxAud;
     const add=canAdd?`<div class="mm-add" id="mmAdd"><span class="plus">+</span><span class="lbl">继续添加</span></div>`:'';
@@ -325,6 +339,10 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     if(addEl){ addEl.onclick=()=>mmPick.click(); bindDrop(addEl, fs=>addFiles(fs)); }
     area.querySelectorAll('.rmx[data-rm]').forEach(el=>el.onclick=()=>{ const [k,i]=el.dataset.rm.split(':');
       ({img:imgFiles,vid:vidFiles,aud:audFiles})[k].splice(Number(i),1); afterChange(); });
+    // 预览:图放大、视频/音频在 lightbox 播放
+    area.querySelectorAll('[data-prev]').forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); const [k,i]=el.dataset.prev.split(':');
+      const f=({img:imgFiles,vid:vidFiles,aud:audFiles})[k][Number(i)]; if(!f) return;
+      if(k==='img') openLightbox(f.url); else openMedia(k, f.url, f.file&&f.file.name); });
   }
   function bindDrop(el, handler){
     el.addEventListener('dragover',e=>{ e.preventDefault(); el.classList.add('drag'); });
@@ -342,7 +360,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       const k=kindOf(f);
       if(!k){ window.LJToast&&LJToast(`不支持的文件:${f.name||''}`,'err'); rejected=true; continue; }
       if(arrs[k].length>=max[k]){ window.LJToast&&LJToast(`${label[k]}最多 ${max[k]} 个`,'err'); rejected=true; continue; }
-      arrs[k].push({ file:f, url:k==='aud'?'':URL.createObjectURL(f) });
+      arrs[k].push({ file:f, url:URL.createObjectURL(f) }); // 音频也给 objectURL 供预览播放
     }
     afterChange();
     return rejected;
@@ -401,36 +419,24 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   }
 
   // ── popover / lightbox ──
-  // 弹框提升为 fixed 并 portal 到 body 再按 pill 定位。
-  // 根因(问题3):.cfg 的 animation:rise both 残留 identity transform,使 .cfg 成为
-  // fixed 元素的包含块 → 弹框 fixed 坐标错位到 .cfg 内部。portal 到 body(无 transform)
-  // 后 fixed 才相对视口,定位才正确;同时逃离 .cfg overflow 裁剪(问题1)。
-  function placePop(pop, pill){
-    const r=pill.getBoundingClientRect(), M=12, GAP=8, vw=window.innerWidth, vh=window.innerHeight;
-    if(!pop._home){ pop._home=pop.parentNode; } // 记住原位,关闭时归还
-    document.body.appendChild(pop);
-    pop.classList.add('pop-fixed');
-    pop.style.visibility='hidden'; pop.style.animation='none'; pop.style.top='0'; pop.style.left='0'; pop.style.bottom='auto'; pop.style.maxHeight='';
-    const pw=pop.offsetWidth;
-    const left=Math.max(M, Math.min(r.left, vw-pw-M));
-    const above=r.top-M-GAP, below=vh-r.bottom-M-GAP; // pill 上/下可用净高
-    pop.style.left=left+'px';
-    if(above>=below){
-      // 放上方:bottom 锚定到 pill 上沿,向上排布;限高=above,超出内部滚动
-      pop.style.bottom=(vh-r.top+GAP)+'px'; pop.style.top='auto'; pop.style.maxHeight=above+'px';
-    } else {
-      pop.style.top=(r.bottom+GAP)+'px'; pop.style.bottom='auto'; pop.style.maxHeight=below+'px';
-    }
-    pop.style.visibility=''; pop.style.animation='';
-  }
+  // 与 AI 图片等模块一致:纯 app.css absolute 定位(.pop{left:0;bottom:calc(100%+8px)}),
+  // 偏左向上弹起,不做 JS 重定位(此前 portal+fixed 反而把弹框推偏右)。
   function togglePop(which){ const map={model:'pop-model',set:'pop-set',seed:'pop-seed'}, pillMap={model:'modelPill',set:'setPill',seed:'seedPill'};
     const el=document.getElementById(map[which]); const isOpen=el.classList.contains('show'); closePops();
-    if(!isOpen){ el.classList.add('show'); document.getElementById('popOv').classList.add('show'); document.getElementById(pillMap[which]).classList.add('open');
-      placePop(el, document.getElementById(pillMap[which])); } }
-  function closePops(){ document.querySelectorAll('.pop.show').forEach(p=>{ p.classList.remove('show'); p.classList.remove('pop-fixed'); p.style.left=p.style.top=p.style.bottom=p.style.maxHeight=p.style.visibility=''; if(p._home && p.parentNode!==p._home){ p._home.appendChild(p); } }); document.querySelectorAll('.cpill.open').forEach(p=>p.classList.remove('open')); document.getElementById('popOv').classList.remove('show'); }
+    if(!isOpen){ el.classList.add('show'); document.getElementById('popOv').classList.add('show'); document.getElementById(pillMap[which]).classList.add('open'); } }
+  function closePops(){ document.querySelectorAll('.pop.show').forEach(p=>p.classList.remove('show')); document.querySelectorAll('.cpill.open').forEach(p=>p.classList.remove('open')); document.getElementById('popOv').classList.remove('show'); }
   window.togglePop=togglePop; window.closePops=closePops;
-  window.openLightbox=(url)=>{ document.getElementById('lightboxImg').src=url; document.getElementById('lightbox').classList.add('on'); };
-  window.closeLightbox=()=>{ document.getElementById('lightbox').classList.remove('on'); document.getElementById('lightboxImg').src=''; };
+  // 媒体预览:图(放大)/视频(播放)/音频(播放)统一走 lightbox
+  function lbReset(){ const img=document.getElementById('lightboxImg'),v=document.getElementById('lightboxVid'),a=document.getElementById('lightboxAud'),ae=document.getElementById('lightboxAudEl');
+    img.style.display='none'; img.src=''; v.style.display='none'; try{v.pause();}catch(e){} v.removeAttribute('src'); v.load&&v.load();
+    a.style.display='none'; try{ae.pause();}catch(e){} ae.removeAttribute('src'); }
+  window.openLightbox=(url)=>{ lbReset(); const img=document.getElementById('lightboxImg'); img.src=url; img.style.display=''; document.getElementById('lightbox').classList.add('on'); };
+  window.openMedia=(kind,url,name)=>{ lbReset();
+    if(kind==='vid'){ const v=document.getElementById('lightboxVid'); v.src=url; v.style.display=''; v.play&&v.play().catch(()=>{}); }
+    else if(kind==='aud'){ const a=document.getElementById('lightboxAud'),ae=document.getElementById('lightboxAudEl'); document.getElementById('lightboxAudName').textContent=name||'音频'; ae.src=url; a.style.display=''; ae.play&&ae.play().catch(()=>{}); }
+    else { return window.openLightbox(url); }
+    document.getElementById('lightbox').classList.add('on'); };
+  window.closeLightbox=()=>{ document.getElementById('lightbox').classList.remove('on'); lbReset(); };
   document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeLightbox(); closePops(); } });
   document.getElementById('seedInput').addEventListener('input',e=>{ seed=e.target.value.replace(/[^0-9]/g,''); e.target.value=seed; });
 
@@ -615,7 +621,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         const blob=await r.blob();
         const file=new File([blob], a.name, { type:a.type||blob.type });
         const arr=({img:imgFiles,vid:vidFiles,aud:audFiles})[a.kind];
-        arr.push({ file, url:a.kind==='aud'?'':URL.createObjectURL(file) });
+        arr.push({ file, url:URL.createObjectURL(file) }); // 音频也给 objectURL 供预览播放
       }catch(e){ failed++; }
     }));
     afterChange();
@@ -625,12 +631,14 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   function renderDemoRefs(){
     const wrap=document.getElementById('demoRefs'); if(!wrap) return;
     const num={img:0,vid:0,aud:0}, label={img:'图片',vid:'视频',aud:'音频'};
-    wrap.innerHTML=DEMO_INPUTS.map(a=>{
+    wrap.innerHTML=DEMO_INPUTS.map((a,idx)=>{
       const n=++num[a.kind]; const tag=label[a.kind]+n;
-      if(a.kind==='img') return `<div class="demo-ref"><span class="tag">${tag}</span><img src="${a.url}" alt="${tag}"></div>`;
-      if(a.kind==='vid') return `<div class="demo-ref"><span class="tag">${tag}</span><video src="${a.url}" muted preload="metadata"></video></div>`;
-      return `<div class="demo-ref aud"><span class="tag">${tag}</span>${AUD_SVG}</div>`;
+      if(a.kind==='img') return `<div class="demo-ref" data-dprev="${idx}"><span class="tag">${tag}</span><img src="${a.url}" alt="${tag}"></div>`;
+      if(a.kind==='vid') return `<div class="demo-ref" data-dprev="${idx}"><span class="tag">${tag}</span><video src="${a.url}" muted preload="metadata"></video><div class="play-ov"><span class="pbtn">${PLAY_SVG}</span></div></div>`;
+      return `<div class="demo-ref aud" data-dprev="${idx}"><span class="tag">${tag}</span>${AUD_SVG}<div class="play-ov"><span class="pbtn">${PLAY_SVG}</span></div></div>`;
     }).join('');
+    wrap.querySelectorAll('[data-dprev]').forEach(el=>el.onclick=()=>{ const a=DEMO_INPUTS[Number(el.dataset.dprev)]; if(!a) return;
+      if(a.kind==='img') openLightbox(a.url); else openMedia(a.kind, a.url, a.name); });
   }
   function initDemo(){
     const card=document.getElementById('demoCard'); if(!card) return;
