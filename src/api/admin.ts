@@ -304,6 +304,42 @@ adminRouter.get('/api/metrics/ops', requirePlatformAdmin, (_req: Request, res: R
   });
 });
 
+/** 积分消耗流水(平台级对账):按时间倒序列出每个 job 的 租户/模块/模型/消耗积分/状态/提交时间/耗时。
+ *  分页(page+pageSize)+ 可按租户过滤。消耗口径走 consumptionInWindow 同源(reserve+release,非 settle)。
+ *  module=job.type、model=input_json.model(tts 无 model → null,前端显「系统音色」)。 */
+adminRouter.get('/api/consumption', requirePlatformAdmin, (req: Request, res: Response) => {
+  const tenant = req.query.tenant ? String(req.query.tenant).trim() : '';
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 20));
+  const offset = (page - 1) * pageSize;
+  const where = tenant ? `WHERE j.tenant_id = @tenant` : '';
+  const countParams = tenant ? { tenant } : {};
+  const total = (
+    db.prepare(`SELECT COUNT(*) AS n FROM job j ${where}`).get(countParams) as { n: number }
+  ).n;
+  // 每行:job 字段 + 该 job 消耗(子查询,口径=reserve+release×-1)+ 租户名 JOIN(孤儿 id 兜底)。
+  const rows = db
+    .prepare(
+      `SELECT j.id, j.tenant_id AS tenantId,
+              COALESCE(t.name, '租户 ' || substr(j.tenant_id, 1, 8)) AS tenantName,
+              j.type AS module,
+              json_extract(j.input_json, '$.model') AS model,
+              j.status,
+              j.created_at AS submitAt,
+              (CASE WHEN j.started_at IS NOT NULL AND j.status='done'
+                    THEN j.updated_at - j.started_at ELSE NULL END) AS durationMs,
+              (SELECT COALESCE(SUM(CASE WHEN l.kind IN ('reserve','release') THEN l.amount END), 0) * -1
+                 FROM credit_ledger l WHERE l.job_id = j.id) AS credits
+         FROM job j
+         LEFT JOIN tenant t ON t.id = j.tenant_id
+         ${where}
+        ORDER BY j.created_at DESC, j.rowid DESC
+        LIMIT @pageSize OFFSET @offset`,
+    )
+    .all(tenant ? { tenant, pageSize, offset } : { pageSize, offset });
+  return res.json({ rows, total, page, pageSize });
+});
+
 /** 租户维度:谁在用、用得怎么样。queued/running 实时,今日量/成功率/P95 按本地零点。 */
 adminRouter.get('/api/metrics/by-tenant', requirePlatformAdmin, (_req: Request, res: Response) => {
   const todayStart = startOfTodayMs();

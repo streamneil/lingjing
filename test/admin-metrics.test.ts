@@ -285,3 +285,74 @@ describe('运营数据 ops 端点', () => {
     expect(r.status).toBe(401);
   });
 });
+
+// ── 积分消耗流水 /api/consumption(对账)──
+describe('积分消耗流水 consumption 端点', () => {
+  let ct: string;
+  let lq = 0;
+  function led(tenant: string, kind: string, amount: number, jobId: string | null, createdAt: number) {
+    db.prepare(`INSERT INTO credit_ledger (id,tenant_id,kind,amount,job_id,created_at) VALUES (?,?,?,?,?,?)`)
+      .run(`cled-${++lq}`, tenant, kind, amount, jobId, createdAt);
+  }
+  function cjob(tenant: string, type: string, model: string | null, status: string, createdAt: number, startedAt: number | null, updatedAt: number) {
+    const id = `cjob-${++seq}`;
+    const input = model ? JSON.stringify({ model }) : '{}';
+    db.prepare(
+      `INSERT INTO job (id,tenant_id,type,status,progress,input_json,attempts,created_at,updated_at,started_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    ).run(id, tenant, type, status, status === 'done' ? 100 : 0, input, 1, createdAt, updatedAt, startedAt);
+    return id;
+  }
+
+  beforeAll(() => {
+    ct = createTenant('对账租户').id;
+    const t0 = todayStart;
+    // 任务1: ai_image / z-image / done,reserve -10 净 release +3 → 消耗 7;耗时 5s。
+    const j1 = cjob(ct, 'ai_image', 'z-image', 'done', t0 + 1000, t0 + 1500, t0 + 6500);
+    led(ct, 'reserve', -10, j1, t0 + 1000); led(ct, 'release', 3, j1, t0 + 2000);
+    // 任务2: tts / 无 model / done,reserve -4 → 消耗 4。
+    const j2 = cjob(ct, 'tts', null, 'done', t0 + 3000, t0 + 3100, t0 + 5100);
+    led(ct, 'reserve', -4, j2, t0 + 3000);
+    // 任务3: video_t2v / 失败,reserve -20 全 release +20 → 消耗 0(失败已退不计)。
+    const j3 = cjob(ct, 'video_t2v', 'wan2.7-t2v', 'failed', t0 + 4000, t0 + 4100, t0 + 4500);
+    led(ct, 'reserve', -20, j3, t0 + 4000); led(ct, 'release', 20, j3, t0 + 4500);
+  });
+
+  it('列消耗:module/model/状态/消耗积分/耗时,按时间倒序', async () => {
+    const c = await padminLogin();
+    const r = await c.get('/admin/api/consumption?tenant=' + ct + '&pageSize=50');
+    expect(r.status).toBe(200);
+    const rows = r.body.rows.filter((x: { tenantId: string }) => x.tenantId === ct);
+    expect(rows.length).toBe(3);
+    // 倒序:最后插入的 video_t2v(t0+4000)在最前
+    expect(rows[0].module).toBe('video_t2v');
+    expect(rows[0].credits).toBe(0); // 失败全退 → 0
+    const z = rows.find((x: { model: string }) => x.model === 'z-image');
+    expect(z.credits).toBe(7); // reserve10 净 release3
+    expect(z.durationMs).toBe(5000); // done: updated-started
+    const tts = rows.find((x: { module: string }) => x.module === 'tts');
+    expect(tts.model).toBeNull(); // tts 无 model(前端显系统音色)
+    expect(tts.credits).toBe(4);
+  });
+
+  it('分页:total + page + pageSize 正确', async () => {
+    const c = await padminLogin();
+    const r = await c.get('/admin/api/consumption?tenant=' + ct + '&page=1&pageSize=2');
+    expect(r.body.pageSize).toBe(2);
+    expect(r.body.rows.length).toBe(2);
+    expect(r.body.total).toBe(3);
+    const r2 = await c.get('/admin/api/consumption?tenant=' + ct + '&page=2&pageSize=2');
+    expect(r2.body.rows.length).toBe(1); // 第二页剩 1 条
+  });
+
+  it('租户过滤:只返该租户的 job', async () => {
+    const c = await padminLogin();
+    const r = await c.get('/admin/api/consumption?tenant=' + ct + '&pageSize=100');
+    expect(r.body.rows.every((x: { tenantId: string }) => x.tenantId === ct)).toBe(true);
+  });
+
+  it('未登录 → 401', async () => {
+    const r = await new Client(app).get('/admin/api/consumption');
+    expect(r.status).toBe(401);
+  });
+});

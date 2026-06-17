@@ -123,6 +123,14 @@
   .mon-chart{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 18px}
   .mc-head{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--t3);font-weight:600;margin-bottom:8px;font-family:var(--f-en);text-transform:uppercase;letter-spacing:.5px}
   .mc-legend{color:var(--t2);text-transform:none;letter-spacing:0;font-family:var(--f-mono)}
+  /* ── 消耗流水 ── */
+  .con-filter{background:var(--field);border:1px solid var(--line);color:var(--t1);border-radius:10px;padding:9px 12px;font-size:13px;font-family:var(--f);cursor:pointer}
+  .con-pager{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:14px;font-size:13px;color:var(--t3)}
+  .con-pager button{background:var(--field);border:1px solid var(--line);color:var(--t2);padding:7px 14px;border-radius:8px;font-size:13px;cursor:pointer}
+  .con-pager button:disabled{opacity:.4;cursor:not-allowed}
+  .con-mod{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;background:var(--blue-bg);color:var(--blue)}
+  .con-st{font-size:11px;font-weight:600} .con-st.done{color:var(--green)} .con-st.failed{color:var(--red)} .con-st.running{color:var(--blue)} .con-st.queued{color:var(--t3)}
+  .con-cr{font-family:var(--f-mono);font-weight:700}
   /* ── 运营数据 ── */
   #opsStats{grid-template-columns:repeat(4,1fr)}
   .ops-strip{display:flex;gap:24px;flex-wrap:wrap;background:var(--card-hi);border:1px solid var(--line-hi);border-radius:14px;padding:16px 20px;margin-bottom:16px}
@@ -162,6 +170,7 @@
     <button class="nav-item" data-nav="leads"><span class="nav-dot"></span>意向线索<span class="nav-badge" id="navLeadBadge"></span></button>
     <button class="nav-item" data-nav="orders"><span class="nav-dot"></span>对公收款</button>
     <button class="nav-item" data-nav="invoices"><span class="nav-dot"></span>发票开具</button>
+    <button class="nav-item" data-nav="consumption"><span class="nav-dot"></span>消耗流水</button>
     <button class="nav-item" data-nav="audit"><span class="nav-dot"></span>平台审计</button>
   </nav>
 
@@ -372,6 +381,21 @@
     </section>
 
     <!-- ── 平台审计日志 ── -->
+    <!-- ── 积分消耗流水(对账)── -->
+    <section class="sec" data-sec="consumption" id="sec-consumption">
+    <div class="ph">
+      <div><h1>积分消耗流水</h1><p>按时间倒序列出每个任务的积分消耗,便于对账:某模型在某任务消耗多少积分。消耗口径 = 预扣净退款(失败已退不计)。</p></div>
+      <select id="conTenant" class="con-filter"><option value="">全部租户</option></select>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>提交时间</th><th>租户</th><th>模块</th><th>模型</th><th style="text-align:right">消耗积分</th><th>状态</th><th style="text-align:right">耗时</th></tr></thead>
+        <tbody id="conRows"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="con-pager" id="conPager"></div>
+    </section>
+
     <section class="sec" data-sec="audit" id="sec-audit">
     <div class="ph">
       <div><h1>平台审计日志</h1><p>所有平台超管操作的追溯台账(开户 / 充值 / 订单确认 / 发票 / 套餐 / 收款配置)。仅平台可见,绝不出现在租户审计页。</p></div>
@@ -1466,6 +1490,46 @@
   // ── 左侧菜单 SPA 路由(hash 决定当前 section,刷新保持,懒加载各 section)──
   const SECTIONS=['monitor','tenants','image-models','providers','pricing','plans','leads','orders','invoices','audit'];
   // 各 section 首次进入时调用对应 loader(切回已加载的不重拉,靠 loaded 标记防重复)
+  // ── 积分消耗流水(对账)──
+  const CON_MOD={ai_image:'AI 生图',video_t2v:'文生视频',video_i2v:'图生视频',video_edit:'视频编辑',tts:'语音合成',video:'数字人视频'};
+  const CON_ST={done:'完成',failed:'失败',running:'进行中',queued:'排队中'};
+  let conPage=1, conTenantId='', conTenantsLoaded=false;
+  async function loadConTenants(){
+    if(conTenantsLoaded) return; conTenantsLoaded=true;
+    try{ const { tenants }=await PA('GET','/api/tenants');
+      const sel=document.getElementById('conTenant');
+      tenants.forEach(t=>{ const o=document.createElement('option'); o.value=t.id; o.textContent=t.name; sel.appendChild(o); });
+      sel.onchange=()=>{ conTenantId=sel.value; conPage=1; loadConsumption(); };
+    }catch(e){}
+  }
+  async function loadConsumption(){
+    await loadConTenants();
+    const tb=document.getElementById('conRows');
+    try{
+      const qs=`?page=${conPage}&pageSize=20`+(conTenantId?`&tenant=${encodeURIComponent(conTenantId)}`:'');
+      const { rows, total, page, pageSize }=await PA('GET','/api/consumption'+qs);
+      if(!rows.length){ tb.innerHTML='<tr><td colspan="7" class="empty">暂无消耗记录</td></tr>'; }
+      else tb.innerHTML=rows.map(r=>`<tr>
+        <td style="font-family:var(--f-mono);font-size:12px;color:var(--t3)">${fmtTime(r.submitAt)}</td>
+        <td>${esc(r.tenantName)}</td>
+        <td><span class="con-mod">${esc(CON_MOD[r.module]||r.module)}</span></td>
+        <td style="font-size:12px">${r.model?esc(r.model):'<span style="color:var(--t4)">系统音色</span>'}</td>
+        <td style="text-align:right" class="con-cr">${fmtN(r.credits)}</td>
+        <td><span class="con-st ${esc(r.status)}">${esc(CON_ST[r.status]||r.status)}</span></td>
+        <td style="text-align:right;font-family:var(--f-mono);font-size:12px;color:var(--t3)">${r.durationMs!=null?fmtDur(r.durationMs):'—'}</td>
+      </tr>`).join('');
+      // 分页
+      const pages=Math.max(1,Math.ceil(total/pageSize));
+      document.getElementById('conPager').innerHTML=
+        `<span>共 ${total} 条 · 第 ${page}/${pages} 页</span>`
+        +`<button ${page<=1?'disabled':''} id="conPrev">上一页</button>`
+        +`<button ${page>=pages?'disabled':''} id="conNext">下一页</button>`;
+      const prev=document.getElementById('conPrev'), next=document.getElementById('conNext');
+      if(prev) prev.onclick=()=>{ if(conPage>1){ conPage--; loadConsumption(); } };
+      if(next) next.onclick=()=>{ if(conPage<pages){ conPage++; loadConsumption(); } };
+    }catch(e){ tb.innerHTML='<tr><td colspan="7" class="empty">加载失败</td></tr>'; }
+  }
+
   const SEC_LOADERS={
     monitor:pollMonitor,        // 监控由轮询接管,这里也兜底首拉一次(loadMonitor + loadOps)
     tenants:loadTenants,
@@ -1476,6 +1540,7 @@
     leads:loadLeads,
     orders:loadOrders,
     invoices:loadInvoices,
+    consumption:loadConsumption,
     audit:loadPlatformAudit,
   };
   const loaded={};   // section → 是否已首次加载
