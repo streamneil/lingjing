@@ -27,7 +27,7 @@
     {
       key: 'ref-video', label: '参考生成影片',
       icon: '<rect x="3" y="5" width="14" height="14" rx="2"/><path d="m17 9 4-2v10l-4-2"/><path d="m8 10 2 2-2 2"/>',
-      badge: { text: '新', kind: 'new' }, enabled: false, outputKind: 'video', tier: 'later',
+      badge: { text: '新', kind: 'new' }, enabled: true, outputKind: 'video', page: 'ref-video.html', tier: 'live',
     },
     {
       key: 'img2video', label: '图片转影片',
