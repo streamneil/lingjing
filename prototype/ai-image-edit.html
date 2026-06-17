@@ -37,12 +37,15 @@
   .maintools button svg { width:18px; height:18px; }
 
   /* ── 指令卡(主面板):参考图小图 + 编辑指令 + 上传 ── */
-  .instr-card { border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:14px; margin-top:12px; }
-  #refStrip { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  /* 指令卡固定总高:加参考图时 textarea 收缩补偿,卡总高不变(不跳动) */
+  .instr-card { border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:14px; margin-top:12px; display:flex; flex-direction:column; min-height:200px; }
+  #refStrip { display:flex; gap:8px; flex-wrap:wrap; }
+  #refStrip:not(:empty) { margin-bottom:10px; } /* 空态不占 margin,有图才留间距 */
   .refchip { position:relative; width:70px; height:70px; border-radius:10px; overflow:hidden; border:1px solid var(--line); background:var(--field); }
   .refchip img { width:100%; height:100%; object-fit:cover; display:block; }
-  .refchip .rmx { position:absolute; top:-6px; right:-6px; width:20px; height:20px; background:var(--red,#ff5b5b); border-radius:50%; display:grid; place-items:center; color:#fff; font-size:12px; line-height:1; cursor:pointer; border:2px solid var(--card); }
-  .instr-card textarea { width:100%; min-height:96px; background:none; border:none; resize:none; color:var(--t1); font-size:14px; line-height:1.6; outline:none; font-family:inherit; }
+  /* 关闭按钮与图生图(.img-tile .rmx)一致:深色半透明圆底 + 白 ×,框内右上角 */
+  .refchip .rmx { position:absolute; top:6px; right:6px; width:22px; height:22px; background:rgba(0,0,0,.6); border-radius:50%; display:grid; place-items:center; color:#fff; font-size:13px; line-height:1; cursor:pointer; }
+  .instr-card textarea { width:100%; flex:1 1 auto; min-height:0; background:none; border:none; resize:none; color:var(--t1); font-size:14px; line-height:1.6; outline:none; font-family:inherit; }
   .instr-card textarea::placeholder { color:var(--t4); }
   .instr-foot { display:flex; align-items:center; justify-content:space-between; margin-top:8px; }
   .refbtn { display:inline-flex; align-items:center; gap:7px; background:var(--field); border:1px solid var(--line); border-radius:10px; padding:8px 14px; font-size:12.5px; color:var(--t2); cursor:pointer; }
