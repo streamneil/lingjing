@@ -115,9 +115,19 @@
   .demo-card .dh { font-size:13px; font-weight:700; color:var(--t1); margin-bottom:4px; }
   .demo-card .ds { font-size:12px; color:var(--t4); line-height:1.6; margin-bottom:12px; }
   .demo-card .dbtn { display:inline-flex; align-items:center; gap:6px; font-size:12.5px; color:var(--blue); background:var(--blue-bg,rgba(77,141,255,.12)); border:1px solid var(--blue); border-radius:9px; padding:8px 14px; cursor:pointer; }
+  /* 示范卡输入参考缩略带:图/视频/音频混合小方格 */
+  .demo-refs-label { font-size:11px; color:var(--t4); margin:0 0 6px; }
+  .demo-refs { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-bottom:12px; }
+  .demo-ref { position:relative; aspect-ratio:1/1; border-radius:8px; overflow:hidden; border:1px solid var(--line); background:var(--field); }
+  .demo-ref img, .demo-ref video { width:100%; height:100%; object-fit:cover; display:block; }
+  .demo-ref.aud { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; color:var(--t3); }
+  .demo-ref.aud svg { width:20px; height:20px; }
+  .demo-ref .tag { position:absolute; top:4px; left:4px; font-size:9px; background:rgba(0,0,0,.62); color:#fff; padding:1px 5px; border-radius:4px; }
 
-  /* setPill 等弹框:提升为 fixed(由 JS 按 pill 位置定位),逃离 .cfg 的 overflow 裁剪 */
-  .cfg .pop.pop-fixed { position:fixed; bottom:auto; left:auto; right:auto; min-width:340px; }
+  /* setPill 等弹框:JS portal 到 body + fixed 定位(逃离 .cfg transform 包含块与 overflow 裁剪)。
+     portal 到 body 后失去 .cfg 宽度约束,需显式定宽(否则 ratio-row 撑到 92vw)。seed 弹框 JS 覆写更窄。*/
+  .pop.pop-fixed { position:fixed; right:auto; width:360px; min-width:0; max-width:calc(100vw - 24px); z-index:120; }
+  .pop.pop-fixed#pop-seed { width:200px; }
   /* 本页滚动条隐藏但仍可滚(问题2):页面整体滚动条 + .cfg/.feed 内部滚动条都隐 */
   html { scrollbar-width:none; -ms-overflow-style:none; }
   html::-webkit-scrollbar, .cfg::-webkit-scrollbar, .feed::-webkit-scrollbar { width:0; height:0; display:none; }
@@ -229,10 +239,13 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
           <div class="s">上传图片/视频/音频参考、写描述,点「创建」就能生成第一条。</div>
         </div>
       </div>
-      <!-- 茶广告多模态示范(文档旗舰示例;素材转存平台 OSS)-->
+      <!-- 茶广告多模态示范(文档旗舰示例;素材走 /api/demo-assets 同源代理)-->
       <div class="demo-card" id="demoCard" style="margin-top:14px;display:none">
         <div class="dh">🍵 示范:多模态参考(茶广告)</div>
-        <div class="ds">文本 + 2 图 + 1 视频 + 1 音频 → 第一人称果茶广告。下方为示范成片,点「套用示范提示词」体验多模态参考生成。</div>
+        <div class="ds">文本 + 2 图 + 1 视频 + 1 音频 → 第一人称果茶广告。下方为输入参考素材与示范成片,点「套用示范提示词」即可把素材一键载入。</div>
+        <div class="demo-refs-label">输入参考</div>
+        <div class="demo-refs" id="demoRefs"></div>
+        <div class="demo-refs-label">示范成片</div>
         <video class="fvid" id="demoVid" controls preload="metadata" style="margin-bottom:12px;display:none"></video>
         <div class="ds" id="demoVidFallback" style="display:none;margin:0 0 12px;padding:14px;border:1px dashed var(--line);border-radius:10px;text-align:center">示范成片加载中…若长时间无画面,套用提示词后上传素材即可生成同款。</div>
         <button type="button" class="dbtn" id="demoApply">套用示范提示词</button>
@@ -388,9 +401,14 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   }
 
   // ── popover / lightbox ──
-  // 弹框提升为 fixed 并按 pill 位置定位,逃离 .cfg overflow 裁剪(问题1:setPill 弹框被遮挡)
+  // 弹框提升为 fixed 并 portal 到 body 再按 pill 定位。
+  // 根因(问题3):.cfg 的 animation:rise both 残留 identity transform,使 .cfg 成为
+  // fixed 元素的包含块 → 弹框 fixed 坐标错位到 .cfg 内部。portal 到 body(无 transform)
+  // 后 fixed 才相对视口,定位才正确;同时逃离 .cfg overflow 裁剪(问题1)。
   function placePop(pop, pill){
     const r=pill.getBoundingClientRect(), M=12, GAP=8, vw=window.innerWidth, vh=window.innerHeight;
+    if(!pop._home){ pop._home=pop.parentNode; } // 记住原位,关闭时归还
+    document.body.appendChild(pop);
     pop.classList.add('pop-fixed');
     pop.style.visibility='hidden'; pop.style.animation='none'; pop.style.top='0'; pop.style.left='0'; pop.style.bottom='auto'; pop.style.maxHeight='';
     const pw=pop.offsetWidth;
@@ -398,7 +416,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     const above=r.top-M-GAP, below=vh-r.bottom-M-GAP; // pill 上/下可用净高
     pop.style.left=left+'px';
     if(above>=below){
-      // 放上方:用 bottom 锚定到 pill 上沿,浏览器自行向上排布;限高=above,超出则内部滚动
+      // 放上方:bottom 锚定到 pill 上沿,向上排布;限高=above,超出内部滚动
       pop.style.bottom=(vh-r.top+GAP)+'px'; pop.style.top='auto'; pop.style.maxHeight=above+'px';
     } else {
       pop.style.top=(r.bottom+GAP)+'px'; pop.style.bottom='auto'; pop.style.maxHeight=below+'px';
@@ -409,7 +427,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     const el=document.getElementById(map[which]); const isOpen=el.classList.contains('show'); closePops();
     if(!isOpen){ el.classList.add('show'); document.getElementById('popOv').classList.add('show'); document.getElementById(pillMap[which]).classList.add('open');
       placePop(el, document.getElementById(pillMap[which])); } }
-  function closePops(){ document.querySelectorAll('.pop.show').forEach(p=>{ p.classList.remove('show'); p.classList.remove('pop-fixed'); p.style.left=p.style.top=p.style.bottom=p.style.visibility=''; }); document.querySelectorAll('.cpill.open').forEach(p=>p.classList.remove('open')); document.getElementById('popOv').classList.remove('show'); }
+  function closePops(){ document.querySelectorAll('.pop.show').forEach(p=>{ p.classList.remove('show'); p.classList.remove('pop-fixed'); p.style.left=p.style.top=p.style.bottom=p.style.maxHeight=p.style.visibility=''; if(p._home && p.parentNode!==p._home){ p._home.appendChild(p); } }); document.querySelectorAll('.cpill.open').forEach(p=>p.classList.remove('open')); document.getElementById('popOv').classList.remove('show'); }
   window.togglePop=togglePop; window.closePops=closePops;
   window.openLightbox=(url)=>{ document.getElementById('lightboxImg').src=url; document.getElementById('lightbox').classList.add('on'); };
   window.closeLightbox=()=>{ document.getElementById('lightbox').classList.remove('on'); document.getElementById('lightboxImg').src=''; };
@@ -603,9 +621,21 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     afterChange();
     return failed;
   }
+  // 示范卡输入参考缩略带:图显图、视频显首帧、音频显图标(走同源代理,与套用同源)
+  function renderDemoRefs(){
+    const wrap=document.getElementById('demoRefs'); if(!wrap) return;
+    const num={img:0,vid:0,aud:0}, label={img:'图片',vid:'视频',aud:'音频'};
+    wrap.innerHTML=DEMO_INPUTS.map(a=>{
+      const n=++num[a.kind]; const tag=label[a.kind]+n;
+      if(a.kind==='img') return `<div class="demo-ref"><span class="tag">${tag}</span><img src="${a.url}" alt="${tag}"></div>`;
+      if(a.kind==='vid') return `<div class="demo-ref"><span class="tag">${tag}</span><video src="${a.url}" muted preload="metadata"></video></div>`;
+      return `<div class="demo-ref aud"><span class="tag">${tag}</span>${AUD_SVG}</div>`;
+    }).join('');
+  }
   function initDemo(){
     const card=document.getElementById('demoCard'); if(!card) return;
     card.style.display=''; // 空态时显示(有作品后 emptyHint 与示范卡一起被 renderCard 隐;此处仅初始显)
+    renderDemoRefs(); // 输入参考缩略(2图/1视频/1音频)
     // 示范成片:能加载就显视频,失败回落文字提示(不让卡片「没界面」)
     const vid=document.getElementById('demoVid'), fb=document.getElementById('demoVidFallback');
     if(vid){
