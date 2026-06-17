@@ -294,9 +294,9 @@ describe('积分消耗流水 consumption 端点', () => {
     db.prepare(`INSERT INTO credit_ledger (id,tenant_id,kind,amount,job_id,created_at) VALUES (?,?,?,?,?,?)`)
       .run(`cled-${++lq}`, tenant, kind, amount, jobId, createdAt);
   }
-  function cjob(tenant: string, type: string, model: string | null, status: string, createdAt: number, startedAt: number | null, updatedAt: number) {
+  function cjob(tenant: string, type: string, model: string | null, status: string, createdAt: number, startedAt: number | null, updatedAt: number, extra: Record<string, unknown> = {}) {
     const id = `cjob-${++seq}`;
-    const input = model ? JSON.stringify({ model }) : '{}';
+    const input = JSON.stringify({ ...(model ? { model } : {}), ...extra });
     db.prepare(
       `INSERT INTO job (id,tenant_id,type,status,progress,input_json,attempts,created_at,updated_at,started_at)
        VALUES (?,?,?,?,?,?,?,?,?,?)`,
@@ -307,14 +307,14 @@ describe('积分消耗流水 consumption 端点', () => {
   beforeAll(() => {
     ct = createTenant('对账租户').id;
     const t0 = todayStart;
-    // 任务1: ai_image / z-image / done,reserve -10 净 release +3 → 消耗 7;耗时 5s。
-    const j1 = cjob(ct, 'ai_image', 'z-image', 'done', t0 + 1000, t0 + 1500, t0 + 6500);
-    led(ct, 'reserve', -10, j1, t0 + 1000); led(ct, 'release', 3, j1, t0 + 2000);
-    // 任务2: tts / 无 model / done,reserve -4 → 消耗 4。
-    const j2 = cjob(ct, 'tts', null, 'done', t0 + 3000, t0 + 3100, t0 + 5100);
+    // 任务1: ai_image / z-image / done / count=3,reserve -36 净 release +0 → 消耗 36(=3张×12);耗时 5s。
+    const j1 = cjob(ct, 'ai_image', 'z-image', 'done', t0 + 1000, t0 + 1500, t0 + 6500, { count: 3 });
+    led(ct, 'reserve', -36, j1, t0 + 1000);
+    // 任务2: tts / 无 model / done / text 6 字,reserve -4 → 消耗 4。
+    const j2 = cjob(ct, 'tts', null, 'done', t0 + 3000, t0 + 3100, t0 + 5100, { text: '你好世界呀啊' });
     led(ct, 'reserve', -4, j2, t0 + 3000);
-    // 任务3: video_t2v / 失败,reserve -20 全 release +20 → 消耗 0(失败已退不计)。
-    const j3 = cjob(ct, 'video_t2v', 'wan2.7-t2v', 'failed', t0 + 4000, t0 + 4100, t0 + 4500);
+    // 任务3: video_t2v / 失败 / durationSnapshot=5,reserve -20 全 release +20 → 消耗 0(失败已退不计)。
+    const j3 = cjob(ct, 'video_t2v', 'wan2.7-t2v', 'failed', t0 + 4000, t0 + 4100, t0 + 4500, { durationSnapshot: 5 });
     led(ct, 'reserve', -20, j3, t0 + 4000); led(ct, 'release', 20, j3, t0 + 4500);
   });
 
@@ -328,11 +328,25 @@ describe('积分消耗流水 consumption 端点', () => {
     expect(rows[0].module).toBe('video_t2v');
     expect(rows[0].credits).toBe(0); // 失败全退 → 0
     const z = rows.find((x: { model: string }) => x.model === 'z-image');
-    expect(z.credits).toBe(7); // reserve10 净 release3
+    expect(z.credits).toBe(36); // reserve36 净 release0
     expect(z.durationMs).toBe(5000); // done: updated-started
     const tts = rows.find((x: { module: string }) => x.module === 'tts');
     expect(tts.model).toBeNull(); // tts 无 model(前端显系统音色)
     expect(tts.credits).toBe(4);
+  });
+
+  it('数量+单位:图片张、TTS字、视频秒 — 36积分能看出是3张×12不是1张×36', async () => {
+    const c = await padminLogin();
+    const r = await c.get('/admin/api/consumption?tenant=' + ct + '&pageSize=50');
+    const rows = r.body.rows.filter((x: { tenantId: string }) => x.tenantId === ct);
+    const z = rows.find((x: { model: string }) => x.model === 'z-image');
+    expect(z.quantity).toBe(3); expect(z.unit).toBe('张'); // 36积分/3张=12/张
+    const tts = rows.find((x: { module: string }) => x.module === 'tts');
+    expect(tts.quantity).toBe(6); expect(tts.unit).toBe('字'); // '你好世界呀啊'=6字
+    const vid = rows.find((x: { module: string }) => x.module === 'video_t2v');
+    expect(vid.quantity).toBe(5); expect(vid.unit).toBe('秒'); // durationSnapshot=5
+    // 原料字段不下发(只给 quantity/unit)
+    expect(z.imgCount).toBeUndefined(); expect(z.vidDuration).toBeUndefined(); expect(z.ttsChars).toBeUndefined();
   });
 
   it('分页:total + page + pageSize 正确', async () => {

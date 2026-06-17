@@ -389,8 +389,8 @@
     </div>
     <div class="tbl">
       <table>
-        <thead><tr><th>提交时间</th><th>租户</th><th>模块</th><th>模型</th><th style="text-align:right">消耗积分</th><th>状态</th><th style="text-align:right">耗时</th></tr></thead>
-        <tbody id="conRows"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody>
+        <thead><tr><th>提交时间</th><th>租户</th><th>模块</th><th>模型</th><th style="text-align:right">数量</th><th style="text-align:right">消耗积分</th><th>状态</th><th style="text-align:right">耗时</th></tr></thead>
+        <tbody id="conRows"><tr><td colspan="8" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
     <div class="con-pager" id="conPager"></div>
@@ -1508,12 +1508,13 @@
     try{
       const qs=`?page=${conPage}&pageSize=20`+(conTenantId?`&tenant=${encodeURIComponent(conTenantId)}`:'');
       const { rows, total, page, pageSize }=await PA('GET','/api/consumption'+qs);
-      if(!rows.length){ tb.innerHTML='<tr><td colspan="7" class="empty">暂无消耗记录</td></tr>'; }
+      if(!rows.length){ tb.innerHTML='<tr><td colspan="8" class="empty">暂无消耗记录</td></tr>'; }
       else tb.innerHTML=rows.map(r=>`<tr>
         <td style="font-family:var(--f-mono);font-size:12px;color:var(--t3)">${fmtTime(r.submitAt)}</td>
         <td>${esc(r.tenantName)}</td>
         <td><span class="con-mod">${esc(CON_MOD[r.module]||r.module)}</span></td>
         <td style="font-size:12px">${r.model?esc(r.model):'<span style="color:var(--t4)">系统音色</span>'}</td>
+        <td style="text-align:right;font-family:var(--f-mono);font-size:12px">${r.quantity!=null?fmtN(r.quantity)+' '+esc(r.unit||''):'<span style="color:var(--t4)">—</span>'}</td>
         <td style="text-align:right" class="con-cr">${fmtN(r.credits)}</td>
         <td><span class="con-st ${esc(r.status)}">${esc(CON_ST[r.status]||r.status)}</span></td>
         <td style="text-align:right;font-family:var(--f-mono);font-size:12px;color:var(--t3)">${r.durationMs!=null?fmtDur(r.durationMs):'—'}</td>
@@ -1527,7 +1528,7 @@
       const prev=document.getElementById('conPrev'), next=document.getElementById('conNext');
       if(prev) prev.onclick=()=>{ if(conPage>1){ conPage--; loadConsumption(); } };
       if(next) next.onclick=()=>{ if(conPage<pages){ conPage++; loadConsumption(); } };
-    }catch(e){ tb.innerHTML='<tr><td colspan="7" class="empty">加载失败</td></tr>'; }
+    }catch(e){ tb.innerHTML='<tr><td colspan="8" class="empty">加载失败</td></tr>'; }
   }
 
   const SEC_LOADERS={

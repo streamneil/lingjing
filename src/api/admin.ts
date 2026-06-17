@@ -328,6 +328,11 @@ adminRouter.get('/api/consumption', requirePlatformAdmin, (req: Request, res: Re
               j.created_at AS submitAt,
               (CASE WHEN j.started_at IS NOT NULL AND j.status='done'
                     THEN j.updated_at - j.started_at ELSE NULL END) AS durationMs,
+              -- 计费数量原料(按模块取):图片张数 count、视频秒数 durationSnapshot/duration、TTS 字数。
+              json_extract(j.input_json, '$.count') AS imgCount,
+              COALESCE(json_extract(j.input_json, '$.durationSnapshot'),
+                       json_extract(j.input_json, '$.duration')) AS vidDuration,
+              length(json_extract(j.input_json, '$.text')) AS ttsChars,
               (SELECT COALESCE(SUM(CASE WHEN l.kind IN ('reserve','release') THEN l.amount END), 0) * -1
                  FROM credit_ledger l WHERE l.job_id = j.id) AS credits
          FROM job j
@@ -336,8 +341,22 @@ adminRouter.get('/api/consumption', requirePlatformAdmin, (req: Request, res: Re
         ORDER BY j.created_at DESC, j.rowid DESC
         LIMIT @pageSize OFFSET @offset`,
     )
-    .all(tenant ? { tenant, pageSize, offset } : { pageSize, offset });
-  return res.json({ rows, total, page, pageSize });
+    .all(tenant ? { tenant, pageSize, offset } : { pageSize, offset }) as Array<
+      Record<string, unknown> & { module: string; imgCount: number | null; vidDuration: number | null; ttsChars: number | null }
+    >;
+  // 计费数量 + 单位(按模块):图片→张、视频→秒、TTS→字;未知→null。让 36 积分能看出是「3 张×12」还是「1 张×36」。
+  const out = rows.map((r) => {
+    let quantity: number | null = null;
+    let unit: string | null = null;
+    if (r.module === 'ai_image') { quantity = r.imgCount ?? 1; unit = '张'; }
+    else if (r.module === 'tts') { quantity = r.ttsChars ?? null; unit = '字'; }
+    else if (r.module === 'video_t2v' || r.module === 'video_i2v' || r.module === 'video_edit' || r.module === 'video') {
+      quantity = r.vidDuration ?? null; unit = '秒';
+    }
+    const { imgCount, vidDuration, ttsChars, ...rest } = r;
+    return { ...rest, quantity, unit };
+  });
+  return res.json({ rows: out, total, page, pageSize });
 });
 
 /** 租户维度:谁在用、用得怎么样。queued/running 实时,今日量/成功率/P95 按本地零点。 */
