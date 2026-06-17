@@ -698,7 +698,7 @@ shell.js(defer)随后用 LJ.me() 校正并写回缓存。 */
       }
       function renderCard(job) {
         document.getElementById('feedEmpty').style.display = 'none';
-        const dc = document.getElementById('demoCard'); if (dc) dc.style.display = 'none'; // 有作品后隐藏示范卡
+        // 示范卡常显(不随生成记录隐藏);留在记录列底部供随时参考。
         if (job.prompt !== undefined || job.lyrics !== undefined) musicMeta[job.id] = { prompt: job.prompt || '', lyrics: job.lyrics || '' };
         const meta = musicMeta[job.id] || {}; const pt = meta.prompt || job.prompt || ''; const lt = meta.lyrics || job.lyrics || '';
         let card = document.getElementById('job-' + job.id); const existed = !!card;
@@ -824,6 +824,7 @@ shell.js(defer)随后用 LJ.me() 校正并写回缓存。 */
 晚风吹过，蝉鸣留在夏天。各自奔赴，高处相见。`;
       function initDemo() {
         const card = document.getElementById('demoCard'); if (!card) return;
+        card.style.display = ''; // 常显:无论有无生成记录都展示示范
         document.getElementById('demoPromptBox').textContent = DEMO_PROMPT;
         document.getElementById('demoLyricsBox').textContent = DEMO_LYRICS;
         document.getElementById('demoApply').onclick = () => {
@@ -836,11 +837,8 @@ shell.js(defer)随后用 LJ.me() 校正并写回缓存。 */
           window.LJToast && window.LJToast('✓ 已套用示范提示词与歌词,可直接点「创建」或自行修改');
         };
       }
-      // 空态(无作品)才显示示范卡;loadHistory 渲染出作品会在 renderCard 里隐藏
-      function maybeShowDemo() { const hasJob = !!document.querySelector('.feed-list .fitem[id^=job-]'); const dc = document.getElementById('demoCard'); if (dc) dc.style.display = hasJob ? 'none' : ''; }
-
       initDemo();
-      LJ.me().then(() => loadHistory()).then(() => maybeShowDemo()).catch(() => maybeShowDemo());
+      LJ.me().then(() => loadHistory()).catch(() => { });
       switchMode('song'); refreshBtn(); scheduleEstimate();
       applyStyleFromQuery();
     </script>
