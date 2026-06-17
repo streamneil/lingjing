@@ -60,7 +60,8 @@ describe('ArkGateway 视频:请求体组装 + 响应解析', () => {
     const gw = new ArkGateway();
     const id = await gw.submitVideoT2V({ model: 'doubao-seedance-2.0', prompt: '小猫打哈欠', resolution: '720P', duration: 5, audio: true });
     expect(id).toBe('cgt-ark-123');
-    expect(captured.model).toBe('doubao-seedance-2.0');
+    // 入参 model 用内部 key 'doubao-seedance-2.0',发给火山的 captured.model 是厂商真实 modelId(带日期版本)
+    expect(captured.model).toBe('doubao-seedance-2-0-260128');
     expect(captured.resolution).toBe('720p'); // 火山小写
     expect(captured.content[0]).toEqual({ type: 'text', text: '小猫打哈欠' });
     expect(captured.generate_audio).toBe(true); // supportsAudio 模型透传 audio
