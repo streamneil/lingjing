@@ -1488,7 +1488,7 @@
   window.loadProviders=loadProviders;
 
   // ── 左侧菜单 SPA 路由(hash 决定当前 section,刷新保持,懒加载各 section)──
-  const SECTIONS=['monitor','tenants','image-models','providers','pricing','plans','leads','orders','invoices','audit'];
+  const SECTIONS=['monitor','tenants','image-models','providers','pricing','plans','leads','orders','invoices','consumption','audit'];
   // 各 section 首次进入时调用对应 loader(切回已加载的不重拉,靠 loaded 标记防重复)
   // ── 积分消耗流水(对账)──
   const CON_MOD={ai_image:'AI 生图',video_t2v:'文生视频',video_i2v:'图生视频',video_edit:'视频编辑',tts:'语音合成',video:'数字人视频'};
