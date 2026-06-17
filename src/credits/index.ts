@@ -141,11 +141,38 @@ export function estimateTtsCost(textLength: number, pricePerChar?: number): numb
 //  - 提交时按慷慨上限 AI_MUSIC_RESERVE_SECONDS 预估并 reserve(估高,留余量);
 //  - 完成后 worker 用实际 duration 结算,且封顶 reserved(actual ≤ reserve → 只退不补,
 //    绝不击穿"不允许负余额");settle() 已支持变额(diff=退/补,见本文件 settle)。
-const AI_MUSIC_PRICE_PER_SECOND = 0.05; // 每秒 0.05 积分(占位值,可配置)
-export const AI_MUSIC_RESERVE_SECONDS = 240; // 预估/reserve 用的慷慨上限(约 4 分钟)
-/** AI 音乐费用预估:ceil(秒数 × 每秒单价)。提交用上限秒,结算用实际秒(worker 封顶 reserved)。 */
+// Fun-Music 真实成本 0.002 元/秒(文档);售价 = 成本 × 全局倍率(markupX35,默认 ×35 → 0.07 积分/秒)。
+// 接全局倍率:后台改倍率,音乐单价随之变。round 抹 IEEE-754 浮尘(同 TTS 范式)。
+const AI_MUSIC_COST_PER_SECOND_YUAN = 0.002;
+function aiMusicPricePerSecond(): number {
+  return Math.round(AI_MUSIC_COST_PER_SECOND_YUAN * markupX35() * 1e10) / 1e10;
+}
+export const AI_MUSIC_RESERVE_SECONDS = 240; // 时长无法预估时的慷慨上限(约 4 分钟)
+// 时长预估上下限 + 安全系数:reserve 必须 ≥ 实际(只退不补,绝不击穿)。
+const AI_MUSIC_MIN_SECONDS = 30;
+const AI_MUSIC_MAX_SECONDS = 300;
+const AI_MUSIC_DUR_SAFETY = 1.3; // 估高余量,避免实际略超估值导致结算补扣
+const AI_MUSIC_CHARS_PER_SECOND = 3.3; // 中文演唱速率(字/秒)粗估;英文按词≈字近似
+const AI_MUSIC_INTRO_OUTRO_SECONDS = 20; // 前奏/间奏/尾奏无歌词时长的余量
+/** 从歌词/提示词估算预期歌曲时长(秒)。Fun-Music 无时长入参,按文本量估 → 字越多歌越长。
+ *  歌词优先(更准);仅提示词时按提示词量粗估。乘安全系数 + clamp[30,300],保 reserve≥实际。 */
+export function estimateAiMusicSeconds(input: { lyrics?: unknown; prompt?: unknown }): number {
+  const lyrics = typeof input.lyrics === 'string' ? input.lyrics.trim() : '';
+  const prompt = typeof input.prompt === 'string' ? input.prompt.trim() : '';
+  // 同传以歌词为准(与 Fun-Music 行为一致);仅提示词时按提示词量(更短,粗估)。
+  const text = lyrics || prompt;
+  if (!text) return AI_MUSIC_RESERVE_SECONDS; // 无文本(异常)→ 慷慨上限
+  // 去掉 [verse]/[chorus] 等结构标记与空白,只数实际可唱字符。
+  const singable = text.replace(/\[[^\]]*\]/g, '').replace(/\([^)]*\)/g, '').replace(/\s+/g, '').length;
+  const raw = singable / AI_MUSIC_CHARS_PER_SECOND + AI_MUSIC_INTRO_OUTRO_SECONDS;
+  const withSafety = raw * AI_MUSIC_DUR_SAFETY;
+  return Math.min(AI_MUSIC_MAX_SECONDS, Math.max(AI_MUSIC_MIN_SECONDS, Math.ceil(withSafety)));
+}
+/** AI 音乐费用预估:ceil(秒数 × 每秒售价)。提交用估算秒(reserve),结算用实际秒(worker 封顶 reserved)。
+ *  round 到 1e-6 抹 IEEE-754 浮尘(0.002×35×200=14.0000…2 → 否则 ceil 多收成 15)。 */
 export function estimateAiMusicCost(durationSeconds: number): number {
-  return Math.max(MIN_COST, Math.ceil(durationSeconds * AI_MUSIC_PRICE_PER_SECOND));
+  const raw = Math.round(durationSeconds * aiMusicPricePerSecond() * 1e6) / 1e6;
+  return Math.max(MIN_COST, Math.ceil(raw));
 }
 
 /**
@@ -224,10 +251,13 @@ export function costFor(toolType: string, input: Record<string, unknown>): numbe
       return estimateTtsCost(typeof input.text === 'string' ? input.text.length : 0, pricePerChar);
     }
     case 'ai_music': {
-      // 有 durationSnapshot(worker 写入的实际秒)→ 按实际算;无(reserve/estimate 阶段或老 job)
-      // → 按慷慨上限。worker settle 时再 min(本值, reserved) 封顶,保只退不补。
+      // 有 durationSnapshot(worker 写入的实际秒)→ 按实际算;无(reserve/estimate 阶段)
+      // → 按歌词/提示词估算预期时长(字越多歌越长,乘安全系数 + clamp,保 reserve≥实际)。
+      // worker settle 时再 min(本值, reserved) 封顶,保只退不补。
       const seconds =
-        typeof input.durationSnapshot === 'number' ? input.durationSnapshot : AI_MUSIC_RESERVE_SECONDS;
+        typeof input.durationSnapshot === 'number'
+          ? input.durationSnapshot
+          : estimateAiMusicSeconds(input);
       return estimateAiMusicCost(seconds);
     }
     default:

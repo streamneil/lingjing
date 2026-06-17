@@ -23,7 +23,7 @@ vi.mock('../src/storage/index.js', () => ({
 
 const { generateMusic } = await import('../src/gateway/fun-music.js');
 const { db } = await import('../src/db/index.js');
-const { estimateAiMusicCost, AI_MUSIC_RESERVE_SECONDS, costFor, grant, reserve, balance } = await import('../src/credits/index.js');
+const { estimateAiMusicCost, estimateAiMusicSeconds, AI_MUSIC_RESERVE_SECONDS, costFor, grant, reserve, balance } = await import('../src/credits/index.js');
 const { enqueueJob, getJob } = await import('../src/queue/index.js');
 const { tick } = await import('../src/queue/worker.js');
 const { createApp } = await import('../src/server.js');
@@ -94,8 +94,8 @@ describe('generateMusic', () => {
 
 // ── 计价 ──
 describe('estimateAiMusicCost / costFor', () => {
-  it('按秒:200 秒 × 0.05 = 10', () => {
-    expect(estimateAiMusicCost(200)).toBe(10);
+  it('按秒:200 秒 × 0.07(0.002元 × markup35)= ceil(14) = 14', () => {
+    expect(estimateAiMusicCost(200)).toBe(14);
   });
   it('MIN_COST 兜底:短曲仍 >=1', () => {
     expect(estimateAiMusicCost(1)).toBe(1);
@@ -118,10 +118,12 @@ describe('POST /api/jobs (ai_music) 校验', () => {
     const r = await client.post('/api/jobs', { type: 'ai_music', mode: 'song' });
     expect(r.status).toBe(400);
   });
-  it('歌曲 prompt → 202 + cost=reserve 口径', async () => {
+  it('歌曲 prompt → 202 + cost 按输入估时长(非固定上限)', async () => {
     const r = await client.post('/api/jobs', { type: 'ai_music', mode: 'song', prompt: '夏日清新民谣', gender: 'female' });
     expect(r.status).toBe(202);
-    expect(r.body.cost).toBe(estimateAiMusicCost(AI_MUSIC_RESERVE_SECONDS));
+    // 预扣按提示词估算的预期时长(短提示 → 远低于 240s 上限),证明不再固定扣满。
+    expect(r.body.cost).toBe(estimateAiMusicCost(estimateAiMusicSeconds({ prompt: '夏日清新民谣' })));
+    expect(r.body.cost).toBeLessThan(estimateAiMusicCost(AI_MUSIC_RESERVE_SECONDS));
     const inp = JSON.parse(getJob(r.body.id)!.input_json);
     expect(inp.mode).toBe('song');
     expect(inp.gender).toBe('female');
@@ -138,10 +140,18 @@ describe('POST /api/jobs (ai_music) 校验', () => {
     const r = await client.post('/api/jobs', { type: 'ai_music', mode: 'song', prompt: 'p', model: 'no-such' });
     expect(r.status).toBe(400);
   });
-  it('estimate ≡ build(reserve==settle 同口径)', async () => {
-    const est = await client.post('/api/jobs/estimate', { type: 'ai_music', mode: 'song' });
-    const job = await client.post('/api/jobs', { type: 'ai_music', mode: 'song', prompt: 'x' });
+  it('estimate ≡ build(同输入 → reserve==settle 同口径)', async () => {
+    // 必须同一输入(估时长依赖文本量);此前用不同 body 会自然得不同价。
+    const body = { type: 'ai_music', mode: 'song', prompt: 'x' };
+    const est = await client.post('/api/jobs/estimate', body);
+    const job = await client.post('/api/jobs', body);
     expect(est.body.cost).toBe(job.body.cost);
+  });
+  it('估价随输入变(长歌词 > 短提示)', async () => {
+    const shortEst = await client.post('/api/jobs/estimate', { type: 'ai_music', mode: 'song', prompt: '流行' });
+    const longLyrics = '操场跑道圈着年少，晚霞落在你的嘴角。手里的汽水冒着泡，你说长大的梦总会来到。青春是不散的晚宴，举杯敬昨天的倔强。';
+    const longEst = await client.post('/api/jobs/estimate', { type: 'ai_music', mode: 'song', lyrics: longLyrics });
+    expect(longEst.body.cost).toBeGreaterThan(shortEst.body.cost);
   });
 });
 

@@ -29,7 +29,7 @@ import {
   estimateVideoCost,
   videoPriceTier,
   estimateAiMusicCost,
-  AI_MUSIC_RESERVE_SECONDS,
+  estimateAiMusicSeconds,
   clampImageCount,
   reserve,
   balance,
@@ -330,10 +330,16 @@ function buildAiMusicJob(body: Record<string, unknown>): JobBuildResult {
     if (gender !== undefined && gender !== 'male' && gender !== 'female')
       return { ok: false, status: 400, error: '人声性别非法' };
   }
-  // 文本长度(官方:prompt 1~2000;lyrics 中文 5~350 / 英文 5~2000 → 取宽松 5~2000)。
-  if (hasPrompt && prompt!.length > 2000) return { ok: false, status: 400, error: '提示词最多 2000 字' };
-  if (hasLyrics && (lyrics!.trim().length < 5 || lyrics!.length > 2000))
-    return { ok: false, status: 400, error: '歌词需 5~2000 字' };
+  // 文本长度(官方非流式:prompt 1~2000;lyrics 含中文按 5~350,纯英文按 5~2000)。
+  if (hasPrompt && prompt!.length > 2000) return { ok: false, status: 400, error: '提示词最多 2000 字符' };
+  if (hasLyrics) {
+    const lyTrim = lyrics!.trim();
+    const hasCJK = /[一-鿿]/.test(lyTrim);
+    const maxLy = hasCJK ? 350 : 2000;
+    if (lyTrim.length < 5) return { ok: false, status: 400, error: '歌词至少 5 个字符' };
+    if (lyTrim.length > maxLy)
+      return { ok: false, status: 400, error: `歌词最多 ${maxLy} 个字符(${hasCJK ? '中文' : '英文'})` };
+  }
   if (model !== undefined && !AI_MUSIC_MODELS.has(model))
     return { ok: false, status: 400, error: '音乐模型非法' };
 
@@ -346,8 +352,9 @@ function buildAiMusicJob(body: Record<string, unknown>): JobBuildResult {
     ok: true,
     type: 'ai_music',
     input: input as unknown as Record<string, unknown>,
-    // 预估按慷慨上限秒(reserve);worker 结算按实际秒并封顶 reserved。estimate≡build 同口径。
-    cost: estimateAiMusicCost(AI_MUSIC_RESERVE_SECONDS),
+    // 预估按歌词/提示词估算的预期时长秒(reserve);worker 结算按实际秒并封顶 reserved。
+    // estimate≡build 同口径:走 costFor('ai_music') 同一估算函数。
+    cost: estimateAiMusicCost(estimateAiMusicSeconds(input as unknown as Record<string, unknown>)),
   };
 }
 
@@ -973,8 +980,8 @@ jobsRouter.post('/jobs/estimate', requireAuth, async (req: Request, res: Respons
     });
   }
   if (type === 'ai_music') {
-    // 按慷慨上限秒预估(与 buildAiMusicJob 同口径);完成后按实际秒结算并封顶 reserved。
-    return res.json({ cost: estimateAiMusicCost(AI_MUSIC_RESERVE_SECONDS) });
+    // 按歌词/提示词估算预期时长(与 buildAiMusicJob 同口径);完成后按实际秒结算并封顶 reserved。
+    return res.json({ cost: estimateAiMusicCost(estimateAiMusicSeconds(body)) });
   }
   if (typeof body.script !== 'string') return res.status(400).json({ error: '缺少 script' });
   return res.json({
