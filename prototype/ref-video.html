@@ -97,6 +97,10 @@
   .mm-tile .rmx { position:absolute; top:5px; right:5px; width:20px; height:20px; background:rgba(0,0,0,.6); border-radius:50%; display:grid; place-items:center; color:#fff; font-size:12px; line-height:1; cursor:pointer; border:none; padding:0; z-index:1; }
   .mm-add { aspect-ratio:1/1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; border:1.5px dashed var(--line-hi); border-radius:10px; color:var(--t3); cursor:pointer; transition:.15s; }
   .mm-add:hover, .mm-add.drag { border-color:var(--blue); color:var(--t1); background:var(--card); }
+  /* 空组(只有 add-tile,无素材):add-tile 不撑成大方块,横铺整宽 + 矮高(避免三组叠起 ~700px)*/
+  .mm-group.empty .mm-tiles { grid-template-columns:1fr; }
+  .mm-group.empty .mm-add { aspect-ratio:auto; height:84px; flex-direction:row; gap:8px; }
+  .mm-group.empty .mm-add .plus { font-size:20px; }
   .mm-add .plus { font-size:24px; font-weight:300; line-height:1; }
   .mm-add .lbl { font-size:11px; }
   /* 素材引用助手:可点击芯片插入 [图片N]/[视频N]/[音频N] */
@@ -267,7 +271,8 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   function groupHtml(title, kind, files, max, addLabel, tileFn){
     const tiles=files.map((f,i)=>tileFn(f,i)).join('');
     const add=files.length<max ? `<div class="mm-add" data-add="${kind}"><span class="plus">+</span><span class="lbl">${addLabel}</span></div>` : '';
-    return `<div class="mm-group"><div class="mm-h"><span>${title}</span><span class="cnt">${files.length}/${max}</span></div><div class="mm-tiles">${tiles}${add}</div></div>`;
+    const emptyCls=files.length===0?' empty':''; // 空组:add-tile 横铺矮高,不撑成大方块
+    return `<div class="mm-group${emptyCls}"><div class="mm-h"><span>${title}</span><span class="cnt">${files.length}/${max}</span></div><div class="mm-tiles">${tiles}${add}</div></div>`;
   }
   function renderMMArea(){
     const m=curModel(); if(!m){ document.getElementById('mmArea').innerHTML=''; return; }
