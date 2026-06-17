@@ -346,12 +346,17 @@
     <!-- ── 对公收款核对 ── -->
     <section class="sec" data-sec="orders" id="sec-orders">
     <div class="ph">
-      <div><h1>对公收款核对</h1><p>用户提交「我已打款」的充值订单。核对对公账户实际到账后点「确认到账」,积分自动入账(只发一次)。</p></div>
+      <div><h1>对公收款核对</h1><p>用户提交「我已打款」的充值订单。核对对公账户实际到账后点「确认到账」,积分自动入账(只发一次)。已到账/已驳回订单永久可查,留经办人与时间。</p></div>
       <button class="btn-new" onclick="openPayee()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>对公收款信息</button>
+    </div>
+    <div class="bl-seg" id="orderSeg" style="display:flex;gap:6px;margin-bottom:14px">
+      <button class="act on" data-s="paid_claimed">待核对</button>
+      <button class="act" data-s="credited">已到账</button>
+      <button class="act" data-s="rejected">已驳回</button>
     </div>
     <div class="tbl">
       <table>
-        <thead><tr><th>租户</th><th>订单号</th><th>套餐</th><th>金额</th><th>到账积分</th><th>回单</th><th style="text-align:right">操作</th></tr></thead>
+        <thead><tr><th>租户</th><th>订单号</th><th>套餐</th><th>金额</th><th>到账积分</th><th>回单</th><th style="text-align:right">操作 / 处理记录</th></tr></thead>
         <tbody id="orderRows"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
@@ -394,7 +399,7 @@
       <label>企业税号</label><input id="peTax" placeholder="91320114MA…">
       <label>开户银行</label><input id="peBank" placeholder="中国工商银行…支行">
       <label>银行账号</label><input id="peAcct" placeholder="4301…">
-      <div class="row" style="margin-top:14px"><button class="cancel" onclick="closeOv('payeeOv')">取消</button><button class="ok" onclick="savePayee()">保存</button></div>
+      <div class="mbtns"><button class="cancel" onclick="closeOv('payeeOv')">取消</button><button class="ok" onclick="savePayee()">保存</button></div>
     </div>
   </div>
 
@@ -405,7 +410,7 @@
       <p class="mdesc" id="issueInfo"></p>
       <label>发票号</label><input id="isNo" placeholder="发票号码">
       <label>发票 PDF(必传)</label><input id="isPdf" type="file" accept="application/pdf">
-      <div class="row" style="margin-top:14px"><button class="cancel" onclick="closeOv('issueOv')">取消</button><button class="ok" onclick="submitIssue()">确认开票</button></div>
+      <div class="mbtns"><button class="cancel" onclick="closeOv('issueOv')">取消</button><button class="ok" onclick="submitIssue()">确认开票</button></div>
     </div>
   </div>
 
@@ -618,25 +623,46 @@
   }
 
   // ── 对公收款核对 ──
+  let orderStatus='paid_claimed';
+  const ORDER_EMPTY={paid_claimed:'暂无待核对的打款',credited:'暂无已到账订单',rejected:'暂无已驳回订单'};
   async function loadOrders(){
     const tb=document.getElementById('orderRows');
     try{
-      const { orders }=await PA('GET','/api/recharge-orders?status=paid_claimed');
-      if(!orders.length){ tb.innerHTML='<tr><td colspan="7" class="empty">暂无待核对的打款</td></tr>'; return; }
-      tb.innerHTML=orders.map(o=>`<tr>
+      const { orders }=await PA('GET','/api/recharge-orders?status='+orderStatus);
+      if(!orders.length){ tb.innerHTML=`<tr><td colspan="7" class="empty">${ORDER_EMPTY[orderStatus]||'暂无订单'}</td></tr>`; return; }
+      tb.innerHTML=orders.map(o=>{
+        const receipt=o.hasReceipt?`<button class="act" onclick='previewReceipt(${JSON.stringify(o.id)},${JSON.stringify(o.orderNo)})'>查看回执</button>`:'<span style="color:var(--t4)">无</span>';
+        // 末列按状态:待核对→操作按钮;已到账→✓ 谁/何时;已驳回→✗ 谁/何时 + 原因。
+        let last;
+        if(o.status==='paid_claimed'){
+          last=`<div class="acts">
+            <button class="act pri" onclick='confirmOrder(${JSON.stringify(o.id)},${JSON.stringify(o.orderNo)})'>确认到账</button>
+            <button class="act" onclick='rejectOrder(${JSON.stringify(o.id)})'>驳回</button></div>`;
+        } else if(o.status==='credited'){
+          last=`<div style="text-align:right;font-size:12px;line-height:1.5">
+            <div style="color:var(--green);font-weight:600">✓ 已到账</div>
+            <div style="color:var(--t3)">${esc(o.confirmedByName||'—')}${o.confirmedAt?' · '+fmtTime(o.confirmedAt):''}</div></div>`;
+        } else {
+          last=`<div style="text-align:right;font-size:12px;line-height:1.5">
+            <div style="color:var(--red);font-weight:600">✗ 已驳回</div>
+            <div style="color:var(--t3)">${esc(o.confirmedByName||'—')}${o.confirmedAt?' · '+fmtTime(o.confirmedAt):''}</div>
+            ${o.adminNote?`<div style="color:var(--t4)">原因:${esc(o.adminNote)}</div>`:''}</div>`;
+        }
+        return `<tr>
         <td><div class="tn">${esc(o.tenantName||'—')}</div><div class="tid" style="font-size:11px;color:var(--t4)">${esc(o.tenantId)}</div></td>
         <td style="font-family:var(--f-mono);font-size:12px">${esc(o.orderNo)}</td>
         <td>${esc(o.planName)}</td>
         <td class="bal">¥${fmtN(o.priceYuan)}</td>
         <td>${fmtN(o.credits+o.bonusCredits)}</td>
-        <td>${o.hasReceipt?`<button class="act" onclick='previewReceipt(${JSON.stringify(o.id)},${JSON.stringify(o.orderNo)})'>查看回执</button>`:'<span style="color:var(--t4)">无</span>'}</td>
-        <td><div class="acts">
-          <button class="act pri" onclick='confirmOrder(${JSON.stringify(o.id)},${JSON.stringify(o.orderNo)})'>确认到账</button>
-          <button class="act" onclick='rejectOrder(${JSON.stringify(o.id)})'>驳回</button>
-        </div></td>
-      </tr>`).join('');
+        <td>${receipt}</td>
+        <td>${last}</td>
+      </tr>`;}).join('');
     }catch(e){ tb.innerHTML='<tr><td colspan="7" class="empty">加载失败</td></tr>'; }
   }
+  document.querySelectorAll('#orderSeg button').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#orderSeg button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); orderStatus=b.dataset.s; loadOrders();
+  });
   async function confirmOrder(id, no){
     if(!confirm(`确认订单 ${no} 已到账?积分将自动入账(不可撤销)。`)) return;
     try{ await PA('POST',`/api/recharge-orders/${id}/confirm`); toast('✓ 已确认到账,积分已入账'); await loadOrders(); await loadTenants(); }

@@ -1064,7 +1064,7 @@ adminRouter.put('/api/sales-leads/:id', requirePlatformAdmin, (req: Request, res
 
 // ── 对公充值:收款核对工作台 ──
 
-function serializeAdminOrder(o: ReturnType<typeof getOrder> & object, tenantName: string) {
+function serializeAdminOrder(o: ReturnType<typeof getOrder> & object, tenantName: string, confirmedByName?: string | null) {
   return {
     id: o!.id,
     orderNo: o!.order_no,
@@ -1078,6 +1078,9 @@ function serializeAdminOrder(o: ReturnType<typeof getOrder> & object, tenantName
     hasReceipt: !!o!.receipt_key,
     adminNote: o!.admin_note,
     createdAt: o!.created_at,
+    // 处理留痕(确认到账/驳回 的经办人 + 时间)——已到账/已驳回订单要可追溯,不能处理完就查不到。
+    confirmedAt: o!.confirmed_at ?? null,
+    confirmedByName: confirmedByName ?? null,
   };
 }
 
@@ -1096,7 +1099,20 @@ adminRouter.get('/api/recharge-orders', requirePlatformAdmin, (req: Request, res
       | undefined;
     names.set(o.tenant_id, t?.name ?? '(已删租户)');
   }
-  res.json({ orders: orders.map((o) => serializeAdminOrder(o, names.get(o.tenant_id) ?? '')) });
+  // 批量解析经办超管名(confirmed_by → platform_admin.username),用于「谁确认/驳回的」留痕。
+  const padmins = new Map<string, string>();
+  for (const o of orders) {
+    if (!o.confirmed_by || padmins.has(o.confirmed_by)) continue;
+    const a = db.prepare(`SELECT username FROM platform_admin WHERE id=?`).get(o.confirmed_by) as
+      | { username: string }
+      | undefined;
+    padmins.set(o.confirmed_by, a?.username ?? '(已删超管)');
+  }
+  res.json({
+    orders: orders.map((o) =>
+      serializeAdminOrder(o, names.get(o.tenant_id) ?? '', o.confirmed_by ? padmins.get(o.confirmed_by) : null),
+    ),
+  });
 });
 
 // 看回单截图(超管,流式)。
