@@ -313,7 +313,7 @@ export async function finalizeVideoJob(
   job: JobRow,
   videoUrl: string,
   costInput: Record<string, unknown>,
-  costType: 'video_t2v' | 'video_i2v' | 'video_edit',
+  costType: 'video_t2v' | 'video_i2v' | 'video_edit' | 'video_r2v',
 ): Promise<void> {
   // 抓成品 MP4 为 Buffer
   const resp = await fetch(videoUrl);
@@ -353,7 +353,7 @@ export async function finalizeVideoJob(
  *  抛错由调用方捕获并标 failed(失败隔离)。 */
 async function runMediaVideoJob(
   job: JobRow,
-  opts: { withVideo: boolean; requireRefs: boolean; costType: 'video_i2v' | 'video_edit' },
+  opts: { withVideo: boolean; requireRefs: boolean; multimodal?: boolean; costType: 'video_i2v' | 'video_edit' | 'video_r2v' },
 ): Promise<void> {
   const input = JSON.parse(job.input_json) as VideoGenT2VInput;
 
@@ -384,6 +384,22 @@ async function runMediaVideoJob(
   }
   if (refs.length) input.imageRefs = await Promise.all(refs.map((k) => publisher.publish(k)));
 
+  // 2c. 多模态参考(video_r2v):参考视频/音频送审 + 并行 publish 覆写(eng-review P1#2/Sec4)。
+  //     typed 三数组各自 publish,绝不 merge 进 imageRefs(否则 wan/HH 收到 video URL 当 reference_image → 400)。
+  if (opts.multimodal) {
+    const vids = input.videoRefs ?? [];
+    const auds = input.audioRefs ?? [];
+    for (const k of vids) { const v = await moderateOutput(k); if (!v.allowed) throw new Error(`参考视频送审拒绝:${v.reason}`); }
+    for (const k of auds) { const v = await moderateOutput(k); if (!v.allowed) throw new Error(`参考音频送审拒绝:${v.reason}`); }
+    // Promise.all 并行 publish 全部 video/audio refs(最多 6 个,串行=6 次 OSS 往返)。
+    const [pubVids, pubAuds] = await Promise.all([
+      Promise.all(vids.map((k) => publisher.publish(k))),
+      Promise.all(auds.map((k) => publisher.publish(k))),
+    ]);
+    if (pubVids.length) input.videoRefs = pubVids;
+    if (pubAuds.length) input.audioRefs = pubAuds;
+  }
+
   // 3. 网关提交(按 task 组 media)+ 轮询;resume 守卫:已有 task_id 续跑不重提交。
   const gateway = getGateway(input.model);
   const providerTaskId = await submitOrResume(job, () => gateway.submitVideoT2V(input));
@@ -409,6 +425,12 @@ async function runVideoI2VJob(job: JobRow): Promise<void> {
 /** 视频编辑(video_edit):共享 runner 薄包装(media 首元素为输入视频)。 */
 async function runVideoEditJob(job: JobRow): Promise<void> {
   return runMediaVideoJob(job, { withVideo: true, requireRefs: false, costType: 'video_edit' });
+}
+
+/** 多模态参考生影片(video_r2v):共享 runner 薄包装(图/视频/音频 typed 三数组)。
+ *  requireRefs:false(可纯文本 + 视频/音频);multimodal:true 启用 video/audio publish + 审核。 */
+async function runVideoR2VJob(job: JobRow): Promise<void> {
+  return runMediaVideoJob(job, { withVideo: false, requireRefs: false, multimodal: true, costType: 'video_r2v' });
 }
 
 /** 共享尾段:百炼图 URL → 拉进自有存储存 key → markDone(JSON key 数组,kind=image)→ settle。
@@ -673,6 +695,8 @@ async function processJob(job: JobRow): Promise<void> {
       return runVideoT2VJob(job);
     case 'video_i2v':
       return runVideoI2VJob(job);
+    case 'video_r2v':
+      return runVideoR2VJob(job);
     case 'video_edit':
       return runVideoEditJob(job);
     case 'ai_image':

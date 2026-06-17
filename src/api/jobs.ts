@@ -41,7 +41,7 @@ import { getEmotion, EMOTIONS, getSpeed, SPEEDS, getLanguage, LANGUAGES } from '
 import { db } from '../db/index.js';
 import type { VideoGenInput, ImageGenInput, TtsGenInput, VideoGenT2VInput, AiMusicGenInput } from '../gateway/types.js';
 import { getImageModel, resolutionAllowed, isKnownModel, listEnabledModels, DEFAULT_IMAGE_MODEL, tierFromPixels } from '../gateway/image-models.js';
-import { getVideoModel, isKnownVideoModel, listVideoModels, klingModeToResolution, getI2VModel, listI2VModels, getEditModel, listEditModels, type VideoTask, type VideoModelDef } from '../gateway/video-models.js';
+import { getVideoModel, isKnownVideoModel, listVideoModels, klingModeToResolution, getI2VModel, listI2VModels, getEditModel, listEditModels, getR2VModel, type VideoTask, type VideoModelDef } from '../gateway/video-models.js';
 import { probeVideoMeta, type VideoMeta } from '../pipeline/ai-label.js';
 import { readFile, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -54,6 +54,8 @@ const imageUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize
 // 视频编辑输入视频上传:走临时磁盘(eng-review A2:100MB 进内存有并发 OOM 风险),
 // 探测/落 MinIO 后 finally 删临时文件。
 const videoUpload = multer({ dest: tmpdir(), limits: { fileSize: 100 * 1024 * 1024 } });
+// 参考音频上传(video_r2v 多模态):内存缓冲 ≤20MB(音频小,免临时盘)。
+const audioUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 // ── 视频编辑 sidecar 元数据(eng-review D5:时长服务端真相)──
 // 上传时 ffprobe → {key}.meta.json 写 MinIO;build/estimate 按 videoRef 读回算计费快照。
@@ -517,6 +519,95 @@ function buildVideoI2VJob(body: Record<string, unknown>): JobBuildResult {
   };
 }
 
+/** 多模态参考组合校验(eng-review Sec2 单一 helper)。
+ *  返回 ok 或 {error}。约束(Seedance 文档):图≤max/视频≤max/音频≤max + 禁「仅音频」「文本+仅音频」。 */
+function validateMultimodalRefs(
+  images: string[], videos: string[], audios: string[],
+  maxImg: number, maxVid: number, maxAud: number,
+  hasPrompt: boolean,
+): { ok: true } | { ok: false; error: string } {
+  if (images.length > maxImg) return { ok: false, error: `参考图最多 ${maxImg} 张` };
+  if (videos.length > maxVid) return { ok: false, error: `参考视频最多 ${maxVid} 个` };
+  if (audios.length > maxAud) return { ok: false, error: `参考音频最多 ${maxAud} 个` };
+  // 文档:不支持「纯音频」「文本+音频」输入(必须有 文本/图/视频 之一作为画面来源)。
+  const hasVisual = images.length > 0 || videos.length > 0;
+  if (!hasVisual && !hasPrompt) return { ok: false, error: '请输入提示词或上传图片/视频参考' };
+  if (!hasVisual && audios.length > 0) return { ok: false, error: '不支持仅音频或「文本+音频」输入,请加图片或视频参考' };
+  return { ok: true };
+}
+
+/** 校验并构建 video_r2v(多模态参考生影片)job 入参 + 计价(eng-review:独立类型,隔离 i2v)。
+ *  Seedance 2.0 多模态:文本 + 0-9 图 + 0-3 视频 + 0-3 音频 → 新视频。
+ *  - 能力门控:仅声明 maxVideoRefs 的模型(getR2VModel);prompt 必填(含 [图N]/[视频N]/[音频N] 指代)。
+ *  - 计费含音频(audio 入快照 → costFor 不破 reserve≡settle;Seedance 有 priceTierAudio)。 */
+function buildVideoR2VJob(body: Record<string, unknown>): JobBuildResult {
+  const modelKey = typeof body.model === 'string' ? body.model : undefined;
+  if (modelKey && (!isKnownVideoModel(modelKey) || typeof getVideoModel(modelKey).maxVideoRefs !== 'number'))
+    return { ok: false, status: 400, error: '未知的多模态参考生模型' };
+  const def = getR2VModel(modelKey);
+
+  const toStrArr = (v: unknown): string[] => Array.isArray(v) ? v.filter((k): k is string => typeof k === 'string') : [];
+  const imageRefs = toStrArr(body.imageRefs);
+  const videoRefs = toStrArr(body.videoRefs);
+  const audioRefs = toStrArr(body.audioRefs);
+  const prompt = typeof body.prompt === 'string' ? body.prompt : '';
+
+  // 组合校验(单一 helper)
+  const v = validateMultimodalRefs(imageRefs, videoRefs, audioRefs, def.maxRefImages ?? 9, def.maxVideoRefs ?? 0, def.maxAudioRefs ?? 0, !!prompt.trim());
+  if (!v.ok) return { ok: false, status: 400, error: v.error };
+
+  if (def.promptRequired && !prompt.trim())
+    return { ok: false, status: 400, error: '参考生须输入描述(含 [图片N]/[视频N]/[音频N] 指代)' };
+  if (prompt.length > def.maxPromptChars)
+    return { ok: false, status: 400, error: `提示词超过 ${def.maxPromptChars} 字上限`, extra: { length: prompt.length } };
+
+  // ratio(model 声明则校验/取默认)
+  let ratio: string | undefined;
+  if (def.ratios.length) {
+    ratio = typeof body.ratio === 'string' ? body.ratio : def.ratios[0]!;
+    if (!def.ratios.includes(ratio)) return { ok: false, status: 400, error: '该模型不支持所选比例' };
+  }
+
+  // resolution + duration
+  const resolution = typeof body.resolution === 'string' ? body.resolution : '720P';
+  if (!def.resolutions.includes(resolution as '720P' | '1080P'))
+    return { ok: false, status: 400, error: '该模型不支持所选分辨率' };
+  if (body.duration !== undefined) {
+    const d = body.duration;
+    const [dmin, dmax] = def.durationRange;
+    if (typeof d !== 'number' || !Number.isInteger(d) || d < dmin || d > dmax)
+      return { ok: false, status: 400, error: `时长需为 ${dmin}–${dmax} 秒之间的整数` };
+  }
+  if (body.seed !== undefined && (typeof body.seed !== 'number' || body.seed < 0 || body.seed > 2147483647))
+    return { ok: false, status: 400, error: 'seed 需在 0–2147483647 之间' };
+
+  // 有声(generate_audio):Seedance supportsAudio → 读 body.audio(eng-review P1#1:audio 入快照+计价,不硬编码 false)
+  const audio = def.supportsAudio ? !!body.audio : false;
+  const { duration } = deriveVideoT2VParams(def, body);
+  const priceTier = videoPriceTier(def, resolution, audio);
+
+  const input: VideoGenT2VInput = { model: def.key, task: 'reference', resolution };
+  if (imageRefs.length) input.imageRefs = imageRefs;
+  if (videoRefs.length) input.videoRefs = videoRefs;
+  if (audioRefs.length) input.audioRefs = audioRefs;
+  if (prompt.trim()) input.prompt = prompt;
+  if (ratio) input.ratio = ratio;
+  input.audio = audio;
+  if (typeof body.seed === 'number') input.seed = body.seed;
+  // 快照(reserve==settle):duration/res/audio/priceTier
+  input.durationSnapshot = duration;
+  input.resSnapshot = resolution;
+  input.audioSnapshot = audio;
+  input.priceTierSnapshot = priceTier;
+
+  return {
+    ok: true,
+    type: 'video_r2v',
+    input: input as unknown as Record<string, unknown>,
+    cost: estimateVideoCost(duration, priceTier, resolution, audio),
+  };
+}
+
 /** 校验并构建 video_edit(视频编辑)job 入参 + 计价。
  *  时长真相只认 sidecar(eng-review D5/E5):客户端 body 里的 duration/billableSeconds
  *  一概忽略,伪造无效。async:builder 通道已放宽支持 Promise(eng-review E1)。 */
@@ -626,6 +717,7 @@ const JOB_BUILDERS: Record<
     ai_image: (body: Record<string, unknown>) => buildImageJob(body),
     video_t2v: (body: Record<string, unknown>) => buildVideoT2VJob(body),
     video_i2v: (body: Record<string, unknown>) => buildVideoI2VJob(body),
+    video_r2v: (body: Record<string, unknown>) => buildVideoR2VJob(body),
     video_edit: (body: Record<string, unknown>) => buildVideoEditJob(body),
     tts: buildTtsJob,
     ai_music: (body: Record<string, unknown>) => buildAiMusicJob(body),
@@ -784,6 +876,36 @@ jobsRouter.post(
   },
 );
 
+// ── 参考音频上传(video_r2v 多模态参考)──
+// 仅 admin/creator。eng-review #4:参考素材语义 ≠ 深度伪造,走轻量 consent(不写 authorization 行),
+// 只挡格式/大小。mp3/wav/m4a ≤20MB,落存储返 key。
+jobsRouter.post(
+  '/audio-uploads',
+  requireRole('admin', 'creator'),
+  audioUpload.single('audio'),
+  async (req: Request, res: Response) => {
+    const file = req.file;
+    const tid = req.user!.tenantId;
+    if (!file) return res.status(400).json({ error: '缺少音频文件(audio)' });
+    // 防御纵深:前端已拦,客户端可绕过 → 后端再验格式/大小。
+    const OK_AUDIO = new Set(['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/mp4', 'audio/x-m4a', 'audio/aac']);
+    const extOk = /\.(mp3|wav|m4a|aac)$/i.test(file.originalname || '');
+    if (!OK_AUDIO.has(file.mimetype) && !extOk)
+      return res.status(400).json({ error: `不支持的格式 ${file.mimetype || '未知'},请上传 MP3/WAV/M4A` });
+    if (file.size > 20 * 1024 * 1024)
+      return res.status(400).json({ error: '音频不能超过 20MB' });
+    try {
+      const ext = /\.(\w+)$/.exec(file.originalname || '')?.[1]?.toLowerCase() ?? 'mp3';
+      const key = `audio-inputs/${tid}/${randomUUID()}.${ext}`;
+      await putObject(key, file.buffer, file.mimetype || 'audio/mpeg');
+      audit(req, 'upload_audio_input', key);
+      return res.json({ audioRef: key });
+    } catch (e) {
+      return res.status(500).json({ error: e instanceof Error ? e.message : '上传失败' });
+    }
+  },
+);
+
 // 费用预估(生成前展示,验收第4条)。按 type 计价;默认 video。
 jobsRouter.post('/jobs/estimate', requireAuth, async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
@@ -822,6 +944,14 @@ jobsRouter.post('/jobs/estimate', requireAuth, async (req: Request, res: Respons
     const def = getI2VModel(typeof body.model === 'string' ? body.model : undefined);
     const { duration, resolution, priceTier } = deriveVideoT2VParams(def, body);
     return res.json({ cost: estimateVideoCost(duration, priceTier, resolution, false) });
+  }
+  if (type === 'video_r2v') {
+    // 与 buildVideoR2VJob 逐字节一致:audio 入计价(Seedance priceTierAudio,P1#1),estimate≡build。
+    const def = getR2VModel(typeof body.model === 'string' ? body.model : undefined);
+    const resolution = typeof body.resolution === 'string' ? body.resolution : '720P';
+    const { duration } = deriveVideoT2VParams(def, body);
+    const audio = def.supportsAudio ? !!body.audio : false;
+    return res.json({ cost: estimateVideoCost(duration, videoPriceTier(def, resolution, audio), resolution, audio) });
   }
   if (type === 'video_edit') {
     // 与 buildVideoEditJob 同读 sidecar(时长服务端真相,estimate≡build → reserve==settle)。

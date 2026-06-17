@@ -104,16 +104,24 @@ function normalizeArkStatus(s: string | undefined): ProviderJobStatus {
   }
 }
 
-/** i2v media 组装:火山用 content[] 里的 image_url 对象 + role 表达首帧/尾帧/参考图。
+/** media 组装:火山用 content[] 里的 image_url/video_url/audio_url 对象 + role。
  *  - first_frame → 1 张 role=first_frame
  *  - first_last  → 首帧 first_frame + 尾帧 last_frame
- *  - reference   → N 张 role=reference_image(Seedance 2.0 多模态参考生) */
-function buildArkImageContent(task: string | undefined, urls: string[]): Array<Record<string, unknown>> {
+ *  - reference   → N 图 role=reference_image + (多模态)N 视频 role=reference_video + N 音频 role=reference_audio
+ *  videoRefs/audioRefs 仅 video_r2v 多模态参考生有(worker 已 publish 成公网 URL)。 */
+function buildArkMediaContent(
+  task: string | undefined, urls: string[],
+  videoUrls: string[] = [], audioUrls: string[] = [],
+): Array<Record<string, unknown>> {
   if (task === 'first_last') return [
     { type: 'image_url', image_url: { url: urls[0] }, role: 'first_frame' },
     { type: 'image_url', image_url: { url: urls[1] }, role: 'last_frame' },
   ];
-  if (task === 'reference') return urls.map((u) => ({ type: 'image_url', image_url: { url: u }, role: 'reference_image' }));
+  if (task === 'reference') return [
+    ...urls.map((u) => ({ type: 'image_url', image_url: { url: u }, role: 'reference_image' })),
+    ...videoUrls.map((u) => ({ type: 'video_url', video_url: { url: u }, role: 'reference_video' })),
+    ...audioUrls.map((u) => ({ type: 'audio_url', audio_url: { url: u }, role: 'reference_audio' })),
+  ];
   // first_frame(默认):1 张首帧
   return urls.length ? [{ type: 'image_url', image_url: { url: urls[0] }, role: 'first_frame' }] : [];
 }
@@ -128,7 +136,10 @@ export class ArkGateway implements CapabilityGateway, SyncImageGateway {
     const content: Array<Record<string, unknown>> = [];
     if (input.prompt) content.push({ type: 'text', text: input.prompt });
     const imageUrls = (input.imageRefs ?? []).filter(Boolean) as string[];
-    if (imageUrls.length) content.push(...buildArkImageContent(input.task, imageUrls));
+    const videoUrls = (input.videoRefs ?? []).filter(Boolean) as string[];
+    const audioUrls = (input.audioRefs ?? []).filter(Boolean) as string[];
+    if (imageUrls.length || videoUrls.length || audioUrls.length)
+      content.push(...buildArkMediaContent(input.task, imageUrls, videoUrls, audioUrls));
     const body: Record<string, unknown> = {
       model: def.modelId,
       content,
@@ -136,6 +147,9 @@ export class ArkGateway implements CapabilityGateway, SyncImageGateway {
       duration,
       watermark: false,
     };
+    // ratio:模型声明了 ratios 且用户选了才发(文档:21:9/16:9/4:3/1:1/3:4/9:16)。
+    // 注:有 reference media 时火山可能以输入图比例为准;发 ratio 无害(厂商不支持则忽略/回落)。
+    if (input.ratio && def.ratios.includes(input.ratio)) body.ratio = input.ratio;
     if (def.supportsAudio) body.generate_audio = input.audio ?? false;
     const { status, json } = await arkHttp('POST', '/contents/generations/tasks', body);
     if (status !== 200) throw new Error(`火山视频提交失败 HTTP ${status}: ${JSON.stringify(json?.error ?? json)}`);
