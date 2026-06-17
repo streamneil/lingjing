@@ -233,7 +233,10 @@ img { display: block; }
 .back:hover { background: var(--card-hi); color: var(--t1); }
 .back svg { width: 18px; height: 18px; }
 
-.cfg { background: var(--card); border: 1px solid var(--line-soft); border-radius: var(--r-lg); padding: 24px; display: flex; flex-direction: column; gap: 13px; position: sticky; top: 90px; box-shadow: var(--sh-card); animation: rise .6s var(--ease-out) both; }
+/* 左输入区 sticky 置顶;高超一屏时自身内部滚动(max-height 锁视口),底部提交按钮始终可达,不联动右侧记录 */
+.cfg { background: var(--card); border: 1px solid var(--line-soft); border-radius: var(--r-lg); padding: 24px; display: flex; flex-direction: column; gap: 13px; position: sticky; top: 90px; max-height: calc(100vh - 114px); overflow-y: auto; overscroll-behavior: contain; box-shadow: var(--sh-card); animation: rise .6s var(--ease-out) both; }
+/* 子项不收缩:否则在 max-height + overflow 的 flex 列里会被压扁而非溢出滚动(.cfg-sp 仍靠 flex:1 占位) */
+.cfg > * { flex-shrink: 0; }
 .cfg-h { font-size: 18px; font-weight: 800; letter-spacing: -.01em; margin-bottom: 5px; display: flex; align-items: center; gap: 9px; }
 .cfg-h .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--t1); box-shadow: 0 0 10px rgba(255,255,255,.4); }
 
@@ -472,7 +475,8 @@ img { display: block; }
 
 @media (max-width: 1080px) {
   .studio { grid-template-columns: 1fr; }
-  .cfg { position: static; }
+  /* 窄屏单列堆叠:取消 sticky 内部滚动,整页自然滚(否则 cfg 被锁高度) */
+  .cfg { position: static; max-height: none; overflow-y: visible; }
   .ss-body { grid-template-columns: 1fr; }
   .sheet-side { width: 100vw; }
 }
