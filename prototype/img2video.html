@@ -46,12 +46,14 @@
   .img-tile .rmx { position:absolute; top:6px; right:6px; width:22px; height:22px; background:rgba(0,0,0,.6); border-radius:50%; display:grid; place-items:center; color:#fff; font-size:13px; line-height:1; cursor:pointer; border:none; padding:0; }
   .img-tile .num { position:absolute; top:6px; left:6px; font-size:11px; background:rgba(0,0,0,.62); color:#fff; padding:1px 7px; border-radius:6px; z-index:1; }
   .img-tile.add { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; border:1.5px dashed var(--line-hi); cursor:pointer; color:var(--t3); transition:.15s; }
-  .img-tile.add:hover, .img-tile.add.drag { border-color:var(--blue); color:var(--t1); background:var(--card); }
+  .img-tile.add:hover { border-color:var(--t4); color:var(--t1); background:var(--card); } /* hover 柔和:灰亮边,不抢眼 */
+  .img-tile.add.drag { border-color:var(--blue); color:var(--t1); background:var(--card); } /* 仅拖拽中给蓝边(投放目标反馈) */
   .img-tile.add .plus { font-size:30px; font-weight:300; line-height:1; }
   .img-tile.add .lbl { font-size:12.5px; }
   /* 空态高度 = 一行 tile 高度 = (容器宽 - 2*gap)/3,与有图态完全等高,切换不跳动 */
   .img-drop { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; height:100%; box-sizing:border-box; border:1.5px dashed var(--line-hi); border-radius:12px; background:var(--field); cursor:pointer; color:var(--t3); transition:.15s; padding:12px 16px; text-align:center; }
-  .img-drop:hover, .img-drop.drag { border-color:var(--blue); background:var(--card-hi); }
+  .img-drop:hover { border-color:var(--t4); background:var(--card-hi); } /* hover 柔和:灰亮边,不抢眼蓝 */
+  .img-drop.drag { border-color:var(--blue); background:var(--card-hi); } /* 仅拖拽中给蓝边(投放目标反馈) */
   .img-drop .di svg { width:38px; height:38px; color:var(--t3); }
   .img-drop .dt { font-size:14px; color:var(--t2); }
   .img-drop .da { display:inline-flex; align-items:center; gap:6px; font-size:12.5px; color:var(--t3); background:var(--card); border:1px solid var(--line); border-radius:9px; padding:8px 14px; }
@@ -361,9 +363,15 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       } else {
         let tiles=urls.map((u,i)=>tileImgHtml(u,`图${i+1}`,`data-rm="${i}"`)).join('');
         if(urls.length<max && !reuseActive()) tiles+=tileAddHtml('点击 / 拖放','id="addRef" role="button" aria-label="添加参考图"');
-        area.innerHTML=`<div class="img-tiles">${tiles}</div><div class="area-hint">已选 ${urls.length}/${max} 张${reuseActive()?'(复用上次原图,点 × 可清除)':''}。提示词用 [图N] 指代第 N 张。</div>`;
+        area.innerHTML=`<div class="img-tiles">${tiles}</div><div class="area-hint">已选 ${urls.length}/${max} 张${reuseActive()?'(复用上次原图,点 × 删除单张;如需新增请先清空再上传)':''}。提示词用 [图N] 指代第 N 张。</div>`;
         const add=area.querySelector('#addRef'); if(add){ add.onclick=()=>pick('ref'); bindDrop(add, fs=>Array.from(fs).forEach(f=>addFile(f,'ref'))); }
-        area.querySelectorAll('.rmx[data-rm]').forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); if(reuseActive()){ clearReuse(); } else { refFiles.splice(Number(el.dataset.rm),1); } afterImgChange(); });
+        area.querySelectorAll('.rmx[data-rm]').forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); const i=Number(el.dataset.rm);
+          if(reuseActive()){
+            // 复用态:删单张 = splice 该索引(reuseRefs/reuseUrls 同步);删到 0 张才彻底清复用态。
+            reuseRefs.splice(i,1); reuseUrls.splice(i,1);
+            if(!reuseRefs.length) clearReuse();
+          } else { refFiles.splice(i,1); }
+          afterImgChange(); });
       }
     }
   }
