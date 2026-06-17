@@ -91,10 +91,10 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       <div class="pop-anchor" style="flex:1.2">
         <div class="cpill" id="setPill" onclick="togglePop('set')"><span class="v" id="setPillV">720P · 5秒 · 16:9</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
         <div class="pop" id="pop-set">
-          <div class="pop-label" id="resLabel">解析度</div>
-          <div class="seg-row" id="resSeg"></div>
           <div class="pop-label">比例</div>
           <div class="ratio-row" id="ratioRow"></div>
+          <div class="pop-label" id="resLabel">清晰度</div>
+          <div class="seg-row" id="resSeg"></div>
           <div class="pop-label">长度</div>
           <div class="seg-row" id="durSeg"></div>
           <!-- 模型特有控件(显隐于 popover 底部,切模型上方不跳)-->
@@ -186,7 +186,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       seg.innerHTML=opts.map(([v,t])=>`<div class="seg${v===klingMode?' on':''}" data-v="${v}">${t}</div>`).join('');
       seg.querySelectorAll('.seg').forEach(s=>s.onclick=()=>{ seg.querySelectorAll('.seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); klingMode=s.dataset.v; syncPills(); scheduleEstimate(); });
     } else {
-      lbl.textContent='解析度';
+      lbl.textContent='清晰度';
       const opts=m.resolutions; if(!opts.includes(resolution)) resolution=opts[0];
       seg.innerHTML=opts.map(r=>`<div class="seg${r===resolution?' on':''}" data-v="${r}">${r}</div>`).join('');
       seg.querySelectorAll('.seg').forEach(s=>s.onclick=()=>{ seg.querySelectorAll('.seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); resolution=s.dataset.v; syncPills(); scheduleEstimate(); });
