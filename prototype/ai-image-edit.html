@@ -204,6 +204,9 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       <div class="pop-anchor" style="flex:1.2">
         <div class="cpill" id="setPill" onclick="togglePop('set')"><span class="v" id="setPillV">1K</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
         <div class="pop" id="pop-set">
+          <div class="pop-label" id="ratioLabel" style="display:none">比例</div>
+          <div class="seg-row" id="ratioSeg" style="display:none;flex-wrap:wrap"></div>
+          <div class="pop-hint" id="setHint" style="display:none;color:var(--t4);font-size:12px;padding:4px 2px">该模型输出尺寸跟随输入图,无需设置。</div>
           <div class="pop-label">清晰度</div>
           <div class="seg-row" id="resSeg"><div class="seg on" data-res="1K">1K</div><div class="seg" data-res="2K">2K</div></div>
           <div class="pop-label" id="countLabel" style="margin-top:12px;display:none">输出张数</div>
@@ -308,7 +311,9 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
 <script>
   const ta=document.getElementById('prompt'), cnt=document.getElementById('cnt'), btn=document.getElementById('createBtn');
   const feedList=document.querySelector('.feed-list');
-  let res='1K', count=1, model='', allModels=[], seed='';
+  let res='1K', count=1, model='', allModels=[], seed='', ratio='1:1';
+  // 比例回落集(无 pixelMatrix/ratios 的模型用);有 m.ratios 的模型只显其集。
+  const EDIT_RATIOS=['1:1','16:9','9:16','4:3','3:4','3:2','2:3','21:9'];
   let reuseRefs=null, reuseUrls=null; // 重新提示复用原 job 输入图(免重传;OSS 跨域 fetch 不到 File)
   function clearReuse(){ reuseRefs=null; reuseUrls=null; }
   function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -520,11 +525,31 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     if(refFiles.length>maxRefs()) refFiles=refFiles.slice(0,maxRefs());
     if(!supportsBbox() && mainFile){ mainFile.bbox=null; mainFile.strokes=[]; }
     markModelOpt();
-    renderMain(); renderRefs(); syncMkEditCard(); renderEditRes(); renderCount(); syncPills(); refreshBtn(); scheduleEstimate();
+    renderMain(); renderRefs(); syncMkEditCard(); renderRatios(); renderEditRes(); renderCount(); syncPills(); refreshBtn(); scheduleEstimate();
   }
   // 清晰度控件按模型 canSetSize 显隐:qwen-image-edit 不可设(随输入图)→ 隐藏;万相2.7 编辑可设 1K/2K。
   function canSetSize(){ const m=curModel(); return !m || m.canSetSize !== false; }
   function effRes(){ return canSetSize() ? res : undefined; } // 不可设时提交体不发 resolution
+  // 比例:仅当模型支持(有 m.ratios 非空,如千问 2.0 系)才发;keyword/不可设的不发(随输入图)。
+  function ratioSupported(){ const m=curModel(); return canSetSize() && !!(m && Array.isArray(m.ratios) && m.ratios.length); }
+  function effRatio(){ return ratioSupported() ? ratio : undefined; }
+  // 比例控件:三态(与 AI 图片生成器 renderRatios 同口径)
+  //   ① canSetSize=false(qwen-image-edit:随输入图)→ 隐藏比例 + 显提示
+  //   ② m.ratios=[](keyword,如万相:输出随输入图)→ 隐藏比例(不显提示,清晰度仍在)
+  //   ③ m.ratios 非空(千问 2.0 系)→ 显这些比例;current 不在集内则重置首个
+  function renderRatios(){
+    const m=curModel();
+    const seg=document.getElementById('ratioSeg'), lbl=document.getElementById('ratioLabel'), hint=document.getElementById('setHint');
+    const hide=()=>{ seg.style.display='none'; lbl.style.display='none'; };
+    if(m && m.canSetSize===false){ hide(); hint.style.display=''; return; }
+    hint.style.display='none';
+    if(!ratioSupported()){ hide(); return; } // keyword(万相)等:无比例维度
+    const opts=m.ratios;
+    if(!opts.includes(ratio)) ratio=opts[0];
+    seg.style.display='flex'; lbl.style.display='';
+    seg.innerHTML=opts.map(r=>`<div class="seg${r===ratio?' on':''}" data-ratio="${r}" style="flex:0 0 auto;min-width:52px">${r}</div>`).join('');
+    seg.querySelectorAll('.seg').forEach(s=>s.onclick=()=>{ seg.querySelectorAll('.seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); ratio=s.dataset.ratio; syncPills(); scheduleEstimate(); });
+  }
   const ERES_ORDER={'1K':1,'2K':2,'3K':3,'4K':4};
   function renderEditRes(){
     const seg=document.getElementById('resSeg'); const lbl=seg.previousElementSibling;
@@ -557,7 +582,17 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   window.togglePop=togglePop; window.closePops=closePops;
   document.getElementById('seedInput').addEventListener('input',e=>{ seed=e.target.value.replace(/[^0-9]/g,''); e.target.value=seed; });
   document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closePops(); closeLightbox(); if(document.getElementById('mkOv').classList.contains('on')) closeMask(false); } });
-  function syncPills(){ const m=curModel(); document.getElementById('modelPillV').textContent=m?m.label:'模型'; document.getElementById('setPillV').textContent=(m&&m.maxImages>1)?`${res} · ${count} 张`:res; }
+  function syncPills(){
+    const m=curModel();
+    document.getElementById('modelPillV').textContent=m?m.label:'模型';
+    // 不可设尺寸(qwen-image-edit:随输入图)→ setPill 显「跟随输入图」(修 bug:此前仍显无意义的清晰度档)
+    if(m && m.canSetSize===false){ document.getElementById('setPillV').textContent='跟随输入图'; return; }
+    const parts=[];
+    if(ratioSupported()) parts.push(ratio);   // 千问 2.0 系:显比例
+    parts.push(res);                          // 清晰度档
+    if(m && m.maxImages>1) parts.push(count+' 张');
+    document.getElementById('setPillV').textContent=parts.join(' · ');
+  }
   document.querySelectorAll('#resSeg .seg').forEach(s=>s.onclick=()=>{ document.querySelectorAll('#resSeg .seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); res=s.dataset.res; syncPills(); scheduleEstimate(); });
 
   window.openLightbox=(url)=>{ document.getElementById('lightboxImg').src=url; document.getElementById('lightbox').classList.add('on'); };
@@ -621,9 +656,10 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     const us=job.inputUrls||[]; if(!us.length) return '';
     return `<div class="in-thumbs"><span class="lbl">输入图</span>${us.map(u=>`<img src="${u}" onclick="openLightbox('${u}')" title="点击查看大图">`).join('')}</div>`;
   }
-  // 元信息 chips:模型 · 清晰度 · 张数(编辑走 keyword size,无比例维度)
+  // 元信息 chips:模型 · 比例 · 清晰度 · 张数(千问 2.0 系编辑支持比例;keyword/qwen-edit 无 ratio)
   function metaChips(job){
     const c=[]; if(job.modelLabel) c.push(job.modelLabel);
+    if(job.ratio && job.ratio!=='auto') c.push(job.ratio);
     if(job.resolution) c.push(job.resolution);
     if(job.count && job.count>1) c.push(job.count+' 张');
     return c.length?`<div class="card-meta">${c.map(x=>`<span class="chip">${esc(x)}</span>`).join('')}</div>`:'';
@@ -676,7 +712,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     if(btn){ btn.disabled=true; btn.dataset.t=btn.textContent; btn.textContent='提交中…'; }
     try{
       const payload={ type:'ai_image', source:'ai-image-edit', model:inp.model, mode:'img2img', prompt:inp.prompt,
-        imageRefs:inp.imageRefs, count:inp.count, resolution:inp.resolution, seed:inp.seed };
+        imageRefs:inp.imageRefs, count:inp.count, resolution:inp.resolution, ratio:inp.ratio, seed:inp.seed };
       if(inp.bboxList) payload.bboxList=inp.bboxList;
       const res2=await LJ.createJob(payload);
       renderCard({ id:res2.id, status:'queued', progress:0, prompt:inp.prompt, modelLabel:findLabel(inp.model), resolution:inp.resolution, count:inp.count });
@@ -690,6 +726,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     const inp=jobInputs[id]; if(!inp){ window.LJToast&&window.LJToast('原参数丢失','err'); return; }
     if(inp.model && allModels.find(m=>m.key===inp.model)) model=inp.model;
     if(inp.resolution) res=inp.resolution;
+    if(inp.ratio) ratio=inp.ratio;
     if(typeof inp.count==='number') count=inp.count;
     seed = inp.seed!=null ? String(inp.seed) : ''; const si=document.getElementById('seedInput'); if(si) si.value=seed;
     if(typeof onModelChange==='function') onModelChange(); // 重渲清晰度/张数 + pill
@@ -733,7 +770,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     await window.LJDownloadAll(Array.from({length:n},(_,i)=>({url:`/api/jobs/${id}/download/${i}`, filename:`lingjing-${id}-${i+1}.png`})));
   };
 
-  async function track(id, prompt){ try{ await LJ.pollJob(id,(job)=>renderCard({...job, prompt, ...(jobInputs[id]?{modelLabel:findLabel(jobInputs[id].model),resolution:jobInputs[id].resolution,count:jobInputs[id].count}:{})})); }catch(e){} }
+  async function track(id, prompt){ try{ await LJ.pollJob(id,(job)=>renderCard({...job, prompt, ...(jobInputs[id]?{modelLabel:findLabel(jobInputs[id].model),resolution:jobInputs[id].resolution,ratio:jobInputs[id].ratio,count:jobInputs[id].count}:{})})); }catch(e){} }
   async function loadHistory(){
     let jobs=[]; try{ jobs=await LJ.listJobs(); }catch(e){ return; }
     // 按来源页分流:编辑器显 source==='ai-image-edit';老 job 无 source → 回落按 mode(img2img 归这里)。
@@ -741,7 +778,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     if(!mine.length) return;
     document.getElementById('feedEmpty').style.display='none';
     for(const j of [...mine].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))){
-      jobInputs[j.id]={ model:j.model, mode:j.mode, prompt:j.script, imageRefs:j.imageRefs, inputUrls:j.inputUrls, count:j.count, resolution:j.resolution, seed:j.seed, bboxList:j.bboxList };
+      jobInputs[j.id]={ model:j.model, mode:j.mode, prompt:j.script, imageRefs:j.imageRefs, inputUrls:j.inputUrls, count:j.count, resolution:j.resolution, ratio:j.ratio, seed:j.seed, bboxList:j.bboxList };
       renderCard({...j, prompt:j.script, modelLabel:findLabel(j.model)});
       if(j.status==='queued'||j.status==='running') track(j.id, j.script);
     }
@@ -754,10 +791,12 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     try{
       const imageRefs=await uploadInputImages();
       btn.textContent='提交中…';
-      const payload={ type:'ai_image', source:'ai-image-edit', model, mode:'img2img', prompt, imageRefs, resolution:effRes(), count, seed:seed||undefined };
+      const payload={ type:'ai_image', source:'ai-image-edit', model, mode:'img2img', prompt, imageRefs, resolution:effRes(), ratio:effRatio(), count, seed:seed||undefined };
       const bb=buildBboxList(imageRefs.length); if(bb) payload.bboxList=bb;
       const res2=await LJ.createJob(payload);
-      renderCard({ id:res2.id, status:'queued', progress:0, prompt });
+      // 存 jobInputs(供卡片元信息 + 轮询重渲带比例/清晰度/张数 + 重新提示回填)
+      jobInputs[res2.id]={ model, mode:'img2img', prompt, imageRefs, count, resolution:effRes(), ratio:effRatio(), seed:seed||undefined, bboxList:payload.bboxList };
+      renderCard({ id:res2.id, status:'queued', progress:0, prompt, modelLabel:findLabel(model), resolution:effRes(), ratio:effRatio(), count });
       track(res2.id, prompt);
       ta.value=''; cnt.textContent='0'; mkPromptEl.value=''; mainFile=null; baseImg=null; refFiles=[]; clearReuse(); seed=''; document.getElementById('seedInput').value=''; renderMain(); renderRefs(); syncMkEditCard(); document.getElementById('consentChk').checked=false; refreshBtn(); scheduleEstimate();
       window.LJToast&&window.LJToast('✓ 已提交编辑,可在右侧查看进度');
