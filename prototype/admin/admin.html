@@ -184,12 +184,7 @@
       <div class="mstat"><div class="ms-k">平均耗时</div><div class="ms-v" id="msDur">—</div></div>
     </div>
 
-    <!-- ── 运营数据(钱 / Top租户 / 余额续航)── -->
-    <div class="ops-strip" id="opsStrip">
-      <div class="ops-item"><span class="ops-k">本月收入</span><span class="ops-v ops-money" id="opsMonthYuan">—</span></div>
-      <div class="ops-item"><span class="ops-k">本月消耗积分</span><span class="ops-v" id="opsMonthConsume">—</span></div>
-      <div class="ops-item"><span class="ops-k">本月充值积分</span><span class="ops-v" id="opsMonthRecharge">—</span></div>
-    </div>
+    <!-- ── 运营数据(钱 / Top租户 / 余额续航)。体感条已删:与下方本月消耗/充值卡重复 ── -->
     <div class="mon-stats" id="opsStats">
       <div class="mstat"><div class="ms-k">今日消耗</div><div class="ms-v" id="opsToday">—</div></div>
       <div class="mstat"><div class="ms-k">昨日消耗</div><div class="ms-v" id="opsYesterday">—</div></div>
@@ -220,9 +215,9 @@
     <div class="mon-diag" id="monDiag" style="display:none"></div>
 
     <!-- 并发趋势 -->
-    <div class="mon-chart">
+    <div class="mon-chart" style="margin-top:16px">
       <div class="mc-head"><span>并发趋势 · 近 24 小时</span><span class="mc-legend" id="mcPeak"></span></div>
-      <svg id="monSpark" viewBox="0 0 720 120" preserveAspectRatio="xMinYMid meet" width="100%" height="120"></svg>
+      <svg id="monSpark" viewBox="0 0 720 138" preserveAspectRatio="xMinYMid meet" width="100%" height="138"></svg>
     </div>
 
     <!-- 租户维度表 -->
@@ -1086,6 +1081,13 @@
         bars+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="var(--blue)" opacity="0.9"><title>${fmtTime(p.hourStart)} 活跃${p.active} 完成${p.done} 失败${p.failed}</title></rect>`;
         if(fh>0.5) bars+=`<rect x="${x.toFixed(1)}" y="${(base-fh).toFixed(1)}" width="${bw.toFixed(1)}" height="${fh.toFixed(1)}" rx="2" fill="var(--red)"></rect>`;
       });
+      // x 轴时间刻度:每约 1/4 间隔标一个 HH:00(首尾必标),刻度线 + 文字。
+      const step=Math.max(1,Math.round(n/4));
+      for(let i=0;i<n;i+=step){
+        const cx=pad+i*slot+slot/2; const hh=new Date(series[i].hourStart).getHours();
+        bars+=`<line x1="${cx.toFixed(1)}" y1="${base}" x2="${cx.toFixed(1)}" y2="${(base+4)}" stroke="var(--line-hi)" stroke-width="1"/>`;
+        bars+=`<text x="${cx.toFixed(1)}" y="${(base+18)}" fill="var(--t4)" font-size="11" text-anchor="middle" font-family="var(--f-mono)">${String(hh).padStart(2,'0')}:00</text>`;
+      }
       svg.innerHTML=bars;
     }catch(e){}
   }
@@ -1132,11 +1134,7 @@
   async function loadOps(){
     try{
       const d=await PA('GET','/api/metrics/ops');
-      // 体感条
-      document.getElementById('opsMonthYuan').textContent='¥'+fmtN(d.summary.monthYuan);
-      document.getElementById('opsMonthConsume').textContent=fmtN(d.summary.monthConsumeCredits);
-      document.getElementById('opsMonthRecharge').textContent=fmtN(d.summary.monthRechargeCredits);
-      // 消耗/充值 4 卡
+      // 消耗/充值 4 卡(体感条已删,与这 4 卡重复)
       document.getElementById('opsToday').textContent=fmtN(d.consumption.today);
       document.getElementById('opsYesterday').textContent=fmtN(d.consumption.yesterday);
       document.getElementById('opsMonth').textContent=fmtN(d.consumption.month);
