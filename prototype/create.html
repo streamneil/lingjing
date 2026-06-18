@@ -15,6 +15,18 @@
   .card-acts button svg { width:14px; height:14px; }
   /* 克隆/设计弹窗:从音色面板(z110)内打开,须盖在其之上(与 TTS 一致) */
   #ov-design, #ov-clone { z-index:320; }
+  /* 音色面板与 TTS 一致:收窄成单列选择器(默认 64vw 多列 → 480px 单列) */
+  #sheet-voices { width:min(480px,92vw); }
+  #sheet-voices .ss-head { gap:10px; padding:22px 22px 14px; flex-wrap:wrap; }
+  #sheet-voices .ss-head h3 { font-size:17px; white-space:nowrap; }
+  #sheet-voices .ss-filters { padding:0 22px 14px; }
+  #sheet-voices .ss-search { margin:0 22px 14px; }
+  #sheet-voices .ss-body { grid-template-columns:1fr; padding:0 22px 22px; }
+  #sheet-voices .vcard.on { background:var(--card-hi); border-color:var(--blue); }
+  /* 面板筛选/「复制或设计」在顶部 → popover 向下弹(app.css 默认向上,是底部工具栏用的) */
+  #sheet-voices .pop { bottom:auto; top:calc(100% + 6px); min-width:auto; }
+  #sheet-voices #pop-voiceNew { left:auto; right:0; }
+  #sheet-voices [id$="Opts"] { max-height:240px; overflow-y:auto; }
   /* 设计音色维度芯片(与 TTS 一致) */
   .vd-dims { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 4px; }
   .vd-dim { font-size:11px; padding:4px 9px; border-radius:var(--r-sm,8px); background:var(--field); border:1px solid var(--line); color:var(--t3); cursor:pointer; transition:.15s; }
@@ -161,9 +173,10 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       <button data-tab="mine" role="tab" aria-selected="false">我的声音</button>
     </div>
     <div class="pop-anchor">
-      <button class="btn btn-dark" id="voiceNewPill" onclick="toggleVPop('voiceNew')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" style="width:15px;height:15px"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>克隆或设计</button>
+      <button class="btn btn-dark" id="voiceNewPill" onclick="toggleVPop('voiceNew')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" style="width:15px;height:15px"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>复制或设计</button>
       <div class="pop" id="pop-voiceNew" style="min-width:180px;left:auto;right:0"><div class="pop-opt" onclick="closeVPops();openClone()"><span class="nm">复制音色(克隆)</span></div><div class="pop-opt" onclick="closeVPops();openDesign()"><span class="nm">设计音色(描述)</span></div></div>
     </div>
+    <div class="x" onclick="closeSheet('voices')" role="button" tabindex="0" aria-label="关闭" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();closeSheet('voices');}" style="cursor:pointer;color:var(--t3)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:22px;height:22px"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
   </div>
   <!-- 语言/性别筛选(与 TTS 一致)-->
   <div class="ss-filters">
