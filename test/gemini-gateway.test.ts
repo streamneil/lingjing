@@ -27,11 +27,11 @@ afterEach(() => { vi.restoreAllMocks(); });
 
 describe('providerForModel + getGateway(Gemini)', () => {
   it('gemini 模型 → google-ai-studio', () => {
-    expect(providerForModel('gemini-2.5-flash-image')).toBe('google-ai-studio');
+    expect(providerForModel('gemini-3.1-flash-image')).toBe('google-ai-studio');
     expect(providerForModel('gemini-3-pro-image')).toBe('google-ai-studio');
   });
   it('getGateway 选 GeminiGateway(sync image 形状)', () => {
-    const gw = getGateway('gemini-2.5-flash-image') as unknown;
+    const gw = getGateway('gemini-3.1-flash-image') as unknown;
     expect(gw).toBeInstanceOf(GeminiGateway);
   });
 });

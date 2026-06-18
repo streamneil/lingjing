@@ -160,19 +160,20 @@ export const IMAGE_MODELS: Record<string, ImageModelDef> = {
     maxImages: 1, maxInputImages: 5, maxResolution: '4K', resolutionTiers: ['2K', '3K', '4K'], priceTier: 8,
   },
 
-  // ── Google AI Studio Gemini(Nano Banana,PR-2a;provider='google-ai-studio',走 gemini.ts)──
-  // shape='S':同步生成(走 generateImageSync/editImage)。sizeKind='keyword':resolution→imageSize(2K/4K)。
-  // 文生图 + 图生图/多图融合(输入图 base64 内联,适配器内拉 URL 转 base64)。
-  // 真实价(美元×7.2 汇率;后台可调):2.5-flash $0.039→0.28元→⌈×35⌉=10;3-pro $0.134→0.96元→34。
-  'gemini-2.5-flash-image': {
-    key: 'gemini-2.5-flash-image', label: 'Nano Banana (Gemini 2.5 Flash)', modelId: 'gemini-2.5-flash-image', provider: 'google-ai-studio',
+  // ── Google AI Studio Gemini(Nano Banana,文档收口:只用这 2 个模型)──
+  // shape='S':同步生成(走 generateImageSync/editImage)。sizeKind='keyword':resolution→imageSize(1K/2K/4K)。
+  // 文生图(text2img,0 图)+ 图生图/图片编辑/多图融合(img2img,1 主图 + 0..N 参考图,均同一 API 形状)。
+  // 真实价(美元×7.2 汇率,2K 档单一计价;后期分辨率分档见 TODOS):
+  //   3.1 Flash 2K $0.101→0.73元→⌈×35⌉=26;3 Pro 1–2K $0.134→0.96元→34。
+  'gemini-3.1-flash-image': {
+    key: 'gemini-3.1-flash-image', label: 'Nano Banana 2 (Gemini 3.1 Flash)', modelId: 'gemini-3.1-flash-image', provider: 'google-ai-studio',
     shape: 'S', sizeKind: 'keyword', modes: ['text2img', 'img2img'],
-    maxImages: 1, maxInputImages: 5, maxResolution: '2K', priceTier: 10,
+    maxImages: 1, maxInputImages: 10, maxResolution: '4K', resolutionTiers: ['1K', '2K', '4K'], priceTier: 26,
   },
   'gemini-3-pro-image': {
     key: 'gemini-3-pro-image', label: 'Nano Banana Pro (Gemini 3 Pro)', modelId: 'gemini-3-pro-image', provider: 'google-ai-studio',
     shape: 'S', sizeKind: 'keyword', modes: ['text2img', 'img2img'],
-    maxImages: 1, maxInputImages: 5, maxResolution: '4K', priceTier: 34,
+    maxImages: 1, maxInputImages: 6, maxResolution: '4K', resolutionTiers: ['1K', '2K', '4K'], priceTier: 34,
   },
 };
 
