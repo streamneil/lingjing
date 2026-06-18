@@ -245,6 +245,16 @@
       -webkit-line-clamp: unset;
     }
 
+    /* 歌词:完整显示,保留换行与 [verse]/[chorus] 结构;长曲内部滚动不撑爆卡片 */
+    .tx.tx-lyrics {
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 360px;
+      overflow-y: auto;
+      line-height: 1.7;
+      font-size: 12.5px;
+    }
+
     .tx-toggle {
       display: none;
       font-size: 12px;
@@ -662,11 +672,25 @@ shell.js(defer)随后用 LJ.me() 校正并写回缓存。 */
       refreshGender();
 
       // ── 预估 ──
+      // 无输入时显示「—」(参考其他模块);有提示词/歌词时按实际内容估算(随输入变)。
       let estTimer = null;
+      function setEst(text, gem) {
+        document.getElementById('estLabel').textContent = text;
+        document.getElementById('estGem').textContent = gem;
+      }
       function scheduleEstimate() {
         clearTimeout(estTimer);
+        const prompt = pa.value.trim();
+        const lyrics = (lyricsOpen && mode === 'song') ? ly.value.trim() : '';
+        if (!prompt && !lyrics) { setEst('预估 — 点', '—'); return; } // 未输入 → 不显示固定数,等可算时再显
         estTimer = setTimeout(async () => {
-          try { const r = await LJ.post('/jobs/estimate', { type: 'ai_music', mode }); document.getElementById('estLabel').textContent = '预估 ' + r.cost + ' 点'; document.getElementById('estGem').textContent = r.cost; } catch (e) { }
+          try {
+            const body = { type: 'ai_music', mode };
+            if (prompt) body.prompt = prompt;
+            if (lyrics) body.lyrics = lyrics; // 同传以歌词为准(与后端一致)
+            const r = await LJ.post('/jobs/estimate', body);
+            setEst('预估 ' + r.cost + ' 点', r.cost);
+          } catch (e) { setEst('预估 — 点', '—'); }
         }, 300);
       }
       function refreshBtn() {
@@ -677,7 +701,7 @@ shell.js(defer)随后用 LJ.me() 校正并写回缓存。 */
         document.getElementById('cbtnLabel').textContent = label;
       }
       pa.addEventListener('input', () => { cnt.textContent = pa.value.length; refreshBtn(); scheduleEstimate(); });
-      ly.addEventListener('input', () => { refreshBtn(); });
+      ly.addEventListener('input', () => { refreshBtn(); scheduleEstimate(); });
 
       document.querySelectorAll('.ftab').forEach(t => t.onclick = function () {
         this.parentNode.querySelectorAll('.ftab').forEach(x => x.classList.remove('active')); this.classList.add('active');
@@ -689,7 +713,8 @@ shell.js(defer)随后用 LJ.me() 校正并写回缓存。 */
       const musicMeta = {};  // jobId → {prompt, lyrics}(供重新提示/展示)
       function head(color, led, txt, createdAt) { return `<div class="fmeta"><b>AI 音乐</b><span class="ts">${(window.LJTimeAgo && LJTimeAgo(createdAt)) || '刚刚'}</span><span class="sp"></span><span class="st" style="color:${color}"><span class="led ${led}"></span>${txt}</span></div>`; }
       function promptBubble(t) { return t ? `<div class="fbubble"><div class="tx-wrap"><div class="tx-label">提示词</div><div class="tx clamp">${esc(t)}</div><span class="tx-toggle" onclick="toggleTx(this)">展开</span></div></div>` : ''; }
-      function lyricsBlock(t) { return t ? `<div class="fbubble" style="margin-top:8px"><div class="tx-wrap"><div class="tx-label">歌词</div><div class="tx clamp">${esc(t)}</div><span class="tx-toggle" onclick="toggleTx(this)">展开</span></div></div>` : ''; }
+      // 歌词完整展示(不 clamp;保留换行/结构,长曲内部滚动)。clamp 会截断且 line-clamp+pre-wrap 易测错。
+      function lyricsBlock(t) { return t ? `<div class="fbubble" style="margin-top:8px"><div class="tx-wrap"><div class="tx-label">歌词</div><div class="tx tx-lyrics">${esc(t)}</div></div></div>` : ''; }
       function cardActs(job, ok) {
         const url = (job.outputUrls || [])[0];
         const dl = ok && url ? `<button onclick="downloadAudio('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg>下载</button>` : '';
