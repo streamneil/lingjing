@@ -150,16 +150,28 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   <div class="ss-head">
     <h3>所有声音</h3>
     <div class="sp"></div>
-    <div class="ss-seg"><button class="active">音色库</button><button>我的声音</button></div>
+    <div class="ss-seg" role="tablist" aria-label="音色来源">
+      <button class="active" data-tab="preset" role="tab" aria-selected="true">音色库</button>
+      <button data-tab="mine" role="tab" aria-selected="false">我的声音</button>
+    </div>
     <button class="btn btn-dark" onclick="location.href='voices.html'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" style="width:15px;height:15px"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>克隆或设计</button>
   </div>
+  <!-- 语言/性别筛选(与 TTS 一致)-->
   <div class="ss-filters">
-    <input id="voiceSearch" placeholder="搜索音色名称…" oninput="filterVoices(this.value)"
-      style="flex:1;max-width:320px;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:9px 13px;color:var(--t1);font-size:13px;font-family:var(--f);outline:none">
+    <div class="pop-anchor" style="flex:1">
+      <div class="cpill" id="vlangPill" onclick="toggleVPop('vlang')"><span class="v" id="vlangPillV">语言:全部</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+      <div class="pop" id="pop-vlang" style="min-width:auto;left:0;right:0"><div class="pop-label">语言</div><div id="vlangOpts"></div></div>
+    </div>
+    <div class="pop-anchor" style="flex:1">
+      <div class="cpill" id="vgenderPill" onclick="toggleVPop('vgender')"><span class="v" id="vgenderPillV">性别:全部</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+      <div class="pop" id="pop-vgender" style="min-width:auto;left:0;right:0"><div class="pop-label">性别</div><div id="vgenderOpts"></div></div>
+    </div>
   </div>
+  <input id="voiceSearch" class="ss-search" placeholder="搜索音色名称…" oninput="renderVoiceSheet()" autocomplete="off">
   <div class="ss-body" id="voiceSheetBody">
     <div style="color:var(--t4);padding:20px">加载音色中…</div>
   </div>
+  <div class="pop-ov" id="vpopOv" onclick="closeVPops()"></div>
 </div>
 
 <!-- ===== 居中:创建角色 ===== -->
@@ -190,12 +202,37 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   const ta=document.getElementById('script'), cnt=document.getElementById('cnt'), btn=document.getElementById('createBtn');
   // 音色 Tab:音色库(预置)/ 我的声音(克隆),点击真切换列表(与 tts 一致,此前只切样式不切内容)
   document.querySelectorAll('.ss-seg button').forEach((t,i)=>t.addEventListener('click',function(){
-    this.parentNode.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
-    this.classList.add('active');
+    this.parentNode.querySelectorAll('button').forEach(x=>{x.classList.remove('active');x.setAttribute('aria-selected','false');});
+    this.classList.add('active'); this.setAttribute('aria-selected','true');
     voiceTab = i===0 ? 'preset' : 'mine';
     renderVoiceSheet();
   }));
   let voiceTab='preset', voicesData={presets:[],clones:[]};
+  let vSelLang='', vSelGender='';
+
+  // ── 音色筛选 popover(语言/性别;与 TTS 同款,自带轻量 pop 开关)──
+  function toggleVPop(which){
+    const pop=document.getElementById('pop-'+which); const isOpen=pop.classList.contains('show'); closeVPops();
+    if(!isOpen){ pop.classList.add('show'); document.getElementById(which+'Pill').classList.add('open'); document.getElementById('vpopOv').classList.add('show'); }
+  }
+  function closeVPops(){
+    document.querySelectorAll('#sheet-voices .pop.show').forEach(p=>p.classList.remove('show'));
+    document.querySelectorAll('#sheet-voices .cpill.open').forEach(p=>p.classList.remove('open'));
+    document.getElementById('vpopOv').classList.remove('show');
+  }
+  window.toggleVPop=toggleVPop; window.closeVPops=closeVPops;
+  function renderVPopOpts(containerId, items, current, onPick){
+    const box=document.getElementById(containerId); if(!box) return;
+    box.innerHTML=items.map(it=>`<div class="pop-opt${it.value===current?' on':''}" data-v="${esc(it.value)}"><span class="nm">${esc(it.label)}</span><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg></div>`).join('');
+    box.querySelectorAll('.pop-opt[data-v]').forEach(el=>el.onclick=()=>{ onPick(el.dataset.v); closeVPops(); });
+  }
+  function refreshVoiceFilters(){
+    const langs=[...new Set((voicesData.presets||[]).map(p=>p.lang).filter(Boolean))];
+    renderVPopOpts('vlangOpts', [{value:'',label:'语言:全部'}].concat(langs.map(l=>({value:l,label:l}))), vSelLang,
+      (v)=>{ vSelLang=v; document.getElementById('vlangPillV').textContent=v||'语言:全部'; refreshVoiceFilters(); renderVoiceSheet(); });
+    renderVPopOpts('vgenderOpts', [{value:'',label:'性别:全部'},{value:'女',label:'女'},{value:'男',label:'男'}], vSelGender,
+      (v)=>{ vSelGender=v; document.getElementById('vgenderPillV').textContent=v?('性别:'+v):'性别:全部'; refreshVoiceFilters(); renderVoiceSheet(); });
+  }
 
   // ── feed 状态筛选(全部/生成中/已完成/失败)──
   function fitemStatus(el){
@@ -243,20 +280,29 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       c.style.display = (!q || t.includes(q)) ? '' : 'none';
     });
   }
-  // 渲染音色 sheet(按 voiceTab 切换:预置 / 我的声音);试听走共享 LJAudioPreview(与 tts 一致)。
+  // 渲染音色 sheet(与 TTS 一致:Tab 切换 + 语言/性别筛选 + 名称搜索 + 试听 + 选中态 + 描述含语言)。
   function renderVoiceSheet(){
     const body=document.getElementById('voiceSheetBody'); if(!body) return;
-    const list = voiceTab==='mine'
+    if(window.LJAudioPreview) window.LJAudioPreview.stop();
+    const isMine = voiceTab==='mine';
+    let list = isMine
       ? (voicesData.clones||[]).filter(v=>v.status==='ready')
       : (voicesData.presets||[]);
-    if(!list.length){ body.innerHTML=`<div style="color:var(--t4);padding:30px;text-align:center">${voiceTab==='mine'?'还没有自己的声音,点右上「克隆或设计」创建一个':'暂无预置音色'}</div>`; return; }
+    if(vSelLang) list=list.filter(v=>(v.lang||'')===vSelLang);
+    if(vSelGender) list=list.filter(v=>(v.gender||'')===vSelGender);
+    const q=(document.getElementById('voiceSearch')?.value||'').trim().toLowerCase();
+    if(q) list=list.filter(v=>(v.name||'').toLowerCase().includes(q));
+    if(!list.length){ body.innerHTML=`<div style="color:var(--t4);padding:30px;text-align:center">${isMine?'还没有自己的声音,点右上「克隆或设计」创建一个':'没有符合筛选的音色'}</div>`; return; }
     const playSvg = (window.LJAudioPreview && window.LJAudioPreview.PLAY_SVG) || '▶';
     body.innerHTML = list.map(v=>{
-      const desc = v.kind==='clone' ? '克隆音色 · 本人声音' : `${v.gender||''} · ${v.desc||''}`;
-      const pick = `pickVoice(${JSON.stringify({id:v.id,name:v.name}).replace(/'/g,"&#39;")})`;
+      const kindLabel = v.kind==='design'?'设计音色':(v.kind==='clone'?'克隆音色':'');
+      const desc = isMine ? kindLabel : `${[v.gender,v.lang].filter(Boolean).join(' · ')}${v.desc?' · '+v.desc:''}`;
+      const hot = !isMine ? ' <span class="hot">预置</span>' : '';
+      const on = selectedVoice && selectedVoice.id===v.id;
       const canPlay = !!v.sample;
-      const play = `<button class="vc-p" type="button" data-src="${esc(v.sample||'')}" ${canPlay?'':'disabled style="opacity:.4;cursor:not-allowed"'} onclick="event.stopPropagation();window.LJAudioPreview&&window.LJAudioPreview.play(this.dataset.src,this)" aria-label="试听">${playSvg}</button>`;
-      return `<div class="vcard" onclick='${pick}'><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>${esc(v.name)}${v.kind==='preset'?' <span class="hot">预置</span>':''}</div><div class="vc-d">${esc(desc)}</div></div>${play}</div>`;
+      const play = `<button class="vc-p vc-play" type="button" data-src="${esc(v.sample||'')}" ${canPlay?'':'disabled style="opacity:.4;cursor:not-allowed"'} onclick="event.stopPropagation();window.LJAudioPreview&&window.LJAudioPreview.play(this.dataset.src,this)" aria-label="试听">${playSvg}</button>`;
+      const pick = `pickVoice(${JSON.stringify({id:v.id,name:v.name}).replace(/'/g,"&#39;")})`;
+      return `<div class="vcard${on?' on':''}" data-id="${esc(v.id)}" role="button" tabindex="0" aria-pressed="${on?'true':'false'}" onclick='${pick}' onkeydown='if(event.key==="Enter"||event.key===" "){event.preventDefault();${pick};}'><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>${esc(v.name)}${hot}</div><div class="vc-d">${esc(desc)}</div></div>${play}</div>`;
     }).join('');
   }
 
@@ -295,6 +341,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     }catch(e){}
     try{
       voicesData = await LJ.get('/voices');
+      refreshVoiceFilters();
       renderVoiceSheet();
       // 默认选首个(优先当前 Tab 列表)
       const first = (voiceTab==='mine' ? (voicesData.clones||[]).filter(v=>v.status==='ready') : (voicesData.presets||[]))[0]
@@ -337,6 +384,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   function pickVoice(a, silent){
     selectedVoice = a;
     document.getElementById('voicePickLabel').textContent = a.name;
+    if(typeof renderVoiceSheet==='function') renderVoiceSheet(); // 高亮选中卡(与 TTS 一致)
     if(!silent) closeSheet('voices');
     refreshCreateBtn();
   }

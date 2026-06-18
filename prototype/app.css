@@ -412,7 +412,21 @@ img { display: block; }
 .ss-seg button { padding: 7px 16px; border-radius: var(--r-pill); font-size: 13.5px; font-weight: 600; color: var(--t3); border: none; background: none; cursor: pointer; font-family: var(--f); transition: color .2s; }
 .ss-seg button.active { background: var(--t1); color: #0A0A0B; }
 .ss-filters { display: flex; gap: 10px; padding: 0 32px 18px; }
+/* 音色 sheet 筛选 pill(语言/性别):.cpill 基础样式在 .cfgbar 下,这里补一份给 sheet 用,
+   否则 .chev SVG 无尺寸约束会撑成大箭头。 */
+.ss-filters .cpill { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 13px; background: var(--field); border: 1px solid var(--line); border-radius: var(--r); font-size: 12.5px; font-weight: 600; color: var(--t2); cursor: pointer; transition: border-color .2s; white-space: nowrap; overflow: hidden; }
+.ss-filters .cpill .v { overflow: hidden; text-overflow: ellipsis; }
+.ss-filters .cpill:hover { border-color: var(--line-hi); }
+.ss-filters .cpill.open { border-color: var(--blue); color: var(--t1); }
+.ss-filters .cpill svg.chev { width: 13px; height: 13px; color: var(--t4); flex-shrink: 0; transition: transform .2s; }
+.ss-filters .cpill.open svg.chev { transform: rotate(180deg); }
+/* 音色 sheet 搜索框(与 TTS/create 统一)*/
+.ss-search { margin: 0 32px 18px; padding: 11px 14px; background: var(--field); border: 1px solid var(--line); border-radius: var(--r); color: var(--t1); font-size: 13.5px; outline: none; }
+.ss-search:focus { border-color: var(--line-hi); }
 .ss-body { padding: 0 32px 32px; overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-content: start; }
+/* 音色 sheet 列表滚动条隐藏(仍可滚) */
+.ss-body { scrollbar-width: none; -ms-overflow-style: none; }
+.ss-body::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
 .vcard { display: flex; align-items: center; gap: 14px; padding: 15px 16px; border-radius: var(--r); background: var(--card); border: 1px solid var(--line-soft); cursor: pointer; transition: background .2s, border-color .2s, transform .2s; box-shadow: 0 1px 0 var(--hairline) inset; }
 .vcard:hover { background: var(--card-hi); border-color: var(--line); transform: translateY(-1px); }
