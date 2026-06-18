@@ -564,10 +564,6 @@ img { display: block; }
 .tool-soon p { font-size: 13.5px; color: var(--t4); line-height: 1.7; max-width: 360px; }
 .tool-soon .soon-pill { margin-bottom: 20px; font-family: var(--f-mono); font-size: 11px; letter-spacing: .1em; color: var(--blue); border: 1px solid var(--blue); padding: 4px 12px; border-radius: 999px; text-transform: uppercase; }
 
-.sb-foot { padding: 14px; border-top: 1px solid var(--hairline); }
-.deploy-tag { display: flex; align-items: center; gap: 8px; padding: 9px 11px; border: 1px dashed var(--line-hi); border-radius: 10px; font-family: var(--f-mono); font-size: 10px; color: var(--t3); letter-spacing: .03em; }
-.deploy-tag .d { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
-
 /* —— 主区(系统页内顶栏) —— */
 .main-col { display: flex; flex-direction: column; min-width: 0; }
 .app-bar { height: 64px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 32px; border-bottom: 1px solid var(--hairline); background: rgba(10,10,11,.7); backdrop-filter: blur(20px); position: sticky; top: 0; z-index: 50; }
@@ -714,8 +710,7 @@ img { display: block; }
 @media (max-width: 1000px) {
   .shell { grid-template-columns: 64px 1fr; }
   .sb-brand .nm, .sb-brand .cjk, .org-meta, .sb-group, .sb-item span,
-  .sb-item .badge-soon, .sb-tool .nbadge, .sb-tool .nano, .sb-tool .soon,
-  .deploy-tag span { display: none; }
+  .sb-item .badge-soon, .sb-tool .nbadge, .sb-tool .nano, .sb-tool .soon { display: none; }
   /* 触点 ≥44px(D3 a11y):折叠态图标项放大到 44 高 */
   .sb-item { justify-content: center; min-height: 44px; }
 
