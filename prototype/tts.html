@@ -273,7 +273,9 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
   // ── 音色 sheet:音色库/我的声音 Tab + 语言/性别筛选 + 逐音色试听 ──
-  const PLAY_SVG=window.LJAudioPreview.PLAY_SVG;
+  // LJAudioPreview 在 shell.js(defer)里定义,晚于本内联脚本执行;此处不可在 eval 期取它,
+  // 否则抛错中断整段脚本(vsData/vTab 进 TDZ → 音色库报「加载失败」、Tab 失效)。改为渲染时惰性取。
+  function playSvg(){ return (window.LJAudioPreview && window.LJAudioPreview.PLAY_SVG) || '▶'; }
   let vsData={presets:[],clones:[]};   // /voices 原始数据
   let vTab='preset';                   // 当前 Tab:preset | mine
   function openModal(id){ document.getElementById('ov-'+id)?.classList.add('show'); }
@@ -328,7 +330,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       const on=selectedVoice&&selectedVoice.id===v.id;
       const canPlay=!!v.sample;
       // 复用共享 .vcard/.vc-* + .vc-p.vc-play(圆形试听槽);保留真试听 + 键盘 a11y
-      const play=`<button class="vc-p vc-play" data-src="${esc(v.sample||'')}" ${canPlay?'':'disabled'} onclick="event.stopPropagation();window.LJAudioPreview.play(this.dataset.src,this)" aria-label="试听">${PLAY_SVG}</button>`;
+      const play=`<button class="vc-p vc-play" data-src="${esc(v.sample||'')}" ${canPlay?'':'disabled'} onclick="event.stopPropagation();window.LJAudioPreview.play(this.dataset.src,this)" aria-label="试听">${playSvg()}</button>`;
       const pick=`pickVoiceObj(${JSON.stringify({id:v.id,name:v.name,desc,kind:isMine?(v.kind||'clone'):'preset'}).replace(/'/g,"&#39;")})`;
       return `<div class="vcard${on?' on':''}" data-id="${esc(v.id)}" role="button" tabindex="0" aria-pressed="${on?'true':'false'}" aria-label="选择音色 ${esc(v.name)}" onclick='${pick}' onkeydown='if(event.key==="Enter"||event.key===" "){event.preventDefault();${pick};}'>`
         +`<div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>${esc(v.name)}${hot}</div><div class="vc-d">${esc(desc)}</div></div>${play}</div>`;

@@ -76,8 +76,9 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
 
   document.querySelectorAll('.chip').forEach((b,i)=>b.addEventListener('click',function(){this.parentNode.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));this.classList.add('active');render(i===0?'clone':'preset');}));
 
-  // 试听用共享 LJAudioPreview(shell.js);播放图标取其内置 SVG
-  const PLAY_SVG=window.LJAudioPreview.PLAY_SVG;
+  // 试听用共享 LJAudioPreview(shell.js,defer 晚于本脚本);不可在 eval 期取它,否则抛错中断
+  // 整段脚本 → 音色库无预览、Tab 失效。改为渲染时惰性取。
+  function playSvg(){ return (window.LJAudioPreview && window.LJAudioPreview.PLAY_SVG) || '▶'; }
   function togglePlay(btn){ window.LJAudioPreview.play(btn.dataset.src, btn); }
   function stopAudio(){ window.LJAudioPreview.stop(); }
 
@@ -90,13 +91,13 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     let actions;
     if(isClone){
       const canPlay = v.status==='ready' && v.sample;
-      const play = `<button class="vc-p vc-play" data-src="${v.sample||''}" ${canPlay?'':'disabled style="opacity:.4;cursor:not-allowed"'} onclick="event.stopPropagation();togglePlay(this)" aria-label="试听">${PLAY_SVG}</button>`;
+      const play = `<button class="vc-p vc-play" data-src="${v.sample||''}" ${canPlay?'':'disabled style="opacity:.4;cursor:not-allowed"'} onclick="event.stopPropagation();togglePlay(this)" aria-label="试听">${playSvg()}</button>`;
       const del = `<button class="btn btn-dark" style="padding:8px 12px;font-size:12.5px" onclick="event.stopPropagation();delVoice('${v.id}','${esc(v.name)}')">删除</button>`;
       actions = `<div class="vc-actions">${play}${del}</div>`;
     } else {
       // 预置:有 sample 则可真试听(E9 预置试听样本库),否则置灰
       const canPlay = !!v.sample;
-      actions = `<button class="vc-p vc-play" data-src="${v.sample||''}" ${canPlay?'':'disabled style="opacity:.4;cursor:not-allowed"'} onclick="event.stopPropagation();togglePlay(this)" aria-label="试听">${PLAY_SVG}</button>`;
+      actions = `<button class="vc-p vc-play" data-src="${v.sample||''}" ${canPlay?'':'disabled style="opacity:.4;cursor:not-allowed"'} onclick="event.stopPropagation();togglePlay(this)" aria-label="试听">${playSvg()}</button>`;
     }
     return `<div class="vcard"><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>${esc(v.name)}${tag}</div><div class="vc-d">${esc(desc)}</div></div>${actions}</div>`;
   }
