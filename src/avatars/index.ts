@@ -15,12 +15,14 @@ const PRESETS: {
   id: string; name: string; thumb: string;
   gender: 'male' | 'female'; orientation: 'portrait' | 'landscape'; scene: string;
 }[] = [
-  { id: 'preset-1', name: '新闻女主播 · 晓琳', gender: 'female', orientation: 'landscape', scene: '新闻', thumb: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&q=85&fit=crop&crop=faces' },
-  { id: 'preset-2', name: '财经男主播 · 浩然', gender: 'male', orientation: 'landscape', scene: '财经', thumb: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&q=85&fit=crop&crop=faces' },
-  { id: 'preset-3', name: '出镜记者 · 思雨', gender: 'female', orientation: 'portrait', scene: '出镜', thumb: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=300&q=85&fit=crop&crop=faces' },
-  { id: 'preset-4', name: '政务播报 · 王朗', gender: 'male', orientation: 'landscape', scene: '政务', thumb: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=300&q=85&fit=crop&crop=faces' },
-  { id: 'preset-5', name: '生活主持 · 雅琪', gender: 'female', orientation: 'portrait', scene: '生活', thumb: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=300&q=85&fit=crop&crop=faces' },
-  { id: 'preset-6', name: '科教讲解 · 子昂', gender: 'male', orientation: 'portrait', scene: '科教', thumb: 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=300&q=85&fit=crop&crop=faces' },
+  // 平台自产中式数字人形象(均为女性竖图,公网固定资产,worker.resolveImageUrl 直接喂百炼做口播)。
+  { id: 'preset-1', name: '田野记者 · 夏穗', gender: 'female', orientation: 'portrait', scene: '出镜', thumb: 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-preset-1.png' },
+  { id: 'preset-2', name: '科技主播 · 林溪', gender: 'female', orientation: 'portrait', scene: '科技', thumb: 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-preset-2.png' },
+  { id: 'preset-3', name: '文博讲解 · 苏窈', gender: 'female', orientation: 'portrait', scene: '文博', thumb: 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-preset-3.png' },
+  { id: 'preset-4', name: '时政主播 · 安宁', gender: 'female', orientation: 'portrait', scene: '新闻', thumb: 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-preset-4.png' },
+  { id: 'preset-5', name: '访谈主持 · 云岚', gender: 'female', orientation: 'portrait', scene: '访谈', thumb: 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-preset-5.png' },
+  { id: 'preset-6', name: '现场记者 · 程笑', gender: 'female', orientation: 'portrait', scene: '出镜', thumb: 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-preset-6.png' },
+  { id: 'preset-7', name: '新闻主播 · 叶澜', gender: 'female', orientation: 'portrait', scene: '新闻', thumb: 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-preset-7.png' },
 ];
 
 /** 预置形象(不入库,直接返回;所有租户共享)。 */
