@@ -296,6 +296,8 @@ img { display: block; }
 /* 全站下拉/弹层滚动条隐藏(仍可滚):.pop 自身及其内部选项容器 */
 .pop, .pop [id$="Opts"], .pop > div[id$="Opts"] { scrollbar-width: none; -ms-overflow-style: none; }
 .pop::-webkit-scrollbar, .pop [id$="Opts"]::-webkit-scrollbar { width: 0; height: 0; display: none; }
+/* 弹框 portal 到 body 后:fixed + 顶层(逃离 .cfg overflow / 侧栏层叠上下文)。位置由 LJPlacePop 设。 */
+.pop.lj-pop-portal { position: fixed; right: auto; bottom: auto; max-width: calc(100vw - 16px); z-index: 1000; }
 /* 模型 popover:够宽,不受 pill 宽度限制 */
 #pop-model { min-width: 320px; }
 /* 设置 popover:靠右锚定 + 更宽,容 8 个比例 cell 一行 */

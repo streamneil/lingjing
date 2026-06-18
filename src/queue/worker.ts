@@ -807,6 +807,7 @@ export function startWorker(): void {
 
   (async () => {
     while (!stopped) {
+      workerHeartbeat = Date.now(); // 心跳:证明轮询活着(看门狗据此区分「卡住」vs「worker 死了」)
       let claimedThisRound = false;
       // 填槽:有空位且有 queued + 未被 cap 挡住,就一直领。
       while (!stopped && active < config.worker.poolSize) {
@@ -825,6 +826,47 @@ export function startWorker(): void {
     }
     running = false;
   })();
+
+  startQueueWatchdog();
+}
+
+// ── 队列看门狗:防 queued job 静默卡死(worker 活着却始终领不到它)──
+// 现有 recoverStuckJobs 只管「卡 running」(崩溃残留);queued 卡住(如 worker 曾死过、
+// 池被异常占满)无人兜底,用户会看到任务排队几十分钟无果。看门狗补这个洞:
+//   - worker 心跳新鲜(<2× 长歇间隔)= worker 活着;此时仍有 job 排队超 queuedTimeoutMs
+//     → 判定真卡住,标 failed + 退预扣(只退不补,与失败语义一致)。
+//   - 心跳过期(worker 死/卡)→ 不误杀等待中的正常 job,交给进程重启的 recoverStuckJobs。
+let workerHeartbeat = 0;
+let watchdogTimer: ReturnType<typeof setInterval> | null = null;
+const HEARTBEAT_FRESH_MS = 5_000; // 心跳超过此值未更新 = worker 不在正常轮询
+function startQueueWatchdog(): void {
+  if (watchdogTimer) return;
+  const checkMs = 60_000; // 每分钟扫一次
+  watchdogTimer = setInterval(() => {
+    if (stopped) return;
+    // worker 心跳必须新鲜,才敢判定「卡住」(否则是 worker 死了,等重启 recover,不误杀)
+    if (Date.now() - workerHeartbeat > HEARTBEAT_FRESH_MS) return;
+    const cutoff = Date.now() - config.worker.queuedTimeoutMs;
+    let stale: { id: string; tenant_id: string }[];
+    try {
+      stale = db
+        .prepare(`SELECT id, tenant_id FROM job WHERE status='queued' AND created_at < ?`)
+        .all(cutoff) as { id: string; tenant_id: string }[];
+    } catch {
+      return;
+    }
+    for (const j of stale) {
+      // 二次确认仍是 queued(避免与 claimNextJob 竞态:刚被领走就别标 failed)
+      const r = db
+        .prepare(`UPDATE job SET status='failed', error=?, updated_at=? WHERE id=? AND status='queued'`)
+        .run('排队超时:长时间未能进入生成(服务繁忙或调度异常),已退还预扣积分,请重试', Date.now(), j.id);
+      if (r.changes === 1) {
+        release(j.tenant_id, j.id); // 退预扣(只退不补)
+        console.warn(`[worker] 看门狗:job ${j.id} 排队超时,标 failed + 退预扣`);
+      }
+    }
+  }, checkMs);
+  if (typeof watchdogTimer.unref === 'function') watchdogTimer.unref();
 }
 
 /**
@@ -836,6 +878,7 @@ export function startWorker(): void {
  */
 export function stopWorker(): void {
   stopped = true;
+  if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
 }
 
 /** worker 是否已收到停止信号(pollUntilDone 据此提前跳出)。 */

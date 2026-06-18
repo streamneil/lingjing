@@ -188,7 +188,14 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
 <script src="api.js"></script>
 <script>
   const ta=document.getElementById('script'), cnt=document.getElementById('cnt'), btn=document.getElementById('createBtn');
-  document.querySelectorAll('.ss-seg button').forEach(t=>t.addEventListener('click',function(){this.parentNode.querySelectorAll('button').forEach(x=>x.classList.remove('active'));this.classList.add('active');}));
+  // 音色 Tab:音色库(预置)/ 我的声音(克隆),点击真切换列表(与 tts 一致,此前只切样式不切内容)
+  document.querySelectorAll('.ss-seg button').forEach((t,i)=>t.addEventListener('click',function(){
+    this.parentNode.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+    this.classList.add('active');
+    voiceTab = i===0 ? 'preset' : 'mine';
+    renderVoiceSheet();
+  }));
+  let voiceTab='preset', voicesData={presets:[],clones:[]};
 
   // ── feed 状态筛选(全部/生成中/已完成/失败)──
   function fitemStatus(el){
@@ -236,6 +243,22 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       c.style.display = (!q || t.includes(q)) ? '' : 'none';
     });
   }
+  // 渲染音色 sheet(按 voiceTab 切换:预置 / 我的声音);试听走共享 LJAudioPreview(与 tts 一致)。
+  function renderVoiceSheet(){
+    const body=document.getElementById('voiceSheetBody'); if(!body) return;
+    const list = voiceTab==='mine'
+      ? (voicesData.clones||[]).filter(v=>v.status==='ready')
+      : (voicesData.presets||[]);
+    if(!list.length){ body.innerHTML=`<div style="color:var(--t4);padding:30px;text-align:center">${voiceTab==='mine'?'还没有自己的声音,点右上「克隆或设计」创建一个':'暂无预置音色'}</div>`; return; }
+    const playSvg = (window.LJAudioPreview && window.LJAudioPreview.PLAY_SVG) || '▶';
+    body.innerHTML = list.map(v=>{
+      const desc = v.kind==='clone' ? '克隆音色 · 本人声音' : `${v.gender||''} · ${v.desc||''}`;
+      const pick = `pickVoice(${JSON.stringify({id:v.id,name:v.name}).replace(/'/g,"&#39;")})`;
+      const canPlay = !!v.sample;
+      const play = `<button class="vc-p" type="button" data-src="${esc(v.sample||'')}" ${canPlay?'':'disabled style="opacity:.4;cursor:not-allowed"'} onclick="event.stopPropagation();window.LJAudioPreview&&window.LJAudioPreview.play(this.dataset.src,this)" aria-label="试听">${playSvg}</button>`;
+      return `<div class="vcard" onclick='${pick}'><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>${esc(v.name)}${v.kind==='preset'?' <span class="hot">预置</span>':''}</div><div class="vc-d">${esc(desc)}</div></div>${play}</div>`;
+    }).join('');
+  }
 
   function esc(s){ return (s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   const feedList = document.querySelector('.feed-list');
@@ -271,18 +294,13 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       if(!selectedAvatar && items[0]) pickAvatar({id:items[0].id,name:items[0].name,thumb:items[0].thumb||'',orientation:items[0].orientation||'portrait'}, true);
     }catch(e){}
     try{
-      const vc = await LJ.get('/voices');
-      const body = document.getElementById('voiceSheetBody');
-      const items = [...((vc.clones||[]).filter(v=>v.status==='ready')), ...(vc.presets||[])];
-      body.innerHTML = items.map(v=>{
-        // 克隆音色:复刻成功(ready)= 本人声音可用;失败(failed)= 复刻未成,暂用预置
-        const desc = v.kind==='clone'
-          ? (v.status==='ready' ? '克隆音色 · 本人声音' : '克隆音色 · 复刻未完成,暂用预置')
-          : `${v.gender||''} · ${v.desc||''}`;
-        return `<div class="vcard" onclick='pickVoice(${JSON.stringify({id:v.id,name:v.name}).replace(/'/g,"&#39;")})'><div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>${esc(v.name)}${v.kind==='preset'?' <span class="hot">预置</span>':''}</div><div class="vc-d">${esc(desc)}</div></div><div class="vc-p"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div></div>`;
-      }).join('') || '<div style="color:var(--t4);padding:20px">暂无音色</div>';
-      if(!selectedVoice && items[0]) pickVoice({id:items[0].id,name:items[0].name}, true);
-    }catch(e){}
+      voicesData = await LJ.get('/voices');
+      renderVoiceSheet();
+      // 默认选首个(优先当前 Tab 列表)
+      const first = (voiceTab==='mine' ? (voicesData.clones||[]).filter(v=>v.status==='ready') : (voicesData.presets||[]))[0]
+        || (voicesData.presets||[])[0];
+      if(!selectedVoice && first) pickVoice({id:first.id,name:first.name}, true);
+    }catch(e){ const b=document.getElementById('voiceSheetBody'); if(b) b.innerHTML='<div style="color:var(--red);padding:20px">音色加载失败</div>'; }
     // 默认分辨率:仅"新建"(?from= 不存在)时套用机构默认;"重新编辑"由 prefillFromQuery 回填原作品值,
     // 不被默认污染(直接 gate 在 ?from=,而非靠 prefill 后覆盖——老作品可能无 resolution,后者会漏)。
     if(!new URLSearchParams(location.search).get('from')){

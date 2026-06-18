@@ -127,6 +127,9 @@ export const config = {
       const override = Number(optional('WORKER_TENANT_MAX', ''));
       return override > 0 ? override : Math.ceil(pool / 2);
     })(),
+    // 看门狗:queued job 排队超过此时长(且 worker 心跳新鲜=活着却始终没领它)→ 判定卡住,
+    // 标 failed + 退预扣(只退不补)。worker 心跳过期(进程死)时不误杀,等重启 recover。默认 15 分钟。
+    queuedTimeoutMs: Math.max(60_000, Number(optional('WORKER_QUEUED_TIMEOUT_MS', '')) || 900_000),
   },
 
   // ── 数据库（Slice1 用 SQLite，够单租户单机；Slice2 多租户可换 Postgres）──
