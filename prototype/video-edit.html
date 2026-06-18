@@ -724,16 +724,23 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     try{ scheduleEstimate(); refreshBtn(); }catch(e){}
   }
 
-  // 探索页灵感库一键复用:?prompt=<编辑指令> 只填指令框(eng-review:不接 ?img=/视频;
-  // 输入视频/参考图有 consent 合规闸,请用户自行上传原视频 + 勾选授权)。
+  // 探索页灵感库一键复用:?prompt=<编辑指令>[&reuseVideo=<key>]。
+  // reuseVideo 是平台自产样例视频的存储 key(同桶);走 reuse 态(videoRef=key + 预览),
+  // 免重传 100MB、OSS 跨域不 fetch File。平台自产素材无第三方 consent 问题(站内生成内容)。
+  const OSS_BASE='https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/';
   function applyPromptFromQuery(){
-    const p=new URLSearchParams(location.search).get('prompt');
-    if(!p) return;
-    ta.value=p.slice(0,5000); cnt.textContent=ta.value.length;
-    refreshBtn(); scheduleEstimate(); ta.focus();
-    window.LJToast&&window.LJToast('✓ 已套用编辑指令,请上传原视频 + 勾选授权后生成');
+    const q=new URLSearchParams(location.search);
+    const p=q.get('prompt'); const reuseVideo=q.get('reuseVideo');
+    if(p){ ta.value=p.slice(0,5000); cnt.textContent=ta.value.length; }
+    if(reuseVideo){
+      videoRef=reuseVideo; reuseVideoUrl=OSS_BASE+reuseVideo; // key 当 ref 提交;公网 URL 显预览
+      vidState='reuse'; renderVidCard(); renderDur();
+    }
+    refreshBtn(); scheduleEstimate(); if(p) ta.focus();
+    if(p||reuseVideo) window.LJToast&&window.LJToast(reuseVideo?'✓ 已带入原视频与编辑指令,可改后生成':'✓ 已套用编辑指令,请上传原视频 + 勾选授权后生成');
   }
-  LJ.me().then(()=>{ loadModels(); loadHistory(); applyPromptFromQuery(); }).catch(()=>{});
+  // 先 await loadModels(异步)再 applyPromptFromQuery:否则 reuse 视频可能被随后的模型 UI 重渲清掉。
+  LJ.me().then(async ()=>{ await loadModels(); loadHistory(); applyPromptFromQuery(); }).catch(()=>{});
   renderVidCard(); refreshBtn();
 </script>
 </body>

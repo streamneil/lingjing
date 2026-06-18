@@ -23,6 +23,10 @@ const PRESETS: {
   { id: 'preset-5', name: '访谈主持 · 云岚', gender: 'female', orientation: 'portrait', scene: '访谈', thumb: 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-preset-5.png' },
   { id: 'preset-6', name: '现场记者 · 程笑', gender: 'female', orientation: 'portrait', scene: '出镜', thumb: 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-preset-6.png' },
   { id: 'preset-7', name: '新闻主播 · 叶澜', gender: 'female', orientation: 'portrait', scene: '新闻', thumb: 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-preset-7.png' },
+  // 探索灵感库「数字人」示范脸入库为预置,供「去做同款数字人」?avatar= 预选(id 与 explore 映射一致)。
+  { id: 'preset-sage', name: '睿智长者 · 松鹤', gender: 'male', orientation: 'portrait', scene: '访谈', thumb: 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/portrait-sage.jpg' },
+  { id: 'preset-grandma', name: '慈祥长辈 · 秀兰', gender: 'female', orientation: 'portrait', scene: '生活', thumb: 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/portrait-grandma.jpg' },
+  { id: 'preset-girl', name: '元气少女 · 桃夭', gender: 'female', orientation: 'portrait', scene: '生活', thumb: 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/girl-rainbow.jpg' },
 ];
 
 /** 预置形象(不入库,直接返回;所有租户共享)。 */

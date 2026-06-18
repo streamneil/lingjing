@@ -818,17 +818,24 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   });
 
   renderMain(); renderRefs();
-  // 探索页灵感库一键复用:?prompt=<编辑指令> 只填指令框(eng-review:不接 ?img=,
-  // OSS 跨域抓不到 File + 输入图有 consent 合规闸;原图请用户自行上传 + 勾选授权)。
+  // 探索页灵感库一键复用:?prompt=<编辑指令>[&reuseImg=<key>]。
+  // reuseImg 是平台自产样例的存储 key(同桶);走 refillImages 复用机制(免重传、OSS 跨域不 fetch File)。
+  // 平台自产素材无第三方 consent 问题(本就是站内生成内容),故可直接带入原图。
+  const OSS_BASE='https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/';
   function applyPromptFromQuery(){
-    const p=new URLSearchParams(location.search).get('prompt');
-    if(!p) return;
-    ta.value=p.slice(0,2000); cnt.textContent=ta.value.length;
-    if(typeof mkPromptEl!=='undefined' && mkPromptEl) mkPromptEl.value=ta.value;
-    refreshBtn(); scheduleEstimate(); ta.focus();
-    window.LJToast&&window.LJToast('✓ 已套用编辑指令,请上传原图 + 勾选授权后生成');
+    const q=new URLSearchParams(location.search);
+    const p=q.get('prompt'); const reuseImg=q.get('reuseImg');
+    if(p){ ta.value=p.slice(0,2000); cnt.textContent=ta.value.length; if(typeof mkPromptEl!=='undefined' && mkPromptEl) mkPromptEl.value=ta.value; }
+    if(reuseImg){
+      // key → 公网 URL 显预览;ref 用 key 本身(提交沿用,后端 publish 重签喂厂商)。
+      refillImages([OSS_BASE+reuseImg], [reuseImg]);
+    }
+    refreshBtn(); scheduleEstimate(); if(p) ta.focus();
+    if(p||reuseImg) window.LJToast&&window.LJToast(reuseImg?'✓ 已带入原图与编辑指令,可改后生成':'✓ 已套用编辑指令,请上传原图 + 勾选授权后生成');
   }
-  LJ.me().then(()=>{ loadModels(); loadHistory(); applyPromptFromQuery(); }).catch(()=>{});
+  // 先 await loadModels(异步)再 applyPromptFromQuery:否则 loadModels 末尾的 onModelChange
+  // 会在 reuse 渲染之后才跑、且可能重渲清掉带入的参考图(模型/模式 UI 尚未就绪时铺图会被覆盖)。
+  LJ.me().then(async ()=>{ await loadModels(); loadHistory(); applyPromptFromQuery(); }).catch(()=>{});
   refreshBtn();
 </script>
 </body>
