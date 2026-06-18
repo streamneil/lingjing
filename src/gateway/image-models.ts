@@ -38,7 +38,7 @@ export interface ImageModelDef {
   sizeKind: SizeKind;
   modes: ImageMode[]; // 支持的模式
   maxImages: number; // 出图张数上限(z-image 固定1、qwen-2.0 6)
-  maxInputImages: number; // img2img 输入图上限(text2img 模型 0);v1 封顶 3(上传端点写死,P2-c)
+  maxInputImages: number; // img2img 输入图上限(text2img 模型 0);上限受 /image-uploads 端点 maxCount=9 约束
   maxResolution: '1K' | '2K' | '4K'; // 最高分辨率档
   // 该模型支持的清晰度档集(精确,非「≤maxResolution」)。火山 seedream 各型号档不同:
   //   5.0-lite=2K/3K/4K、4.5=2K/4K、4.0=1K/2K/4K(跳档,maxResolution 表达不了)。
@@ -168,7 +168,7 @@ export const IMAGE_MODELS: Record<string, ImageModelDef> = {
   'gemini-3.1-flash-image': {
     key: 'gemini-3.1-flash-image', label: 'Nano Banana 2 (Gemini 3.1 Flash)', modelId: 'gemini-3.1-flash-image', provider: 'google-ai-studio',
     shape: 'S', sizeKind: 'keyword', modes: ['text2img', 'img2img'],
-    maxImages: 1, maxInputImages: 10, maxResolution: '4K', resolutionTiers: ['1K', '2K', '4K'], priceTier: 26,
+    maxImages: 1, maxInputImages: 9, maxResolution: '4K', resolutionTiers: ['1K', '2K', '4K'], priceTier: 26,
   },
   'gemini-3-pro-image': {
     key: 'gemini-3-pro-image', label: 'Nano Banana Pro (Gemini 3 Pro)', modelId: 'gemini-3-pro-image', provider: 'google-ai-studio',
