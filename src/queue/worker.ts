@@ -163,6 +163,15 @@ export function resolveVoice(
 // 默认回退音色:Qwen-TTS 合法音色名(专业播音场景)
 const DEFAULT_PRESET_VOICE = 'Neil';
 
+// 按 magic number 判音频真实格式(wan2.2-s2v 只认 .wav/.mp3,扩展名须与字节一致)。
+// WAV: 'RIFF'....'WAVE';MP3: 'ID3' 标签 或 帧同步 0xFFEx/0xFFFx。识别不出回退 mp3。
+export function detectAudioFormat(buf: Buffer): 'wav' | 'mp3' {
+  if (buf.length >= 12 && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WAVE') return 'wav';
+  if (buf.length >= 3 && buf.toString('ascii', 0, 3) === 'ID3') return 'mp3';
+  if (buf.length >= 2 && buf[0] === 0xff && (buf[1]! & 0xe0) === 0xe0) return 'mp3';
+  return 'mp3';
+}
+
 /**
  * 渲染单个文案片段(<20s):文案 → TTS → 落 MinIO → s2v 提交 → 轮询 → 抓成品 Buffer。
  * 不打水印、不落最终库(那是整条视频拼好后做一次)。抛错冒泡给 processJob 标 failed。
@@ -190,8 +199,12 @@ async function renderSegment(
   if (dur !== null && dur >= 20) {
     throw new Error(`第 ${segIndex + 1} 段音频 ${dur.toFixed(1)}s 仍超 20s,请缩短该段或降低语速`);
   }
-  const audioKey = `tts/${job.tenant_id}/${job.id}-seg${segIndex}.mp3`;
-  await storage.putObject(audioKey, audioBuf, 'audio/mpeg');
+  // 按真实字节判格式(qwen3-tts 经 multimodal-generation 默认回 WAV,非 MP3)。
+  // wan2.2-s2v 只认 .wav/.mp3,且按内容/扩展名校验——若把 WAV 当 .mp3 上传会报
+  // "File type is not supported. Allowed types are: .wav, .mp3."。故扩展名/Content-Type 必须与字节一致。
+  const fmt = detectAudioFormat(audioBuf); // 'wav' | 'mp3'
+  const audioKey = `tts/${job.tenant_id}/${job.id}-seg${segIndex}.${fmt}`;
+  await storage.putObject(audioKey, audioBuf, fmt === 'wav' ? 'audio/wav' : 'audio/mpeg');
   const audioUrl = await getMediaPublisher(tenantDelivery(job.tenant_id)).publish(audioKey);
 
   // 2. 网关提交(wan2.2-s2v:image_url + audio_url)
