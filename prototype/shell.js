@@ -446,5 +446,29 @@
     return { play, stop, PLAY_SVG: PLAY, STOP_SVG: STOP };
   })();
 
+  /* ── 弹框定位:portal 到 body 顶层 + 按 pill 定位(居左弹出、不被 .cfg/侧栏遮挡)──
+   * 各模块 setPill 等弹框统一调用,避免被左栏 overflow/层叠上下文裁切。
+   * LJPlacePop(pop, pill): 把 pop 移到 body、fixed 定位(右沿对齐 pill 右沿向左铺,
+   *   贴 pill 上沿向上;放不下则下方/夹紧内滚)。LJUnplacePop(pop): 关闭时归还原位 + 清样式。 */
+  window.LJPlacePop = function(pop, pill){
+    if(!pop || !pill) return;
+    const r = pill.getBoundingClientRect(), M = 8, GAP = 8, vw = window.innerWidth, vh = window.innerHeight;
+    if(!pop._ljHome) pop._ljHome = pop.parentNode;
+    document.body.appendChild(pop);
+    pop.classList.add('lj-pop-portal');
+    pop.style.visibility = 'hidden'; pop.style.left = '0'; pop.style.right = 'auto'; pop.style.top = '0'; pop.style.bottom = 'auto'; pop.style.maxHeight = '';
+    const pw = pop.offsetWidth, ph = pop.offsetHeight;
+    let left = Math.max(M, r.right - pw);                 // 右沿对齐 pill 右沿(居左铺)
+    let top = r.top - GAP - ph;                           // 贴 pill 上沿向上
+    if(top < M){ const below = r.bottom + GAP; top = (below + ph <= vh - M) ? below : M; if(top === M) pop.style.maxHeight = (vh - 2*M) + 'px'; }
+    pop.style.left = left + 'px'; pop.style.top = Math.max(M, top) + 'px'; pop.style.visibility = '';
+  };
+  window.LJUnplacePop = function(pop){
+    if(!pop) return;
+    pop.classList.remove('lj-pop-portal');
+    pop.style.left = pop.style.right = pop.style.top = pop.style.bottom = pop.style.maxHeight = pop.style.visibility = '';
+    if(pop._ljHome && pop.parentNode !== pop._ljHome) pop._ljHome.appendChild(pop);
+  };
+
   bindAuth();
 })();
