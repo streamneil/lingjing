@@ -35,7 +35,7 @@ import {
   balance,
 } from '../credits/index.js';
 import { audit } from '../audit/index.js';
-import { isUsableAvatar } from '../avatars/index.js';
+import { isUsableAvatar, listPresets as listAvatarPresets, getAvatar } from '../avatars/index.js';
 import { isUsableVoice } from '../voices/index.js';
 import { getEmotion, EMOTIONS, getSpeed, SPEEDS, getLanguage, LANGUAGES } from '../gateway/tts-models.js';
 import { db } from '../db/index.js';
@@ -89,6 +89,17 @@ async function signInputUrls(refs?: string[]): Promise<string[]> {
   if (!Array.isArray(refs) || !refs.length) return [];
   const signed = await Promise.all(refs.map((k) => getSignedUrl(k).catch(() => null)));
   return signed.filter((u): u is string => u !== null);
+}
+
+// 数字人 avatarRef → 形象缩略 URL(记录卡每条显各自形象,修「全是同一人」)。
+// 预置:公网外链直接用;自定义:thumb_url 签名(私有 key)。查不到/坏数据回 null(卡片回退占位)。
+async function signAvatarThumb(avatarRef: string | undefined, tenantId: string): Promise<string | null> {
+  if (!avatarRef) return null;
+  const preset = listAvatarPresets().find((p) => p.id === avatarRef);
+  if (preset) return preset.thumb;
+  const custom = getAvatar(avatarRef, tenantId, '', true); // worker 无 acting user,按租户解析(isAdmin)
+  if (custom?.thumb_url) return getSignedUrl(custom.thumb_url).catch(() => null);
+  return null;
 }
 
 // ── type 封闭 allowlist(eng-review E2 / 外部声音 P2)──
@@ -1134,6 +1145,7 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
           duration?: number; audio?: boolean; negativePrompt?: string; promptExtend?: boolean; task?: string;
           videoRef?: string; truncateDuration?: number; audioSetting?: string; inputDurationSnapshot?: number;
           videoRefs?: string[]; audioRefs?: string[]; // 多模态参考生影片(video_r2v):视频/音频参考 key
+          avatarRef?: string; voiceRef?: string; speed?: number; // 数字人(video):形象/音色/语速
         };
         script = inp.script ?? inp.prompt ?? inp.text ?? '';
         if (j.type === 'ai_image') {
@@ -1204,6 +1216,13 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
             negativePrompt: inp.negativePrompt, promptExtend: inp.promptExtend, seed: inp.seed,
             videoRef: inp.videoRef, inputVideoUrl, imageRefs: inp.imageRefs, inputUrls,
           };
+        } else if (j.type === 'video') {
+          // 数字人卡片:每条显各自形象缩略(修「记录头像全是同一人」)+ 回放 avatarRef/voiceRef/speed。
+          const avatarThumb = await signAvatarThumb(inp.avatarRef, req.user!.tenantId);
+          meta = {
+            avatarRef: inp.avatarRef, voiceRef: inp.voiceRef, avatarThumb,
+            resolution: inp.resolution, ratio: inp.ratio, speed: inp.speed,
+          };
         }
       } catch {
         /* 旧/坏数据忽略 */
@@ -1244,8 +1263,10 @@ jobsRouter.get('/jobs/:id', requireAuth, async (req: Request, res: Response) => 
   };
 
   // 输入图签名 URL(图生图记录卡显示 + 重新提示回填)。
-  const inp = payload.input as { imageRefs?: string[]; videoRef?: string; videoRefs?: string[]; audioRefs?: string[] } | undefined;
+  const inp = payload.input as { imageRefs?: string[]; videoRef?: string; videoRefs?: string[]; audioRefs?: string[]; avatarRef?: string } | undefined;
   if (inp?.imageRefs?.length) payload.inputUrls = await signInputUrls(inp.imageRefs);
+  // 数字人(video):形象缩略 URL,记录卡每条显各自形象(修「全是同一人」;轮询期间也带上)。
+  if (job.type === 'video') payload.avatarThumb = await signAvatarThumb(inp?.avatarRef, job.tenant_id);
   // 视频编辑:输入视频签名 URL(记录卡显原片 + 重新提示视频预览,video-inputs 同桶)。
   if (inp?.videoRef) payload.inputVideoUrl = await getSignedUrl(inp.videoRef).catch(() => null);
   // 多模态参考生影片(video_r2v):签名图/视频/音频参考 → 记录卡输入缩略全显(修「轮询时没有输入」)。
