@@ -52,6 +52,7 @@ export interface ImageModelDef {
   pixelMatrix?: Record<string, Record<string, string>>;
   supportsBbox?: boolean; // 支持 bbox_list 局部重绘(仅万相2.7;千问编辑不支持)
   canSetSize?: boolean; // 是否可指定分辨率(缺省 true);false=随输入图(qwen-image-edit),UI 隐藏清晰度控件 + 提交不发 size
+  ratios?: string[]; // 该模型暴露的比例集(Gemini 等 keyword 模型用);缺省 → /image-models 派生回落(pixelMatrix 首档键 / keyword 空 / undefined)
 }
 
 // 分辨率条目(admin 照百炼文档录 比例:宽*高;tier 计价档由像素自动推,不存)。
@@ -168,12 +169,14 @@ export const IMAGE_MODELS: Record<string, ImageModelDef> = {
   'gemini-3.1-flash-image': {
     key: 'gemini-3.1-flash-image', label: 'Nano Banana 2 (Gemini 3.1 Flash)', modelId: 'gemini-3.1-flash-image', provider: 'google-ai-studio',
     shape: 'S', sizeKind: 'keyword', modes: ['text2img', 'img2img'],
-    maxImages: 1, maxInputImages: 9, maxResolution: '4K', resolutionTiers: ['1K', '2K', '4K'], priceTier: 26,
+    maxImages: 1, maxInputImages: 9, maxResolution: '4K', resolutionTiers: ['512', '1K', '2K', '4K'], priceTier: 26,
+    ratios: ['1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'],
   },
   'gemini-3-pro-image': {
     key: 'gemini-3-pro-image', label: 'Nano Banana Pro (Gemini 3 Pro)', modelId: 'gemini-3-pro-image', provider: 'google-ai-studio',
     shape: 'S', sizeKind: 'keyword', modes: ['text2img', 'img2img'],
     maxImages: 1, maxInputImages: 6, maxResolution: '4K', resolutionTiers: ['1K', '2K', '4K'], priceTier: 34,
+    ratios: ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'],
   },
 };
 
