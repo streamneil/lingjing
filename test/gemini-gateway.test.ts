@@ -27,11 +27,11 @@ afterEach(() => { vi.restoreAllMocks(); });
 
 describe('providerForModel + getGateway(Gemini)', () => {
   it('gemini 模型 → google-ai-studio', () => {
-    expect(providerForModel('gemini-2.5-flash-image')).toBe('google-ai-studio');
+    expect(providerForModel('gemini-3.1-flash-image')).toBe('google-ai-studio');
     expect(providerForModel('gemini-3-pro-image')).toBe('google-ai-studio');
   });
   it('getGateway 选 GeminiGateway(sync image 形状)', () => {
-    const gw = getGateway('gemini-2.5-flash-image') as unknown;
+    const gw = getGateway('gemini-3.1-flash-image') as unknown;
     expect(gw).toBeInstanceOf(GeminiGateway);
   });
 });
@@ -46,12 +46,12 @@ describe('GeminiGateway 请求/响应', () => {
       }), { status: 200 });
     });
     const urls = await new GeminiGateway().generateImageSync(
-      { model: 'gemini-2.5-flash-image', prompt: '一只猫', resolution: '2K', ratio: '16:9' },
+      { model: 'gemini-3.1-flash-image', prompt: '一只猫', resolution: '2K', ratio: '16:9' },
       new AbortController().signal,
     );
     expect(urls.length).toBe(1);
     expect(urls[0]).toContain('https://cdn/'); // 来自 publish 桩(base64→putObject→publish 转 URL)
-    expect(captured.url).toContain('/v1beta/models/gemini-2.5-flash-image:generateContent'); // v1beta(实测 v1 不认 image-gen)
+    expect(captured.url).toContain('/v1beta/models/gemini-3.1-flash-image:generateContent'); // v1beta(实测 v1 不认 image-gen)
     expect(captured.headers['x-goog-api-key']).toBe('gkey-test-123'); // 非 Bearer
     expect(captured.headers.Authorization).toBeUndefined();
     expect(captured.body.contents[0].parts[0]).toEqual({ text: '一只猫' });
@@ -94,26 +94,28 @@ describe('GeminiGateway 请求/响应', () => {
     expect(urls.length).toBe(1); // 只 1 张成品(2 张 thought 被跳过)
   });
 
-  it('imageSize 仅 Gemini 3.x 发;2.5-flash 不发(只发 aspectRatio)', async () => {
-    let g3: any = null, g25: any = null;
+  it('两个 Nano Banana 模型都发 imageSize + aspectRatio(均 3.x)', async () => {
+    // 2.5 已下线;产品仅余 3.1 Flash 与 3 Pro,两者都支持 imageSize。
+    // 网关 startsWith('gemini-3') 守卫保留(无害、未来若再接非-3.x 模型仍正确)。
+    let flash: any = null, pro: any = null;
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (_u, init: any) => {
       const b = JSON.parse(init.body);
-      if (b.contents) { if (!g3) g3 = b; else g25 = b; }
+      if (b.contents) { if (!pro) pro = b; else flash = b; }
       return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ inline_data: { mime_type: 'image/png', data: Buffer.from('x').toString('base64') } }] } }] }), { status: 200 });
     });
     await new GeminiGateway().generateImageSync({ model: 'gemini-3-pro-image', prompt: 'x', resolution: '2K', ratio: '16:9' }, new AbortController().signal);
-    await new GeminiGateway().generateImageSync({ model: 'gemini-2.5-flash-image', prompt: 'x', resolution: '2K', ratio: '16:9' }, new AbortController().signal);
-    expect(g3.generationConfig.imageConfig.imageSize).toBe('2K');   // 3.x 发 imageSize
-    expect(g3.generationConfig.imageConfig.aspectRatio).toBe('16:9');
-    expect(g25.generationConfig.imageConfig.imageSize).toBeUndefined(); // 2.5 不发 imageSize
-    expect(g25.generationConfig.imageConfig.aspectRatio).toBe('16:9'); // 但发 aspectRatio
+    await new GeminiGateway().generateImageSync({ model: 'gemini-3.1-flash-image', prompt: 'x', resolution: '4K', ratio: '1:1' }, new AbortController().signal);
+    expect(pro.generationConfig.imageConfig.imageSize).toBe('2K');
+    expect(pro.generationConfig.imageConfig.aspectRatio).toBe('16:9');
+    expect(flash.generationConfig.imageConfig.imageSize).toBe('4K');
+    expect(flash.generationConfig.imageConfig.aspectRatio).toBe('1:1');
   });
 
   it('camelCase 响应(inlineData)也能解析', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: Buffer.from('z').toString('base64') } }] } }],
     }), { status: 200 }) as any);
-    const urls = await new GeminiGateway().generateImageSync({ model: 'gemini-2.5-flash-image', prompt: 'x' }, new AbortController().signal);
+    const urls = await new GeminiGateway().generateImageSync({ model: 'gemini-3.1-flash-image', prompt: 'x' }, new AbortController().signal);
     expect(urls.length).toBe(1);
   });
 
@@ -122,14 +124,14 @@ describe('GeminiGateway 请求/响应', () => {
       candidates: [{ content: { parts: [{ text: '拒绝' }] }, finishReason: 'SAFETY' }],
     }), { status: 200 }) as any);
     await expect(
-      new GeminiGateway().generateImageSync({ model: 'gemini-2.5-flash-image', prompt: 'x' }, new AbortController().signal),
+      new GeminiGateway().generateImageSync({ model: 'gemini-3.1-flash-image', prompt: 'x' }, new AbortController().signal),
     ).rejects.toThrow();
   });
 
   it('HTTP 错误 → 抛错(带 error 信息)', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ error: { message: 'API key invalid' } }), { status: 400 }) as any);
     await expect(
-      new GeminiGateway().generateImageSync({ model: 'gemini-2.5-flash-image', prompt: 'x' }, new AbortController().signal),
+      new GeminiGateway().generateImageSync({ model: 'gemini-3.1-flash-image', prompt: 'x' }, new AbortController().signal),
     ).rejects.toThrow();
   });
 });
