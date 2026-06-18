@@ -198,7 +198,7 @@ export const VIDEO_MODELS: Record<string, VideoModelDef> = {
   // shape 复用 V_DASH 占位(ark 适配器自建请求体,不读 shape)。文本+图(首帧/首尾帧/参考生)+ 有声。
   // ⚠ 价格未录(火山按 token 计,非每秒固定价)→ priceTier 占位、cost_source 待用户在 admin 录真实成本前不启用。
   'doubao-seedance-2.0': {
-    key: 'doubao-seedance-2.0', label: '豆包 Seedance 2.0', modelId: 'doubao-seedance-2-0-260128', provider: 'volc-ark',
+    key: 'doubao-seedance-2.0', label: 'Seedance 2.0', modelId: 'doubao-seedance-2-0-260128', provider: 'volc-ark',
     shape: 'V_DASH',
     resolutions: ['720P', '1080P'],
     ratios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
@@ -215,7 +215,7 @@ export const VIDEO_MODELS: Record<string, VideoModelDef> = {
     maxVideoRefs: 3, maxAudioRefs: 3, // 多模态参考(video_r2v):0-3 视频 + 0-3 音频
   },
   'doubao-seedance-2.0-fast': {
-    key: 'doubao-seedance-2.0-fast', label: '豆包 Seedance 2.0 Fast', modelId: 'doubao-seedance-2-0-fast-260128', provider: 'volc-ark',
+    key: 'doubao-seedance-2.0-fast', label: 'Seedance 2.0 Fast', modelId: 'doubao-seedance-2-0-fast-260128', provider: 'volc-ark',
     shape: 'V_DASH',
     resolutions: ['720P'], // Fast 不支持 1080P
     ratios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
