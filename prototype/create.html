@@ -7,6 +7,21 @@
 <link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
 <link rel="stylesheet" href="app.css">
 <style>
+  /* 外观弹框:分区(我的形象/内置形象)+ 收窄卡片(原 220px 偏大 → 150px 紧凑) */
+  #sheet-appearance .av-sec { margin-bottom:28px; }
+  #sheet-appearance .av-sec-h { font-size:14px; font-weight:700; color:var(--t1); margin:0 0 14px; display:flex; align-items:baseline; gap:8px; }
+  #sheet-appearance .av-sec-h span { font-size:12px; font-weight:500; color:var(--t4); font-family:var(--f-mono,monospace); }
+  #sheet-appearance .grid-av.av-mini { grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; }
+  #sheet-appearance .grid-av.av-mini .av { aspect-ratio:3/4; }
+  #sheet-appearance .grid-av.av-mini .av-name { font-size:13px; top:11px; left:12px; }
+  #sheet-appearance .grid-av.av-mini .av-cta { font-size:11px; }
+  /* 外观弹框正文滚动条隐藏但可滚(与 #3 右侧记录区同口径) */
+  #sheet-appearance .sf-body { scrollbar-width:none; -ms-overflow-style:none; }
+  #sheet-appearance .sf-body::-webkit-scrollbar { width:0; height:0; display:none; }
+  /* #3 右侧生成记录区(.feed)+ 整页滚动条隐藏但仍可滚(与 ref-video 同款) */
+  html { scrollbar-width:none; -ms-overflow-style:none; }
+  html::-webkit-scrollbar, .cfg::-webkit-scrollbar, .feed::-webkit-scrollbar { width:0; height:0; display:none; }
+  .cfg, .feed { scrollbar-width:none; -ms-overflow-style:none; }
   /* 生成记录卡:与全站模块统一(图转影片/影片编辑)。成片视频收进缩略约束盒 + card-acts 动作。*/
   .fvid { display:block; width:auto; height:auto; max-width:min(320px,100%); max-height:280px; border-radius:12px; background:#000; border:1px solid var(--line); margin-top:8px; }
   .card-acts { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
@@ -151,14 +166,11 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
 <!-- ===== 全屏:选择外观 ===== -->
 <div class="sheet-full" id="sheet-appearance">
   <div class="sf-head">
-    <div class="sf-sub"><b>晓琳</b><span>1 外观</span></div>
     <h3>选择外观</h3>
     <div class="sf-close" onclick="closeSheet('appearance')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
   </div>
-  <div class="sf-body">
-    <div class="grid-av" id="avSheetGrid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));max-width:1080px;margin:0 auto;">
-      <div style="color:var(--t4);padding:20px">加载形象中…</div>
-    </div>
+  <div class="sf-body" id="avSheetBody" style="max-width:920px;margin:0 auto;width:100%">
+    <div style="color:var(--t4);padding:20px">加载形象中…</div>
   </div>
 </div>
 
@@ -239,10 +251,10 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       <div class="rtitle">照片要求</div>
       <div class="rsub">格式 jpg / jpeg / png / webp，文件 &lt; 30MB</div>
       <div class="samples">
-        <div class="sample" style="background-image:url('https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-preset-7.png')"><span class="mk">✅</span></div>
-        <div class="sample" style="background-image:url('https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-preset-1.png')"><span class="mk">❌</span></div>
-        <div class="sample" style="background-image:url('https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-preset-2.png')"><span class="mk">❌</span></div>
-        <div class="sample" style="background-image:url('https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-preset-3.png')"><span class="mk">❌</span></div>
+        <div class="sample" style="background-image:url('https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-sample-1.png')" title="正脸清晰"><span class="mk">✅</span></div>
+        <div class="sample" style="background-image:url('https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-sample-2.png')" title="侧脸"><span class="mk">❌</span></div>
+        <div class="sample" style="background-image:url('https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-sample-3.png')" title="遮挡"><span class="mk">❌</span></div>
+        <div class="sample" style="background-image:url('https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-sample-4.png')" title="多人"><span class="mk">❌</span></div>
       </div>
       <ul class="rlist"><li>闭嘴，中性表情</li><li>正脸看着镜头</li><li>无墨镜、刘海等面部遮挡</li></ul>
       <div class="consent"><div class="ck on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></div><div>本形象已在创建时完成<b style="color:var(--t1)">授权与合规确认</b>。继续使用即表示遵守 <a href="terms.html" target="_blank" rel="noopener" style="color:var(--blue)">服务条款</a> 与 <a href="privacy.html" target="_blank" rel="noopener" style="color:var(--blue)">隐私政策</a>。</div></div>
@@ -372,19 +384,24 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   async function loadPickers(){
     try{
       const av = await LJ.get('/avatars');
-      const grid = document.getElementById('avSheetGrid');
-      // 自定义形象排在预置前面:用户刚建好的形象应当是默认,而不是预置晓琳
+      const body = document.getElementById('avSheetBody');
+      // 自定义形象排在预置前面:用户刚建好的形象应当是默认
       const myAvatars = (av.custom||[]).filter(a=>a.status==='ready');
-      const items = [...myAvatars, ...(av.presets||[])];
+      const presets = (av.presets||[]);
+      const items = [...myAvatars, ...presets]; // 供下方默认选首个 / ?avatar= 命中用
       const checkSvg = '<div class="av-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></div>';
-      const avCards = items.map(a=>{
+      const card = (a)=>{
         const bg = a.thumb ? `background-image:url('${a.thumb}')` : 'background:linear-gradient(160deg,#33333A,#1A1A1E)';
         const sel = selectedAvatar && selectedAvatar.id===a.id;
         return `<div class="av${sel?' selected':''}" data-avid="${a.id}" onclick='pickAvatar(${JSON.stringify({id:a.id,name:a.name,thumb:a.thumb||'',orientation:a.orientation||'portrait'}).replace(/'/g,"&#39;")})'><div class="av-img" style="${bg}"></div><div class="av-veil"></div>${sel?checkSvg:''}<div class="av-name">${esc(a.name)}</div><div class="av-cta">${sel?'✓ 当前使用':'选择此形象'}</div></div>`;
-      }).join('');
+      };
       // 上传卡:跳形象库走完整上传+授权流程(不在此重做)。
       const uploadCard = `<div class="av new" onclick="location.href='avatars.html'"><div class="av-new-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg><span>上传自己的形象</span></div></div>`;
-      grid.innerHTML = (avCards + uploadCard) || '<div style="color:var(--t4);padding:20px">暂无形象</div>';
+      // 分区:我的形象(自有)与 内置形象 分开展示;卡片用 .av-mini 收窄。
+      const sec = (title, sub, html)=>`<div class="av-sec"><div class="av-sec-h">${title}<span>${sub}</span></div><div class="grid-av av-mini">${html}</div></div>`;
+      const myHtml = myAvatars.length ? (myAvatars.map(card).join('')+uploadCard) : uploadCard;
+      const presetHtml = presets.length ? presets.map(card).join('') : '<div style="color:var(--t4);padding:8px 2px">暂无内置形象</div>';
+      body.innerHTML = sec('我的形象', myAvatars.length+' 个', myHtml) + sec('内置形象', presets.length+' 个', presetHtml);
       // 形象库带 ?avatar=id 进来 → 预选该形象(D4:查不到/已删/旧链则不预选,落到下面默认选首个)。
       const wantId = new URLSearchParams(location.search).get('avatar');
       if(wantId && !selectedAvatar){
@@ -513,6 +530,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         const script=(detail.input&&detail.input.script)||'';
         renderCard({ id:detail.id, status:detail.status, progress:detail.progress,
           videoUrl:detail.videoUrl, aiLabel:detail.aiLabel, error:detail.error,
+          avatarThumb:detail.avatarThumb||'', // 每条记录各自的形象缩略(修「全是同一人」)
           createdAt:detail.createdAt||j.createdAt }, script);
         // 仍在进行中的任务,继续轮询到终态
         if(detail.status==='queued'||detail.status==='running') track(detail.id, script);
@@ -562,18 +580,27 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   // 渲染/更新一个 job 卡片(三态:running/done/failed),复用原型 class。
   function renderCard(job, scriptText){
     const empty=document.getElementById('feedEmpty'); if(empty) empty.style.display='none';
-    let card = document.getElementById('job-'+job.id);
+    let card = document.getElementById('job-'+job.id); const existed=!!card;
     if(!card){
       card = document.createElement('div');
       card.className = 'fitem';
       card.id = 'job-'+job.id;
       feedList.insertBefore(card, feedList.firstChild); // 新任务置顶
     }
-    // 气泡左侧圆形:显示当前虚拟人形象缩略图(取本次选中的形象,有就铺图)
-    const avThumb = (job.avatarThumb) || (selectedAvatar && selectedAvatar.thumb) || '';
+    // 生成中卡片已存在 → 轮询只更进度文字/进度条,不重建 innerHTML
+    //(否则每次轮询都重铺 .mav 背景图,头像会闪一下,见用户反馈)。
+    if((job.status==='queued'||job.status==='running') && existed && card.dataset.st==='running'){
+      const lbl=card.querySelector('.proc-in .lbl'); const bar=card.querySelector('.proc-bar i');
+      if(lbl) lbl.textContent=job.progress?('进度 '+job.progress+'%'):'已进入生成队列';
+      if(bar) bar.style.width=(job.progress||8)+'%';
+      return;
+    }
+    // 气泡左侧圆形:显示该条记录各自的形象缩略(后端按 avatarRef 返回;不再回退当前选中,否则全是同一人)
+    const avThumb = job.avatarThumb || '';
     const mavStyle = avThumb ? `background-image:url('${avThumb}');background-size:cover;background-position:center` : '';
     const bubble = `<div class="fbubble"><div class="mav" style="${mavStyle}"></div><div class="tx">${esc(scriptText)}</div></div>`;
     if(job.status==='queued' || job.status==='running'){
+      card.dataset.st='running';
       card.innerHTML = `
         <div class="fmeta"><b>AI 虚拟人</b><span class="ts">${(window.LJTimeAgo&&LJTimeAgo(job.createdAt))||'刚刚'}</span><span class="sp"></span>
           <span class="st" style="color:var(--amber)"><span class="led led-run"></span>${job.status==='queued'?'排队中':'生成中'}</span></div>
@@ -582,6 +609,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
           <div class="lbl">${job.progress?('进度 '+job.progress+'%'):'已进入生成队列'}</div>
           <div class="proc-bar"><i style="width:${job.progress||8}%"></i></div></div></div>`;
     } else if(job.status==='done'){
+      card.dataset.st='done';
       // 成片视频收进 .fvid 缩略约束盒(与全站记录卡一致:竖屏不高出一屏)
       const v = job.videoUrl
         ? `<video class="fvid" src="${job.videoUrl}" controls playsinline preload="metadata"></video>`
@@ -600,6 +628,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         ${v}
         ${actions}`;
     } else { // failed
+      card.dataset.st='failed';
       card.innerHTML = `
         <div class="fmeta"><b>AI 虚拟人</b><span class="ts">${(window.LJTimeAgo&&LJTimeAgo(job.createdAt))||'刚刚'}</span><span class="sp"></span>
           <span class="st" style="color:var(--red)"><span class="led led-err"></span>生成失败</span></div>
@@ -654,7 +683,8 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         speed: parseFloat(speedEl.value),   // T3
         volume: parseInt(volEl.value, 10),  // T3
       });
-      renderCard({ id: res.id, status: 'queued', progress: 0 }, script);
+      // 乐观卡:带上本次选中形象的缩略(刚提交的这条就是该形象;后续轮询用后端 avatarThumb 校正)
+      renderCard({ id: res.id, status: 'queued', progress: 0, avatarThumb: selectedAvatar.thumb||'' }, script);
       track(res.id, script);
       ta.value=''; cnt.textContent='0'; scheduleEstimate();
       window.LJToast('✓ 已提交生成,可在右侧查看进度');
