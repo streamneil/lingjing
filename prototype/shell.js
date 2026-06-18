@@ -5,7 +5,10 @@
   // 用 mousedown 捕获,比 click 更早、更稳;点击弹框内部(.pop)或锚点(.pop-anchor)不关闭。
   document.addEventListener('mousedown', (e)=>{
     if (!document.querySelector('.pop.show')) return; // 无打开的弹框,快速返回
-    if (e.target.closest('.pop-anchor')) return;      // 点在 pill / 弹框内部 → 不关
+    // 点在 pill 锚点(.pop-anchor)或弹框内部(.pop)→ 不关。
+    // 关键:弹框可能被 portal 到 body(.pop-portal,逃离 .cfg 裁剪),此时已不在 .pop-anchor 内,
+    // 必须再判 .closest('.pop'),否则点选项时 mousedown 先关掉弹框 → mouseup/click 落空 → 「点不中」。
+    if (e.target.closest('.pop-anchor') || e.target.closest('.pop')) return;
     if (typeof window.closePops === 'function') window.closePops();
     else {
       document.querySelectorAll('.pop.show').forEach(p=>p.classList.remove('show'));
