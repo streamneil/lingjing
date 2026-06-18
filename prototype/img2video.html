@@ -677,16 +677,23 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     try{ renderImgArea(); scheduleEstimate(); refreshBtn(); }catch(e){}
   }
 
-  // 探索页灵感库一键复用:?prompt=<原文> 只填提示词框(eng-review:不接 ?img=,
-  // OSS 跨域抓不到 File + 输入图有 consent 合规闸;源图请用户自行上传同款)。
+  // 探索页灵感库一键复用:?prompt=<原文>[&reuseImg=<key>]。
+  // reuseImg = 同款开始图(首帧)的存储 key,走 reuse 机制(免重传、绕 OSS 跨域)。
+  // 平台自产素材无第三方 consent 问题(站内生成内容),故可直接带入开始图。
+  const OSS_BASE='https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/';
   function applyPromptFromQuery(){
-    const p=new URLSearchParams(location.search).get('prompt');
-    if(!p) return;
-    ta.value=p.slice(0,2000); cnt.textContent=ta.value.length;
-    refreshBtn(); scheduleEstimate(); ta.focus();
-    window.LJToast&&window.LJToast('✓ 已套用灵感库提示词,请上传同款开始图后生成');
+    const q=new URLSearchParams(location.search);
+    const p=q.get('prompt'); const reuseImg=q.get('reuseImg');
+    if(p){ ta.value=p.slice(0,2000); cnt.textContent=ta.value.length; }
+    if(reuseImg){
+      task='first_frame'; renderTaskTabs();
+      reuseRefs=[reuseImg]; reuseUrls=[OSS_BASE+reuseImg]; // key 当 ref 提交;公网 URL 显开始图预览
+      renderImgArea();
+    }
+    refreshBtn(); scheduleEstimate(); if(p) ta.focus();
+    if(p||reuseImg) window.LJToast&&window.LJToast(reuseImg?'✓ 已带入同款开始图与提示词,可改后生成':'✓ 已套用灵感库提示词,请上传同款开始图后生成');
   }
-  LJ.me().then(()=>{ loadModels(); loadHistory(); applyPromptFromQuery(); }).catch(()=>{});
+  LJ.me().then(async ()=>{ await loadModels(); loadHistory(); applyPromptFromQuery(); }).catch(()=>{});
   renderTaskTabs(); renderImgArea(); refreshBtn();
 </script>
 </body>

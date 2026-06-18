@@ -67,11 +67,14 @@ window.LJShowcase = [
     "toolName": "AI 图片编辑器",
     "page": "ai-image-edit.html",
     "actionLabel": "用这个编辑指令",
-    "actionText": "图1的女生的衣服换成图2女生的衣服，桌子上的手机换成图3的手机。",
-    "prompt": "图1的女生的衣服换成图2女生的衣服，桌子上的手机换成图3的手机。",
+    "actionText": "把图中女生的衣服换成参考图里的浅色针织套装，保持脸部、姿态与背景不变。",
+    "prompt": "把图中女生的衣服换成参考图里的浅色针织套装，保持脸部、姿态与背景不变。",
     "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/5a8a957b-9877-4802-b2ca-57514281751e-0.png",
     "beforeUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/image-inputs/16ed6622-c22c-4467-a319-947b37efbdbe/b00a0ff7-b3fb-4ece-8cab-11b79a504e48.jpg",
-    "afterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/5a8a957b-9877-4802-b2ca-57514281751e-0.png"
+    "afterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/5a8a957b-9877-4802-b2ca-57514281751e-0.png",
+    "refUrls": [
+      "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/swap-ref-knit.png"
+    ]
   },
   {
     "id": "lh-edit-2",
@@ -82,11 +85,14 @@ window.LJShowcase = [
     "toolName": "AI 图片编辑器",
     "page": "ai-image-edit.html",
     "actionLabel": "用这个编辑指令",
-    "actionText": "将图中的女孩的衣服换成图1的。",
-    "prompt": "将图中的女孩的衣服换成图1的。",
+    "actionText": "把图中女孩的衣服换成参考图里的浅色针织套装，保持脸部、姿态与背景不变。",
+    "prompt": "把图中女孩的衣服换成参考图里的浅色针织套装，保持脸部、姿态与背景不变。",
     "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/60b3c0a7-50d4-4b72-8b92-bcda21bed302-0.png",
     "beforeUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/image-inputs/16ed6622-c22c-4467-a319-947b37efbdbe/55fa0e3f-207a-462e-89fd-e6b0ee65b19b.jpg",
-    "afterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/60b3c0a7-50d4-4b72-8b92-bcda21bed302-0.png"
+    "afterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/60b3c0a7-50d4-4b72-8b92-bcda21bed302-0.png",
+    "refUrls": [
+      "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/swap-ref-knit.png"
+    ]
   },
   {
     "id": "lh-edit-3",
@@ -97,11 +103,14 @@ window.LJShowcase = [
     "toolName": "AI 图片编辑器",
     "page": "ai-image-edit.html",
     "actionLabel": "用这个编辑指令",
-    "actionText": "将图中的女孩的衣服换成参考图的衣服。",
-    "prompt": "将图中的女孩的衣服换成参考图的衣服。",
+    "actionText": "把图中女孩的衣服换成参考图里的时尚浅色针织套装，保持脸部、姿态与背景不变。",
+    "prompt": "把图中女孩的衣服换成参考图里的时尚浅色针织套装，保持脸部、姿态与背景不变。",
     "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/fada997b-7295-4256-b6fd-0e653cecbcd4-0.png",
     "beforeUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/image-inputs/16ed6622-c22c-4467-a319-947b37efbdbe/55fa0e3f-207a-462e-89fd-e6b0ee65b19b.jpg",
-    "afterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/fada997b-7295-4256-b6fd-0e653cecbcd4-0.png"
+    "afterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/fada997b-7295-4256-b6fd-0e653cecbcd4-0.png",
+    "refUrls": [
+      "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/swap-ref-knit.png"
+    ]
   },
   {
     "id": "lh-vedit-1",
@@ -112,10 +121,13 @@ window.LJShowcase = [
     "toolName": "AI 影片编辑器",
     "page": "video-edit.html",
     "actionLabel": "用这个编辑指令",
-    "actionText": "将视频中的女孩的衣服换成图1，并拿着手机图2在自拍，压根不知道镜头在拍她。",
-    "prompt": "将视频中的女孩的衣服换成图1，并拿着手机图2在自拍，压根不知道镜头在拍她。",
+    "actionText": "把视频中女孩的衣服换成参考图里的休闲浅色外套，让她举起手机自拍、神态自然，仿佛没察觉镜头在拍。",
+    "prompt": "把视频中女孩的衣服换成参考图里的休闲浅色外套，让她举起手机自拍、神态自然，仿佛没察觉镜头在拍。",
     "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/8dc94e89-7785-4f5d-bdf9-0e07c0fcb649-0.png",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/videos/16ed6622-c22c-4467-a319-947b37efbdbe/f82688d1-1fcc-472a-9817-b3f685f5827a.mp4"
+    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/videos/16ed6622-c22c-4467-a319-947b37efbdbe/f82688d1-1fcc-472a-9817-b3f685f5827a.mp4",
+    "refUrls": [
+      "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/swap-ref-coat.png"
+    ]
   },
   {
     "id": "lh-vedit-2",
@@ -126,10 +138,13 @@ window.LJShowcase = [
     "toolName": "AI 影片编辑器",
     "page": "video-edit.html",
     "actionLabel": "用这个编辑指令",
-    "actionText": "将视频中的女孩的衣服换成图1，并拿着手机图2在自拍，压根不知道镜头在拍她。",
-    "prompt": "将视频中的女孩的衣服换成图1，并拿着手机图2在自拍，压根不知道镜头在拍她。",
+    "actionText": "把视频中女孩的衣服换成参考图里的休闲浅色外套，让她举起手机自拍、神态自然，仿佛没察觉镜头在拍。",
+    "prompt": "把视频中女孩的衣服换成参考图里的休闲浅色外套，让她举起手机自拍、神态自然，仿佛没察觉镜头在拍。",
     "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/8dc94e89-7785-4f5d-bdf9-0e07c0fcb649-0.png",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/videos/16ed6622-c22c-4467-a319-947b37efbdbe/6aa1a61c-524a-42a1-8d3c-1ff4e5fae0ff.mp4"
+    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/videos/16ed6622-c22c-4467-a319-947b37efbdbe/6aa1a61c-524a-42a1-8d3c-1ff4e5fae0ff.mp4",
+    "refUrls": [
+      "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/swap-ref-coat.png"
+    ]
   },
   {
     "id": "probe-hanfu",

@@ -540,6 +540,9 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   // ── T5:?from=jobId 回填 ──
   async function prefillFromQuery(){
     const qs=new URLSearchParams(location.search);
+    // 探索页「去做同款数字人」带 ?prompt=<口播文案>(+ ?avatar= 由 loadPickers 预选形象)。
+    const qp=qs.get('prompt');
+    if(qp){ ta.value=qp.slice(0,2000); cnt.textContent=ta.value.length; refreshCreateBtn(); scheduleEstimate(); }
     // 探索页「一键开始」带 ?template=news/policy/finance/field 进来 → 套用示范文案
     // (复用既有 useTemplate;未知 key 静默忽略,不污染空白创作台)
     const tpl=qs.get('template');

@@ -49,8 +49,10 @@ function norm(x) {
   };
   if (modality === 'image') return { ...base, poster: ABS(x.ossKey || x.url), url: ABS(x.ossKey || x.url) };
   if (modality === 'video') return { ...base, poster: ABS(x.posterUrl), videoUrl: ABS(x.videoUrl) };
-  if (modality === 'video-edit') return { ...base, poster: ABS(x.posterUrl || x.sourceUrl), videoUrl: ABS(x.videoUrl) };
-  if (modality === 'image-edit') return { ...base, poster: ABS(x.afterUrl), beforeUrl: ABS(x.beforeUrl), afterUrl: ABS(x.afterUrl) };
+  // refUrls:参考图(如换装的参考衣服图),一键复用时带进编辑器「参考图」槽。逐个 ABS。
+  const refUrls = Array.isArray(x.refUrls) && x.refUrls.length ? { refUrls: x.refUrls.map(ABS) } : {};
+  if (modality === 'video-edit') return { ...base, poster: ABS(x.posterUrl || x.sourceUrl), videoUrl: ABS(x.videoUrl), ...refUrls };
+  if (modality === 'image-edit') return { ...base, poster: ABS(x.afterUrl), beforeUrl: ABS(x.beforeUrl), afterUrl: ABS(x.afterUrl), ...refUrls };
   if (modality === 'avatar') return { ...base, poster: ABS(x.sourceUrl), videoUrl: ABS(x.videoUrl), sourceUrl: ABS(x.sourceUrl) };
   return base;
 }

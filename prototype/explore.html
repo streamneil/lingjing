@@ -304,12 +304,15 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   function urlToKey(u){ if(!u) return ''; const i=u.indexOf(OSS_HOST); return i<0?'':u.slice(i+OSS_HOST.length).split('?')[0]; }
   // 数字人示范脸 → 预置 id(与 src/avatars/index.ts 的 preset-sage/grandma/girl 对应)。
   const AVATAR_PRESET = { 'portrait-sage.jpg':'preset-sage', 'portrait-grandma.jpg':'preset-grandma', 'girl-rainbow.jpg':'preset-girl' };
+  // 参考图(refUrls,如换装的参考衣服图)→ &reuseRefImg=key1,key2(逗号分隔,带进编辑器「参考图」槽)。
+  function refImgParam(s){ const ks=(s.refUrls||[]).map(urlToKey).filter(Boolean); return ks.length?'&reuseRefImg='+encodeURIComponent(ks.join(',')):''; }
   function buildPrefill(s){
     const prompt=encodeURIComponent(s.actionText||s.prompt||'');
-    if(s.modality==='image-edit'){ const k=urlToKey(s.beforeUrl||s.poster); return `${s.page}?prompt=${prompt}${k?'&reuseImg='+encodeURIComponent(k):''}`; }
-    if(s.modality==='video-edit'){ const k=urlToKey(s.videoUrl||s.sourceUrl); return `${s.page}?prompt=${prompt}${k?'&reuseVideo='+encodeURIComponent(k):''}`; }
-    if(s.modality==='avatar'){ const pid=AVATAR_PRESET[(s.sourceUrl||s.poster||'').split('/').pop()]; return `create.html${pid?'?avatar='+encodeURIComponent(pid):''}`; }
-    return `${s.page}?prompt=${prompt}`; // image / video(图转影片):只带提示词
+    if(s.modality==='image-edit'){ const k=urlToKey(s.beforeUrl||s.poster); return `${s.page}?prompt=${prompt}${k?'&reuseImg='+encodeURIComponent(k):''}${refImgParam(s)}`; }
+    if(s.modality==='video-edit'){ const k=urlToKey(s.videoUrl||s.sourceUrl); return `${s.page}?prompt=${prompt}${k?'&reuseVideo='+encodeURIComponent(k):''}${refImgParam(s)}`; }
+    if(s.modality==='avatar'){ const pid=AVATAR_PRESET[(s.sourceUrl||s.poster||'').split('/').pop()]; return `create.html?prompt=${prompt}${pid?'&avatar='+encodeURIComponent(pid):''}`; }
+    if(s.modality==='video'){ const k=urlToKey(s.poster); return `${s.page}?prompt=${prompt}${k?'&reuseImg='+encodeURIComponent(k):''}`; } // 图转影片:poster=开始图(首帧)
+    return `${s.page}?prompt=${prompt}`; // image:只带提示词
   }
   const SC_ALL = (window.LJShowcase || []).map(s=>({
     id:s.id, title:s.title, sub:`${s.toolName} · ${s.theme}`, tag:s.theme, theme:s.theme,

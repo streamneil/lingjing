@@ -730,13 +730,18 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   function applyPromptFromQuery(){
     const q=new URLSearchParams(location.search);
     const p=q.get('prompt'); const reuseVideo=q.get('reuseVideo');
+    const refKeys=(q.get('reuseRefImg')||'').split(',').map(s=>s.trim()).filter(Boolean); // 参考图 key(如换装的参考衣服图)
     if(p){ ta.value=p.slice(0,5000); cnt.textContent=ta.value.length; }
     if(reuseVideo){
       videoRef=reuseVideo; reuseVideoUrl=OSS_BASE+reuseVideo; // key 当 ref 提交;公网 URL 显预览
       vidState='reuse'; renderVidCard(); renderDur();
     }
+    if(refKeys.length){
+      // 参考图走 reuse 机制:reuseRefs=keys(提交沿用)、reuseUrls=公网 URL(显缩略)。
+      reuseRefs=refKeys.slice(); reuseUrls=refKeys.map(k=>OSS_BASE+k); renderRefs();
+    }
     refreshBtn(); scheduleEstimate(); if(p) ta.focus();
-    if(p||reuseVideo) window.LJToast&&window.LJToast(reuseVideo?'✓ 已带入原视频与编辑指令,可改后生成':'✓ 已套用编辑指令,请上传原视频 + 勾选授权后生成');
+    if(p||reuseVideo||refKeys.length) window.LJToast&&window.LJToast((reuseVideo||refKeys.length)?'✓ 已带入原视频/参考图与编辑指令,可改后生成':'✓ 已套用编辑指令,请上传原视频 + 勾选授权后生成');
   }
   // 先 await loadModels(异步)再 applyPromptFromQuery:否则 reuse 视频可能被随后的模型 UI 重渲清掉。
   LJ.me().then(async ()=>{ await loadModels(); loadHistory(); applyPromptFromQuery(); }).catch(()=>{});

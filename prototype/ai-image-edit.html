@@ -824,13 +824,16 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   function applyPromptFromQuery(){
     const q=new URLSearchParams(location.search);
     const p=q.get('prompt'); const reuseImg=q.get('reuseImg');
+    const refKeys=(q.get('reuseRefImg')||'').split(',').map(s=>s.trim()).filter(Boolean); // 参考图 key(如换装的参考衣服图)
     if(p){ ta.value=p.slice(0,2000); cnt.textContent=ta.value.length; if(typeof mkPromptEl!=='undefined' && mkPromptEl) mkPromptEl.value=ta.value; }
-    if(reuseImg){
+    if(reuseImg || refKeys.length){
+      // refillImages([主图, 参考图...], [keys...]):urls[0]=被编辑主图,其余进「参考图」槽。
       // key → 公网 URL 显预览;ref 用 key 本身(提交沿用,后端 publish 重签喂厂商)。
-      refillImages([OSS_BASE+reuseImg], [reuseImg]);
+      const keys=[...(reuseImg?[reuseImg]:[]), ...refKeys];
+      refillImages(keys.map(k=>OSS_BASE+k), keys);
     }
     refreshBtn(); scheduleEstimate(); if(p) ta.focus();
-    if(p||reuseImg) window.LJToast&&window.LJToast(reuseImg?'✓ 已带入原图与编辑指令,可改后生成':'✓ 已套用编辑指令,请上传原图 + 勾选授权后生成');
+    if(p||reuseImg||refKeys.length) window.LJToast&&window.LJToast((reuseImg||refKeys.length)?'✓ 已带入原图/参考图与编辑指令,可改后生成':'✓ 已套用编辑指令,请上传原图 + 勾选授权后生成');
   }
   // 先 await loadModels(异步)再 applyPromptFromQuery:否则 loadModels 末尾的 onModelChange
   // 会在 reuse 渲染之后才跑、且可能重渲清掉带入的参考图(模型/模式 UI 尚未就绪时铺图会被覆盖)。
