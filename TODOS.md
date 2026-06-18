@@ -154,3 +154,11 @@
 - **Context:** CEO plan ~/.gstack/projects/digital-human/ceo-plans/2026-06-17-admin-ops-dashboard.md。本轮已做点名的消耗快照/Top租户/充值/体感条/余额续航。消耗口径=reserve+release(非settle,settle 恒0);充值=recharge_order status='credited'。
 - **Effort:** 每项 M(human)→ S(CC)。**Priority:** P3(数据量触发)。
 - **Depends on / blocked by:** 租户/job 量增长;趋势图需先抽 bucketSeries helper + credit_ledger(created_at) 索引。
+
+## AI 图片:分辨率分档计价(后期)
+
+Nano Banana 价格随分辨率变(3.1 Flash 1K=$0.067/2K=$0.101/4K=$0.151;Pro 1–2K=$0.134/4K=$0.24),
+当前 `model_pricing` 图片表「一模型一行」,用 2K 档单一成本(3.1 Flash ¥0.73、Pro ¥0.96)。
+后期分档方案:复用视频已有的 `model_pricing.variant` 机制 —— 每模型种 `gemini-*:1K/2K/4K` 多行,
+`lookupCost` 图片路径透传 resolution,`buildImageJob` 价格快照按所选档取。改动穿透 mergeDef/buildImageJob/价格快照/admin。
+决策记录:docs/superpowers/specs/2026-06-18-nano-banana-image-design.md。
