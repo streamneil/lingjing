@@ -13,6 +13,12 @@
   .card-acts button { display:inline-flex; align-items:center; gap:5px; font-size:12.5px; color:var(--t2); background:var(--field); border:1px solid var(--line); border-radius:9px; padding:7px 13px; cursor:pointer; transition:.15s; }
   .card-acts button:hover { border-color:var(--line-hi); color:var(--t1); }
   .card-acts button svg { width:14px; height:14px; }
+  /* 克隆/设计弹窗:从音色面板(z110)内打开,须盖在其之上(与 TTS 一致) */
+  #ov-design, #ov-clone { z-index:320; }
+  /* 设计音色维度芯片(与 TTS 一致) */
+  .vd-dims { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 4px; }
+  .vd-dim { font-size:11px; padding:4px 9px; border-radius:var(--r-sm,8px); background:var(--field); border:1px solid var(--line); color:var(--t3); cursor:pointer; transition:.15s; }
+  .vd-dim:hover { border-color:var(--line-hi); color:var(--t1); }
 </style>
 <script defer src="tools.js"></script>
 <script defer src="shell.js"></script>
@@ -154,7 +160,10 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       <button class="active" data-tab="preset" role="tab" aria-selected="true">音色库</button>
       <button data-tab="mine" role="tab" aria-selected="false">我的声音</button>
     </div>
-    <button class="btn btn-dark" onclick="location.href='voices.html'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" style="width:15px;height:15px"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>克隆或设计</button>
+    <div class="pop-anchor">
+      <button class="btn btn-dark" id="voiceNewPill" onclick="toggleVPop('voiceNew')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" style="width:15px;height:15px"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>克隆或设计</button>
+      <div class="pop" id="pop-voiceNew" style="min-width:180px;left:auto;right:0"><div class="pop-opt" onclick="closeVPops();openClone()"><span class="nm">复制音色(克隆)</span></div><div class="pop-opt" onclick="closeVPops();openDesign()"><span class="nm">设计音色(描述)</span></div></div>
+    </div>
   </div>
   <!-- 语言/性别筛选(与 TTS 一致)-->
   <div class="ss-filters">
@@ -173,6 +182,39 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   </div>
   <div class="pop-ov" id="vpopOv" onclick="closeVPops()"></div>
 </div>
+
+<!-- 设计音色弹窗(与 TTS 一致)-->
+<div class="ov" id="ov-design"><div class="modal">
+  <div class="mh"><h3>设计音色</h3><div class="mc" onclick="closeModal('design')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></div></div>
+  <div class="mb">
+    <div class="iline"><label>音色名称</label><input id="dgName" placeholder="例如:温柔知性女声" maxlength="40" oninput="refreshDgBtn()"></div>
+    <div class="cfg-label" style="margin-top:2px">声音描述(越具体越精准,≤2048 字)</div>
+    <textarea id="dgPrompt" maxlength="2048" placeholder="例如:年轻活泼的女性声音,语速较快,带有明显的上扬语调,适合介绍时尚产品。" style="width:100%;min-height:84px;padding:11px 13px;background:var(--field);border:1px solid var(--line);border-radius:10px;color:var(--t1);font-size:13px;resize:vertical" oninput="refreshDgBtn()"></textarea>
+    <div class="vd-dims" id="dgDims"></div>
+    <div class="vd-preview" id="dgPreview" style="display:none"></div>
+    <button class="btn btn-white" id="dgSubmitBtn" style="width:100%;padding:14px;font-size:15px;margin-top:12px" onclick="submitDesign()">生成音色</button>
+  </div>
+</div></div>
+
+<!-- 复制音色(克隆)弹窗(与 TTS 一致:上传样本 + 本人授权存证)-->
+<div class="ov" id="ov-clone"><div class="modal">
+  <div class="mh"><h3>复制音色(克隆)</h3><div class="mc" onclick="closeModal('clone')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></div></div>
+  <div class="mb">
+    <div class="iline"><label>音色名称</label><input id="cvName" placeholder="例如:我的克隆音色" maxlength="40" oninput="refreshCvBtn()" onkeydown="if(event.key==='Enter')submitClone()"></div>
+    <div class="uzone" onclick="document.getElementById('voiceSample').click()">
+      <div class="ubox" id="cvUboxEmpty"><div class="u"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>上传 5–30s 语音样本</div></div>
+      <div class="upreview" id="cvPreview" style="display:none"><div class="upreview-bar"><span id="cvSampleName"></span><button type="button" class="upreview-x" onclick="event.stopPropagation();clearCvUpload()">重新选择</button></div></div>
+    </div>
+    <div class="rtitle">样本要求</div><div class="rsub" style="font-size:12.5px;color:var(--t3);margin-bottom:14px">单人清晰语音,5–30 秒,无背景音乐与噪声;格式 mp3 / wav / m4a。</div>
+    <div class="consent" id="cvConsent" role="checkbox" aria-checked="false" tabindex="0" onclick="toggleCvConsent()" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleCvConsent();}" style="cursor:pointer">
+      <div class="ck" id="cvConsentBox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></div>
+      <div>我确认已获被克隆人<b style="color:var(--t1)">本人授权</b>(年满 18 岁,声音属本人或已书面授权),并接受 <a href="terms.html" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--blue)">服务条款</a> 与 <a href="privacy.html" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--blue)">隐私政策</a>。<a onclick="event.stopPropagation();document.getElementById('voiceProof').click()" style="color:var(--blue);cursor:pointer">上传授权凭证(可选)</a> <span id="cvProofName" style="color:var(--t4);font-size:11px"></span></div>
+    </div>
+    <button class="btn btn-white" id="cvSubmitBtn" style="width:100%;padding:15px;font-size:15px" onclick="submitClone()">克隆音色</button>
+  </div>
+</div></div>
+<input type="file" id="voiceSample" accept="audio/*" style="display:none">
+<input type="file" id="voiceProof" accept="image/*,application/pdf" style="display:none">
 
 <!-- ===== 居中:创建角色 ===== -->
 <div class="ov" id="ov-createRole">
@@ -609,6 +651,83 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       btn.innerHTML=prev; refreshCreateBtn();
     }
   });
+
+  // ── 克隆/设计音色(与 TTS 一致:面板内弹「复制或设计」popover → 原地弹窗,不跳页)──
+  // 重新拉音色并切到「我的声音」Tab(克隆/设计成功后调用,体验连续)
+  async function reloadVoicesToMine(){
+    try{ voicesData = await LJ.get('/voices'); refreshVoiceFilters(); }catch(e){}
+    voiceTab='mine';
+    document.querySelectorAll('.ss-seg button').forEach((b,i)=>{ const on=i===1; b.classList.toggle('active',on); b.setAttribute('aria-selected',on?'true':'false'); });
+    renderVoiceSheet();
+  }
+  // 设计音色
+  const DG_DIMS=['年轻女声','沉稳男声','温柔','活泼','磁性','播音腔','语速偏快','适合有声书'];
+  function openDesign(){
+    document.getElementById('dgName').value=''; document.getElementById('dgPrompt').value='';
+    document.getElementById('dgPreview').style.display='none'; document.getElementById('dgPreview').innerHTML='';
+    document.getElementById('dgDims').innerHTML=DG_DIMS.map(d=>`<span class="vd-dim" onclick="addDgDim('${d}')">${d}</span>`).join('');
+    refreshDgBtn(); openModal('design');
+    setTimeout(()=>document.getElementById('dgName').focus(),60);
+  }
+  window.addDgDim=(d)=>{ const t=document.getElementById('dgPrompt'); t.value=(t.value?t.value.replace(/[，。]?$/,'，'):'')+d; refreshDgBtn(); t.focus(); };
+  function refreshDgBtn(){
+    const btn=document.getElementById('dgSubmitBtn');
+    const name=document.getElementById('dgName').value.trim(), prompt=document.getElementById('dgPrompt').value.trim();
+    let ok=true, txt='生成音色';
+    if(!name){ ok=false; txt='请输入音色名称'; } else if(!prompt){ ok=false; txt='请输入声音描述'; }
+    btn.disabled=!ok; btn.textContent=txt;
+  }
+  async function submitDesign(){
+    const btn=document.getElementById('dgSubmitBtn'); if(btn.disabled) return;
+    const name=document.getElementById('dgName').value.trim(), voicePrompt=document.getElementById('dgPrompt').value.trim();
+    btn.disabled=true; btn.textContent='生成中…';
+    try{
+      const r=await LJ.post('/voices/design',{name,voicePrompt});
+      const pv=document.getElementById('dgPreview');
+      if(r.previewUrl){ pv.style.display=''; pv.innerHTML=`<div class="cfg-label">预览试听</div><audio src="${esc(r.previewUrl)}" controls preload="metadata" style="width:100%"></audio>`; }
+      window.LJToast&&window.LJToast('✓ 音色「'+name+'」已生成,可在「我的声音」选用');
+      await reloadVoicesToMine();
+      pickVoice({id:r.id,name:r.name}, true);
+      setTimeout(()=>closeModal('design'), r.previewUrl?2500:300);
+    }catch(e){ window.LJToast&&window.LJToast(e.message||'设计失败','err'); }
+    finally{ refreshDgBtn(); }
+  }
+  window.openDesign=openDesign; window.refreshDgBtn=refreshDgBtn; window.submitDesign=submitDesign;
+  // 复制音色(克隆)
+  let cvConsented=false;
+  function openClone(){
+    document.getElementById('cvName').value=''; document.getElementById('voiceProof').value=''; document.getElementById('cvProofName').textContent='';
+    setCvConsent(false); clearCvUpload(); openModal('clone');
+    setTimeout(()=>document.getElementById('cvName').focus(),60);
+  }
+  function setCvConsent(v){ cvConsented=v; document.getElementById('cvConsentBox').classList.toggle('on',v); document.getElementById('cvConsent').setAttribute('aria-checked',v?'true':'false'); refreshCvBtn(); }
+  function toggleCvConsent(){ setCvConsent(!cvConsented); }
+  function clearCvUpload(){ document.getElementById('voiceSample').value=''; document.getElementById('cvPreview').style.display='none'; document.getElementById('cvUboxEmpty').style.display=''; refreshCvBtn(); }
+  function refreshCvBtn(){
+    const btn=document.getElementById('cvSubmitBtn');
+    const name=(document.getElementById('cvName').value||'').trim(), hasFile=!!document.getElementById('voiceSample').files[0];
+    let txt='克隆音色', ok=true;
+    if(!name){ txt='请输入音色名称'; ok=false; } else if(!hasFile){ txt='请上传语音样本'; ok=false; } else if(!cvConsented){ txt='请勾选已获授权'; ok=false; }
+    btn.disabled=!ok; btn.textContent=txt;
+  }
+  document.getElementById('voiceSample').addEventListener('change',function(){ const f=this.files[0]; if(!f) return; document.getElementById('cvUboxEmpty').style.display='none'; document.getElementById('cvPreview').style.display='block'; document.getElementById('cvSampleName').textContent=f.name; refreshCvBtn(); });
+  document.getElementById('voiceProof').addEventListener('change',function(){ const f=this.files[0]; if(f) document.getElementById('cvProofName').textContent='✓ '+f.name; });
+  async function submitClone(){
+    const btn=document.getElementById('cvSubmitBtn'); if(btn.disabled) return;
+    const name=document.getElementById('cvName').value.trim(), sample=document.getElementById('voiceSample').files[0], proof=document.getElementById('voiceProof').files[0];
+    const fd=new FormData(); fd.append('name',name); fd.append('consent','true'); fd.append('sample',sample); if(proof) fd.append('proof',proof);
+    btn.disabled=true; btn.textContent='克隆中…';
+    try{
+      const res=await fetch('/api/voices',{method:'POST',body:fd,credentials:'same-origin'});
+      if(res.status===401){ location.href='login.html'; return; }
+      const d=await res.json().catch(()=>({})); if(!res.ok) throw new Error(d.error||'克隆失败');
+      closeModal('clone'); window.LJToast&&window.LJToast('✓ 音色「'+name+'」已提交克隆');
+      await reloadVoicesToMine();
+    }catch(e){ window.LJToast&&window.LJToast(e.message||'克隆失败','err'); refreshCvBtn(); }
+  }
+  window.openClone=openClone; window.toggleCvConsent=toggleCvConsent; window.refreshCvBtn=refreshCvBtn; window.clearCvUpload=clearCvUpload; window.submitClone=submitClone;
+  // Esc 关克隆/设计弹窗
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ if(document.getElementById('ov-design').classList.contains('show')) closeModal('design'); if(document.getElementById('ov-clone').classList.contains('show')) closeModal('clone'); } });
 
   refreshCreateBtn(); // 初始态:按缺项给出提示
 </script>
