@@ -122,9 +122,10 @@ const DOUBAO_SEED = [
   ['doubao-seedance-2.0:720P', 'doubao-seedance-2.0', 'video', '秒', '720P', 1.0],   // 4.97/5 秒 ≈ 1.0
   ['doubao-seedance-2.0:1080P', 'doubao-seedance-2.0', 'video', '秒', '1080P', 2.5], // 12.39/5 秒 ≈ 2.48→2.5
   ['doubao-seedance-2.0-fast:720P', 'doubao-seedance-2.0-fast', 'video', '秒', '720P', 0.8], // 4.0/5 秒 = 0.8
-  // Google Gemini(Nano Banana):美元×7.2 汇率折人民币(后台可调)。
-  ['gemini-2.5-flash-image', 'gemini-2.5-flash-image', 'image', '张', null, 0.28], // $0.039×7.2≈0.28→⌈×35⌉=10
-  ['gemini-3-pro-image', 'gemini-3-pro-image', 'image', '张', null, 0.96],         // $0.134×7.2≈0.96→⌈×35⌉=34
+  // Google Gemini(Nano Banana,文档收口:只这 2 个模型):美元×7.2 汇率折人民币(后台可调)。
+  // 图片暂不分辨率分档,用 2K 档单一成本(后期分档见 TODOS)。
+  ['gemini-3.1-flash-image', 'gemini-3.1-flash-image', 'image', '张', null, 0.73], // Nano Banana 2:$0.101(2K)×7.2≈0.73→⌈×35⌉=26
+  ['gemini-3-pro-image', 'gemini-3-pro-image', 'image', '张', null, 0.96],         // Nano Banana Pro:$0.134(1–2K)×7.2≈0.96→⌈×35⌉=34
 ];
 for (const [id, key, modality, unit, variant, cost] of DOUBAO_SEED) {
   if (insMp.run(id, key, modality, unit, variant, cost, 1, 0, Date.now()).changes) mpSeeded++;
