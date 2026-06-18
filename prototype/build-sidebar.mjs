@@ -76,7 +76,6 @@ function buildSidebar(cur) {
 <span class="nm">Lingjing</span><span class="cjk">灵镜</span>
 </a>
 <nav class="sb-nav">${items}</nav>
-<div class="sb-foot"><div class="deploy-tag"><span class="d"></span><span>云端服务 · 运行中</span></div></div>
 </aside>
 <script>/* 品牌即时渲染:此内联脚本紧跟 .sb-brand,解析到此即同步执行(早于首次绘制),
 按 localStorage 缓存把默认「Lingjing 灵镜」改成机构真实名/Logo → Chrome/Safari 0 闪。

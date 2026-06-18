@@ -87,7 +87,6 @@
         <span class="nm">Lingjing</span><span class="cjk">灵镜</span>
       </a>
       <nav class="sb-nav">${items}</nav>
-      <div class="sb-foot"><div class="deploy-tag"><span class="d"></span><span>云端服务 · 运行中</span></div></div>
     </aside>`);
     __sidebar = __mount.querySelector('.sidebar');
   }
