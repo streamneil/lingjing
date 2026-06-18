@@ -270,8 +270,8 @@ async function runVideoJob(job: JobRow): Promise<void> {
   }
 
   markDone(job.id, objectKey, aiLabel);
-  // 成功结算:实扣按字数估算(与提交时 reserve 同一算法 → 差额0)
-  const actualCost = estimateCost(input.script.length, input.resolution);
+  // 成功结算:按秒数×每秒售价(与提交 reserve 同一函数同一入参 script/resolution/speed → 差额0)
+  const actualCost = estimateCost(input.script.length, input.resolution, input.speed);
   settle(job.tenant_id, job.id, actualCost);
 }
 

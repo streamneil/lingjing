@@ -16,20 +16,23 @@ beforeEach(() => {
 });
 
 describe('计价', () => {
-  it('字数 × 单价,有下限', () => {
-    expect(estimateCost(0)).toBe(1); // MIN_COST
-    expect(estimateCost(100, '1080P')).toBe(5); // ceil(100*0.05*1)
-    expect(estimateCost(100, '720P')).toBe(3); // ceil(100*0.05*0.6)=3
-    expect(estimateCost(100, '4K')).toBe(10); // 100*0.05*2
+  it('按秒数 × 每秒售价,有下限', () => {
+    // 数字人(wan2.2-s2v):秒数=⌈字数/(5×语速)⌉;每秒售价=⌈真实元/秒 × 35⌉(480P 18 / 720P 32)。
+    expect(estimateCost(0)).toBe(1); // 空脚本 → MIN_COST
+    expect(estimateCost(100, '720P')).toBe(640); // ⌈100/5⌉=20s × 32 = 640
+    expect(estimateCost(100, '480P')).toBe(360); // 20s × 18 = 360(480P 必须比 720P 便宜)
+    expect(estimateCost(100, '480P')).toBeLessThan(estimateCost(100, '720P'));
+    // 语速快 → 同字数更短 → 更便宜
+    expect(estimateCost(100, '720P', 2)).toBe(320); // ⌈100/10⌉=10s × 32 = 320
   });
 
   it('预估 = reserve = settle(同一算法,验收第4条)', () => {
-    const cost = estimateCost(200, '1080P');
-    grant(T, 100);
+    const cost = estimateCost(100, '720P'); // 640
+    grant(T, 1000);
     reserve(T, 'job-x', cost);
     settle(T, 'job-x', cost);
-    // grant100 - reserve(cost) + settle(0) = 100 - cost
-    expect(balance(T)).toBe(100 - cost);
+    // grant1000 - reserve(cost) + settle(0) = 1000 - cost
+    expect(balance(T)).toBe(1000 - cost);
   });
 });
 

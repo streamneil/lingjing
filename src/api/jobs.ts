@@ -128,7 +128,7 @@ function buildVideoJob(body: Record<string, unknown>, tid: string, actingUserId:
     ok: true,
     type: 'video',
     input: input as unknown as Record<string, unknown>,
-    cost: estimateCost(script.length, resolution),
+    cost: estimateCost(script.length, resolution, speed), // 秒数×每秒售价(语速影响秒数);settle 读同一入参保 reserve==settle
   };
 }
 
@@ -985,7 +985,12 @@ jobsRouter.post('/jobs/estimate', requireAuth, async (req: Request, res: Respons
   }
   if (typeof body.script !== 'string') return res.status(400).json({ error: '缺少 script' });
   return res.json({
-    cost: estimateCost(body.script.length, typeof body.resolution === 'string' ? body.resolution : undefined),
+    // 数字人:秒数×每秒售价,speed 影响秒数(与 buildVideoJob 同口径 → 预估≡reserve)。
+    cost: estimateCost(
+      body.script.length,
+      typeof body.resolution === 'string' ? body.resolution : undefined,
+      typeof body.speed === 'number' ? body.speed : undefined,
+    ),
   });
 });
 

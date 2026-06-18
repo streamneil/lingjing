@@ -17,16 +17,28 @@ import { sellPrice, getConfig, markupX35, lookupCost } from './pricing.js';
 
 const now = () => Date.now();
 
-// ── 计价:字数 × 单价 × 分辨率系数 ──
-const PRICE_PER_CHAR = 0.05; // 每字 0.05 积分(可配置;占位值)
-// 分辨率计价系数。480P 必须低于 720P,否则"更便宜"的选项反而更贵(eng-review D-E7)。
-const RES_FACTOR: Record<string, number> = { '480P': 0.4, '720P': 0.6, '1080P': 1, '4K': 2 };
 const MIN_COST = 1;
 
-/** 数字人视频计价(字数 × 单价 × 分辨率系数)。reserve / settle 用同一函数,保证一致(验收第4条)。 */
-export function estimateCost(scriptLength: number, resolution = '1080P'): number {
-  const factor = RES_FACTOR[resolution] ?? 1;
-  return Math.max(MIN_COST, Math.ceil(scriptLength * PRICE_PER_CHAR * factor));
+// ── 数字人(wan2.2-s2v)计价:按生成视频「秒数 × 每秒售价」,与全站视频同口径 ──
+// 此前按「字数 × 0.05 × 分辨率系数」扁平估算,严重低估:65字/720P 仅 2 积分,
+// 而 wan2.2-s2v 真实按输出秒数计费(480P 0.5元/秒、720P 0.9元/秒),漏收 ~200 倍。
+// 修正为「估算秒数 × 每秒售价(真实元/秒 × 全局倍率)」,与 estimateVideoCost 一致。
+//
+// 秒数估算:中文播报约 5 字/秒(与 pipeline/segment.ts 同口径);语速 speed 快则同样字数更短。
+//   seconds ≈ ⌈script.length / (5 × speed)⌉。worker settle 读同一 input 再算 → reserve==settle。
+// s2v 无 model 字段(固定百炼),每秒真实成本(元/秒)直接登记于此,售价 = 成本 × markupX35()。
+const AVATAR_CHARS_PER_SECOND = 5; // 中文播报速率(字/秒,rate=1)
+const S2V_COST_YUAN_PER_SECOND: Record<string, number> = { '480P': 0.5, '720P': 0.9 }; // 百炼官方单价
+
+/** 数字人视频计价:估算秒数 × 每秒售价(真实元/秒 × 全局倍率)。
+ *  reserve(buildVideoJob)/ settle(worker.runVideoJob)用同一函数同一入参,保证一致(reserve==settle)。 */
+export function estimateCost(scriptLength: number, resolution = '720P', speed = 1): number {
+  if (!(scriptLength > 0)) return MIN_COST; // 空脚本不生成视频 → 下限(否则 max(1,秒)会凭空收 1 秒)
+  const cps = AVATAR_CHARS_PER_SECOND * (speed > 0 ? speed : 1); // 语速快 → 每秒读更多字 → 秒数减
+  const seconds = Math.max(1, Math.ceil(scriptLength / cps));
+  const costPerSec = S2V_COST_YUAN_PER_SECOND[resolution] ?? S2V_COST_YUAN_PER_SECOND['720P']!;
+  const perSecTier = sellPrice(costPerSec); // 售价积分/秒 = ⌈真实元/秒 × markupX35⌉(后台改倍率随之变)
+  return Math.max(MIN_COST, Math.ceil(seconds * perSecTier));
 }
 
 // ── AI 图片计价:图数 × 单价(图片费用与分辨率无关) ──
@@ -185,6 +197,7 @@ export function costFor(toolType: string, input: Record<string, unknown>): numbe
       return estimateCost(
         typeof input.script === 'string' ? input.script.length : 0,
         typeof input.resolution === 'string' ? input.resolution : undefined,
+        typeof input.speed === 'number' ? input.speed : undefined,
       );
     case 'ai_image': {
       // mode 感知 + model-aware(外部声音 P1/P2):priceTier 替代基价,maxImages 限张数。
