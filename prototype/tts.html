@@ -68,6 +68,9 @@
   /* 复制或设计菜单同向下;弹框选项较多时限高可滚 */
   #sheet-voices #pop-voiceNew { left:auto; right:0; }
   #ttsCfg #emoOpts, #ttsCfg #spdOpts, #ttsCfg #langSynOpts, #sheet-voices [id$="Opts"] { max-height:240px; overflow-y:auto; }
+  /* 滚动条隐藏:已由 app.css .pop 全站统一(隐藏但可滚)。*/
+  /* 面板内 popover portal 到 body 后:fixed + 顶层,逃离 .cfg overflow 裁剪(修下拉被截) */
+  .pop.pop-portal { position:fixed; top:auto; bottom:auto; z-index:1000; }
   /* 情绪/语速/语言/音高 2 列紧凑网格(左栏不超屏,P4)*/
   #ttsCfg .cfg-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px 12px; }
   /* 复刻/设计音色:禁用情绪/语速/语言/音高(Qwen 不支持),变灰且不可点 */
@@ -273,7 +276,9 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
   // ── 音色 sheet:音色库/我的声音 Tab + 语言/性别筛选 + 逐音色试听 ──
-  const PLAY_SVG=window.LJAudioPreview.PLAY_SVG;
+  // LJAudioPreview 在 shell.js(defer)里定义,晚于本内联脚本执行;此处不可在 eval 期取它,
+  // 否则抛错中断整段脚本(vsData/vTab 进 TDZ → 音色库报「加载失败」、Tab 失效)。改为渲染时惰性取。
+  function playSvg(){ return (window.LJAudioPreview && window.LJAudioPreview.PLAY_SVG) || '▶'; }
   let vsData={presets:[],clones:[]};   // /voices 原始数据
   let vTab='preset';                   // 当前 Tab:preset | mine
   function openModal(id){ document.getElementById('ov-'+id)?.classList.add('show'); }
@@ -328,7 +333,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       const on=selectedVoice&&selectedVoice.id===v.id;
       const canPlay=!!v.sample;
       // 复用共享 .vcard/.vc-* + .vc-p.vc-play(圆形试听槽);保留真试听 + 键盘 a11y
-      const play=`<button class="vc-p vc-play" data-src="${esc(v.sample||'')}" ${canPlay?'':'disabled'} onclick="event.stopPropagation();window.LJAudioPreview.play(this.dataset.src,this)" aria-label="试听">${PLAY_SVG}</button>`;
+      const play=`<button class="vc-p vc-play" data-src="${esc(v.sample||'')}" ${canPlay?'':'disabled'} onclick="event.stopPropagation();window.LJAudioPreview.play(this.dataset.src,this)" aria-label="试听">${playSvg()}</button>`;
       const pick=`pickVoiceObj(${JSON.stringify({id:v.id,name:v.name,desc,kind:isMine?(v.kind||'clone'):'preset'}).replace(/'/g,"&#39;")})`;
       return `<div class="vcard${on?' on':''}" data-id="${esc(v.id)}" role="button" tabindex="0" aria-pressed="${on?'true':'false'}" aria-label="选择音色 ${esc(v.name)}" onclick='${pick}' onkeydown='if(event.key==="Enter"||event.key===" "){event.preventDefault();${pick};}'>`
         +`<div class="vc-b"><div class="vc-n"><span class="flag">🇨🇳</span>${esc(v.name)}${hot}</div><div class="vc-d">${esc(desc)}</div></div>${play}</div>`;
@@ -359,14 +364,30 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   // 无法选中。故面板内 popover 改用 document 监听外部点击关闭(不显示遮罩);侧边音色面板
   // (z:110 > 55)不受此限,仍用遮罩。
   let outsideHandler=null;
+  // 面板内 popover portal 到 body + fixed 按 pill 定位,逃离 .cfg overflow 裁剪(修下拉被截)。
+  function placePop(pop, pill){
+    const r=pill.getBoundingClientRect(), M=8, GAP=6, vw=window.innerWidth, vh=window.innerHeight;
+    if(!pop._home) pop._home=pop.parentNode;
+    document.body.appendChild(pop);
+    pop.classList.add('pop-portal');
+    pop.style.visibility='hidden'; pop.style.left='0'; pop.style.top='0'; pop.style.bottom='auto'; pop.style.width=Math.round(r.width)+'px';
+    const ph=pop.offsetHeight;
+    const left=Math.max(M, Math.min(r.left, vw-pop.offsetWidth-M));
+    const below=vh-r.bottom-GAP-M;
+    let top;
+    if(ph<=below){ top=r.bottom+GAP; }                          // 下方放得下
+    else if(r.top-GAP-M>=ph){ top=r.top-GAP-ph; }               // 上方放得下
+    else { top=Math.max(M, vh-ph-M); pop.style.maxHeight=(vh-2*M)+'px'; } // 都放不下:夹紧+内滚
+    pop.style.left=left+'px'; pop.style.top=top+'px'; pop.style.visibility='';
+  }
   function togglePop(which){
     const pop=document.getElementById('pop-'+which); const isOpen=pop.classList.contains('show'); closePops();
     if(!isOpen){
       pop.classList.add('show');
       const pill=document.getElementById(which+'Pill'); if(pill) pill.classList.add('open');
-      const inPanel=!!pop.closest('#ttsCfg');
-      if(inPanel){
-        // 下一帧起监听:点到 .pop / .cpill 之外即关闭(避开本次打开点击)
+      // 面板内(#ttsCfg)的 pop:portal+fixed 防裁剪 + document 外部点击关闭(不用遮罩)。
+      if(pill&&pill.closest('#ttsCfg')){
+        placePop(pop, pill);
         setTimeout(()=>{
           outsideHandler=(e)=>{ if(!e.target.closest('.pop')&&!e.target.closest('.cpill')) closePops(); };
           document.addEventListener('mousedown', outsideHandler, true);
@@ -377,7 +398,11 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     }
   }
   function closePops(){
-    document.querySelectorAll('.pop.show').forEach(p=>p.classList.remove('show'));
+    document.querySelectorAll('.pop.show').forEach(p=>{
+      p.classList.remove('show'); p.classList.remove('pop-portal');
+      p.style.left=p.style.top=p.style.bottom=p.style.width=p.style.maxHeight=p.style.visibility='';
+      if(p._home && p.parentNode!==p._home) p._home.appendChild(p); // 归还原锚点
+    });
     document.querySelectorAll('.cpill.open').forEach(p=>p.classList.remove('open'));
     document.getElementById('popOv').classList.remove('show');
     if(outsideHandler){ document.removeEventListener('mousedown', outsideHandler, true); outsideHandler=null; }
