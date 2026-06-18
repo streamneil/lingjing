@@ -162,3 +162,11 @@ Nano Banana 价格随分辨率变(3.1 Flash 1K=$0.067/2K=$0.101/4K=$0.151;Pro 1�
 后期分档方案:复用视频已有的 `model_pricing.variant` 机制 —— 每模型种 `gemini-*:1K/2K/4K` 多行,
 `lookupCost` 图片路径透传 resolution,`buildImageJob` 价格快照按所选档取。改动穿透 mergeDef/buildImageJob/价格快照/admin。
 决策记录:docs/superpowers/specs/2026-06-18-nano-banana-image-design.md。
+
+## AI 图片:Nano Banana 尺寸预览像素化(后期)
+
+走 `ratios?: string[]` 轻量机制后,Gemini 的 setPill 尺寸预览显档名(如「16:9 · 2K」),
+不显具体像素(如「16:9 · 2752×1536」)——与 z-image 现状一致。官方像素表(见
+docs/superpowers/specs/2026-06-18-nano-banana-resolutions-design.md 的 Flash 14×4 / Pro 10×3 表)
+将来可录为静态展示常量供 setPill 查,做像素级预览。本轮不做(档名够用)。
+决策:plan-eng-review 2026-06-19。

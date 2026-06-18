@@ -111,6 +111,21 @@ describe('GeminiGateway 请求/响应', () => {
     expect(flash.generationConfig.imageConfig.aspectRatio).toBe('1:1');
   });
 
+  it('512 档:imageSize 原样透传 "512"(Flash;不被大写/映射误伤)', async () => {
+    let captured: any = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_u, init: any) => {
+      const b = JSON.parse(init.body);
+      if (b.contents) captured = b;
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ inline_data: { mime_type: 'image/png', data: Buffer.from('x').toString('base64') } }] } }] }), { status: 200 });
+    });
+    await new GeminiGateway().generateImageSync(
+      { model: 'gemini-3.1-flash-image', prompt: 'x', resolution: '512', ratio: '1:4' },
+      new AbortController().signal,
+    );
+    expect(captured.generationConfig.imageConfig.imageSize).toBe('512');
+    expect(captured.generationConfig.imageConfig.aspectRatio).toBe('1:4');
+  });
+
   it('camelCase 响应(inlineData)也能解析', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: Buffer.from('z').toString('base64') } }] } }],

@@ -297,5 +297,37 @@ describe('validateBboxList(不信前端:对齐 + 框数 + 整数边界)', () => 
   });
 });
 
+describe('Nano Banana 比例/清晰度(分辨率支持)', () => {
+  it('gemini-3.1-flash-image: 14 比例 + 512/1K/2K/4K 档', () => {
+    const m = getImageModel('gemini-3.1-flash-image');
+    expect(m.ratios).toEqual(['1:1','1:4','1:8','2:3','3:2','3:4','4:1','4:3','4:5','5:4','8:1','9:16','16:9','21:9']);
+    expect(m.resolutionTiers).toEqual(['512','1K','2K','4K']);
+  });
+  it('gemini-3-pro-image: 10 比例 + 1K/2K/4K 档', () => {
+    const m = getImageModel('gemini-3-pro-image');
+    expect(m.ratios).toEqual(['1:1','2:3','3:2','3:4','4:3','4:5','5:4','9:16','16:9','21:9']);
+    expect(m.resolutionTiers).toEqual(['1K','2K','4K']);
+  });
+});
+
+describe('/image-models ratios 派生优先 d.ratios', () => {
+  // 纯函数化派生逻辑的单测(与 jobs.ts handler 内联表达式同口径)。
+  // 派生:d.ratios ?? (d.pixelMatrix ? 首档键 : (keyword ? [] : undefined))
+  function deriveRatios(d: { ratios?: string[]; pixelMatrix?: Record<string, Record<string, string>>; sizeKind: string }) {
+    return d.ratios ?? (d.pixelMatrix
+      ? Object.keys(d.pixelMatrix[Object.keys(d.pixelMatrix)[0]!]!)
+      : (d.sizeKind === 'keyword' ? [] : undefined));
+  }
+  it('有 ratios 字段 → 用它', () => {
+    expect(deriveRatios({ ratios: ['1:1', '16:9'], sizeKind: 'keyword' })).toEqual(['1:1', '16:9']);
+  });
+  it('无 ratios 有 pixelMatrix → 首档键(z-image/qwen 不回归)', () => {
+    expect(deriveRatios({ pixelMatrix: { '1K': { '1:1': '1024*1024', '16:9': '1280*720' } }, sizeKind: 'wh' })).toEqual(['1:1', '16:9']);
+  });
+  it('keyword 无 ratios 无 pixelMatrix → [](万相不回归)', () => {
+    expect(deriveRatios({ sizeKind: 'keyword' })).toEqual([]);
+  });
+});
+
 // 注:所有 spy globalThis.fetch 的 adapter 测试移到 test/baichuan-adapter.test.ts(独立文件,
 // 避免进程级 fetch spy 在 vitest 并行跑时泄漏到其它文件,见该文件头注释)。
