@@ -166,14 +166,15 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```typescript
     const urls = await new GeminiGateway().generateImageSync({ model: 'gemini-3.1-flash-image', prompt: 'x' }, new AbortController().signal);
 ```
-`无图响应(被安全策略拦)→ 抛错` 用例(约行 125):
+`无图响应(被安全策略拦)→ 抛错`(约行 125)与 `HTTP 错误 → 抛错`(约行 132)两个用例里各有一处:
 ```typescript
       new GeminiGateway().generateImageSync({ model: 'gemini-2.5-flash-image', prompt: 'x' }, new AbortController().signal),
 ```
-改为:
+两处都改为:
 ```typescript
       new GeminiGateway().generateImageSync({ model: 'gemini-3.1-flash-image', prompt: 'x' }, new AbortController().signal),
 ```
+(可用 `replace_all` 替换该行字面量,但注意 Step 1/Step 3 上文已改的几处用了不同上下文 —— 此处仅指这两个抛错用例的相同行。)
 
 - [ ] **Step 4: 确认文件内再无 2.5 残留**
 
