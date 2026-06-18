@@ -1025,9 +1025,9 @@ jobsRouter.get('/image-models', requireAuth, (_req: Request, res: Response) => {
     //   空数组 [] → 隐藏比例框(keyword 模型,如万相:输出比例随输入图,选了也被后端丢弃)
     //   undefined → 前端回落硬编码 8 比例(无 pixelMatrix 且非 keyword,如 wan2.2/gemini/z-image*)
     //   * z-image 有 pixelMatrix → 会得到其 7 比例(顺带修:此前硬编码 8 含 21:9 未在矩阵会静默回落 1:1)
-    ratios: d.pixelMatrix
+    ratios: d.ratios ?? (d.pixelMatrix
       ? Object.keys(d.pixelMatrix[Object.keys(d.pixelMatrix)[0]!]!)
-      : (d.sizeKind === 'keyword' ? [] : undefined),
+      : (d.sizeKind === 'keyword' ? [] : undefined)),
     // admin 录的分辨率表(前端比例下拉用;只吐 ratio/w/h/默认,不漏 priceTier/modelId)
     resolutions: (d.resolutions ?? []).map((r) => ({ ratio: r.ratio, width: r.width, height: r.height, isDefault: !!r.isDefault })),
   }));
