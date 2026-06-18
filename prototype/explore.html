@@ -187,12 +187,6 @@
   .player .pbar .pt .pn{ font-size:14.5px; font-weight:700 }
   .player .pbar .pt .ps{ font-size:11px; color:var(--t4); font-family:var(--f-mono); margin-top:4px; line-height:1.5;
     display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden }
-  /* CTA:紧凑、不换行、不溢出弹窗 */
-  .player .pbar .puse{ flex:none; max-width:46%; display:inline-flex; align-items:center; gap:6px; background:var(--t1); color:#0A0A0B;
-    border:none; border-radius:var(--r-pill); padding:11px 16px; font-size:13px; font-weight:700; font-family:var(--f);
-    white-space:nowrap; cursor:pointer; box-shadow:var(--sh-white-btn); text-decoration:none }
-  .player .pbar .puse .use-label{ overflow:hidden; text-overflow:ellipsis }
-  .player .pbar .puse svg{ width:15px; height:15px; flex:none }
   /* 关闭按钮:固定在弹窗右上角、最高层级,绝不被 video controls / 对比图盖住 */
   .player .pclose{ position:absolute; top:12px; right:12px; width:36px; height:36px; border-radius:50%; z-index:10;
     background:rgba(255,255,255,.92); border:none; color:#0A0A0B; cursor:pointer; display:grid; place-items:center;
@@ -280,7 +274,6 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     <div class="pv" id="playerView"></div>
     <div class="pbar">
       <div class="pt"><div class="pn" id="playerName"></div><div class="ps" id="playerSub"></div></div>
-      <a class="puse" id="playerUse" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3Z"/></svg><span class="use-label">用这个模板</span></a>
     </div>
     <button class="pclose" id="playerClose" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
   </div>
@@ -295,30 +288,13 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   function svg(inner){ return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`; }
 
   // 灵感库:平台自产的多模态真实产出(showcase-data.js / window.LJShowcase)。
-  // 每项 = 一条可一键复用的真实样例;点动作 → 带 ?prompt= 进对应工具(eng-review:只文本,不带 ?img=)。
-  // modality: image | video | image-edit | avatar。actionLabel/actionText 按模态由 build-showcase-data 生成。
+  // 每项 = 一条平台自产真实样例,仅用于预览/查看(「一键做同款」已下线)。
+  // modality: image | video | image-edit | avatar。actionText 仅供弹窗副行展示原文。
   const MOD_BADGE = { video:'▶ 影片', 'video-edit':'▶ 影片编辑', 'image-edit':'✎ 图片编辑', avatar:'🧍 数字人' }; // image 无徽章
-  // OSS 公网 URL → 存储 key(去 host + 去签名 query)。同桶 key 可直接当 reuse 输入 ref
-  //(后端 worker publish(key) 重新签名喂厂商;浏览器跨域 fetch 不到 File,故走 reuse 不重传)。
-  const OSS_HOST = 'lh-lingjing.oss-cn-hangzhou.aliyuncs.com/';
-  function urlToKey(u){ if(!u) return ''; const i=u.indexOf(OSS_HOST); return i<0?'':u.slice(i+OSS_HOST.length).split('?')[0]; }
-  // 数字人示范脸 → 预置 id(与 src/avatars/index.ts 的 preset-sage/grandma/girl 对应)。
-  const AVATAR_PRESET = { 'portrait-sage.jpg':'preset-sage', 'portrait-grandma.jpg':'preset-grandma', 'girl-rainbow.jpg':'preset-girl' };
-  // 参考图(refUrls,如换装的参考衣服图)→ &reuseRefImg=key1,key2(逗号分隔,带进编辑器「参考图」槽)。
-  function refImgParam(s){ const ks=(s.refUrls||[]).map(urlToKey).filter(Boolean); return ks.length?'&reuseRefImg='+encodeURIComponent(ks.join(',')):''; }
-  function buildPrefill(s){
-    const prompt=encodeURIComponent(s.actionText||s.prompt||'');
-    if(s.modality==='image-edit'){ const k=urlToKey(s.beforeUrl||s.poster); return `${s.page}?prompt=${prompt}${k?'&reuseImg='+encodeURIComponent(k):''}${refImgParam(s)}`; }
-    if(s.modality==='video-edit'){ const k=urlToKey(s.videoUrl||s.sourceUrl); return `${s.page}?prompt=${prompt}${k?'&reuseVideo='+encodeURIComponent(k):''}${refImgParam(s)}`; }
-    if(s.modality==='avatar'){ const pid=AVATAR_PRESET[(s.sourceUrl||s.poster||'').split('/').pop()]; return `create.html?prompt=${prompt}${pid?'&avatar='+encodeURIComponent(pid):''}`; }
-    if(s.modality==='video'){ const k=urlToKey(s.poster); return `${s.page}?prompt=${prompt}${k?'&reuseImg='+encodeURIComponent(k):''}`; } // 图转影片:poster=开始图(首帧)
-    return `${s.page}?prompt=${prompt}`; // image:只带提示词
-  }
   const SC_ALL = (window.LJShowcase || []).map(s=>({
     id:s.id, title:s.title, sub:`${s.toolName} · ${s.theme}`, tag:s.theme, theme:s.theme,
     modality:s.modality, poster:s.poster, videoUrl:s.videoUrl, beforeUrl:s.beforeUrl, afterUrl:s.afterUrl, sourceUrl:s.sourceUrl,
-    toolName:s.toolName, actionLabel:s.actionLabel||'用这个提示词', actionText:s.actionText||s.prompt||'',
-    prefill:buildPrefill(s),
+    toolName:s.toolName, actionText:s.actionText||s.prompt||'', // actionText:弹窗副行显示提示词/编辑指令/口播文案原文
   }));
   let SHOWCASE = SC_ALL.slice(); // 当前筛选/抽样后的可见集
   let SC_THEME = '全部';
@@ -399,14 +375,6 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     const noun = (s.modality==='image-edit'||s.modality==='video-edit')?'编辑指令':(s.modality==='avatar'?'口播文案':'提示词');
     const txt=(s.actionText||'').trim();
     document.getElementById('playerSub').textContent = txt ? `${noun}:${txt.slice(0,80)}${txt.length>80?'…':''}` : s.sub;
-    const useBtn=document.getElementById('playerUse');
-    useBtn.href=s.prefill;
-    useBtn.querySelector('.use-label').textContent = s.actionLabel || '用这个提示词';
-    // CTA 图标按动作语义:数字人=去做(箭头)、编辑=魔棒、图/影片=魔棒生成(非播放三角)
-    const useIc = useBtn.querySelector('svg');
-    useIc.innerHTML = s.modality==='avatar'
-      ? '<path d="M5 12h14M13 6l6 6-6 6"/>'
-      : '<path d="M15 4V2M15 10V8M9 6h2M19 6h2M12.5 8.5 4 17l3 3 8.5-8.5M14 7l3 3"/>';
     const ov=document.getElementById('player');
     ov.classList.add('show');
     document.getElementById('playerClose').focus();
