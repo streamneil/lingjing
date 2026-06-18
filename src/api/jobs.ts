@@ -1128,6 +1128,7 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
           imageRefs?: string[]; seed?: number; width?: number; height?: number; bboxList?: number[][][];
           duration?: number; audio?: boolean; negativePrompt?: string; promptExtend?: boolean; task?: string;
           videoRef?: string; truncateDuration?: number; audioSetting?: string; inputDurationSnapshot?: number;
+          videoRefs?: string[]; audioRefs?: string[]; // 多模态参考生影片(video_r2v):视频/音频参考 key
         };
         script = inp.script ?? inp.prompt ?? inp.text ?? '';
         if (j.type === 'ai_image') {
@@ -1159,6 +1160,31 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
             ratio: inp.ratio, resolution: inp.resolution, sizeLabel: inp.resolution || '720P', duration: inp.duration,
             negativePrompt: inp.negativePrompt, promptExtend: inp.promptExtend, seed: inp.seed,
             imageRefs: inp.imageRefs, inputUrls, // 输入图缩略 + 重新生成回放
+          };
+        } else if (j.type === 'video_r2v') {
+          // 多模态参考生影片卡片:显模型/分辨率/时长/有声 + 输入图/视频/音频全缩略;回放 imageRefs/videoRefs/audioRefs。
+          // 关键修复:此前 r2v 无 meta 分支 → 历史卡「没有输入」。这里签名三类参考并回结构化 inputMedia(图/视频/音频)。
+          const rdef = getR2VModel(inp.model);
+          const imageRefs = Array.isArray(inp.imageRefs) ? inp.imageRefs : [];
+          const videoRefs = Array.isArray(inp.videoRefs) ? inp.videoRefs : [];
+          const audioRefs = Array.isArray(inp.audioRefs) ? inp.audioRefs : [];
+          const [imgUrls, vidUrls, audUrls] = await Promise.all([
+            signInputUrls(imageRefs),
+            signInputUrls(videoRefs),
+            signInputUrls(audioRefs),
+          ]);
+          const inputMedia = [
+            ...imgUrls.map((url) => ({ kind: 'img' as const, url })),
+            ...vidUrls.map((url) => ({ kind: 'vid' as const, url })),
+            ...audUrls.map((url) => ({ kind: 'aud' as const, url })),
+          ];
+          meta = {
+            model: inp.model, modelLabel: rdef?.label, task: 'r2v',
+            ratio: inp.ratio, resolution: inp.resolution, sizeLabel: inp.resolution || '720P', duration: inp.duration,
+            audio: inp.audio, negativePrompt: inp.negativePrompt, promptExtend: inp.promptExtend, seed: inp.seed,
+            imageRefs, videoRefs, audioRefs,
+            inputUrls: imgUrls, // 兼容旧字段(纯图)
+            inputMedia, // 图/视频/音频全缩略
           };
         } else if (j.type === 'video_edit') {
           // 视频编辑卡片:显模型/分辨率/输入时长 chip + 输入视频原片 + 参考图缩略;回放 videoRef/imageRefs(免重传 100MB)。
@@ -1213,10 +1239,22 @@ jobsRouter.get('/jobs/:id', requireAuth, async (req: Request, res: Response) => 
   };
 
   // 输入图签名 URL(图生图记录卡显示 + 重新提示回填)。
-  const inp = payload.input as { imageRefs?: string[]; videoRef?: string } | undefined;
+  const inp = payload.input as { imageRefs?: string[]; videoRef?: string; videoRefs?: string[]; audioRefs?: string[] } | undefined;
   if (inp?.imageRefs?.length) payload.inputUrls = await signInputUrls(inp.imageRefs);
   // 视频编辑:输入视频签名 URL(记录卡显原片 + 重新提示视频预览,video-inputs 同桶)。
   if (inp?.videoRef) payload.inputVideoUrl = await getSignedUrl(inp.videoRef).catch(() => null);
+  // 多模态参考生影片(video_r2v):签名图/视频/音频参考 → 记录卡输入缩略全显(修「轮询时没有输入」)。
+  if (job.type === 'video_r2v' && (inp?.imageRefs?.length || inp?.videoRefs?.length || inp?.audioRefs?.length)) {
+    const [imgUrls, vidUrls, audUrls] = await Promise.all([
+      signInputUrls(inp.imageRefs), signInputUrls(inp.videoRefs), signInputUrls(inp.audioRefs),
+    ]);
+    payload.inputUrls = imgUrls; // 兼容旧字段(纯图)
+    payload.inputMedia = [
+      ...imgUrls.map((url) => ({ kind: 'img', url })),
+      ...vidUrls.map((url) => ({ kind: 'vid', url })),
+      ...audUrls.map((url) => ({ kind: 'aud', url })),
+    ];
+  }
 
   if (job.status === 'done' && job.output_url) {
     const outputUrls = await signOutputUrls(job.output_url);
