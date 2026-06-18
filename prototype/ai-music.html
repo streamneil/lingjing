@@ -245,6 +245,16 @@
       -webkit-line-clamp: unset;
     }
 
+    /* 歌词:完整显示,保留换行与 [verse]/[chorus] 结构;长曲内部滚动不撑爆卡片 */
+    .tx.tx-lyrics {
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 360px;
+      overflow-y: auto;
+      line-height: 1.7;
+      font-size: 12.5px;
+    }
+
     .tx-toggle {
       display: none;
       font-size: 12px;
@@ -516,7 +526,7 @@ shell.js(defer)随后用 LJ.me() 校正并写回缓存。 */
                   <path d="M12 5v14M5 12h14" />
                 </svg>歌词</button>
             </div>
-            <div class="f"><span class="h" id="estLabel">预估 — 点</span><span class="c"><b id="cnt">0</b> / 2000</span>
+            <div class="f"><span class="h" id="estLabel">预估 — 点</span><span class="c" id="promptCnt"><b id="cnt">0</b> / 2000 字符（1~2000）</span>
             </div>
           </div>
 
@@ -530,6 +540,8 @@ shell.js(defer)随后用 LJ.me() 校正并写回缓存。 */
             </div>
             <div class="script"><textarea id="lyrics" maxlength="2000"
                 placeholder="在此添加你的歌词（与提示词二选一，同填以歌词为准）。例如：&#10;[verse]&#10;清晨的阳光穿过窗帘&#10;[chorus]&#10;慢慢来不着急"></textarea>
+              <div class="f"><span class="h" id="lyricsHint">中文 5~350 · 英文 5~2000</span><span class="c" id="lyricsCnt"><b id="lyCnt">0</b> / 350</span>
+              </div>
             </div>
           </div>
 
@@ -621,7 +633,7 @@ shell.js(defer)随后用 LJ.me() 校正并写回缓存。 */
       function toggleLyrics() {
         lyricsOpen = !lyricsOpen;
         document.getElementById('lyricsBlock').style.display = lyricsOpen ? '' : 'none';
-        if (lyricsOpen) setTimeout(() => ly.focus(), 40);
+        if (lyricsOpen) { updateLyricsCount(); setTimeout(() => ly.focus(), 40); }
         refreshBtn(); scheduleEstimate();
       }
       window.switchMode = switchMode; window.toggleLyrics = toggleLyrics;
@@ -662,11 +674,25 @@ shell.js(defer)随后用 LJ.me() 校正并写回缓存。 */
       refreshGender();
 
       // ── 预估 ──
+      // 无输入时显示「—」(参考其他模块);有提示词/歌词时按实际内容估算(随输入变)。
       let estTimer = null;
+      function setEst(text, gem) {
+        document.getElementById('estLabel').textContent = text;
+        document.getElementById('estGem').textContent = gem;
+      }
       function scheduleEstimate() {
         clearTimeout(estTimer);
+        const prompt = pa.value.trim();
+        const lyrics = (lyricsOpen && mode === 'song') ? ly.value.trim() : '';
+        if (!prompt && !lyrics) { setEst('预估 — 点', '—'); return; } // 未输入 → 不显示固定数,等可算时再显
         estTimer = setTimeout(async () => {
-          try { const r = await LJ.post('/jobs/estimate', { type: 'ai_music', mode }); document.getElementById('estLabel').textContent = '预估 ' + r.cost + ' 点'; document.getElementById('estGem').textContent = r.cost; } catch (e) { }
+          try {
+            const body = { type: 'ai_music', mode };
+            if (prompt) body.prompt = prompt;
+            if (lyrics) body.lyrics = lyrics; // 同传以歌词为准(与后端一致)
+            const r = await LJ.post('/jobs/estimate', body);
+            setEst('预估 ' + r.cost + ' 点', r.cost);
+          } catch (e) { setEst('预估 — 点', '—'); }
         }, 300);
       }
       function refreshBtn() {
@@ -676,8 +702,23 @@ shell.js(defer)随后用 LJ.me() 校正并写回缓存。 */
         btn.classList.toggle('ready', ok); btn.disabled = !ok;
         document.getElementById('cbtnLabel').textContent = label;
       }
+      // 歌词字数提示(非流式):含中文按 5~350,纯英文按 5~2000;超出/不足标红。
+      function updateLyricsCount() {
+        const v = ly.value;
+        const hasCJK = /[一-鿿]/.test(v);
+        const max = hasCJK ? 350 : 2000;
+        const lyCnt = document.getElementById('lyCnt');
+        const lyricsCnt = document.getElementById('lyricsCnt');
+        const hint = document.getElementById('lyricsHint');
+        if (lyCnt) lyCnt.textContent = v.length;
+        if (lyricsCnt) lyricsCnt.innerHTML = `<b id="lyCnt">${v.length}</b> / ${max}`;
+        if (hint) hint.textContent = hasCJK ? '中文 5~350' : '英文 5~2000';
+        // 越界(非空且 <5 或 >max)标红提示
+        const bad = v.length > 0 && (v.length < 5 || v.length > max);
+        if (lyricsCnt) lyricsCnt.style.color = bad ? 'var(--red)' : '';
+      }
       pa.addEventListener('input', () => { cnt.textContent = pa.value.length; refreshBtn(); scheduleEstimate(); });
-      ly.addEventListener('input', () => { refreshBtn(); });
+      ly.addEventListener('input', () => { updateLyricsCount(); refreshBtn(); scheduleEstimate(); });
 
       document.querySelectorAll('.ftab').forEach(t => t.onclick = function () {
         this.parentNode.querySelectorAll('.ftab').forEach(x => x.classList.remove('active')); this.classList.add('active');
@@ -689,7 +730,8 @@ shell.js(defer)随后用 LJ.me() 校正并写回缓存。 */
       const musicMeta = {};  // jobId → {prompt, lyrics}(供重新提示/展示)
       function head(color, led, txt, createdAt) { return `<div class="fmeta"><b>AI 音乐</b><span class="ts">${(window.LJTimeAgo && LJTimeAgo(createdAt)) || '刚刚'}</span><span class="sp"></span><span class="st" style="color:${color}"><span class="led ${led}"></span>${txt}</span></div>`; }
       function promptBubble(t) { return t ? `<div class="fbubble"><div class="tx-wrap"><div class="tx-label">提示词</div><div class="tx clamp">${esc(t)}</div><span class="tx-toggle" onclick="toggleTx(this)">展开</span></div></div>` : ''; }
-      function lyricsBlock(t) { return t ? `<div class="fbubble" style="margin-top:8px"><div class="tx-wrap"><div class="tx-label">歌词</div><div class="tx clamp">${esc(t)}</div><span class="tx-toggle" onclick="toggleTx(this)">展开</span></div></div>` : ''; }
+      // 歌词完整展示(不 clamp;保留换行/结构,长曲内部滚动)。clamp 会截断且 line-clamp+pre-wrap 易测错。
+      function lyricsBlock(t) { return t ? `<div class="fbubble" style="margin-top:8px"><div class="tx-wrap"><div class="tx-label">歌词</div><div class="tx tx-lyrics">${esc(t)}</div></div></div>` : ''; }
       function cardActs(job, ok) {
         const url = (job.outputUrls || [])[0];
         const dl = ok && url ? `<button onclick="downloadAudio('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg>下载</button>` : '';
@@ -832,7 +874,7 @@ shell.js(defer)随后用 LJ.me() 校正并写回缓存。 */
           pa.value = DEMO_PROMPT.slice(0, 2000); cnt.textContent = pa.value.length;
           if (!lyricsOpen) toggleLyrics();            // 展开歌词区
           ly.value = DEMO_LYRICS.slice(0, 2000);
-          refreshBtn(); scheduleEstimate();
+          updateLyricsCount(); refreshBtn(); scheduleEstimate();
           pa.scrollIntoView({ behavior: 'smooth', block: 'center' }); pa.focus();
           window.LJToast && window.LJToast('✓ 已套用示范提示词与歌词,可直接点「创建」或自行修改');
         };
