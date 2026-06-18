@@ -136,8 +136,8 @@ describe('图像模型 registry 自洽性(E1 命脉)', () => {
       else expect(def.maxInputImages).toBe(0);
       // v1:A2(可灵)缓,不应有 A2 模型上线
       expect(def.shape).not.toBe('A2');
-      // 输入图上限:千问编辑 3,万相2.7(A_EDIT)5(上传端点 maxCount=5)
-      expect(def.maxInputImages).toBeLessThanOrEqual(5);
+      // 输入图上限:千问编辑 3,万相2.7(A_EDIT)5(上传端点 maxCount=5);Gemini 3.1 Flash 10(多图融合)
+      expect(def.maxInputImages).toBeLessThanOrEqual(10);
       // supportsBbox 仅 A_EDIT(万相2.7):shape 与能力一致,不应在非 A_EDIT 上出现
       if (def.supportsBbox) expect(def.shape).toBe('A_EDIT');
       // A_EDIT 必须支持 img2img(含图编辑)
