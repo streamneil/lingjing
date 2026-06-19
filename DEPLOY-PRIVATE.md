@@ -32,12 +32,12 @@
 # 1. 拷贝代码 + 配置
 cp .env.example .env && chmod 600 .env
 
-# 2. 配 .env(私有化关键:厂商 key 用客户的)
+# 2. 配 .env
 #   LJ_DOMAIN=<内网域名 / 客户证书域名>
 #   SUPERADMIN_PASS=<强密码>
-#   DASHSCOPE_API_KEY=<客户自有百炼 key>   # 冷启动种子;火山/Google key 在后台配
 #   MASTER_KEY=<openssl rand -base64 32>   # 厂商 key 加密入库
 #   OSS_*=<客户的对象存储四项>             # 见 §3 存储方案
+# 厂商 key(百炼/火山/Google,用客户自有账号)部署后在 /admin「厂商 / Key」配,不进 .env。
 
 # 3. 一键起(校验 → build → up → 等健康)
 ./scripts/deploy.sh

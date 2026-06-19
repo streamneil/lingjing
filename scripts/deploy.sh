@@ -38,8 +38,8 @@ need_env(){ grep -qE "^$1=.+" .env || die ".env 缺少 $1(或值为空)"; }
 for k in LJ_DOMAIN SUPERADMIN_PASS MASTER_KEY OSS_REGION OSS_BUCKET OSS_ACCESS_KEY_ID OSS_ACCESS_KEY_SECRET; do
   need_env "$k"
 done
-# 提醒:厂商 API Key 部署后在 /admin →「厂商 / Key」配(百炼/火山/Google)。
-grep -qE "^DASHSCOPE_API_KEY=.+" .env || log "ℹ 未配 DASHSCOPE_API_KEY(可选)。部署后在 /admin 配各厂商 key 即可。"
+# 提醒:厂商 API Key(百炼/火山/Google)部署后在 /admin →「厂商 / Key」配,不写进 .env。
+log "ℹ 部署后到 /admin →「厂商 / Key」粘贴百炼/火山/Google 的 API Key(需已配 MASTER_KEY)。"
 
 # 架构提醒:Mac M 系列本地 build 出 arm64,推 amd64 服务器会 Exec format error。
 # 本脚本默认在服务器本机 build,架构天然一致;这里只在检测到非 amd64 主机时提示。

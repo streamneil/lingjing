@@ -40,7 +40,6 @@ chmod 600 .env        # 限制权限,别提交 git(.gitignore 已排)
 #   OSS_REGION/BUCKET/ACCESS_KEY_ID/ACCESS_KEY_SECRET  # 对象存储,四项缺一不可,见下
 # COOKIE_SECURE=true(生产 HTTPS,保持默认)
 # 厂商 key(百炼/火山/Google)部署后在 /admin「厂商 / Key」配,不进 .env。
-#   DASHSCOPE_API_KEY 可选(仅冷启动种子百炼,留空也能起)。
 # 可选:WORKER_POOL_SIZE=16(并发池;4c8g 压不住可调小到 8)
 
 # 3. 一键部署(推荐):校验 .env → build → up → 等健康 → 打印状态

@@ -54,7 +54,7 @@ cp .env.example .env && chmod 600 .env   # 填 .env(必填:超管密码/百炼 k
 平台接了多个厂商：**阿里百炼**（数字人/TTS/图片/音乐）、**火山方舟**（Seedance/Seedream）、**Google AI Studio**（Gemini）。
 三家 key 都在 **`/admin` →「厂商 / Key」** 页粘贴（AES-256-GCM 加密入库，只显尾号），`.env` 里厂商 key 都不用填。
 - **前提**：`.env` 必须配 `MASTER_KEY`（`openssl rand -base64 32`），否则后台贴 key 会失败。它是解密库内 key 的总钥匙，只能走环境变量。
-- `DASHSCOPE_API_KEY` 在 `.env` **可选**：仅作首次冷启动种子百炼用，留空也能启动，之后去后台配。火山/Google 无 .env 回落，只在后台配。
+- 三家厂商 key 都只在后台配，`.env` 里不写任何厂商 key。
 
 ---
 

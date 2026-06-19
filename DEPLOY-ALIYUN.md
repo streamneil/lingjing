@@ -70,7 +70,6 @@ OSS_BUCKET=<你的桶名>
 OSS_ACCESS_KEY_ID=<RAM AccessKeyId>
 OSS_ACCESS_KEY_SECRET=<RAM AccessKeySecret>
 # 可选
-DASHSCOPE_API_KEY=<百炼 key>                # 可选:仅冷启动种子百炼;留空也能起,之后去 /admin 配
 WORKER_POOL_SIZE=16                         # 4c8g 压不住可调 8
 COOKIE_SECURE=true                          # 生产保持 true
 TZ=Asia/Shanghai
