@@ -33,10 +33,13 @@ docker compose version >/dev/null 2>&1 || die "未装 docker compose(v2)"
 chmod 600 .env 2>/dev/null || true
 
 # .env 必填项检查(缺则 compose 会在 up 时报错,这里提前拦,信息更友好)
+# 注:厂商 key(百炼/火山/Google)在 /admin 配,不在此列;MASTER_KEY 必填——它是后台贴 key 的前提。
 need_env(){ grep -qE "^$1=.+" .env || die ".env 缺少 $1(或值为空)"; }
-for k in LJ_DOMAIN SUPERADMIN_PASS DASHSCOPE_API_KEY OSS_REGION OSS_BUCKET OSS_ACCESS_KEY_ID OSS_ACCESS_KEY_SECRET; do
+for k in LJ_DOMAIN SUPERADMIN_PASS MASTER_KEY OSS_REGION OSS_BUCKET OSS_ACCESS_KEY_ID OSS_ACCESS_KEY_SECRET; do
   need_env "$k"
 done
+# 提醒:厂商 API Key 部署后在 /admin →「厂商 / Key」配(百炼/火山/Google)。
+grep -qE "^DASHSCOPE_API_KEY=.+" .env || log "ℹ 未配 DASHSCOPE_API_KEY(可选)。部署后在 /admin 配各厂商 key 即可。"
 
 # 架构提醒:Mac M 系列本地 build 出 arm64,推 amd64 服务器会 Exec format error。
 # 本脚本默认在服务器本机 build,架构天然一致;这里只在检测到非 amd64 主机时提示。

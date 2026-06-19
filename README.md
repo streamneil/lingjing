@@ -52,8 +52,9 @@ cp .env.example .env && chmod 600 .env   # 填 .env(必填:超管密码/百炼 k
 ### 厂商 API Key 在哪配
 
 平台接了多个厂商：**阿里百炼**（数字人/TTS/图片/音乐）、**火山方舟**（Seedance/Seedream）、**Google AI Studio**（Gemini）。
-所有厂商 key 在 **`/admin` →「厂商 / Key」** 页粘贴（AES-256-GCM 加密入库，只显尾号）。
-`.env` 里的 `DASHSCOPE_API_KEY` 仅用于**首次冷启动种子**与未配 MASTER_KEY 时的回落；火山/Google 无 .env 回落，只在后台配。
+三家 key 都在 **`/admin` →「厂商 / Key」** 页粘贴（AES-256-GCM 加密入库，只显尾号），`.env` 里厂商 key 都不用填。
+- **前提**：`.env` 必须配 `MASTER_KEY`（`openssl rand -base64 32`），否则后台贴 key 会失败。它是解密库内 key 的总钥匙，只能走环境变量。
+- `DASHSCOPE_API_KEY` 在 `.env` **可选**：仅作首次冷启动种子百炼用，留空也能启动，之后去后台配。火山/Google 无 .env 回落，只在后台配。
 
 ---
 
@@ -75,7 +76,7 @@ lingjing/
 
 ```bash
 npm install
-cp .env.example .env     # 本地最少填 SUPERADMIN_PASS + DASHSCOPE_API_KEY;OSS 可选(不配则本机存储回退)
+cp .env.example .env     # 本地最少填 SUPERADMIN_PASS;厂商 key 起来后去 /admin 配(需先填 MASTER_KEY);OSS 可选(不配则本机存储回退)
 npm run dev              # tsx watch 起服务(默认 :9372)
 npm test                # vitest
 ```

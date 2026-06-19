@@ -28,7 +28,8 @@
       ⚠️ 不要放行 9372(app 只走 caddy 反代,不对外)。
 - [ ] **域名**已备案(中国大陆服务器强制),并把 **A 记录**指向 ECS 公网 IP。
       验证:`dig +short your-domain.com` 返回该 IP 才继续(否则 Caddy 申证书会反复失败、触发 Let's Encrypt 限流)。
-- [ ] **百炼(DashScope)**已开通,拿到 `DASHSCOPE_API_KEY`。
+- [ ] **厂商 key 备好**(部署后在 /admin 配,不进 .env):百炼(DashScope)必备;火山方舟 / Google AI Studio 按需。
+- [ ] **生成 `MASTER_KEY`**:`openssl rand -base64 32`(用来加密入库的厂商 key,必填)。
 - [ ] **OSS 桶**已创建(与 ECS 同地域),记下 `region`(如 `oss-cn-hangzhou`)和 `bucket` 名。
       桶**读权限设为公共读**(或确保百炼能拉到素材 URL);写仍走 AccessKey。
 - [ ] **RAM 用户 + AccessKey**:授权 `AliyunOSSFullAccess`(可复用 DashScope 同账号 RAM 用户)。
@@ -63,16 +64,21 @@ vi .env     # 填下面这些(缺任一必填项,容器会拒启)
 LJ_DOMAIN=your-domain.com                  # 已解析到本机的域名
 LJ_ACME_EMAIL=you@example.com              # 证书到期通知(建议填)
 SUPERADMIN_PASS=<一个强密码>                # 平台超管初始密码
-DASHSCOPE_API_KEY=<百炼 key>
+MASTER_KEY=<openssl rand -base64 32>       # 主密钥;要在 /admin 配厂商 key 必须有它
 OSS_REGION=oss-cn-hangzhou                  # 纯 region 名,别填完整 URL
 OSS_BUCKET=<你的桶名>
 OSS_ACCESS_KEY_ID=<RAM AccessKeyId>
 OSS_ACCESS_KEY_SECRET=<RAM AccessKeySecret>
 # 可选
+DASHSCOPE_API_KEY=<百炼 key>                # 可选:仅冷启动种子百炼;留空也能起,之后去 /admin 配
 WORKER_POOL_SIZE=16                         # 4c8g 压不住可调 8
 COOKIE_SECURE=true                          # 生产保持 true
 TZ=Asia/Shanghai
 ```
+
+> **厂商 API Key 在哪配**:百炼 / 火山方舟 / Google AI Studio 三家 key,部署后在
+> **`/admin →「厂商 / Key」**粘贴(加密入库)。`.env` 里厂商 key 都可不填——但 `MASTER_KEY`
+> 必须配,否则后台贴 key 会失败。
 
 ---
 
