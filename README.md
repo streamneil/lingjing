@@ -4,14 +4,14 @@
 上传照片即生成数字人形象，克隆声音，输入文案，云端秒级生成口型自然的讲话视频。
 
 > 当前阶段：**Slice 1 工程实现中**（单租户端到端真视频，兼作私有化 POC）。
-> 运行说明见 `RUNNING.md`；产品规划见 `功能清单-PRD.md`；评审与设计决策见 `~/.gstack/projects/digital-human/`。
+> 运行说明见 `RUNNING.md`；产品规划见 `功能清单-PRD.md`；评审与设计决策见 `~/.gstack/projects/lingjing/`。
 
 ---
 
 ## 目录结构
 
 ```
-digital-human/
+lingjing/
 ├── README.md            ← 本文件（项目导航）
 ├── 功能清单-PRD.md       ← 完整功能规格 / PRD（分模块、标优先级、含验收标准）
 └── prototype/           ← 高保真可点击原型（纯 HTML/CSS/JS，无需构建）

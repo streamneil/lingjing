@@ -24,7 +24,7 @@
 
 ```bash
 # 1. 拉代码
-git clone <repo> && cd digital-human
+git clone <repo> && cd lingjing
 
 # 2. 配 .env(从样板复制后填值)
 cp .env.example .env

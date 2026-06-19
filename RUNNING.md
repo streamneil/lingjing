@@ -1,7 +1,7 @@
 # 灵镜 Slice 1 — 运行说明
 
 Slice 1 = 单租户、无认证、端到端真视频(预置形象 + 预置音色 + 文案 → 百炼 → DB 队列 → 前端轮询 → 带 AI 标识成品)。
-它本身就是可交付给电视台的**私有化 POC**(决策见 `~/.gstack/projects/digital-human/` 设计文档)。
+它本身就是可交付给电视台的**私有化 POC**(决策见 `~/.gstack/projects/lingjing/` 设计文档)。
 
 ## 架构(Slice 1)
 
