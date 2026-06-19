@@ -16,7 +16,7 @@ Slice 1 = 单租户、无认证、端到端真视频(预置形象 + 预置音色
 │   worker.ts ◄────────┘ claimNextJob (原子领取)│
 │      │ moderation 钩子(空实现)              │
 │      │ gateway/baichuan (submit→轮询)        │ ──► 阿里百炼
-│      │ storage/minio (落成品)                │ ──► MinIO
+│      │ storage (落素材/成品)                  │ ──► 阿里云 OSS(本地未配则回退 MinIO/本机)
 │      ▼ markDone / markFailed(失败隔离)      │
 └─────────────────────────────────────────────┘
    DB 为唯一真相,无 SSE,无 Redis。
@@ -28,25 +28,26 @@ Slice 1 = 单租户、无认证、端到端真视频(预置形象 + 预置音色
 
 ```bash
 npm install
-cp .env.example .env          # 填入 DASHSCOPE_API_KEY(已开通付费)
-# MinIO:本地单独起一个,或用 docker 只起 minio:
-docker compose up -d minio
-npm run dev                   # http://localhost:9372/index.html
+cp .env.example .env          # 最少填 SUPERADMIN_PASS + DASHSCOPE_API_KEY
+npm run dev                   # http://localhost:9372/  (tsx watch)
 ```
 
-## docker 一键起(app + MinIO)
+> 对象存储:本地未配 OSS 时,代码自动回退到本机存储(MinIO,默认 127.0.0.1:9000)。
+> 想跑真实数字人生成需配 OSS(百炼要公网可达素材 URL),否则生成会卡 pending。
+
+## docker 部署(生产)
+
+生产用 `docker compose`(Caddy + app,对象存储走阿里云 OSS),见 **`DEPLOY.md` / `DEPLOY-ALIYUN.md`**。
 
 ```bash
-cp .env.example .env          # 填 key
-docker compose up --build
-# 形象库首页: http://localhost:9372/index.html
-# MinIO 控制台: http://localhost:9001 (minioadmin/minioadmin)
+cp .env.example .env          # 填 .env(超管密码/百炼 key/OSS 四项/域名)
+./scripts/deploy.sh           # 一键:校验 → build → up → 等健康
 ```
 
 ## 测试
 
 ```bash
-npm test          # 12 个测试,含失败隔离 E2E(护城河卵论点)
+npm test          # vitest 全量(含失败隔离 E2E、计价、鉴权等)
 npx tsc --noEmit  # 类型检查
 ```
 

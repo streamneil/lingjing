@@ -1,10 +1,52 @@
-# 灵镜 Lingjing · 融媒体数字人内容生产平台
+# 灵镜 Lingjing · 一站式 AIGC 内容创作平台
 
-面向融媒体客户（电视台、报社、政企宣传）的**云端数字人内容生产 SaaS 平台**。
-上传照片即生成数字人形象，克隆声音，输入文案，云端秒级生成口型自然的讲话视频。
+面向融媒体客户（电视台、报社、政企宣传）与内容团队的**云端 AIGC 创作 SaaS 平台**。
+影片、图片、音频三大模态，多个 AI 创作工具，一套积分通用、云端生成、合规可控、支持私有化部署。
 
-> 当前阶段：**Slice 1 工程实现中**（单租户端到端真视频，兼作私有化 POC）。
-> 运行说明见 `RUNNING.md`；产品规划见 `功能清单-PRD.md`；评审与设计决策见 `~/.gstack/projects/lingjing/`。
+> 运行/部署见 `DEPLOY.md` 与 `DEPLOY-ALIYUN.md`；产品规划见 `功能清单-PRD.md`；
+> 评审与设计决策见 `~/.gstack/projects/lingjing/`。
+
+---
+
+## 能做什么
+
+| 模态 | 工具 |
+|---|---|
+| 影片 | **AI 虚拟人**（照片+文案→对口型讲话视频）· **参考生成影片** · **图片转影片** · **文字转影片** · **AI 影片编辑器** |
+| 图片 | **AI 图片**（文生图）· **AI 图片编辑器**（图生图/换装/扩图/风格化…） |
+| 音频 | **文字转语音**（多音色/克隆/设计音色）· **AI 音乐** |
+
+- **多租户**：平台超管（/admin）开机构 → 机构管理员开账号；租户间数据隔离。
+- **积分计费**：reserve（提交预扣）→ settle（成功结算）→ release（失败退还），按真实秒/字/张计价。
+- **合规**：AI 生成标识、内容送审、本人授权存证。
+
+## 技术形态
+
+| 项 | 内容 |
+|---|---|
+| 定位 | 一站式 AIGC 创作 SaaS（融媒体优先），不自建 GPU |
+| 算力 | AI 能力全部走云端 API（**阿里云百炼**为主），本机只做编排/轮询/轻量后处理 |
+| 后端 | Node + TypeScript（tsx 直跑）· **SQLite**（嵌入式，无外部 DB）· **DB 队列 + 进程内 worker 池**（无 Redis/MQ） |
+| 存储 | **阿里云 OSS**（生成素材/成品需公网可达，供百炼拉取） |
+| 部署 | **Docker Compose**（Caddy 自动 HTTPS + app 两容器），一台服务器即可；支持私有化交付 |
+| 交付 | 双模式：①托管（开账号、按量计费）②私有化（部署到客户内网） |
+
+---
+
+## 快速开始（部署）
+
+详见 **`DEPLOY-ALIYUN.md`**（阿里云 ECS 实战 checklist）。简版：
+
+```bash
+git clone https://github.com/streamneil/lingjing.git && cd lingjing
+cp .env.example .env && chmod 600 .env   # 填 .env(必填:超管密码/百炼 key/OSS 四项/域名)
+./scripts/deploy.sh                       # 一键:校验 → build → up → 等健康
+```
+
+- 更新代码：`./scripts/deploy.sh`　仅重启：`./scripts/deploy.sh --restart`
+- 数据备份：`./scripts/backup.sh`（SQLite 在线一致备份，可 cron 定时）
+
+> 服务器要求：≥4c8g、amd64、Docker。无 Redis/MySQL/MQ。AI 重算力在百炼云端,不在本机。
 
 ---
 
@@ -12,79 +54,33 @@
 
 ```
 lingjing/
-├── README.md            ← 本文件（项目导航）
-├── 功能清单-PRD.md       ← 完整功能规格 / PRD（分模块、标优先级、含验收标准）
-└── prototype/           ← 高保真可点击原型（纯 HTML/CSS/JS，无需构建）
-    ├── landing.html     ← 营销落地页（公开页，入口）
-    ├── index.html       ← 形象库（登录后系统首页）
-    ├── create.html      ← 创作台（数字人视频，左配置+右对话流）
-    ├── voices.html      ← 音色库
-    ├── assets.html      ← 素材库
-    ├── works.html       ← 作品库
-    ├── billing.html     ← 用量计费（点数/套餐/消费记录）
-    ├── members.html     ← 成员与权限（机构/角色/席位）
-    ├── settings.html    ← 系统设置（机构信息/合规标识/默认参数）
-    ├── app.css          ← 共享设计系统
-    ├── app.js           ← 浮层/弹窗交互
-    └── shell.js         ← 共享左侧导航 + 顶栏（系统页注入）
+├── src/                 ← 后端(Node + TS):API / 队列 worker / 网关(百炼/火山) / 存储 / 计费 / 鉴权
+├── prototype/           ← 前端页面(HTML/CSS/JS + 共享 shell/app)
+├── scripts/             ← 部署/备份/资产生成脚本(deploy.sh / backup.sh / build-showcase-data.mjs …)
+├── test/                ← vitest 测试
+├── Dockerfile / docker-compose.yml / Caddyfile   ← 容器部署
+├── DEPLOY.md / DEPLOY-ALIYUN.md / DEPLOY-PRIVATE.md  ← 部署文档
+├── .env.example         ← 环境变量样板(复制为 .env 填值)
+└── 功能清单-PRD.md       ← 完整功能规格 / PRD
 ```
 
-## 如何查看原型
-
-直接用浏览器打开任一 HTML，无需服务器、无需构建：
+## 本地开发
 
 ```bash
-open prototype/landing.html      # 从营销落地页开始
-# 或
-open prototype/index.html        # 直接进系统（形象库）
+npm install
+cp .env.example .env     # 本地最少填 SUPERADMIN_PASS + DASHSCOPE_API_KEY;OSS 可选(不配则本机存储回退)
+npm run dev              # tsx watch 起服务(默认 :9372)
+npm test                # vitest
 ```
-
-建议浏览路径：`landing.html`（落地页）→ 点「免费试用」进 `index.html`（系统）
-→ 左侧导航逐页浏览 → 进「创作台」看双栏创作流。
-
-> 注：原型中的真人头像/案例图为 Unsplash 联网占位，需联网加载；正式版替换为自有素材。
-
----
-
-## 产品概况
-
-| 项 | 内容 |
-|---|---|
-| 定位 | 面向融媒体客户的云端数字人内容生产 SaaS |
-| 技术路线 | 能力全部走云端 API（以阿里百炼为主），不自建 GPU |
-| 交付形态 | 双模式：①托管（开账号、按量计费）②私有化（部署到客户处） |
-| 界面形态 | 左侧模块导航的系统 + 公开营销落地页 |
-
-### 三大功能模块（详见 PRD）
-1. **基础服务平台** — 预置形象、40 预置人声、素材管理
-2. **数字人视频** — 照片/视频/定制形象 → 对口型讲话视频；高精形象定制训练
-3. **声音迁移（AI 配音）** — 5–30s 样本音色克隆、语速/音量、歌声迁移（后置）
-
-### 分期
-- **MVP（一期）**：数字人视频 + 声音克隆 + 高精形象定制训练 + 用户/计费
-- **二期**：素材智能分析、批量生成、协作、套餐增强
-- **三期**：歌声迁移（云端 SVC 方案待定）
 
 ---
 
 ## 设计语言
 
-纯黑哑光底（#0A0A0B）+ 炭灰卡片 · 白底黑字 pill 主按钮 · 真人形象卡片 ·
-极简克制、靠灰阶分层 · 强调色仅小蓝标签 · 毛玻璃 ·
-字体 Manrope + 思源黑体 + Space Mono。
+纯黑哑光底（#0A0A0B）+ 炭灰卡片 · 白底黑字 pill 主按钮 · 极简克制、靠灰阶分层 ·
+强调色仅小蓝标签 · 毛玻璃 · 字体 Manrope + 思源黑体 + Space Mono。
 
----
+## 私有化交付
 
-## 待确认的开放项（见 PRD §6）
-1. 用户/权限模型（机构→成员→三角色 + 席位）
-2. 计费单位（点数制 / 套餐）
-3. AI 生成合规标识的具体形式
-4. **高精形象训练厂商**：百炼是否提供该 API（价格/周期/审核）— 影响一期能否如期
-5. 歌声迁移的云端 SVC 方案
-6. 品牌名「灵镜」是否定稿
-
----
-
-## 与短剧项目（quying）的关系
-本平台**独立**于 `../waoowaoo`（quying 短剧项目）：独立仓库、独立部署、运行时隔离。
-技术栈可借鉴 quying 的能力网关、队列编排、资产中心、SSE 进度等模式，但不共用运行实例。
+把 `docker-compose.yml` + `.env`（域名换内网域名/自签证书）丢进客户内网即可。
+注意：内网下 wan2.2-s2v 的公网素材 URL 问题需单独方案（见 `TODOS.md` T-PUBLIC-URL）。
