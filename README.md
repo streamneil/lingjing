@@ -3,8 +3,8 @@
 面向融媒体客户（电视台、报社、政企宣传）与内容团队的**云端 AIGC 创作 SaaS 平台**。
 影片、图片、音频三大模态，多个 AI 创作工具，一套积分通用、云端生成、合规可控、支持私有化部署。
 
-> 运行/部署见 `DEPLOY.md` 与 `DEPLOY-ALIYUN.md`；产品规划见 `功能清单-PRD.md`；
-> 评审与设计决策见 `~/.gstack/projects/lingjing/`。
+> 运行见 `RUNNING.md`；部署见 `DEPLOY.md` / `DEPLOY-ALIYUN.md`（阿里云）/ `DEPLOY-PRIVATE.md`（私有化）；
+> 产品规格见 `功能清单-PRD.md`。
 
 ---
 
@@ -45,8 +45,15 @@ cp .env.example .env && chmod 600 .env   # 填 .env(必填:超管密码/百炼 k
 
 - 更新代码：`./scripts/deploy.sh`　仅重启：`./scripts/deploy.sh --restart`
 - 数据备份：`./scripts/backup.sh`（SQLite 在线一致备份，可 cron 定时）
+- 本地一键起（开发）：`./scripts/dev-up.sh`（清理旧进程 → 种子 demo 账号 → 起服务 → 健康检查）
 
-> 服务器要求：≥4c8g、amd64、Docker。无 Redis/MySQL/MQ。AI 重算力在百炼云端,不在本机。
+> 服务器要求：≥4c8g、amd64、Docker。无 Redis/MySQL/MQ。AI 重算力在云端（百炼/火山），不在本机。
+
+### 厂商 API Key 在哪配
+
+平台接了多个厂商：**阿里百炼**（数字人/TTS/图片/音乐）、**火山方舟**（Seedance/Seedream）、**Google AI Studio**（Gemini）。
+所有厂商 key 在 **`/admin` →「厂商 / Key」** 页粘贴（AES-256-GCM 加密入库，只显尾号）。
+`.env` 里的 `DASHSCOPE_API_KEY` 仅用于**首次冷启动种子**与未配 MASTER_KEY 时的回落；火山/Google 无 .env 回落，只在后台配。
 
 ---
 
