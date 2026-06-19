@@ -6,14 +6,20 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-// 极简 .env 加载:不引 dotenv,避免 Slice1 多一个依赖。已存在的真实 env 优先。
+// 极简 .env 加载:不引 dotenv,避免多一个依赖。已存在的真实 env 优先。
 function loadDotEnv(): void {
   try {
     const raw = readFileSync(resolve(process.cwd(), '.env'), 'utf8');
     for (const line of raw.split('\n')) {
-      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
+      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)$/);
       if (m && m[1] && process.env[m[1]] === undefined) {
-        process.env[m[1]] = m[2]!.replace(/^["']|["']$/g, '');
+        let val = m[2]!;
+        const quoted = /^["']/.test(val);
+        // 未加引号时,剥掉行内注释(空白 + #...)。dotenv 同款行为,避免
+        // `LJ_DOMAIN=example.com  # 注释` 把注释当成域名值的一部分。
+        if (!quoted) val = val.replace(/\s+#.*$/, '');
+        val = val.trim().replace(/^["']|["']$/g, '');
+        process.env[m[1]] = val;
       }
     }
   } catch {
