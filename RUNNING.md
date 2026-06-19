@@ -1,9 +1,9 @@
-# 灵镜 Slice 1 — 运行说明
+# 灵镜 — 运行说明
 
-Slice 1 = 单租户、无认证、端到端真视频(预置形象 + 预置音色 + 文案 → 百炼 → DB 队列 → 前端轮询 → 带 AI 标识成品)。
-它本身就是可交付给电视台的**私有化 POC**(决策见 `~/.gstack/projects/lingjing/` 设计文档)。
+灵镜是一站式 AIGC 创作平台(影片/图片/音频三模态、多工具),多租户 + 积分计费 + 合规可控。
+本文讲怎么把它跑起来。部署见 `DEPLOY.md` / `DEPLOY-ALIYUN.md`;产品规格见 `功能清单-PRD.md`。
 
-## 架构(Slice 1)
+## 架构
 
 ```
 浏览器 (prototype/*.html)
@@ -11,16 +11,18 @@ Slice 1 = 单租户、无认证、端到端真视频(预置形象 + 预置音色
    ▼
 ┌─────────────────────────────────────────────┐
 │ Express 单体 (src/server.ts)                 │
-│   api/jobs.ts ──► queue (job 表=队列)        │
+│   api/* ──► queue(job 表 = 队列)            │  鉴权/admin/积分/计费/订单…
 │                      │                        │
-│   worker.ts ◄────────┘ claimNextJob (原子领取)│
-│      │ moderation 钩子(空实现)              │
-│      │ gateway/baichuan (submit→轮询)        │ ──► 阿里百炼
-│      │ storage (落素材/成品)                  │ ──► 阿里云 OSS(本地未配则回退 MinIO/本机)
+│   worker.ts ◄────────┘ claimNextJob(原子领取)│  N 槽并发池
+│      │ 送审钩子 → gateway(submit→轮询)      │ ──► 阿里百炼 / 火山方舟
+│      │ ffmpeg(拼接/AI 标识) → storage        │ ──► 阿里云 OSS(本地未配则回退本机)
 │      ▼ markDone / markFailed(失败隔离)      │
 └─────────────────────────────────────────────┘
-   DB 为唯一真相,无 SSE,无 Redis。
+   DB(SQLite)为唯一真相;队列在 DB,无 Redis/MQ;前端轮询,无 SSE。
 ```
+
+- **无外部中间件**:SQLite 嵌入式库 + 进程内 worker 池。AI 重算力全在云端(百炼/火山),本机只做编排/轮询/ffmpeg 轻量后处理。
+- **多 provider**:百炼(数字人 s2v / Qwen-TTS / Qwen 图片 / Fun-Music)+ 火山方舟(Seedance/Seedream)。key 走加密网关(库内密文优先,回落 .env)。
 
 ## 本地跑(不用 docker)
 
@@ -32,41 +34,33 @@ cp .env.example .env          # 最少填 SUPERADMIN_PASS + DASHSCOPE_API_KEY
 npm run dev                   # http://localhost:9372/  (tsx watch)
 ```
 
-> 对象存储:本地未配 OSS 时,代码自动回退到本机存储(MinIO,默认 127.0.0.1:9000)。
-> 想跑真实数字人生成需配 OSS(百炼要公网可达素材 URL),否则生成会卡 pending。
+> 对象存储:本地未配 OSS 时,代码自动回退到本机存储(MinIO 客户端,默认 127.0.0.1:9000)。
+> 想跑真实数字人/视频生成需配 OSS(百炼要公网可达素材 URL),否则生成会卡 pending。
 
 ## docker 部署(生产)
 
-生产用 `docker compose`(Caddy + app,对象存储走阿里云 OSS),见 **`DEPLOY.md` / `DEPLOY-ALIYUN.md`**。
+生产用 `docker compose`(Caddy 自动 HTTPS + app 两容器,对象存储走阿里云 OSS),详见 **`DEPLOY-ALIYUN.md`**。
 
 ```bash
-cp .env.example .env          # 填 .env(超管密码/百炼 key/OSS 四项/域名)
+cp .env.example .env          # 填 .env(超管密码 / 百炼 key / OSS 四项 / 域名)
 ./scripts/deploy.sh           # 一键:校验 → build → up → 等健康
 ```
 
-## 测试
+## 首次使用(冷启动)
+
+全新部署 DB 为空,只有平台超管:开 `https://你的域名/admin/login` 用 `admin` / `<SUPERADMIN_PASS>`
+登录 → 「新建租户」建机构 → 「开户」建机构管理员 → 机构用户去 `/login.html` 登录创作台。
+
+## 测试 / 质检
 
 ```bash
-npm test          # vitest 全量(含失败隔离 E2E、计价、鉴权等)
+npm test          # vitest 全量(含失败隔离 E2E、计价、鉴权、配额等)
 npx tsc --noEmit  # 类型检查
 ```
 
-## 探针(验证百炼能力,跑业务前先跑)
+## 探针(验证云端能力,跑业务前可先跑)
 
 ```bash
-npm run probe:connect    # 验证 key 有效 + 百炼可达(qwen-turbo)
-npm run probe:baichuan   # 打穿数字人链路出第一条视频(需先填 BAICHUAN_AVATAR_MODEL 等)
+npm run probe:connect    # 验证 key 有效 + 百炼可达
+npm run probe:baichuan   # 打穿数字人链路出第一条视频
 ```
-
-## 还差什么才算 Slice 1 完整(C-research 待补)
-
-这些字段只有百炼控制台开通数字人后才知道,填进 `.env` 即可,代码无需改:
-- `BAICHUAN_AVATAR_MODEL` — 数字人视频生成的真实 model 名
-- `BAICHUAN_PRESET_AVATAR` — 预置形象 ID
-- `src/gateway/baichuan.ts` 里标 `TODO(C-research)` 的 generation 路径 / input 字段 / 成品 URL 字段,以真实 API 文档校准
-- AI 标识:C-code 探明成品是否自带;若否,在 worker 第 5 步加 ffmpeg 后处理
-
-## 不在 Slice 1(见设计文档与 TODOS.md)
-- 认证 / 多租户 / RBAC → Slice 2
-- 积分 / 审计 / 作品库 / 自定义形象上传 / 授权存证 → Slice 3
-- 高精训练、支付、歌声迁移 → 推迟/砍掉
