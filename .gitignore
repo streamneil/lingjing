@@ -7,8 +7,10 @@
 *.swp
 
 # 密钥 / 环境变量（绝不提交）
+# 忽略所有 .env 变体(含 .env.bak.*、.env.local、时间戳备份),但保留 .env.example。
 .env
-.env.local
+.env.*
+!.env.example
 *.local
 
 # 运行时数据库（本地/部署生成,绝不提交）
