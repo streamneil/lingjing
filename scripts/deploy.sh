@@ -73,8 +73,17 @@ for i in $(seq 1 18); do
   sleep 5
 done
 
-# ── 4. 状态汇总 ──
+# ── 4. 平台数据种子(幂等:默认积分套餐;已有则跳过)──
+if [ "$RESTART_ONLY" != true ]; then
+  log "灌平台默认数据(积分套餐)…"
+  docker compose exec -T app sh -c 'DB_FILE=${DB_FILE:-/data/lingjing.db} npx tsx scripts/seed-platform.mjs' \
+    || log "⚠ 种子步骤未成功(不阻断部署),可稍后手动:docker compose exec app npx tsx scripts/seed-platform.mjs"
+fi
+
+# ── 5. 状态汇总 ──
 log "当前服务状态:"
 docker compose ps
 log "完成。访问 https://$(grep -E '^LJ_DOMAIN=' .env | cut -d= -f2-)/admin/login 用超管登录。"
+log "下一步:① /admin →「厂商 / Key」配百炼/火山/Google key;② 配完百炼后(可选)生成预置音色试听:"
+log "        docker compose exec app npx tsx scripts/seed-preset-samples.mjs"
 log "(看日志:docker compose logs -f app)"

@@ -33,28 +33,52 @@
 
 ---
 
-## 快速开始（部署）
+## 生产部署（阿里云服务器）
 
-详见 **`DEPLOY-ALIYUN.md`**（阿里云 ECS 实战 checklist）。简版：
+完整清单见 **`DEPLOY-ALIYUN.md`**。最短路径:
 
 ```bash
+# 1. 服务器装 Docker(见 DEPLOY-ALIYUN.md §2),然后:
 git clone https://github.com/streamneil/lingjing.git && cd lingjing
-cp .env.example .env && chmod 600 .env   # 填 .env(必填:超管密码/百炼 key/OSS 四项/域名)
-./scripts/deploy.sh                       # 一键:校验 → build → up → 等健康
+
+# 2. 配 .env(只填 5 类:超管密码 / MASTER_KEY / OSS 四项 / 域名;厂商 key 不填这里)
+cp .env.example .env && chmod 600 .env
+
+# 3. 一键部署:校验 → build → up → 等健康 → 灌默认数据(积分套餐)
+./scripts/deploy.sh
+
+# 4. 浏览器开 https://你的域名/admin/login(admin / SUPERADMIN_PASS)
+#    →「厂商 / Key」配百炼/火山/Google 的 API Key → 新建租户 → 开户
+#    平台即可用。落地页/灵感/示范数据已自带(见「数据完整性」)。
 ```
 
-- 更新代码：`./scripts/deploy.sh`　仅重启：`./scripts/deploy.sh --restart`
-- 数据备份：`./scripts/backup.sh`（SQLite 在线一致备份，可 cron 定时）
-- 本地一键起（开发）：`./scripts/dev-up.sh`（清理旧进程 → 种子 demo 账号 → 起服务 → 健康检查）
+- 更新代码:`./scripts/deploy.sh`　仅重启:`./scripts/deploy.sh --restart`
+- 数据备份:`./scripts/backup.sh`(SQLite 在线一致备份,可 cron 定时)
 
-> 服务器要求：≥4c8g、amd64、Docker。无 Redis/MySQL/MQ。AI 重算力在云端（百炼/火山），不在本机。
+> 服务器要求:≥4c8g、amd64、Docker。无 Redis/MySQL/MQ。AI 重算力在云端(百炼/火山),不在本机。
 
-### 厂商 API Key 在哪配
+### 部署后只需配这些(其余开箱即用)
 
-平台接了多个厂商：**阿里百炼**（数字人/TTS/图片/音乐）、**火山方舟**（Seedance/Seedream）、**Google AI Studio**（Gemini）。
-三家 key 都在 **`/admin` →「厂商 / Key」** 页粘贴（AES-256-GCM 加密入库，只显尾号），`.env` 里厂商 key 都不用填。
-- **前提**：`.env` 必须配 `MASTER_KEY`（`openssl rand -base64 32`），否则后台贴 key 会失败。它是解密库内 key 的总钥匙，只能走环境变量。
-- 三家厂商 key 都只在后台配，`.env` 里不写任何厂商 key。
+| 配在哪 | 配什么 |
+|---|---|
+| **`.env`(部署前)** | 超管密码 `SUPERADMIN_PASS`、主密钥 `MASTER_KEY`(`openssl rand -base64 32`)、OSS 四项、域名 |
+| **`/admin`(部署后)** | 厂商 API Key:**百炼 / 火山方舟 / Google AI Studio**,在「厂商 / Key」页粘贴(加密入库) |
+
+`MASTER_KEY` 是解密库内厂商 key 的总钥匙,只能走 `.env`;没它后台贴 key 会失败。
+厂商 key 一律在 `/admin` 配,`.env` 里不写任何厂商 key。
+
+### 数据完整性:为什么部署后不用手动整理示范数据
+
+平台「开箱即数据完整」,分三层,**运营无需手工整理**:
+
+| 数据 | 来源 | 部署后 |
+|---|---|---|
+| 落地页/探索灵感的**图文、示范素材**(果茶广告、AI 音乐示例等)、预置形象/声音 | 公共只读资源(图文托管在公共桶 `lh-lingjing`)+ 随代码常量 | ✅ 自动就有(前端直接引用,无需种子) |
+| **默认积分套餐** | `./scripts/deploy.sh` 自动跑 `seed-platform.mjs` 灌入(幂等,已有则不覆盖) | ✅ 自动有 4 个默认套餐,`/admin` 可改价/增删 |
+| **预置音色试听样本**(可选) | 需先配百炼 key,再手动跑一次 | ⏳ 配完百炼后:`docker compose exec app npx tsx scripts/seed-preset-samples.mjs` |
+
+> 说明:示范图文用公共桶 `lh-lingjing`,所有部署共享只读,不占你的桶、也不会裂。
+> 运营**生成的内容**写进他自己 `.env` 配的 `OSS_BUCKET`,与示范数据完全隔离。
 
 ---
 
@@ -64,7 +88,7 @@ cp .env.example .env && chmod 600 .env   # 填 .env(必填:超管密码/百炼 k
 lingjing/
 ├── src/                 ← 后端(Node + TS):API / 队列 worker / 网关(百炼/火山) / 存储 / 计费 / 鉴权
 ├── prototype/           ← 前端页面(HTML/CSS/JS + 共享 shell/app)
-├── scripts/             ← 部署/备份/资产生成脚本(deploy.sh / backup.sh / build-showcase-data.mjs …)
+├── scripts/             ← 部署/运维脚本(deploy.sh / dev-up.sh / backup.sh / seed-platform.mjs …)
 ├── test/                ← vitest 测试
 ├── Dockerfile / docker-compose.yml / Caddyfile   ← 容器部署
 ├── DEPLOY.md / DEPLOY-ALIYUN.md / DEPLOY-PRIVATE.md  ← 部署文档
@@ -74,12 +98,26 @@ lingjing/
 
 ## 本地开发
 
+**一键起(推荐)** —— 清理旧进程 → 种子 demo 账号 + 默认套餐 → 起服务 → 健康检查:
+
 ```bash
 npm install
-cp .env.example .env     # 本地最少填 SUPERADMIN_PASS;厂商 key 起来后去 /admin 配(需先填 MASTER_KEY);OSS 可选(不配则本机存储回退)
-npm run dev              # tsx watch 起服务(默认 :9372)
-npm test                # vitest
+cp .env.example .env     # 本地最少填 SUPERADMIN_PASS + MASTER_KEY(贴 key 用);OSS 建议配(否则生成卡住)
+./scripts/dev-up.sh      # 起在 http://localhost:9372/
+# 登录:demoadmin / pw123456(机构管理员)| admin / <SUPERADMIN_PASS>(平台超管)
+# 厂商 key:开 /admin →「厂商 / Key」贴百炼等 key 即可生成
 ```
+
+**手动起(只起服务,不种子)**:
+
+```bash
+npm run dev                                  # tsx watch 起服务(默认 :9372)
+DB_FILE=lingjing.db npx tsx scripts/seed-platform.mjs   # 需要默认套餐时手动灌一次
+npm test                                     # vitest 全量
+```
+
+> 本地与生产同一套代码、同样的厂商 key 走 /admin 流程。区别只在:本地 `OSS_BUCKET` 用你自己的开发桶
+> (别和生产共用),示范图文仍引用公共桶 `lh-lingjing`,自动可见。
 
 ---
 

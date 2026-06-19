@@ -19,6 +19,8 @@ sleep 1
 echo "▶ 1/3 种子账号(若 DB 已存在则追加一个新机构)..."
 # 必须用 tsx:种子脚本 import 的是 .ts 源码(TS 的 .js→.ts 解析,node 不支持)
 DB_FILE=lingjing.db NODE_NO_WARNINGS=1 npx tsx scripts/seed-demo.mjs
+# 平台默认数据(积分套餐,幂等)
+DB_FILE=lingjing.db NODE_NO_WARNINGS=1 npx tsx scripts/seed-platform.mjs
 
 echo "▶ 2/3 启动应用(本地,存储连阿里云 OSS)..."
 echo "   日志写到 /tmp/lingjing-app.log;停止用: kill \$(cat /tmp/lingjing-app.pid)"

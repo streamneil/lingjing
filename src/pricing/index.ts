@@ -269,3 +269,22 @@ export function countLeadsByStatus(status: LeadStatus): number {
     .get(status) as { n: number };
   return row.n;
 }
+
+// ── 默认套餐种子(部署开箱即用)──
+// 新部署 pricing_plan 为空 → 定价区/落地页无套餐。这里固化一份默认套餐,
+// 由 seed 脚本调用灌入;运营之后在 /admin 自行改价/增删。
+// 幂等:表非空即跳过(不覆盖运营已改的套餐)。
+const DEFAULT_PLANS: PlanInput[] = [
+  { name: '入门体验', priceYuan: 100, credits: 800, bonusCredits: 0, features: ['适合个人试用', '约 13 条数字人视频'] },
+  { name: '标准充值', priceYuan: 500, credits: 4500, bonusCredits: 300, flag: '最受欢迎', features: ['含赠送积分 300', '团队日常创作'] },
+  { name: '专业充值', priceYuan: 1000, credits: 8300, bonusCredits: 600, features: ['含赠送积分 600', '高频生产'] },
+  { name: '大富翁', priceYuan: 5000, credits: 42000, bonusCredits: 4500, features: ['含赠送积分 4500', '机构批量采购'] },
+];
+
+/** 灌默认套餐。返回新建数量(表非空时返回 0,不重复灌、不覆盖)。 */
+export function seedDefaultPlans(): number {
+  const existing = (db.prepare(`SELECT COUNT(*) AS n FROM pricing_plan`).get() as { n: number }).n;
+  if (existing > 0) return 0; // 已有套餐(运营可能已改),不动
+  for (const p of DEFAULT_PLANS) createPlan(p);
+  return DEFAULT_PLANS.length;
+}
