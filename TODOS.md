@@ -134,7 +134,7 @@
 - **Why:** worker 改并发池后(2026-06-16 CEO review),prod POOL_SIZE=16 不撞百炼/火山账号级 RPM/TPM 额度(账号级配额远高,见 help.aliyun.com/zh/model-studio/rate-limit);但若以后调更高并发、或厂商降额度,无退避会让任务直接 failed。这是「调更高并发」的前置安全网。
 - **Pros:** 解锁安全地把 POOL_SIZE 调到几十;限流时透明重试而非报错给用户。
 - **Cons:** 三处 gateway 都改;需区分可重试(429/5xx)vs 不可重试(4xx 参数错)。
-- **Context:** 来自 2026-06-16 /plan-ceo-review 外部声音 #5。CEO plan: ~/.gstack/projects/digital-human/ceo-plans/2026-06-16-worker-concurrency.md。本轮 prod=16 不做也安全。
+- **Context:** 来自 2026-06-16 /plan-ceo-review 外部声音 #5。CEO plan: ~/.gstack/projects/lingjing/ceo-plans/2026-06-16-worker-concurrency.md。本轮 prod=16 不做也安全。
 - **Effort:** M(human)→ S(CC)。**Priority:** P2。
 - **Depends on / blocked by:** 无;但「把 POOL_SIZE 调到 >16」依赖它先落地。
 
@@ -151,7 +151,7 @@
 - **What:** 2026-06-17 CEO review(EXPANSION→TRIM)砍下的 5 个看板指标,数据量够大再做:① 收入vs消耗 30日双线趋势图(届时抽 bucketSeries 时间分桶 helper,复用 concurrency:285 模式)② 消耗 by 工具/模型 条形榜(ledger JOIN job,json_extract input_json.model,NULL→其他桶)③ 今日失败错误分类榜(job.error 关键词归类:送审拒/限流429/超时/参数错)④ 增长指标(新增租户月 / 活跃7日 / sales_leads 转化 / 付费租户数)⑤ 流失预警(MAX(job.created_at)<now−7d 的曾活跃租户)。
 - **Why:** 现在 2 租户/63 job,这些图表/榜单是噪声(~2 job/天的折线、n=2 的活跃率/Top10 无分辨率)。外部声音 strategic review 判定 premature。量起来后才有信号。
 - **Pros:** 量大后是真运营驾驶舱(收支趋势/成本结构/排障/增长)。**Cons:** 现在做=看着像坏了。
-- **Context:** CEO plan ~/.gstack/projects/digital-human/ceo-plans/2026-06-17-admin-ops-dashboard.md。本轮已做点名的消耗快照/Top租户/充值/体感条/余额续航。消耗口径=reserve+release(非settle,settle 恒0);充值=recharge_order status='credited'。
+- **Context:** CEO plan ~/.gstack/projects/lingjing/ceo-plans/2026-06-17-admin-ops-dashboard.md。本轮已做点名的消耗快照/Top租户/充值/体感条/余额续航。消耗口径=reserve+release(非settle,settle 恒0);充值=recharge_order status='credited'。
 - **Effort:** 每项 M(human)→ S(CC)。**Priority:** P3(数据量触发)。
 - **Depends on / blocked by:** 租户/job 量增长;趋势图需先抽 bucketSeries helper + credit_ledger(created_at) 索引。
 

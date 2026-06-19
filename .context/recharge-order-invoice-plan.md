@@ -171,7 +171,7 @@ platform_setting(对公收款): payee_name, tax_no, bank_name, bank_account(超�
 
 | 界面 | 路径 | 方向 | 备注 |
 |------|------|------|------|
-| 对公充值页 | ~/.gstack/projects/digital-human/designs/recharge-loop-20260612/recharge-wireframe.png(v2) | 左套餐选择 + 右 sticky 对公转账卡(状态条/复制/可选回单上传) | 已删自定义金额;移动端套餐在上+底部 sticky 操作条 |
+| 对公充值页 | ~/.gstack/projects/lingjing/designs/recharge-loop-20260612/recharge-wireframe.html(v2) | 左套餐选择 + 右 sticky 对公转账卡(状态条/复制/可选回单上传) | 已删自定义金额;移动端套餐在上+底部 sticky 操作条 |
 
 ## Implementation Tasks
 Synthesized from this review's findings. Each任务 derives from a specific finding above.

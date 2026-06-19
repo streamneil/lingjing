@@ -90,7 +90,7 @@ recharge 页挪到 pay 页;下单时机仍是「提交订单即 createOrder」�
 ## What already exists(复用)
 - createOrder / claimPaid / confirmAndCredit / getPayee(orders/index.ts)—— 全复用,不重写钱路。
 - /payee-info、/orders、/orders/:id、/orders/:id/claim-paid(api/orders.ts)—— pay 页直接用。
-- 收银台线框稿已批:~/.gstack/projects/digital-human/designs/checkout-flow-20260612/pay-wireframe.png
+- 收银台线框稿已批:~/.gstack/projects/lingjing/designs/checkout-flow-20260612/pay-wireframe.png
   (注:线框稿的三选一付款 radio 实现时改为「单方式展示 + 支付宝/微信灰禁占位」,外部 #3 诚实化)。
 
 ## GSTACK REVIEW REPORT
