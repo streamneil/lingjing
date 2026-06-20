@@ -44,7 +44,8 @@ git clone https://github.com/streamneil/lingjing.git && cd lingjing
 # 2. 配 .env(只填 5 类:超管密码 / MASTER_KEY / OSS 四项 / 域名;厂商 key 不填这里)
 cp .env.example .env && chmod 600 .env
 
-# 3. 一键部署:校验 → build → up → 等健康 → 灌默认数据(积分套餐)
+# 3. 一键部署:校验 → build(媒体随镜像)→ up → 等健康 → 灌示范素材到你的 OSS
+#    (积分套餐由 app 启动自动种子;示范图文/音色/视频随仓自带,无外部桶依赖)
 ./scripts/deploy.sh
 
 # 4. 浏览器开 https://你的域名/admin/login(admin / SUPERADMIN_PASS)
@@ -69,16 +70,18 @@ cp .env.example .env && chmod 600 .env
 
 ### 数据完整性:为什么部署后不用手动整理示范数据
 
-平台「开箱即数据完整」,分三层,**运营无需手工整理**:
+平台「开箱即数据完整」,**运营无需手工整理,也不依赖任何外部桶**(去中心化:每个部署自包含):
 
 | 数据 | 来源 | 部署后 |
 |---|---|---|
-| 落地页/探索灵感的**图文、示范素材**(果茶广告、AI 音乐示例等)、预置形象/声音 | 公共只读资源(图文托管在公共桶 `lh-lingjing`)+ 随代码常量 | ✅ 自动就有(前端直接引用,无需种子) |
-| **默认积分套餐** | `./scripts/deploy.sh` 自动跑 `seed-platform.mjs` 灌入(幂等,已有则不覆盖) | ✅ 自动有 4 个默认套餐,`/admin` 可改价/增删 |
-| **预置音色 + 试听小样** | 音色元数据随代码;试听小样托管公共桶共享 | ✅ 自动有,试听直接出声(无需配百炼/跑脚本) |
+| 落地页/探索灵感的**图文、示范素材**(果茶广告、AI 音乐示例等)、预置形象/声音 | 媒体**随 git 入库**(`prototype/showcase/`)→ 进 Docker 镜像 → `deploy.sh` 自动 seed 到运营**自己的 OSS**;前端走 `/api/showcase-asset`(签名重定向自己桶 / 桶里没有则伺服镜像内文件兜底) | ✅ 自动就有,零外部依赖;空桶/内网/air-gap 也完整显示 |
+| **默认积分套餐** | app **启动时自动种子**(`seedDefaultPlans`,表空才灌、幂等);裸 `docker compose up` 也生效 | ✅ 自动有 4 个默认套餐,`/admin` 可改价/增删 |
+| **预置音色 + 试听小样** | 音色元数据随代码;20 个试听 WAV 随 git 入库,同走 `/api/showcase-asset` | ✅ 自动有,试听直接出声(无需配百炼/跑脚本) |
 
-> 说明:示范图文用公共桶 `lh-lingjing`,所有部署共享只读,不占你的桶、也不会裂。
-> 运营**生成的内容**写进他自己 `.env` 配的 `OSS_BUCKET`,与示范数据完全隔离。
+> **去中心化要点**:示范媒体不再引用任何公共桶,改为随仓库 → 镜像 → 运营自己的 OSS。
+> 一台部署的素材完全在自己掌控内,公共桶下线/迁移都不影响你;私有化内网同样开箱即完整。
+> 运营**生成的内容**写进 `.env` 配的 `OSS_BUCKET`,与示范素材(`showcase/` 前缀)同桶不同前缀、互不干扰。
+> 预置形象的**视频生成源帧**例外:经发布策略(托管=签名直链;私有化见 `TODOS.md` T-PUBLIC-URL)保证百炼可拉。
 
 ---
 
@@ -108,16 +111,17 @@ cp .env.example .env     # 本地最少填 SUPERADMIN_PASS + MASTER_KEY(贴 key 
 # 厂商 key:开 /admin →「厂商 / Key」贴百炼等 key 即可生成
 ```
 
-**手动起(只起服务,不种子)**:
+**手动起(只起服务)**:
 
 ```bash
-npm run dev                                  # tsx watch 起服务(默认 :9372)
-DB_FILE=lingjing.db npx tsx scripts/seed-platform.mjs   # 需要默认套餐时手动灌一次
+npm run dev                                  # tsx watch 起服务(默认 :9372;启动自动灌默认积分套餐)
 npm test                                     # vitest 全量
 ```
 
-> 本地与生产同一套代码、同样的厂商 key 走 /admin 流程。区别只在:本地 `OSS_BUCKET` 用你自己的开发桶
-> (别和生产共用),示范图文仍引用公共桶 `lh-lingjing`,自动可见。
+> **零 OSS 也能开箱即用**:不配 `OSS_*` 时,示范素材(落地页/探索/试听/形象/参考生成影片)走
+> `/api/showcase-asset` 的**本地磁盘兜底**(媒体随仓在 `prototype/showcase/`),新克隆同事直接
+> `./scripts/dev-up.sh` 就能看全。只有"真实生成"(数字人视频等)才需 OSS + 厂商 key。
+> 本地 `OSS_BUCKET` 建议用自己的开发桶(别和生产共用)。
 
 ---
 
@@ -128,5 +132,8 @@ npm test                                     # vitest 全量
 
 ## 私有化交付
 
-把 `docker-compose.yml` + `.env`（域名换内网域名/自签证书）丢进客户内网即可。
-注意：内网下 wan2.2-s2v 的公网素材 URL 问题需单独方案（见 `TODOS.md` T-PUBLIC-URL）。
+把镜像 + `docker-compose.yml` + `.env`（域名换内网域名/自签证书）丢进客户内网即可。
+**示范素材随镜像自带**(去中心化),内网/air-gap **开箱即完整显示**(走 `/api/showcase-asset`
+本地兜底),不依赖任何外网公共桶。
+注意:仅"真实生成"(wan2.2-s2v 等)需让百炼能拉到公网素材 URL,内网下需单独方案
+(见 `TODOS.md` T-PUBLIC-URL);示范素材的"显示"不受此限。

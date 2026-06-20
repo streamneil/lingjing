@@ -73,18 +73,16 @@ for i in $(seq 1 18); do
   sleep 5
 done
 
-# ── 4. 平台数据种子(幂等:默认积分套餐;已有则跳过)──
+# ── 4. 示范素材灌桶(去中心化:落地页/探索/试听/形象/参考生成影片素材 → 运营自己的 OSS)──
+# 注:默认积分套餐已由 app 启动时自动种子(src/server.ts seedDefaultPlans,表空才灌、幂等),
+#     无需在此单独跑 seed-platform。本步只做"示范媒体灌桶"。
+# 幂等(已存在跳过)。媒体随镜像自带,从本地树读,air-gap 也能灌。
+# 注意:本步失败 **不阻断部署** —— 端点 /api/showcase-asset 会回退伺服镜像内文件,
+#       站点照常显示(只是出口走 Node 而非 OSS 直链)。故这里大声告警 + 给重跑命令,而非 die。
 if [ "$RESTART_ONLY" != true ]; then
-  log "灌平台默认数据(积分套餐)…"
-  docker compose exec -T app sh -c 'DB_FILE=${DB_FILE:-/data/lingjing.db} npx tsx scripts/seed-platform.mjs' \
-    || log "⚠ 种子步骤未成功(不阻断部署),可稍后手动:docker compose exec app npx tsx scripts/seed-platform.mjs"
-
-  # ── 4b. 示范素材灌桶(去中心化:落地页/探索/试听/形象/参考生成影片素材 → 运营自己的 OSS)──
-  # 幂等(已存在跳过)。失败会让落地页/探索裂图,故这里"大声"提示重跑(端点仍会回退镜像内文件兜底,
-  # 但走桶/CDN 出口更省 Node)。媒体随镜像自带,从本地树读,air-gap 也能灌。
-  log "灌示范素材到对象存储(showcase/*:图文/音色/视频/果茶)…"
+  log "灌示范素材到对象存储(showcase/*:图文/音色/视频/果茶;失败不阻断,有镜像内兜底)…"
   docker compose exec -T app sh -c 'npx tsx scripts/seed-showcase.mjs' \
-    || die "✗ 示范素材灌桶失败 —— 落地页/探索可能裂图。修好 OSS 配置后重跑(幂等):docker compose exec app npx tsx scripts/seed-showcase.mjs"
+    || log "⚠ 示范素材灌桶未全部成功 —— 站点仍可用(端点回退镜像内文件),但建议修好 OSS 后重跑(幂等):docker compose exec app npx tsx scripts/seed-showcase.mjs"
 fi
 
 # ── 5. 状态汇总 ──
