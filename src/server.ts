@@ -16,6 +16,7 @@ import { voicesRouter } from './api/voices.js';
 import { settingsRouter } from './api/settings.js';
 import { legalRouter } from './api/legal.js';
 import { pricingRouter } from './api/pricing.js';
+import { seedDefaultPlans } from './pricing/index.js';
 import { ordersRouter } from './api/orders.js';
 import { adminRouter } from './api/admin.js';
 import { captchaRouter } from './api/captcha.js';
@@ -77,6 +78,14 @@ const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(imp
 if (isMain) {
   void (async () => {
   await bootstrapSuperadmin(); // 首启建初始超管(无 SUPERADMIN_PASS 在此抛错拒启;bcrypt 异步)
+  // 首启自动灌默认积分套餐(表空时;幂等,不覆盖运营改过的)。与超管引导同理 —— 让"购买积分套餐"页
+  // 开箱即有数据,无论用 deploy.sh 还是裸 docker compose up 起,运营都无需手动到后台加。
+  try {
+    const seeded = seedDefaultPlans();
+    if (seeded > 0) console.log(`[启动] 已自动灌默认积分套餐 ${seeded} 个(/admin 可改价/增删)`);
+  } catch (e) {
+    console.warn('[启动] 默认积分套餐自动种子失败(不阻断启动):', e instanceof Error ? e.message : e);
+  }
   // OSS 未配齐告警(Docker 部署就绪 D15):wan2.2-s2v 需公网可达素材 URL,
   // 内网 minio 百炼访问不到。没配 OSS 时生成会卡 pending 超时,这里早告警而非运行时才暴雷。
   if (!config.oss.enabled) {
