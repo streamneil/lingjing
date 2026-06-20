@@ -1,5 +1,5 @@
 // 灵镜 探索页 多模态真实样例库 —— 由 scripts/build-showcase-data.mjs 生成,勿手改。
-// 封面/视频 = 平台自产,存 OSS 公网直链(生产:不进 git、不经 Node 伺服)。
+// 封面/视频 = 平台自产,走相对 /api/showcase-asset/(签名重定向自己桶 / 本地兜底,去中心化自包含)。
 // 重生成:node scripts/gen-showcase.mjs --go && node scripts/gen-multimodal.mjs --go && node scripts/build-showcase-data.mjs
 window.LJShowcase = [
   {
@@ -13,8 +13,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "喊上宿舍的其他的女生来看镜头，非常搞笑的画面。",
     "prompt": "喊上宿舍的其他的女生来看镜头，非常搞笑的画面。",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/image-inputs/16ed6622-c22c-4467-a319-947b37efbdbe/08cf6960-cea5-4212-9f2e-d452ff83588d.png",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/videos/16ed6622-c22c-4467-a319-947b37efbdbe/cba4edf2-cc1d-4374-aec5-e005fc00964c.mp4"
+    "poster": "/api/showcase-asset/explore/08cf6960-cea5-4212-9f2e-d452ff83588d.png",
+    "videoUrl": "/api/showcase-asset/videos/cba4edf2-cc1d-4374-aec5-e005fc00964c.mp4"
   },
   {
     "id": "lh-i2v-2",
@@ -27,8 +27,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "喊上宿舍的其他的女生来看镜头，非常搞笑的画面。",
     "prompt": "喊上宿舍的其他的女生来看镜头，非常搞笑的画面。",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/image-inputs/16ed6622-c22c-4467-a319-947b37efbdbe/08cf6960-cea5-4212-9f2e-d452ff83588d.png",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/videos/16ed6622-c22c-4467-a319-947b37efbdbe/bbf2f7a8-9c33-4e3a-b46b-269fe16cdae3.mp4"
+    "poster": "/api/showcase-asset/explore/08cf6960-cea5-4212-9f2e-d452ff83588d.png",
+    "videoUrl": "/api/showcase-asset/videos/bbf2f7a8-9c33-4e3a-b46b-269fe16cdae3.mp4"
   },
   {
     "id": "lh-i2v-3",
@@ -41,8 +41,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "图2女孩穿着图1的衣服，用图3手机自拍。",
     "prompt": "图2女孩穿着图1的衣服，用图3手机自拍。",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/image-inputs/16ed6622-c22c-4467-a319-947b37efbdbe/cf96d53f-cd8d-4732-a7ae-772f7a78b178.webp",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/videos/16ed6622-c22c-4467-a319-947b37efbdbe/32aa31ce-bb5f-4a01-982e-518c4e351188.mp4"
+    "poster": "/api/showcase-asset/explore/cf96d53f-cd8d-4732-a7ae-772f7a78b178.webp",
+    "videoUrl": "/api/showcase-asset/videos/32aa31ce-bb5f-4a01-982e-518c4e351188.mp4"
   },
   {
     "id": "lh-img-5",
@@ -55,8 +55,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "一位中国女性大学生，性别女，年龄约20岁左右，超短发发型略带柔和文艺感，假小子（tomboy）气质，一字领露肩短袖，近景自拍构图，宿舍环境，手机拍摄柔和环境光，自然真实，充满日常生活的青春气息。",
     "prompt": "一位中国女性大学生，性别女，年龄约20岁左右，超短发发型略带柔和文艺感，假小子（tomboy）气质，一字领露肩短袖，近景自拍构图，宿舍环境，手机拍摄柔和环境光，自然真实，充满日常生活的青春气息。",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/8dc94e89-7785-4f5d-bdf9-0e07c0fcb649-0.png",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/8dc94e89-7785-4f5d-bdf9-0e07c0fcb649-0.png"
+    "poster": "/api/showcase-asset/explore/8dc94e89-7785-4f5d-bdf9-0e07c0fcb649-0.png",
+    "url": "/api/showcase-asset/explore/8dc94e89-7785-4f5d-bdf9-0e07c0fcb649-0.png"
   },
   {
     "id": "lh-edit-1",
@@ -69,11 +69,11 @@ window.LJShowcase = [
     "actionLabel": "用这个编辑指令",
     "actionText": "把图中女生的衣服换成参考图里的浅色针织套装，保持脸部、姿态与背景不变。",
     "prompt": "把图中女生的衣服换成参考图里的浅色针织套装，保持脸部、姿态与背景不变。",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/5a8a957b-9877-4802-b2ca-57514281751e-0.png",
-    "beforeUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/image-inputs/16ed6622-c22c-4467-a319-947b37efbdbe/b00a0ff7-b3fb-4ece-8cab-11b79a504e48.jpg",
-    "afterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/5a8a957b-9877-4802-b2ca-57514281751e-0.png",
+    "poster": "/api/showcase-asset/explore/5a8a957b-9877-4802-b2ca-57514281751e-0.png",
+    "beforeUrl": "/api/showcase-asset/explore/b00a0ff7-b3fb-4ece-8cab-11b79a504e48.jpg",
+    "afterUrl": "/api/showcase-asset/explore/5a8a957b-9877-4802-b2ca-57514281751e-0.png",
     "refUrls": [
-      "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/swap-ref-knit.png"
+      "/api/showcase-asset/swap-ref-knit.png"
     ]
   },
   {
@@ -87,11 +87,11 @@ window.LJShowcase = [
     "actionLabel": "用这个编辑指令",
     "actionText": "把图中女孩的衣服换成参考图里的浅色针织套装，保持脸部、姿态与背景不变。",
     "prompt": "把图中女孩的衣服换成参考图里的浅色针织套装，保持脸部、姿态与背景不变。",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/60b3c0a7-50d4-4b72-8b92-bcda21bed302-0.png",
-    "beforeUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/image-inputs/16ed6622-c22c-4467-a319-947b37efbdbe/55fa0e3f-207a-462e-89fd-e6b0ee65b19b.jpg",
-    "afterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/60b3c0a7-50d4-4b72-8b92-bcda21bed302-0.png",
+    "poster": "/api/showcase-asset/explore/60b3c0a7-50d4-4b72-8b92-bcda21bed302-0.png",
+    "beforeUrl": "/api/showcase-asset/explore/55fa0e3f-207a-462e-89fd-e6b0ee65b19b.jpg",
+    "afterUrl": "/api/showcase-asset/explore/60b3c0a7-50d4-4b72-8b92-bcda21bed302-0.png",
     "refUrls": [
-      "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/swap-ref-knit.png"
+      "/api/showcase-asset/swap-ref-knit.png"
     ]
   },
   {
@@ -105,11 +105,11 @@ window.LJShowcase = [
     "actionLabel": "用这个编辑指令",
     "actionText": "把图中女孩的衣服换成参考图里的时尚浅色针织套装，保持脸部、姿态与背景不变。",
     "prompt": "把图中女孩的衣服换成参考图里的时尚浅色针织套装，保持脸部、姿态与背景不变。",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/fada997b-7295-4256-b6fd-0e653cecbcd4-0.png",
-    "beforeUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/image-inputs/16ed6622-c22c-4467-a319-947b37efbdbe/55fa0e3f-207a-462e-89fd-e6b0ee65b19b.jpg",
-    "afterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/fada997b-7295-4256-b6fd-0e653cecbcd4-0.png",
+    "poster": "/api/showcase-asset/explore/fada997b-7295-4256-b6fd-0e653cecbcd4-0.png",
+    "beforeUrl": "/api/showcase-asset/explore/55fa0e3f-207a-462e-89fd-e6b0ee65b19b.jpg",
+    "afterUrl": "/api/showcase-asset/explore/fada997b-7295-4256-b6fd-0e653cecbcd4-0.png",
     "refUrls": [
-      "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/swap-ref-knit.png"
+      "/api/showcase-asset/swap-ref-knit.png"
     ]
   },
   {
@@ -123,10 +123,10 @@ window.LJShowcase = [
     "actionLabel": "用这个编辑指令",
     "actionText": "把视频中女孩的衣服换成参考图里的休闲浅色外套，让她举起手机自拍、神态自然，仿佛没察觉镜头在拍。",
     "prompt": "把视频中女孩的衣服换成参考图里的休闲浅色外套，让她举起手机自拍、神态自然，仿佛没察觉镜头在拍。",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/8dc94e89-7785-4f5d-bdf9-0e07c0fcb649-0.png",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/videos/16ed6622-c22c-4467-a319-947b37efbdbe/f82688d1-1fcc-472a-9817-b3f685f5827a.mp4",
+    "poster": "/api/showcase-asset/explore/8dc94e89-7785-4f5d-bdf9-0e07c0fcb649-0.png",
+    "videoUrl": "/api/showcase-asset/videos/f82688d1-1fcc-472a-9817-b3f685f5827a.mp4",
     "refUrls": [
-      "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/swap-ref-coat.png"
+      "/api/showcase-asset/swap-ref-coat.png"
     ]
   },
   {
@@ -140,10 +140,10 @@ window.LJShowcase = [
     "actionLabel": "用这个编辑指令",
     "actionText": "把视频中女孩的衣服换成参考图里的休闲浅色外套，让她举起手机自拍、神态自然，仿佛没察觉镜头在拍。",
     "prompt": "把视频中女孩的衣服换成参考图里的休闲浅色外套，让她举起手机自拍、神态自然，仿佛没察觉镜头在拍。",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/8dc94e89-7785-4f5d-bdf9-0e07c0fcb649-0.png",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/videos/16ed6622-c22c-4467-a319-947b37efbdbe/6aa1a61c-524a-42a1-8d3c-1ff4e5fae0ff.mp4",
+    "poster": "/api/showcase-asset/explore/8dc94e89-7785-4f5d-bdf9-0e07c0fcb649-0.png",
+    "videoUrl": "/api/showcase-asset/videos/6aa1a61c-524a-42a1-8d3c-1ff4e5fae0ff.mp4",
     "refUrls": [
-      "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/swap-ref-coat.png"
+      "/api/showcase-asset/swap-ref-coat.png"
     ]
   },
   {
@@ -157,8 +157,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "身姿曼妙的古装美女,身着轻薄飘逸的古风唐装仙女长裙,头戴镶嵌珍珠宝石的精美发饰,在湛蓝高空优雅飞翔,下方金灿灿油菜花田与碧绿湖泊,蓝天白云,如梦似幻仙气,低角度全身,高清画质",
     "prompt": "身姿曼妙的古装美女,身着轻薄飘逸的古风唐装仙女长裙,头戴镶嵌珍珠宝石的精美发饰,在湛蓝高空优雅飞翔,下方金灿灿油菜花田与碧绿湖泊,蓝天白云,如梦似幻仙气,低角度全身,高清画质",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/probe-hanfu.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/probe-hanfu.jpg"
+    "poster": "/api/showcase-asset/probe-hanfu.jpg",
+    "url": "/api/showcase-asset/probe-hanfu.jpg"
   },
   {
     "id": "guofeng-fly-1",
@@ -171,8 +171,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "身姿曼妙的古装美女,身着一袭轻薄飘逸的古风唐装仙女长裙,裙摆如云雾般灵动。她头戴工艺精湛、镶嵌着珍珠宝石的精美发饰,在澄澈湛蓝的高空中优雅地飞翔,微微俯身,美目轻垂,静静观望下方景致。背景是广袤无垠的蓝天白云,洁白云朵似棉花糖般蓬松。天空之下是一片灿烂耀眼的金灿灿油菜花田,微风拂过花浪翻滚,不远处一湾碧绿如翡翠的湖泊静谧存在,水光潋滟。低角度镜头展现优雅全身姿态,如梦似幻的仙气与浪漫氛围,高清画质",
     "prompt": "身姿曼妙的古装美女,身着一袭轻薄飘逸的古风唐装仙女长裙,裙摆如云雾般灵动。她头戴工艺精湛、镶嵌着珍珠宝石的精美发饰,在澄澈湛蓝的高空中优雅地飞翔,微微俯身,美目轻垂,静静观望下方景致。背景是广袤无垠的蓝天白云,洁白云朵似棉花糖般蓬松。天空之下是一片灿烂耀眼的金灿灿油菜花田,微风拂过花浪翻滚,不远处一湾碧绿如翡翠的湖泊静谧存在,水光潋滟。低角度镜头展现优雅全身姿态,如梦似幻的仙气与浪漫氛围,高清画质",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/guofeng-fly-1.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/guofeng-fly-1.jpg"
+    "poster": "/api/showcase-asset/guofeng-fly-1.jpg",
+    "url": "/api/showcase-asset/guofeng-fly-1.jpg"
   },
   {
     "id": "guofeng-fly-2",
@@ -185,8 +185,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "一位容颜秀丽的古装佳人,身着质感轻柔、随风舞动的古风唐装仙女长裙,裙身绣有精致云纹。她头戴造型别致、缀满璀璨珠翠的精美发饰,于高远的天际间优雅翱翔,飞翔姿势宛如翩翩起舞,眼神含情,专注俯瞰下方。背后蓝天白云相映成趣,云朵如丝如缕。下方大地之上,大片金灿灿的油菜花田肆意绽放宛如金色海洋,一旁碧绿湖泊平静如镜,高清画质",
     "prompt": "一位容颜秀丽的古装佳人,身着质感轻柔、随风舞动的古风唐装仙女长裙,裙身绣有精致云纹。她头戴造型别致、缀满璀璨珠翠的精美发饰,于高远的天际间优雅翱翔,飞翔姿势宛如翩翩起舞,眼神含情,专注俯瞰下方。背后蓝天白云相映成趣,云朵如丝如缕。下方大地之上,大片金灿灿的油菜花田肆意绽放宛如金色海洋,一旁碧绿湖泊平静如镜,高清画质",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/guofeng-fly-2.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/guofeng-fly-2.jpg"
+    "poster": "/api/showcase-asset/guofeng-fly-2.jpg",
+    "url": "/api/showcase-asset/guofeng-fly-2.jpg"
   },
   {
     "id": "guofeng-pearl",
@@ -199,8 +199,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "古装美女佩戴圆润的珍珠项链,温婉端庄,背景是古雅的书房,书架陈列古籍,暖色调灯光,细腻写实,高清画质",
     "prompt": "古装美女佩戴圆润的珍珠项链,温婉端庄,背景是古雅的书房,书架陈列古籍,暖色调灯光,细腻写实,高清画质",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/guofeng-pearl.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/guofeng-pearl.jpg"
+    "poster": "/api/showcase-asset/guofeng-pearl.jpg",
+    "url": "/api/showcase-asset/guofeng-pearl.jpg"
   },
   {
     "id": "hanfu-sword",
@@ -213,8 +213,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "A Chinese girl, dressed in red Chinese hanfu, with embroidery, jade pendant and a lot of details, holding a traditional Chinese weapon sword in her hand, looking at the camera, neoclassicism, animation style, light and shade contrast, super many character details, UHD, high detail",
     "prompt": "A Chinese girl, dressed in red Chinese hanfu, with embroidery, jade pendant and a lot of details, holding a traditional Chinese weapon sword in her hand, looking at the camera, neoclassicism, animation style, light and shade contrast, super many character details, UHD, high detail",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/hanfu-sword.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/hanfu-sword.jpg"
+    "poster": "/api/showcase-asset/hanfu-sword.jpg",
+    "url": "/api/showcase-asset/hanfu-sword.jpg"
   },
   {
     "id": "zodiac-mouse",
@@ -227,8 +227,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "A super cute Disney style white mouse, sick but still working, wearing a white towel on his head, big eyes, glasses, many pills and bottles scattered around, wearing super cute pajamas, super delicate, super realistic, super detailed, bright colors, natural light, octane rendering, gorgeous, ultra wide angle, 8k, high-definition lifelike",
     "prompt": "A super cute Disney style white mouse, sick but still working, wearing a white towel on his head, big eyes, glasses, many pills and bottles scattered around, wearing super cute pajamas, super delicate, super realistic, super detailed, bright colors, natural light, octane rendering, gorgeous, ultra wide angle, 8k, high-definition lifelike",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/zodiac-mouse.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/zodiac-mouse.jpg"
+    "poster": "/api/showcase-asset/zodiac-mouse.jpg",
+    "url": "/api/showcase-asset/zodiac-mouse.jpg"
   },
   {
     "id": "zodiac-tiger",
@@ -241,8 +241,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "A super cute Disney style white tiger, sick but still working, wearing a white towel on his head, big eyes, glasses, many pills and bottles scattered around, wearing super cute pajamas, super delicate, super realistic, super detailed, bright colors, natural light, octane rendering, gorgeous, ultra wide angle, 8k, high-definition lifelike",
     "prompt": "A super cute Disney style white tiger, sick but still working, wearing a white towel on his head, big eyes, glasses, many pills and bottles scattered around, wearing super cute pajamas, super delicate, super realistic, super detailed, bright colors, natural light, octane rendering, gorgeous, ultra wide angle, 8k, high-definition lifelike",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/zodiac-tiger.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/zodiac-tiger.jpg"
+    "poster": "/api/showcase-asset/zodiac-tiger.jpg",
+    "url": "/api/showcase-asset/zodiac-tiger.jpg"
   },
   {
     "id": "zodiac-dragon",
@@ -255,8 +255,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "A super cute Disney style white dragon, sick but still working, wearing a white towel on his head, big eyes, glasses, many pills and bottles scattered around, wearing super cute pajamas, super delicate, super realistic, super detailed, bright colors, natural light, octane rendering, gorgeous, ultra wide angle, 8k, high-definition lifelike",
     "prompt": "A super cute Disney style white dragon, sick but still working, wearing a white towel on his head, big eyes, glasses, many pills and bottles scattered around, wearing super cute pajamas, super delicate, super realistic, super detailed, bright colors, natural light, octane rendering, gorgeous, ultra wide angle, 8k, high-definition lifelike",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/zodiac-dragon.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/zodiac-dragon.jpg"
+    "poster": "/api/showcase-asset/zodiac-dragon.jpg",
+    "url": "/api/showcase-asset/zodiac-dragon.jpg"
   },
   {
     "id": "zodiac-bunny",
@@ -269,8 +269,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "A super cute Disney style white bunny, sick but still working, wearing a white towel on his head, big eyes, glasses, many pills and bottles scattered around, wearing super cute pajamas, super delicate, super realistic, super detailed, bright colors, natural light, octane rendering, gorgeous, ultra wide angle, 8k, high-definition lifelike",
     "prompt": "A super cute Disney style white bunny, sick but still working, wearing a white towel on his head, big eyes, glasses, many pills and bottles scattered around, wearing super cute pajamas, super delicate, super realistic, super detailed, bright colors, natural light, octane rendering, gorgeous, ultra wide angle, 8k, high-definition lifelike",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/zodiac-bunny.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/zodiac-bunny.jpg"
+    "poster": "/api/showcase-asset/zodiac-bunny.jpg",
+    "url": "/api/showcase-asset/zodiac-bunny.jpg"
   },
   {
     "id": "jiangnan-wuzhen",
@@ -283,8 +283,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "jiangnan water town, small bridges and flowing water, wuzhen, market, misty rain, antique two-story buildings next to the river, pear flowers, artistic conception, high definition, --ar 2:3",
     "prompt": "jiangnan water town, small bridges and flowing water, wuzhen, market, misty rain, antique two-story buildings next to the river, pear flowers, artistic conception, high definition, --ar 2:3",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/jiangnan-wuzhen.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/jiangnan-wuzhen.jpg"
+    "poster": "/api/showcase-asset/jiangnan-wuzhen.jpg",
+    "url": "/api/showcase-asset/jiangnan-wuzhen.jpg"
   },
   {
     "id": "jiangnan-misty",
@@ -297,8 +297,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "The misty rain in the ancient town of Jiangnan, fog, volume fog, bridges, movie lighting, boats, intricate detail, painterly style, breath of the wild aesthetic, 8k",
     "prompt": "The misty rain in the ancient town of Jiangnan, fog, volume fog, bridges, movie lighting, boats, intricate detail, painterly style, breath of the wild aesthetic, 8k",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/jiangnan-misty.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/jiangnan-misty.jpg"
+    "poster": "/api/showcase-asset/jiangnan-misty.jpg",
+    "url": "/api/showcase-asset/jiangnan-misty.jpg"
   },
   {
     "id": "jiangnan-bamboo",
@@ -311,8 +311,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "thick bamboo forests, thousands of light and shadow, light green leaves blowing in fine wind, sun emerging from depths of bamboo, thick bamboo leaves underfoot, new shoots emerging, Jiangnan garden, CG rendering, wide angle lens, volumetric light, dreamy backlight, highly intricate detail, ultra clear, 8k",
     "prompt": "thick bamboo forests, thousands of light and shadow, light green leaves blowing in fine wind, sun emerging from depths of bamboo, thick bamboo leaves underfoot, new shoots emerging, Jiangnan garden, CG rendering, wide angle lens, volumetric light, dreamy backlight, highly intricate detail, ultra clear, 8k",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/jiangnan-bamboo.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/jiangnan-bamboo.jpg"
+    "poster": "/api/showcase-asset/jiangnan-bamboo.jpg",
+    "url": "/api/showcase-asset/jiangnan-bamboo.jpg"
   },
   {
     "id": "jiangnan-persimmon",
@@ -325,8 +325,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "a huge persimmon tree in the corner of the city, hung with red persimmons covered with snow, rising sun, jiangnan ancient town traditional landscape, quiet, beautiful, high details, soft moonlight, soft color, soft light, 8k, high definition",
     "prompt": "a huge persimmon tree in the corner of the city, hung with red persimmons covered with snow, rising sun, jiangnan ancient town traditional landscape, quiet, beautiful, high details, soft moonlight, soft color, soft light, 8k, high definition",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/jiangnan-persimmon.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/jiangnan-persimmon.jpg"
+    "poster": "/api/showcase-asset/jiangnan-persimmon.jpg",
+    "url": "/api/showcase-asset/jiangnan-persimmon.jpg"
   },
   {
     "id": "wedding-redphoenix",
@@ -339,8 +339,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "The amazing Chinese red Hanfu wedding dress cloak embroidered with translucent crystals, sparkling pearl crystals like diamonds, glowing dynamic particles suspended around, phoenix lifelike, dragging a 2m long skirt, beautiful and noble, magical, octane rendering, surrealism, light background, 16k, --ar 2:3",
     "prompt": "The amazing Chinese red Hanfu wedding dress cloak embroidered with translucent crystals, sparkling pearl crystals like diamonds, glowing dynamic particles suspended around, phoenix lifelike, dragging a 2m long skirt, beautiful and noble, magical, octane rendering, surrealism, light background, 16k, --ar 2:3",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/wedding-redphoenix.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/wedding-redphoenix.jpg"
+    "poster": "/api/showcase-asset/wedding-redphoenix.jpg",
+    "url": "/api/showcase-asset/wedding-redphoenix.jpg"
   },
   {
     "id": "wedding-icepink",
@@ -353,8 +353,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "stunning hanfu wedding cloak embroidered with translucent crystals, sparkling pearl crystals like a diamond, phoenix lifelike, dragging a 2m dress, beautiful and noble ice pink, magic octane render, surreal lighting background, 16k, --ar 2:3",
     "prompt": "stunning hanfu wedding cloak embroidered with translucent crystals, sparkling pearl crystals like a diamond, phoenix lifelike, dragging a 2m dress, beautiful and noble ice pink, magic octane render, surreal lighting background, 16k, --ar 2:3",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/wedding-icepink.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/wedding-icepink.jpg"
+    "poster": "/api/showcase-asset/wedding-icepink.jpg",
+    "url": "/api/showcase-asset/wedding-icepink.jpg"
   },
   {
     "id": "wedding-butterfly",
@@ -367,8 +367,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "fashion design: spotlight shines on a chinese hanfu tulle trailing wedding dress, the skirt covered with glowing butterflies, spectral light skirt, colorful, 16k, ultra-realistic, ultra-high level of detail, tyndall light, --ar 2:3",
     "prompt": "fashion design: spotlight shines on a chinese hanfu tulle trailing wedding dress, the skirt covered with glowing butterflies, spectral light skirt, colorful, 16k, ultra-realistic, ultra-high level of detail, tyndall light, --ar 2:3",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/wedding-butterfly.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/wedding-butterfly.jpg"
+    "poster": "/api/showcase-asset/wedding-butterfly.jpg",
+    "url": "/api/showcase-asset/wedding-butterfly.jpg"
   },
   {
     "id": "dream-pinkroad",
@@ -381,8 +381,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "梦幻冬日景象,一条被雪覆盖的道路在广阔雪地中无限延伸,宁静而孤独。巨大的粉色心形云朵坐落在道路上方,散发粉红色和紫色光芒,夕阳的光辉穿透云层,浪漫梦幻氛围,色调温暖柔和,爱情与希望主题,高清画质",
     "prompt": "梦幻冬日景象,一条被雪覆盖的道路在广阔雪地中无限延伸,宁静而孤独。巨大的粉色心形云朵坐落在道路上方,散发粉红色和紫色光芒,夕阳的光辉穿透云层,浪漫梦幻氛围,色调温暖柔和,爱情与希望主题,高清画质",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/dream-pinkroad.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/dream-pinkroad.jpg"
+    "poster": "/api/showcase-asset/dream-pinkroad.jpg",
+    "url": "/api/showcase-asset/dream-pinkroad.jpg"
   },
   {
     "id": "dream-aurora",
@@ -395,8 +395,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "如梦如幻的场景,背景是绚烂多彩的天空,由柔和粉红色渐变为神秘紫色,如梦幻极光在舞动,无数繁星在天空闪烁如镶嵌天幕的宝石,散发神秘光芒,仿佛置身浩瀚宇宙,高清画质",
     "prompt": "如梦如幻的场景,背景是绚烂多彩的天空,由柔和粉红色渐变为神秘紫色,如梦幻极光在舞动,无数繁星在天空闪烁如镶嵌天幕的宝石,散发神秘光芒,仿佛置身浩瀚宇宙,高清画质",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/dream-aurora.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/dream-aurora.jpg"
+    "poster": "/api/showcase-asset/dream-aurora.jpg",
+    "url": "/api/showcase-asset/dream-aurora.jpg"
   },
   {
     "id": "dream-rose-snow",
@@ -409,8 +409,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "in the sea of snow, many red roses covered with transparent snow, glittering, two neat rows of snow roses on a beach, sunset, rose-colored glow, depth of field, ultra wide viewing angle, surrealism, ultra clear detail, high definition, --ar 2:3",
     "prompt": "in the sea of snow, many red roses covered with transparent snow, glittering, two neat rows of snow roses on a beach, sunset, rose-colored glow, depth of field, ultra wide viewing angle, surrealism, ultra clear detail, high definition, --ar 2:3",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/dream-rose-snow.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/dream-rose-snow.jpg"
+    "poster": "/api/showcase-asset/dream-rose-snow.jpg",
+    "url": "/api/showcase-asset/dream-rose-snow.jpg"
   },
   {
     "id": "dream-lake-rose",
@@ -423,8 +423,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "night sky, stars shining on silky lake, light blue roses floating on water, aurora, fairy light, twinkling stars, a meteor across the sky, wide lake, starry sky, matte painting, CG rendering, volumetric light, bioluminescence, ultra wide angle, 4k, 8k HD, --ar 9:16",
     "prompt": "night sky, stars shining on silky lake, light blue roses floating on water, aurora, fairy light, twinkling stars, a meteor across the sky, wide lake, starry sky, matte painting, CG rendering, volumetric light, bioluminescence, ultra wide angle, 4k, 8k HD, --ar 9:16",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/dream-lake-rose.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/dream-lake-rose.jpg"
+    "poster": "/api/showcase-asset/dream-lake-rose.jpg",
+    "url": "/api/showcase-asset/dream-lake-rose.jpg"
   },
   {
     "id": "dream-palace-cloud",
@@ -437,8 +437,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "early morning, magnificent palace in the clouds, colorful clouds in the sky, light and shadow effects, fairyland, dream, panorama, 4k, by greg rutkowski and thomas kinkade, 8k HD, --ar 9:16",
     "prompt": "early morning, magnificent palace in the clouds, colorful clouds in the sky, light and shadow effects, fairyland, dream, panorama, 4k, by greg rutkowski and thomas kinkade, 8k HD, --ar 9:16",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/dream-palace-cloud.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/dream-palace-cloud.jpg"
+    "poster": "/api/showcase-asset/dream-palace-cloud.jpg",
+    "url": "/api/showcase-asset/dream-palace-cloud.jpg"
   },
   {
     "id": "portrait-grandma",
@@ -451,8 +451,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "一位60岁的慈祥富态老太太,正面微笑,脸上每道皱纹都藏着幸福故事,大大的眼睛满是温暖,头发盘成精致发髻插着粉色绒花,身穿深蓝色绣金羊绒披风,内搭淡黄色绸缎衬衣,手拿檀香木佛珠,背景是华丽宫殿,高清画质",
     "prompt": "一位60岁的慈祥富态老太太,正面微笑,脸上每道皱纹都藏着幸福故事,大大的眼睛满是温暖,头发盘成精致发髻插着粉色绒花,身穿深蓝色绣金羊绒披风,内搭淡黄色绸缎衬衣,手拿檀香木佛珠,背景是华丽宫殿,高清画质",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/portrait-grandma.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/portrait-grandma.jpg"
+    "poster": "/api/showcase-asset/portrait-grandma.jpg",
+    "url": "/api/showcase-asset/portrait-grandma.jpg"
   },
   {
     "id": "portrait-grandpa",
@@ -465,8 +465,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "一位60岁的慈祥富态男人,正面宽厚笑容,炯炯有神的眼睛充满温和,高挺鼻梁架金色边框眼镜,双颊圆润泛红光,头发整齐有型,身穿深蓝色唐装绣金色图案,脖子系红色丝绸围巾,背景是摆满书籍的书房,高清画质",
     "prompt": "一位60岁的慈祥富态男人,正面宽厚笑容,炯炯有神的眼睛充满温和,高挺鼻梁架金色边框眼镜,双颊圆润泛红光,头发整齐有型,身穿深蓝色唐装绣金色图案,脖子系红色丝绸围巾,背景是摆满书籍的书房,高清画质",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/portrait-grandpa.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/portrait-grandpa.jpg"
+    "poster": "/api/showcase-asset/portrait-grandpa.jpg",
+    "url": "/api/showcase-asset/portrait-grandpa.jpg"
   },
   {
     "id": "portrait-farmer",
@@ -479,8 +479,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "男人五十多岁,农民形象,身材魁伟,花白短发,国字脸,高额头,剑眉,双眼皮大眼目光炯炯有神,有胡茬有酒窝,咧嘴笑着乐观开朗,白背心农民装束,半身像,细节真实,写实",
     "prompt": "男人五十多岁,农民形象,身材魁伟,花白短发,国字脸,高额头,剑眉,双眼皮大眼目光炯炯有神,有胡茬有酒窝,咧嘴笑着乐观开朗,白背心农民装束,半身像,细节真实,写实",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/portrait-farmer.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/portrait-farmer.jpg"
+    "poster": "/api/showcase-asset/portrait-farmer.jpg",
+    "url": "/api/showcase-asset/portrait-farmer.jpg"
   },
   {
     "id": "portrait-monk",
@@ -493,8 +493,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "小和尚盘坐在山间,身穿洁白袈裟,光头闪耀阳光下温暖光芒,戴着佛珠双手合拢微笑,小脸胖乎乎可爱极了,背后山峰耸立宁静美丽风景,真实如实景拍摄,光线柔和,高清",
     "prompt": "小和尚盘坐在山间,身穿洁白袈裟,光头闪耀阳光下温暖光芒,戴着佛珠双手合拢微笑,小脸胖乎乎可爱极了,背后山峰耸立宁静美丽风景,真实如实景拍摄,光线柔和,高清",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/portrait-monk.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/portrait-monk.jpg"
+    "poster": "/api/showcase-asset/portrait-monk.jpg",
+    "url": "/api/showcase-asset/portrait-monk.jpg"
   },
   {
     "id": "portrait-sage",
@@ -507,8 +507,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "一位中国风70岁留着白色长胡子的老年人,慈祥和蔼,白色道教服装,中国贤者智慧老人,半身拍摄,脸上有皱纹,仙风道骨,背景天空和大山,真实拍摄,16k高清写实",
     "prompt": "一位中国风70岁留着白色长胡子的老年人,慈祥和蔼,白色道教服装,中国贤者智慧老人,半身拍摄,脸上有皱纹,仙风道骨,背景天空和大山,真实拍摄,16k高清写实",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/portrait-sage.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/portrait-sage.jpg"
+    "poster": "/api/showcase-asset/portrait-sage.jpg",
+    "url": "/api/showcase-asset/portrait-sage.jpg"
   },
   {
     "id": "warrior-cyber",
@@ -521,8 +521,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "an alluring cyberpunk girl with blonde hair in a robotic suit, armour, vibrant, main character, powerful, full body, wide angle, moody cinematic lighting, sunrise gold, beautiful, striking, octane render, unreal engine, high detail, reflective, realistic, exo bodysuit, finely detailed, --ar 2:3",
     "prompt": "an alluring cyberpunk girl with blonde hair in a robotic suit, armour, vibrant, main character, powerful, full body, wide angle, moody cinematic lighting, sunrise gold, beautiful, striking, octane render, unreal engine, high detail, reflective, realistic, exo bodysuit, finely detailed, --ar 2:3",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/warrior-cyber.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/warrior-cyber.jpg"
+    "poster": "/api/showcase-asset/warrior-cyber.jpg",
+    "url": "/api/showcase-asset/warrior-cyber.jpg"
   },
   {
     "id": "warrior-mecha",
@@ -535,8 +535,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "giant mecha, highly detailed black epic cinematic full body concept art CG render, armor, ornamental, artstation, hyper realistic, futuristic, octane render, 8k, towering stature, grandiose, dark fantasy, unreal engine, raytracing, volumetric lighting, cinematic, --ar 2:3",
     "prompt": "giant mecha, highly detailed black epic cinematic full body concept art CG render, armor, ornamental, artstation, hyper realistic, futuristic, octane render, 8k, towering stature, grandiose, dark fantasy, unreal engine, raytracing, volumetric lighting, cinematic, --ar 2:3",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/warrior-mecha.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/warrior-mecha.jpg"
+    "poster": "/api/showcase-asset/warrior-mecha.jpg",
+    "url": "/api/showcase-asset/warrior-mecha.jpg"
   },
   {
     "id": "warrior-samurai",
@@ -549,8 +549,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "cyberpunk cyber-samurai standing in a japan forest, hyperdetailed wet dark-gold and cobalt and black wet golden armor, cinematic lighting, ultra details, high resolution, dynamic lighting, photo realistic, 35mm, 8k, fine and detailed, unreal engine 5, UHD",
     "prompt": "cyberpunk cyber-samurai standing in a japan forest, hyperdetailed wet dark-gold and cobalt and black wet golden armor, cinematic lighting, ultra details, high resolution, dynamic lighting, photo realistic, 35mm, 8k, fine and detailed, unreal engine 5, UHD",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/warrior-samurai.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/warrior-samurai.jpg"
+    "poster": "/api/showcase-asset/warrior-samurai.jpg",
+    "url": "/api/showcase-asset/warrior-samurai.jpg"
   },
   {
     "id": "myth-phoenix",
@@ -563,8 +563,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "Colorful Phoenix, Chinese legendary holy bird, centered, clear feathers, long tail, flame, super clear, epic composition, Chinese mountains and seas, clouds, Chinese art nouveau painting, mythical background, ultrafine, concept art, 16k, octane render, --ar 2:3",
     "prompt": "Colorful Phoenix, Chinese legendary holy bird, centered, clear feathers, long tail, flame, super clear, epic composition, Chinese mountains and seas, clouds, Chinese art nouveau painting, mythical background, ultrafine, concept art, 16k, octane render, --ar 2:3",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/myth-phoenix.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/myth-phoenix.jpg"
+    "poster": "/api/showcase-asset/myth-phoenix.jpg",
+    "url": "/api/showcase-asset/myth-phoenix.jpg"
   },
   {
     "id": "myth-creature",
@@ -577,8 +577,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "multiple species of animal combined into one hybrid mythical creature, in a forest, beautiful, highly detailed, oil painting, fantasy digital painting, masterpiece, --ar 3:2",
     "prompt": "multiple species of animal combined into one hybrid mythical creature, in a forest, beautiful, highly detailed, oil painting, fantasy digital painting, masterpiece, --ar 3:2",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/myth-creature.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/myth-creature.jpg"
+    "poster": "/api/showcase-asset/myth-creature.jpg",
+    "url": "/api/showcase-asset/myth-creature.jpg"
   },
   {
     "id": "myth-galaxycat",
@@ -591,8 +591,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "galaxies, spirals, space, nebulae, stars, smoke, iridescent, intricate detail, in the shape of a cat, octane render, 8k, --ar 2:3",
     "prompt": "galaxies, spirals, space, nebulae, stars, smoke, iridescent, intricate detail, in the shape of a cat, octane render, 8k, --ar 2:3",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/myth-galaxycat.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/myth-galaxycat.jpg"
+    "poster": "/api/showcase-asset/myth-galaxycat.jpg",
+    "url": "/api/showcase-asset/myth-galaxycat.jpg"
   },
   {
     "id": "baby-flower",
@@ -605,8 +605,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "2岁的可爱小萌娃,黑色大眼睛明亮有神藏着无尽好奇与纯真,高鼻梁精致挺直衬托圆润脸蛋,额前几缕碎发随风飘动,头戴粉色小花环,32K高清画质",
     "prompt": "2岁的可爱小萌娃,黑色大眼睛明亮有神藏着无尽好奇与纯真,高鼻梁精致挺直衬托圆润脸蛋,额前几缕碎发随风飘动,头戴粉色小花环,32K高清画质",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/baby-flower.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/baby-flower.jpg"
+    "poster": "/api/showcase-asset/baby-flower.jpg",
+    "url": "/api/showcase-asset/baby-flower.jpg"
   },
   {
     "id": "baby-warmlight",
@@ -619,8 +619,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "两岁的小萌娃,大大的黑色眼睛犹如深邃的湖泊,高鼻梁挺直精致,脸部肌肤如羊脂玉般细腻光滑,眼神透着懵懂与天真,头上竖着几缕俏皮呆毛,背景柔和暖黄色灯光,32K高清画质",
     "prompt": "两岁的小萌娃,大大的黑色眼睛犹如深邃的湖泊,高鼻梁挺直精致,脸部肌肤如羊脂玉般细腻光滑,眼神透着懵懂与天真,头上竖着几缕俏皮呆毛,背景柔和暖黄色灯光,32K高清画质",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/baby-warmlight.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/baby-warmlight.jpg"
+    "poster": "/api/showcase-asset/baby-warmlight.jpg",
+    "url": "/api/showcase-asset/baby-warmlight.jpg"
   },
   {
     "id": "girl-rainbow",
@@ -633,8 +633,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "可爱的少女,扎着两个彩虹色亮光长发麻花辫,穿着白色长袖蕾丝连衣裙,半身照,彩色清澈眼眸,东方美女脸庞,背景有桃花,高清画质",
     "prompt": "可爱的少女,扎着两个彩虹色亮光长发麻花辫,穿着白色长袖蕾丝连衣裙,半身照,彩色清澈眼眸,东方美女脸庞,背景有桃花,高清画质",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/girl-rainbow.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/girl-rainbow.jpg"
+    "poster": "/api/showcase-asset/girl-rainbow.jpg",
+    "url": "/api/showcase-asset/girl-rainbow.jpg"
   },
   {
     "id": "girl-wheat",
@@ -647,8 +647,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "一个开心的小女孩,大步向前走面带微笑,手里提个小花篮,浅绿色短袖,麻花辫,花草帽,麦田,鲜花,其他小动物,温暖画面,高清画质",
     "prompt": "一个开心的小女孩,大步向前走面带微笑,手里提个小花篮,浅绿色短袖,麻花辫,花草帽,麦田,鲜花,其他小动物,温暖画面,高清画质",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/girl-wheat.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/girl-wheat.jpg"
+    "poster": "/api/showcase-asset/girl-wheat.jpg",
+    "url": "/api/showcase-asset/girl-wheat.jpg"
   },
   {
     "id": "anime-70s",
@@ -661,8 +661,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "1970s anime, a girl with black straight hair and pink big bow, japanese manga style, big eyes, smiling face, intense close-up, light red and black, iconic pop culture references, uhd image",
     "prompt": "1970s anime, a girl with black straight hair and pink big bow, japanese manga style, big eyes, smiling face, intense close-up, light red and black, iconic pop culture references, uhd image",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/anime-70s.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/anime-70s.jpg"
+    "poster": "/api/showcase-asset/anime-70s.jpg",
+    "url": "/api/showcase-asset/anime-70s.jpg"
   },
   {
     "id": "animal-cat-crown",
@@ -675,8 +675,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "orange tabby cat, he will be a king, wearing crown, chubby, behance hd, high resolution, 4k",
     "prompt": "orange tabby cat, he will be a king, wearing crown, chubby, behance hd, high resolution, 4k",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/animal-cat-crown.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/animal-cat-crown.jpg"
+    "poster": "/api/showcase-asset/animal-cat-crown.jpg",
+    "url": "/api/showcase-asset/animal-cat-crown.jpg"
   },
   {
     "id": "animal-unicorn",
@@ -689,8 +689,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "glowing unicorn with luscious mane, white eyes, rococo, simplified, animated, beautiful, high detail",
     "prompt": "glowing unicorn with luscious mane, white eyes, rococo, simplified, animated, beautiful, high detail",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/animal-unicorn.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/animal-unicorn.jpg"
+    "poster": "/api/showcase-asset/animal-unicorn.jpg",
+    "url": "/api/showcase-asset/animal-unicorn.jpg"
   },
   {
     "id": "scene-rosechurch",
@@ -703,8 +703,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "tall crystal magic of the rose church garden, frozen rose bushes, scattered roses, snow, rose paths, crystal clear and self-luminous, glowing, magical light mist, volumetric lighting, ultra wide angle lens, surreal, 8k, epic composition, octane rendering, --ar 9:16",
     "prompt": "tall crystal magic of the rose church garden, frozen rose bushes, scattered roses, snow, rose paths, crystal clear and self-luminous, glowing, magical light mist, volumetric lighting, ultra wide angle lens, surreal, 8k, epic composition, octane rendering, --ar 9:16",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/scene-rosechurch.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/scene-rosechurch.jpg"
+    "poster": "/api/showcase-asset/scene-rosechurch.jpg",
+    "url": "/api/showcase-asset/scene-rosechurch.jpg"
   },
   {
     "id": "scene-rosevilla",
@@ -717,8 +717,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "A realistic CG rendering of a green villa on a hill, green grass beside the villa, a white cotton cloud in the sky, and a rose waterfall flowing from the roof to the grass, HD, --ar 9:16",
     "prompt": "A realistic CG rendering of a green villa on a hill, green grass beside the villa, a white cotton cloud in the sky, and a rose waterfall flowing from the roof to the grass, HD, --ar 9:16",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/scene-rosevilla.jpg",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/scene-rosevilla.jpg"
+    "poster": "/api/showcase-asset/scene-rosevilla.jpg",
+    "url": "/api/showcase-asset/scene-rosevilla.jpg"
   },
   {
     "id": "v-guofeng",
@@ -731,8 +731,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "镜头缓缓推进,裙摆与发丝随风轻舞,云雾流动,仙气飘渺,电影质感",
     "prompt": "镜头缓缓推进,裙摆与发丝随风轻舞,云雾流动,仙气飘渺,电影质感",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/guofeng-fly-1.jpg",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/v-guofeng.mp4"
+    "poster": "/api/showcase-asset/guofeng-fly-1.jpg",
+    "videoUrl": "/api/showcase-asset/v-guofeng.mp4"
   },
   {
     "id": "e-grandma-bg",
@@ -745,9 +745,9 @@ window.LJShowcase = [
     "actionLabel": "用这个编辑指令",
     "actionText": "把背景换成郁郁葱葱的中式园林,保持人物不变,自然融合",
     "prompt": "把背景换成郁郁葱葱的中式园林,保持人物不变,自然融合",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/e-grandma-bg.jpg",
-    "beforeUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/portrait-grandma.jpg",
-    "afterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/e-grandma-bg.jpg"
+    "poster": "/api/showcase-asset/e-grandma-bg.jpg",
+    "beforeUrl": "/api/showcase-asset/portrait-grandma.jpg",
+    "afterUrl": "/api/showcase-asset/e-grandma-bg.jpg"
   },
   {
     "id": "a-sage",
@@ -760,9 +760,9 @@ window.LJShowcase = [
     "actionLabel": "去做同款数字人",
     "actionText": "大家好,欢迎来到灵镜。在这里,一张照片,就能成为会说话的数字人。",
     "prompt": "大家好,欢迎来到灵镜。在这里,一张照片,就能成为会说话的数字人。",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/portrait-sage.jpg",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/a-sage.mp4",
-    "sourceUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/portrait-sage.jpg"
+    "poster": "/api/showcase-asset/portrait-sage.jpg",
+    "videoUrl": "/api/showcase-asset/a-sage.mp4",
+    "sourceUrl": "/api/showcase-asset/portrait-sage.jpg"
   },
   {
     "id": "v-jiangnan",
@@ -775,8 +775,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "细雨轻落,水面泛起涟漪,小船缓缓行驶,炊烟袅袅,宁静诗意",
     "prompt": "细雨轻落,水面泛起涟漪,小船缓缓行驶,炊烟袅袅,宁静诗意",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/jiangnan-misty.jpg",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/v-jiangnan.mp4"
+    "poster": "/api/showcase-asset/jiangnan-misty.jpg",
+    "videoUrl": "/api/showcase-asset/v-jiangnan.mp4"
   },
   {
     "id": "v-dream",
@@ -789,8 +789,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "云层缓缓飘动,光影变幻,梦幻唯美,镜头沿雪原长路缓推",
     "prompt": "云层缓缓飘动,光影变幻,梦幻唯美,镜头沿雪原长路缓推",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/dream-pinkroad.jpg",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/v-dream.mp4"
+    "poster": "/api/showcase-asset/dream-pinkroad.jpg",
+    "videoUrl": "/api/showcase-asset/v-dream.mp4"
   },
   {
     "id": "e-jiangnan-snow",
@@ -803,9 +803,9 @@ window.LJShowcase = [
     "actionLabel": "用这个编辑指令",
     "actionText": "给这幅江南水乡加上飘雪,屋顶积雪,营造冬日雪景氛围",
     "prompt": "给这幅江南水乡加上飘雪,屋顶积雪,营造冬日雪景氛围",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/e-jiangnan-snow.jpg",
-    "beforeUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/jiangnan-wuzhen.jpg",
-    "afterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/e-jiangnan-snow.jpg"
+    "poster": "/api/showcase-asset/e-jiangnan-snow.jpg",
+    "beforeUrl": "/api/showcase-asset/jiangnan-wuzhen.jpg",
+    "afterUrl": "/api/showcase-asset/e-jiangnan-snow.jpg"
   },
   {
     "id": "e-guofeng-style",
@@ -818,9 +818,9 @@ window.LJShowcase = [
     "actionLabel": "用这个编辑指令",
     "actionText": "转成中国传统水墨画风格,保留人物姿态与构图",
     "prompt": "转成中国传统水墨画风格,保留人物姿态与构图",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/e-guofeng-style.jpg",
-    "beforeUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/guofeng-pearl.jpg",
-    "afterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/e-guofeng-style.jpg"
+    "poster": "/api/showcase-asset/e-guofeng-style.jpg",
+    "beforeUrl": "/api/showcase-asset/guofeng-pearl.jpg",
+    "afterUrl": "/api/showcase-asset/e-guofeng-style.jpg"
   },
   {
     "id": "e-dream-expand",
@@ -833,9 +833,9 @@ window.LJShowcase = [
     "actionLabel": "用这个编辑指令",
     "actionText": "向左右扩展画面成宽幅全景,延续极光与星空,自然衔接",
     "prompt": "向左右扩展画面成宽幅全景,延续极光与星空,自然衔接",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/e-dream-expand.jpg",
-    "beforeUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/dream-aurora.jpg",
-    "afterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/e-dream-expand.jpg"
+    "poster": "/api/showcase-asset/e-dream-expand.jpg",
+    "beforeUrl": "/api/showcase-asset/dream-aurora.jpg",
+    "afterUrl": "/api/showcase-asset/e-dream-expand.jpg"
   },
   {
     "id": "e-cat-crown",
@@ -848,9 +848,9 @@ window.LJShowcase = [
     "actionLabel": "用这个编辑指令",
     "actionText": "给猫咪戴上更华丽的宝石皇冠,背景加金色光晕",
     "prompt": "给猫咪戴上更华丽的宝石皇冠,背景加金色光晕",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/e-cat-crown.jpg",
-    "beforeUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/animal-cat-crown.jpg",
-    "afterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/e-cat-crown.jpg"
+    "poster": "/api/showcase-asset/e-cat-crown.jpg",
+    "beforeUrl": "/api/showcase-asset/animal-cat-crown.jpg",
+    "afterUrl": "/api/showcase-asset/e-cat-crown.jpg"
   },
   {
     "id": "e-warrior-night",
@@ -863,9 +863,9 @@ window.LJShowcase = [
     "actionLabel": "用这个编辑指令",
     "actionText": "把场景改成霓虹夜景,加入赛博朋克紫红光照,增强氛围",
     "prompt": "把场景改成霓虹夜景,加入赛博朋克紫红光照,增强氛围",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/e-warrior-night.jpg",
-    "beforeUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/warrior-cyber.jpg",
-    "afterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/e-warrior-night.jpg"
+    "poster": "/api/showcase-asset/e-warrior-night.jpg",
+    "beforeUrl": "/api/showcase-asset/warrior-cyber.jpg",
+    "afterUrl": "/api/showcase-asset/e-warrior-night.jpg"
   },
   {
     "id": "a-grandma",
@@ -878,9 +878,9 @@ window.LJShowcase = [
     "actionLabel": "去做同款数字人",
     "actionText": "岁月温柔,愿你被这世界温柔以待。灵镜,让每一份美好都被看见。",
     "prompt": "岁月温柔,愿你被这世界温柔以待。灵镜,让每一份美好都被看见。",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/portrait-grandma.jpg",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/a-grandma.mp4",
-    "sourceUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/portrait-grandma.jpg"
+    "poster": "/api/showcase-asset/portrait-grandma.jpg",
+    "videoUrl": "/api/showcase-asset/a-grandma.mp4",
+    "sourceUrl": "/api/showcase-asset/portrait-grandma.jpg"
   },
   {
     "id": "a-girl",
@@ -893,9 +893,9 @@ window.LJShowcase = [
     "actionLabel": "去做同款数字人",
     "actionText": "嗨!我是你的 AI 数字人,影片、配音、配乐,一个平台全搞定!",
     "prompt": "嗨!我是你的 AI 数字人,影片、配音、配乐,一个平台全搞定!",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/girl-rainbow.jpg",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/a-girl.mp4",
-    "sourceUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/girl-rainbow.jpg"
+    "poster": "/api/showcase-asset/girl-rainbow.jpg",
+    "videoUrl": "/api/showcase-asset/a-girl.mp4",
+    "sourceUrl": "/api/showcase-asset/girl-rainbow.jpg"
   },
   {
     "id": "v-phoenix",
@@ -908,8 +908,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "凤凰羽翼轻展,烈焰流动,粒子飞舞,神话史诗感",
     "prompt": "凤凰羽翼轻展,烈焰流动,粒子飞舞,神话史诗感",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/myth-phoenix.jpg",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/v-phoenix.mp4"
+    "poster": "/api/showcase-asset/myth-phoenix.jpg",
+    "videoUrl": "/api/showcase-asset/v-phoenix.mp4"
   },
   {
     "id": "v-wedding",
@@ -922,8 +922,8 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "裙摆水晶微微闪烁,金色羽翼轻动,光斑流转,华丽梦幻",
     "prompt": "裙摆水晶微微闪烁,金色羽翼轻动,光斑流转,华丽梦幻",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/wedding-redphoenix.jpg",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/v-wedding.mp4"
+    "poster": "/api/showcase-asset/wedding-redphoenix.jpg",
+    "videoUrl": "/api/showcase-asset/v-wedding.mp4"
   },
   {
     "id": "v-bamboo",
@@ -936,7 +936,7 @@ window.LJShowcase = [
     "actionLabel": "用这个提示词",
     "actionText": "竹叶随风沙沙摇曳,光斑在林间游移,阳光穿透竹影,清幽",
     "prompt": "竹叶随风沙沙摇曳,光斑在林间游移,阳光穿透竹影,清幽",
-    "poster": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/jiangnan-bamboo.jpg",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/v-bamboo.mp4"
+    "poster": "/api/showcase-asset/jiangnan-bamboo.jpg",
+    "videoUrl": "/api/showcase-asset/v-bamboo.mp4"
   }
 ];

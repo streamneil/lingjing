@@ -123,7 +123,9 @@ export async function pollUntilDone<T extends PollShape>(
 /** 把 avatarRef 解析为公网可访问的脸图 URL(预置=外链;自定义=经发布策略转公网 URL)。 */
 async function resolveImageUrl(avatarRef: string, tenantId: string): Promise<string> {
   const preset = listAvatarPresets().find((p) => p.id === avatarRef);
-  if (preset) return preset.thumb; // 预置外链本就公网可达
+  // 预置源帧改走与自定义形象同一发布策略(去中心化:不再依赖公共桶外链)。thumbKey 在运营自己桶,
+  // publish() 按交付模式转成百炼可拉 URL(托管=签名直链;私有化=中转,见 media-publisher)。
+  if (preset) return getMediaPublisher(tenantDelivery(tenantId)).publish(preset.thumbKey);
   // worker 无 acting user(异步处理);提交时已做账号校验(isUsableAvatar),此处按租户解析(isAdmin=true)即可。
   const custom = getAvatar(avatarRef, tenantId, '', true);
   if (custom?.source_key) {

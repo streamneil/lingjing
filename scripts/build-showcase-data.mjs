@@ -7,21 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const A = process.argv.slice(2);
-const ossArg = (() => { const i = A.indexOf('--oss'); return i >= 0 ? A[i + 1] : null; })();
-// 默认从 .env 推 OSS 公网前缀(region+bucket);也可 --oss 覆盖。
-function ossBaseFromEnv() {
-  try {
-    const env = Object.fromEntries(readFileSync(join(ROOT, '.env'), 'utf8').split('\n')
-      .map((l) => l.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/)).filter(Boolean)
-      .map((m) => [m[1], m[2].replace(/^["']|["']$/g, '')]));
-    const region = (env.OSS_REGION || '').replace(/^https?:\/\//, '').replace(/\.aliyuncs\.com.*$/, '');
-    if (env.OSS_BUCKET && region) return `https://${env.OSS_BUCKET}.${region}.aliyuncs.com/`;
-  } catch { /* ignore */ }
-  return null;
-}
-const OSS = ossArg || ossBaseFromEnv();
-if (!OSS) { console.error('✗ 无法确定 OSS 公网前缀,请用 --oss 指定'); process.exit(1); }
+// 去中心化后无需 OSS 前缀:前端走相对 /api/showcase-asset/,与环境无关(见 ABS)。
 
 const assets = JSON.parse(readFileSync(join(ROOT, 'prototype/showcase/showcase-assets.json'), 'utf8'));
 // tool → {中文名, 工具页, 一键复用动作文案}。多模态:img2video/ai-image-edit 本轮接 ?prompt=(只文本)。
@@ -33,7 +19,14 @@ const TOOL = {
   'ai-video-edit': { name: 'AI 影片编辑器', page: 'video-edit.html', action: '用这个编辑指令' },
   'ai-avatar': { name: 'AI 虚拟人', page: 'avatars.html', action: '去做同款数字人' },
 };
-const ABS = (u) => (u && /^https?:/.test(u) ? u : OSS + u); // ossKey/相对 key → 绝对 URL
+// 相对 key(showcase/<sub>)→ 本端点 /api/showcase-asset/<sub>(签名重定向到自己桶 / 本地兜底,见 src/api/showcase.ts)。
+// 去中心化:前端不再引用任何外部桶,URL 与环境无关,部署即自包含。
+const ABS = (u) => {
+  if (!u) return u;
+  if (/^https?:/.test(u)) return u; // 迁移后不应再有绝对 URL;保留兜底不破坏
+  const sub = u.replace(/^showcase\//, '');
+  return '/api/showcase-asset/' + sub.split('/').map(encodeURIComponent).join('/');
+};
 
 // 归一化各模态为统一卡片模型。modality 缺省按字段推断(兼容历史纯图条目)。
 function norm(x) {
@@ -61,8 +54,8 @@ const items = assets.map(norm).filter((x) => x.poster);
 const byMod = items.reduce((a, x) => { a[x.modality] = (a[x.modality] || 0) + 1; return a; }, {});
 
 const js = '// 灵镜 探索页 多模态真实样例库 —— 由 scripts/build-showcase-data.mjs 生成,勿手改。\n'
-  + '// 封面/视频 = 平台自产,存 OSS 公网直链(生产:不进 git、不经 Node 伺服)。\n'
+  + '// 封面/视频 = 平台自产,走相对 /api/showcase-asset/(签名重定向自己桶 / 本地兜底,去中心化自包含)。\n'
   + '// 重生成:node scripts/gen-showcase.mjs --go && node scripts/gen-multimodal.mjs --go && node scripts/build-showcase-data.mjs\n'
   + `window.LJShowcase = ${JSON.stringify(items, null, 2)};\n`;
 writeFileSync(join(ROOT, 'prototype/showcase-data.js'), js);
-console.log(`✓ showcase-data.js: ${items.length} 项  按模态: ${JSON.stringify(byMod)}  OSS 前缀 ${OSS}`);
+console.log(`✓ showcase-data.js: ${items.length} 项  按模态: ${JSON.stringify(byMod)}  (URL 走 /api/showcase-asset)`);
