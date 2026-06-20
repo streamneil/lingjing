@@ -104,17 +104,6 @@
     "posterUrl": "showcase/explore/8dc94e89-7785-4f5d-bdf9-0e07c0fcb649-0.png"
   },
   {
-    "id": "probe-hanfu",
-    "theme": "古风人像",
-    "modality": "image",
-    "tool": "ai-image",
-    "prompt": "身姿曼妙的古装美女,身着轻薄飘逸的古风唐装仙女长裙,头戴镶嵌珍珠宝石的精美发饰,在湛蓝高空优雅飞翔,下方金灿灿油菜花田与碧绿湖泊,蓝天白云,如梦似幻仙气,低角度全身,高清画质",
-    "file": "showcase/probe-hanfu.jpg",
-    "ossKey": "showcase/probe-hanfu.jpg",
-    "bytes": 1228362,
-    "sec": 8.1
-  },
-  {
     "id": "guofeng-fly-1",
     "theme": "古风人像",
     "modality": "image",

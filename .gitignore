@@ -28,13 +28,15 @@ probe-output.mp4
 probe-labeled.mp4
 .gitnexus
 
-# 探索/落地页样例封面:真图存 OSS 公网,本地 jpg 不入库(生产由 OSS/CDN 伺服)
-prototype/showcase/*.jpg
+# 示范媒体(落地页/探索/试听/形象/参考生成影片)现已**随 git 入库**(去中心化:进镜像 →
+# deploy 时 seed 到运营自己 OSS;空桶/air-gap 走磁盘兜底)。故不再 ignore showcase 媒体。
+# 仅排除探针测试产物(非示范素材)。
 prototype/showcase/probe-*.jpg
-prototype/showcase/*.mp4
-prototype/showcase/*.wav
 
 # gstack 团队模式自动生成的准入钩子(本仓库单人/无 remote,不入库;团队协作时再放开)
 .claude/settings.json
 .claude/hooks/
 *node_modules*
+
+# 本地运行态产物(dev-up.sh 的 pid/log)
+.run/

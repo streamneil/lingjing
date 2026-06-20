@@ -147,20 +147,6 @@ window.LJShowcase = [
     ]
   },
   {
-    "id": "probe-hanfu",
-    "theme": "古风人像",
-    "title": "probe-hanfu",
-    "modality": "image",
-    "tool": "ai-image",
-    "toolName": "AI 图片",
-    "page": "ai-image.html",
-    "actionLabel": "用这个提示词",
-    "actionText": "身姿曼妙的古装美女,身着轻薄飘逸的古风唐装仙女长裙,头戴镶嵌珍珠宝石的精美发饰,在湛蓝高空优雅飞翔,下方金灿灿油菜花田与碧绿湖泊,蓝天白云,如梦似幻仙气,低角度全身,高清画质",
-    "prompt": "身姿曼妙的古装美女,身着轻薄飘逸的古风唐装仙女长裙,头戴镶嵌珍珠宝石的精美发饰,在湛蓝高空优雅飞翔,下方金灿灿油菜花田与碧绿湖泊,蓝天白云,如梦似幻仙气,低角度全身,高清画质",
-    "poster": "/api/showcase-asset/probe-hanfu.jpg",
-    "url": "/api/showcase-asset/probe-hanfu.jpg"
-  },
-  {
     "id": "guofeng-fly-1",
     "theme": "古风人像",
     "title": "guofeng-fly-1",
