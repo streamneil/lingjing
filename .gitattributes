@@ -1,0 +1,9 @@
+# 示范媒体走 Git LFS(避免仓库/历史被二进制撑大)。随 git 提交 → 进镜像 → deploy 时 seed 到运营自己的 OSS。
+prototype/showcase/**/*.wav filter=lfs diff=lfs merge=lfs -text
+prototype/showcase/**/*.mp3 filter=lfs diff=lfs merge=lfs -text
+prototype/showcase/**/*.mp4 filter=lfs diff=lfs merge=lfs -text
+prototype/showcase/**/*.webm filter=lfs diff=lfs merge=lfs -text
+prototype/showcase/*.jpg filter=lfs diff=lfs merge=lfs -text
+prototype/showcase/*.jpeg filter=lfs diff=lfs merge=lfs -text
+prototype/showcase/*.png filter=lfs diff=lfs merge=lfs -text
+prototype/showcase/*.webp filter=lfs diff=lfs merge=lfs -text
