@@ -96,8 +96,8 @@ if (isMain) {
       const diskPath = resolve(prototypeDir, 'showcase', 'voices', `${first.id}.wav`);
       if (!existsSync(diskPath)) {
         console.warn(
-          `[警告] 预置音色试听样本缺失(${diskPath})。多半是 Git LFS 未安装/未拉取(checkout 只有指针文件)。` +
-            '前端「试听」与 seed-showcase 会失败。修:在本机/服务器装 git-lfs 后 `git lfs pull`,' +
+          `[警告] 预置音色试听样本缺失(${diskPath})。多半是 checkout 不完整(prototype/showcase/ 媒体未拉全)。` +
+            '前端「试听」与 seed-showcase 会失败。修:确认 `git status` 干净并完整 checkout,' +
             '再重新 build 镜像;私有化离线场景请确保镜像内自带 prototype/showcase/ 媒体。',
         );
       }
