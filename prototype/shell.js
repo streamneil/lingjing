@@ -473,4 +473,17 @@
   };
 
   bindAuth();
+
+  // 示范素材兜底:/api/showcase-asset 图若加载失败(极少 —— 镜像自带 + 桶兜底),用中性占位替换,
+  // 绝不露浏览器「裂图」图标(落地第一印象)。捕获阶段(img error 不冒泡),一次性防循环。
+  document.addEventListener('error', (e) => {
+    const img = e.target;
+    if (!img || img.tagName !== 'IMG' || img.dataset.ljFallback) return;
+    if (!/\/api\/showcase-asset\//.test(img.currentSrc || img.src || '')) return;
+    img.dataset.ljFallback = '1';
+    img.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#1a1a1d"/>'
+      + '<path d="M20 40l8-9 6 6 6-8 6 11z" fill="#3a3a40"/><circle cx="24" cy="22" r="4" fill="#3a3a40"/></svg>');
+    img.style.objectFit = 'cover';
+  }, true);
 })();
