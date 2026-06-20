@@ -18,6 +18,7 @@ import { pricingRouter } from './api/pricing.js';
 import { ordersRouter } from './api/orders.js';
 import { adminRouter } from './api/admin.js';
 import { captchaRouter } from './api/captcha.js';
+import { showcaseRouter } from './api/showcase.js';
 import { attachUser } from './auth/middleware.js';
 import { bootstrapSuperadmin } from './auth/platform.js';
 import { startWorker } from './queue/worker.js';
@@ -45,6 +46,7 @@ export function createApp() {
   // /admin 已在上面注册,不会经过 attachUser。
   app.use(attachUser);
   app.use('/api', captchaRouter); // 滑块出题/校验(公开,登录前用)
+  app.use('/api', showcaseRouter); // 示范素材(公开,落地页登录前用):签名重定向 + 本地兜底
   app.use('/api', authRouter);
   app.use('/api', creditsRouter);
   app.use('/api', avatarsRouter);
