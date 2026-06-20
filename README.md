@@ -53,10 +53,32 @@ cp .env.example .env && chmod 600 .env
 #    平台即可用。落地页/灵感/示范数据已自带(见「数据完整性」)。
 ```
 
-- 更新代码:`./scripts/deploy.sh`　仅重启:`./scripts/deploy.sh --restart`
-- 数据备份:`./scripts/backup.sh`(SQLite 在线一致备份,可 cron 定时)
-
 > 服务器要求:≥4c8g、amd64、Docker。无 Redis/MySQL/MQ。AI 重算力在云端(百炼/火山),不在本机。
+
+### 运维速查(部署 / 更新 / 重启 / 备份 / 日志)
+
+| 操作 | 命令 |
+|---|---|
+| 首次部署 / 更新代码 | `./scripts/deploy.sh`(git pull → 重建 → 等健康 → 灌示范素材) |
+| 不拉代码、按现码重建 | `./scripts/deploy.sh --no-pull` |
+| 只重启 app(不拉码、不重建) | `./scripts/deploy.sh --restart` |
+| 看实时日志 | `docker compose logs -f app` |
+| 数据备份(SQLite 在线一致) | `./scripts/backup.sh`(可挂 cron 定时) |
+| 手动补灌示范素材到 OSS(幂等) | `docker compose exec app npx tsx scripts/seed-showcase.mjs` |
+
+> `deploy.sh` 任一步失败即退出(`set -e`),不留半拉子状态;示范素材灌桶失败**只告警不阻断**
+> (端点会回退伺服镜像内文件,站点照常显示)。积分套餐由 app 启动自动种子,无需手动跑。
+
+### 部署完成后怎么校验(5 分钟过一遍)
+
+1. **服务起来了**:`docker compose ps` 两个容器(caddy/app)都 `running`/`healthy`;`curl -s https://你的域名/healthz` 返回 `{"ok":true}`。
+2. **示范素材自包含**:浏览器开 `https://你的域名/landing.html`,图全出;打开 DevTools → Network,过滤框输入 `lh-lingjing` **应为空**(素材都走 `/api/showcase-asset/...`,线上是 `302` 跳你自己的 OSS)。
+3. **登录创作台**(`/login.html`):探索灵感库满屏、音色「试听」出声、参考生成影片「套用示范」素材在。
+4. **积分套餐**:`/pricing.html`(登录后)显示 4 个默认套餐(¥100/500/1000/5000)。
+5. **超管 + 冒烟**:`/admin/login` 用 `admin`/`SUPERADMIN_PASS` 登录 →「厂商/Key」配百炼 key → 新建租户 → 开户 → 建一条数字人视频确认成片(验证百炼 + OSS 全链路)。
+
+> 媒体完整性自检(可选,部署机上跑):`find prototype/showcase -type f | wc -l` 应为 **107**;
+> 或在仓库根跑 `bash scripts/verify-showcase.sh`(空桶起临时实例,断言五模块素材可达 + 0 外部桶 + SSRF 拦截)。
 
 ### 部署后只需配这些(其余开箱即用)
 

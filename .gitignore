@@ -40,3 +40,6 @@ prototype/showcase/probe-*.jpg
 
 # 本地运行态产物(dev-up.sh 的 pid/log)
 .run/
+
+# AI 编码工具(superpowers 等)自动生成的计划/草稿,非项目文档,不入库
+docs/superpowers/
