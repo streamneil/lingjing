@@ -104,12 +104,11 @@ docker compose logs -f caddy   # 看 "certificate obtained"(证书申下来了)
 
 1. 浏览器开 `https://your-domain.com/admin/login`,`admin` / `<SUPERADMIN_PASS>` 登录
 2. **「厂商 / Key」配 API Key**:百炼(必备)、火山方舟 / Google(按需)。粘贴即加密入库。
-3. (可选)生成预置音色试听样本(调百炼 TTS,需上一步配好百炼):
-   ```bash
-   docker compose exec app npx tsx scripts/seed-preset-samples.mjs
-   ```
-4. 「新建租户」建机构 →「开户」建机构管理员 → 机构用户用 `/login.html` 登录创作台。
-5. **冒烟测试**:建一条数字人视频,确认能成片(验证百炼 + OSS 全链路通)。
+3. 「新建租户」建机构 →「开户」建机构管理员 → 机构用户用 `/login.html` 登录创作台。
+4. **冒烟测试**:建一条数字人视频,确认能成片(验证百炼 + OSS 全链路通)。
+
+> 预置音色试听小样托管公共桶,部署后**直接出声**,无需跑脚本。仅私有化内网(访问不到公共桶)
+> 才需把小样灌进自己桶:配好百炼后 `docker compose exec app npx tsx scripts/seed-preset-samples.mjs`。
 
 > 数据完整性:示范图文/预置形象声音自带,默认套餐已种子。运营**只需配厂商 key + 建租户**即可开张。
 > 默认套餐可在 `/admin` 改价/增删。`seed-platform.mjs` 幂等,重跑部署不会覆盖你改过的套餐。

@@ -2,8 +2,9 @@
 // 灵镜 — 预置音色试听样本库(E9)。为每个预置人声合成一段固定试听句 → 落 MinIO。
 // 用法:DASHSCOPE_API_KEY=sk-xxx npx tsx scripts/seed-preset-samples.mjs
 //
-// 一次性 / 幂等:已存在的样本默认跳过(传 --force 重新生成)。GET /voices 每请求签名该 key。
-// 私有化部署:接好 MinIO + DASHSCOPE_API_KEY 后跑一次即可,预置音色便可在前端试听。
+// 一次性 / 幂等:已存在的样本默认跳过(传 --force 重新生成)。样本为 WAV,key 后缀 .wav。
+// 公网部署无需跑本脚本:试听小样托管公共只读桶,GET /voices 直返公共直链(见 src/voices/index.ts)。
+// 仅私有化内网(访问不到公共桶)才需跑:接好 MinIO + DASHSCOPE_API_KEY 后跑一次,灌进自己桶即可试听。
 
 import { listPresets, presetSampleKey } from '../src/voices/index.ts';
 import { synthesizeSpeechHttp } from '../src/gateway/cosyvoice.ts';

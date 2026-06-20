@@ -30,13 +30,8 @@ const DESIGN_RATE_WINDOW_MS = 60_000; // 频率窗口:1 分钟
 const DESIGN_RATE_MAX = 5; // 窗口内最多创建 5 个设计音色
 
 voicesRouter.get('/voices', requireAuth, async (req: Request, res: Response) => {
-  // 预置:每请求签名试听样本 key(URL 会过期,不缓存;样本由 seed 脚本一次性合成上传)。
-  const presets = await Promise.all(
-    listPresets().map(async (p) => ({
-      ...p,
-      sample: await getSignedUrl(p.sampleKey).catch(() => null),
-    })),
-  );
+  // 预置:试听样本走公共只读桶直链(所有部署共享,无需签名/本桶上传)。
+  const presets = listPresets().map((p) => ({ ...p, sample: p.sampleUrl }));
   const clones = await Promise.all(
     listClones(req.user!.tenantId, req.user!.id, req.user!.role === 'admin').map(async (v) => ({
       id: v.id,

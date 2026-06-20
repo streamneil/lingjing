@@ -5,11 +5,10 @@
 //
 // 灌默认积分套餐(幂等:表非空则跳过,不覆盖运营已改的)。无需任何 key,瞬时完成。
 //
-// 不在本脚本内做的(刻意):
-//   · 预置音色试听样本 —— 会调百炼 TTS(花钱+耗时),需先在 /admin 配百炼 key,故独立手动跑:
-//       DB_FILE=$DB_FILE npx tsx scripts/seed-preset-samples.mjs
-//   · 落地页/探索灵感图文、预置形象/声音元数据 —— 公共只读资源(随前端引用 lh-lingjing 公共桶)
-//       + 随代码常量,天生就有,无需种子。详见 DEPLOY-ALIYUN.md。
+// 无需本脚本处理的(天生就有):
+//   · 落地页/探索灵感图文、预置形象/声音元数据、预置音色试听小样 —— 公共只读资源
+//     (随前端引用公共桶 lh-lingjing)+ 随代码常量,部署即有,无需种子。详见 DEPLOY-ALIYUN.md。
+//   · 仅私有化内网(访问不到公共桶)才需把音色小样灌进自己桶:scripts/seed-preset-samples.mjs。
 
 import { seedDefaultPlans } from '../src/pricing/index.ts';
 
@@ -19,4 +18,4 @@ console.log(
     ? `[seed] ✓ 已灌默认积分套餐 ${n} 个(之后在 /admin 可改价/增删)`
     : '[seed] ℹ pricing_plan 已有套餐,跳过(不覆盖)',
 );
-console.log('[seed] 完成。预置音色试听如需:配好 /admin 百炼 key 后跑 scripts/seed-preset-samples.mjs');
+console.log('[seed] 完成。示范图文 + 预置音色试听走公共桶,已自带,无需额外种子。');

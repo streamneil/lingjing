@@ -84,6 +84,5 @@ fi
 log "当前服务状态:"
 docker compose ps
 log "完成。访问 https://$(grep -E '^LJ_DOMAIN=' .env | cut -d= -f2-)/admin/login 用超管登录。"
-log "下一步:① /admin →「厂商 / Key」配百炼/火山/Google key;② 配完百炼后(可选)生成预置音色试听:"
-log "        docker compose exec app npx tsx scripts/seed-preset-samples.mjs"
-log "(看日志:docker compose logs -f app)"
+log "下一步:/admin →「厂商 / Key」配百炼/火山/Google key → 新建租户 → 开户,即可开张。"
+log "(示范图文 + 预置音色试听走公共桶,已自带;看日志:docker compose logs -f app)"

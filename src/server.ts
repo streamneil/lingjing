@@ -21,8 +21,7 @@ import { captchaRouter } from './api/captcha.js';
 import { attachUser } from './auth/middleware.js';
 import { bootstrapSuperadmin } from './auth/platform.js';
 import { startWorker } from './queue/worker.js';
-import { listPresets, presetSampleKey } from './voices/index.js';
-import { storage } from './storage/index.js';
+import { listPresets, presetSampleUrl } from './voices/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const prototypeDir = resolve(__dirname, '..', 'prototype');
@@ -84,17 +83,19 @@ if (isMain) {
         '生产请在 .env 配置 OSS。',
     );
   }
-  // 预置音色试听样本自检:存储里缺样本(没跑过 seed)→ 前端试听会 404,这里启动时早告警。
-  // 非阻塞、容错(探测失败不影响启动);只探第一个预置(代表整批,省一次性 IO)。
+  // 预置音色试听样本自检:小样走公共只读桶直链(见 voices/index.ts),启动时 HEAD 探一下可达性,
+  // 探不到 → 前端试听会失败,早告警。非阻塞、容错(探测失败不影响启动);只探第一个预置(代表整批)。
   void (async () => {
     try {
       const first = listPresets()[0];
       if (!first) return;
-      const buf = await storage.getObject(presetSampleKey(first.id)).catch(() => null);
-      if (!buf || buf.length === 0) {
+      const url = presetSampleUrl(first.id);
+      const resp = await fetch(url, { method: 'HEAD' }).catch(() => null);
+      if (!resp || !resp.ok) {
         console.warn(
-          '[警告] 预置音色试听样本缺失(存储里没有 voices/presets/*.mp3)。' +
-            '前端「试听」预置音色会失败。请在配好存储 + DASHSCOPE_API_KEY 后运行一次种子脚本:' +
+          `[警告] 预置音色试听样本公共直链不可达(${url})。` +
+            '前端「试听」预置音色会失败。公网部署一般可直接访问;' +
+            '若为私有化内网(访问不到公共桶),请配好存储 + DASHSCOPE_API_KEY 后跑一次种子脚本灌进自己桶:' +
             '  DASHSCOPE_API_KEY=sk-xxx npx tsx scripts/seed-preset-samples.mjs  (幂等,可重复跑)',
         );
       }
