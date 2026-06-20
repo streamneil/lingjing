@@ -37,22 +37,17 @@ const PRESETS: { id: string; name: string; lang: string; gender: string; desc: s
   { id: 'Marcus', name: '陕西-秦川', lang: '陕西话', gender: '男', desc: '老陕味道 · 方言配音' },
 ];
 
-/** 预置音色试听样本的存储 key(由 preset id 派生)。
- *  样本由 scripts/seed-preset-samples 合成后上传到此 key;内容为 WAV(Content-Type: audio/wav),故后缀 .wav。 */
+/** 预置音色试听样本的存储 key(由 preset id 派生)。统一 showcase/ 前缀(与落地页/探索/形象示范同桶同根)。
+ *  样本随 git 提交进 prototype/showcase/voices/<id>.wav,部署时 seed 到运营自己的 OSS;内容 WAV。 */
 export function presetSampleKey(presetId: string): string {
-  return `voices/presets/${presetId}.wav`;
+  return `showcase/voices/${presetId}.wav`;
 }
 
-// 试听样本对所有部署都一样(同一句话、同 20 个音色),故托管在公共只读桶,
-// 各部署共享直链 —— 运营零配置即有试听,无需配百炼/跑 seed。与预置形象缩略图同款(见 avatars/index.ts)。
-// 想换桶/本地化:改这个 base 或叠加私有签名逻辑即可(见 TODOS T-SHOWCASE-ASSETS)。
-const PRESET_SAMPLE_PUBLIC_BASE = 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com';
-/** 预置音色试听样本的公共直链(只读,所有部署共享)。
- *  对路径段做 URL 编码:有的 id 带空格(如 'Eldric Sage'),裸空格会让浏览器/OSS 取不到(实测 000)。 */
+/** 预置音色试听样本 URL —— 走本端点 /api/showcase-asset(签名重定向到自己桶 / 本地文件兜底),
+ *  不再依赖公共桶 lh-lingjing(去中心化:每个部署自包含)。
+ *  URL 段编码:有的 id 带空格(如 'Eldric Sage'),裸空格浏览器取不到。 */
 export function presetSampleUrl(presetId: string): string {
-  // 仅编码各路径段,保留 '/' 分隔;空格→%20。
-  const encodedKey = presetSampleKey(presetId).split('/').map(encodeURIComponent).join('/');
-  return `${PRESET_SAMPLE_PUBLIC_BASE}/${encodedKey}`;
+  return `/api/showcase-asset/voices/${encodeURIComponent(presetId)}.wav`;
 }
 
 export function listPresets() {

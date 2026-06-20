@@ -178,3 +178,9 @@ Nano Banana 价格随分辨率变(3.1 Flash 1K=$0.067/2K=$0.101/4K=$0.151;Pro 1�
 docs/superpowers/specs/2026-06-18-nano-banana-resolutions-design.md 的 Flash 14×4 / Pro 10×3 表)
 将来可录为静态展示常量供 setPill 查,做像素级预览。本轮不做(档名够用)。
 决策:plan-eng-review 2026-06-19。
+
+### T-USERASSET-REUSE-URL:复用预览硬编码 lh-lingjing 桶(非示范媒体)
+- **What:** ai-image-edit/img2video/video-edit.html 的 `const OSS_BASE='https://lh-lingjing...'`(3 处),用于「重新提示」复用上一次 job 输入图的预览(OSS_BASE+key)。这是**用户自产资产**,非示范媒体,本次去中心化未动。
+- **Why:** 换个部署/桶时这 3 处仍指向 lh-lingjing → 复用预览裂图(指向错桶)。正解:走一个鉴权签名端点 `/api/sign?key=`(按租户签自己桶的 key),或复用 works 已有签名 URL,不要前端拼桶域名。
+- **Context:** 2026-06 示范媒体去中心化(/api/showcase-asset)的遗留邻项;示范媒体已全部自包含,这条是用户资产预览,影响面小(仅复用交互),单列。
+- **Depends on / blocked by:** 不阻塞部署。

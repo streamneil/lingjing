@@ -1,0 +1,10 @@
+# 示范媒体走普通 git blob(不用 LFS:dev/服务器都不需 git-lfs,deploy git pull + docker build 直接可用)。
+# 仅标 binary 防 Windows checkout 做 CRLF 转换损坏二进制。媒体随 git → 进镜像 → seed 到运营自己 OSS。
+*.wav binary
+*.mp3 binary
+*.mp4 binary
+*.webm binary
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.webp binary

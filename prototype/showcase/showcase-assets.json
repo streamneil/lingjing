@@ -6,8 +6,8 @@
     "modality": "video",
     "tool": "img2video",
     "prompt": "喊上宿舍的其他的女生来看镜头，非常搞笑的画面。",
-    "posterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/image-inputs/16ed6622-c22c-4467-a319-947b37efbdbe/08cf6960-cea5-4212-9f2e-d452ff83588d.png",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/videos/16ed6622-c22c-4467-a319-947b37efbdbe/cba4edf2-cc1d-4374-aec5-e005fc00964c.mp4"
+    "posterUrl": "showcase/explore/08cf6960-cea5-4212-9f2e-d452ff83588d.png",
+    "videoUrl": "showcase/videos/cba4edf2-cc1d-4374-aec5-e005fc00964c.mp4"
   },
   {
     "id": "lh-i2v-2",
@@ -16,8 +16,8 @@
     "modality": "video",
     "tool": "img2video",
     "prompt": "喊上宿舍的其他的女生来看镜头，非常搞笑的画面。",
-    "posterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/image-inputs/16ed6622-c22c-4467-a319-947b37efbdbe/08cf6960-cea5-4212-9f2e-d452ff83588d.png",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/videos/16ed6622-c22c-4467-a319-947b37efbdbe/bbf2f7a8-9c33-4e3a-b46b-269fe16cdae3.mp4"
+    "posterUrl": "showcase/explore/08cf6960-cea5-4212-9f2e-d452ff83588d.png",
+    "videoUrl": "showcase/videos/bbf2f7a8-9c33-4e3a-b46b-269fe16cdae3.mp4"
   },
   {
     "id": "lh-i2v-3",
@@ -26,8 +26,8 @@
     "modality": "video",
     "tool": "img2video",
     "prompt": "图2女孩穿着图1的衣服，用图3手机自拍。",
-    "posterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/image-inputs/16ed6622-c22c-4467-a319-947b37efbdbe/cf96d53f-cd8d-4732-a7ae-772f7a78b178.webp",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/videos/16ed6622-c22c-4467-a319-947b37efbdbe/32aa31ce-bb5f-4a01-982e-518c4e351188.mp4"
+    "posterUrl": "showcase/explore/cf96d53f-cd8d-4732-a7ae-772f7a78b178.webp",
+    "videoUrl": "showcase/videos/32aa31ce-bb5f-4a01-982e-518c4e351188.mp4"
   },
   {
     "id": "lh-img-5",
@@ -36,7 +36,7 @@
     "modality": "image",
     "tool": "ai-image",
     "prompt": "一位中国女性大学生，性别女，年龄约20岁左右，超短发发型略带柔和文艺感，假小子（tomboy）气质，一字领露肩短袖，近景自拍构图，宿舍环境，手机拍摄柔和环境光，自然真实，充满日常生活的青春气息。",
-    "url": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/8dc94e89-7785-4f5d-bdf9-0e07c0fcb649-0.png"
+    "url": "showcase/explore/8dc94e89-7785-4f5d-bdf9-0e07c0fcb649-0.png"
   },
   {
     "id": "lh-edit-1",
@@ -45,9 +45,11 @@
     "modality": "image-edit",
     "tool": "ai-image-edit",
     "prompt": "把图中女生的衣服换成参考图里的浅色针织套装，保持脸部、姿态与背景不变。",
-    "beforeUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/image-inputs/16ed6622-c22c-4467-a319-947b37efbdbe/b00a0ff7-b3fb-4ece-8cab-11b79a504e48.jpg",
-    "refUrls": ["https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/swap-ref-knit.png"],
-    "afterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/5a8a957b-9877-4802-b2ca-57514281751e-0.png"
+    "beforeUrl": "showcase/explore/b00a0ff7-b3fb-4ece-8cab-11b79a504e48.jpg",
+    "refUrls": [
+      "showcase/swap-ref-knit.png"
+    ],
+    "afterUrl": "showcase/explore/5a8a957b-9877-4802-b2ca-57514281751e-0.png"
   },
   {
     "id": "lh-edit-2",
@@ -56,9 +58,11 @@
     "modality": "image-edit",
     "tool": "ai-image-edit",
     "prompt": "把图中女孩的衣服换成参考图里的浅色针织套装，保持脸部、姿态与背景不变。",
-    "beforeUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/image-inputs/16ed6622-c22c-4467-a319-947b37efbdbe/55fa0e3f-207a-462e-89fd-e6b0ee65b19b.jpg",
-    "refUrls": ["https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/swap-ref-knit.png"],
-    "afterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/60b3c0a7-50d4-4b72-8b92-bcda21bed302-0.png"
+    "beforeUrl": "showcase/explore/55fa0e3f-207a-462e-89fd-e6b0ee65b19b.jpg",
+    "refUrls": [
+      "showcase/swap-ref-knit.png"
+    ],
+    "afterUrl": "showcase/explore/60b3c0a7-50d4-4b72-8b92-bcda21bed302-0.png"
   },
   {
     "id": "lh-edit-3",
@@ -67,9 +71,11 @@
     "modality": "image-edit",
     "tool": "ai-image-edit",
     "prompt": "把图中女孩的衣服换成参考图里的时尚浅色针织套装，保持脸部、姿态与背景不变。",
-    "beforeUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/image-inputs/16ed6622-c22c-4467-a319-947b37efbdbe/55fa0e3f-207a-462e-89fd-e6b0ee65b19b.jpg",
-    "refUrls": ["https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/swap-ref-knit.png"],
-    "afterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/fada997b-7295-4256-b6fd-0e653cecbcd4-0.png"
+    "beforeUrl": "showcase/explore/55fa0e3f-207a-462e-89fd-e6b0ee65b19b.jpg",
+    "refUrls": [
+      "showcase/swap-ref-knit.png"
+    ],
+    "afterUrl": "showcase/explore/fada997b-7295-4256-b6fd-0e653cecbcd4-0.png"
   },
   {
     "id": "lh-vedit-1",
@@ -77,10 +83,12 @@
     "title": "视频换装·边走边自拍",
     "modality": "video-edit",
     "tool": "ai-video-edit",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/videos/16ed6622-c22c-4467-a319-947b37efbdbe/f82688d1-1fcc-472a-9817-b3f685f5827a.mp4",
+    "videoUrl": "showcase/videos/f82688d1-1fcc-472a-9817-b3f685f5827a.mp4",
     "prompt": "把视频中女孩的衣服换成参考图里的休闲浅色外套，让她举起手机自拍、神态自然，仿佛没察觉镜头在拍。",
-    "refUrls": ["https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/swap-ref-coat.png"],
-    "posterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/8dc94e89-7785-4f5d-bdf9-0e07c0fcb649-0.png"
+    "refUrls": [
+      "showcase/swap-ref-coat.png"
+    ],
+    "posterUrl": "showcase/explore/8dc94e89-7785-4f5d-bdf9-0e07c0fcb649-0.png"
   },
   {
     "id": "lh-vedit-2",
@@ -88,10 +96,12 @@
     "title": "视频换装·自然抓拍",
     "modality": "video-edit",
     "tool": "ai-video-edit",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/videos/16ed6622-c22c-4467-a319-947b37efbdbe/6aa1a61c-524a-42a1-8d3c-1ff4e5fae0ff.mp4",
+    "videoUrl": "showcase/videos/6aa1a61c-524a-42a1-8d3c-1ff4e5fae0ff.mp4",
     "prompt": "把视频中女孩的衣服换成参考图里的休闲浅色外套，让她举起手机自拍、神态自然，仿佛没察觉镜头在拍。",
-    "refUrls": ["https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/swap-ref-coat.png"],
-    "posterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/images/16ed6622-c22c-4467-a319-947b37efbdbe/8dc94e89-7785-4f5d-bdf9-0e07c0fcb649-0.png"
+    "refUrls": [
+      "showcase/swap-ref-coat.png"
+    ],
+    "posterUrl": "showcase/explore/8dc94e89-7785-4f5d-bdf9-0e07c0fcb649-0.png"
   },
   {
     "id": "probe-hanfu",
@@ -552,8 +562,8 @@
     "inputKey": "showcase/guofeng-fly-1.jpg",
     "prompt": "镜头缓缓推进,裙摆与发丝随风轻舞,云雾流动,仙气飘渺,电影质感",
     "modality": "video",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/v-guofeng.mp4",
-    "posterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/guofeng-fly-1.jpg"
+    "videoUrl": "showcase/v-guofeng.mp4",
+    "posterUrl": "showcase/guofeng-fly-1.jpg"
   },
   {
     "id": "e-grandma-bg",
@@ -563,8 +573,8 @@
     "inputKey": "showcase/portrait-grandma.jpg",
     "prompt": "把背景换成郁郁葱葱的中式园林,保持人物不变,自然融合",
     "modality": "image-edit",
-    "beforeUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/portrait-grandma.jpg",
-    "afterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/e-grandma-bg.jpg"
+    "beforeUrl": "showcase/portrait-grandma.jpg",
+    "afterUrl": "showcase/e-grandma-bg.jpg"
   },
   {
     "id": "a-sage",
@@ -575,8 +585,8 @@
     "voice": "Eldric Sage",
     "text": "大家好,欢迎来到灵镜。在这里,一张照片,就能成为会说话的数字人。",
     "modality": "avatar",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/a-sage.mp4",
-    "sourceUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/portrait-sage.jpg"
+    "videoUrl": "showcase/a-sage.mp4",
+    "sourceUrl": "showcase/portrait-sage.jpg"
   },
   {
     "id": "v-jiangnan",
@@ -586,8 +596,8 @@
     "inputKey": "showcase/jiangnan-misty.jpg",
     "prompt": "细雨轻落,水面泛起涟漪,小船缓缓行驶,炊烟袅袅,宁静诗意",
     "modality": "video",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/v-jiangnan.mp4",
-    "posterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/jiangnan-misty.jpg"
+    "videoUrl": "showcase/v-jiangnan.mp4",
+    "posterUrl": "showcase/jiangnan-misty.jpg"
   },
   {
     "id": "v-dream",
@@ -597,8 +607,8 @@
     "inputKey": "showcase/dream-pinkroad.jpg",
     "prompt": "云层缓缓飘动,光影变幻,梦幻唯美,镜头沿雪原长路缓推",
     "modality": "video",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/v-dream.mp4",
-    "posterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/dream-pinkroad.jpg"
+    "videoUrl": "showcase/v-dream.mp4",
+    "posterUrl": "showcase/dream-pinkroad.jpg"
   },
   {
     "id": "e-jiangnan-snow",
@@ -608,8 +618,8 @@
     "inputKey": "showcase/jiangnan-wuzhen.jpg",
     "prompt": "给这幅江南水乡加上飘雪,屋顶积雪,营造冬日雪景氛围",
     "modality": "image-edit",
-    "beforeUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/jiangnan-wuzhen.jpg",
-    "afterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/e-jiangnan-snow.jpg"
+    "beforeUrl": "showcase/jiangnan-wuzhen.jpg",
+    "afterUrl": "showcase/e-jiangnan-snow.jpg"
   },
   {
     "id": "e-guofeng-style",
@@ -619,8 +629,8 @@
     "inputKey": "showcase/guofeng-pearl.jpg",
     "prompt": "转成中国传统水墨画风格,保留人物姿态与构图",
     "modality": "image-edit",
-    "beforeUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/guofeng-pearl.jpg",
-    "afterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/e-guofeng-style.jpg"
+    "beforeUrl": "showcase/guofeng-pearl.jpg",
+    "afterUrl": "showcase/e-guofeng-style.jpg"
   },
   {
     "id": "e-dream-expand",
@@ -630,8 +640,8 @@
     "inputKey": "showcase/dream-aurora.jpg",
     "prompt": "向左右扩展画面成宽幅全景,延续极光与星空,自然衔接",
     "modality": "image-edit",
-    "beforeUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/dream-aurora.jpg",
-    "afterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/e-dream-expand.jpg"
+    "beforeUrl": "showcase/dream-aurora.jpg",
+    "afterUrl": "showcase/e-dream-expand.jpg"
   },
   {
     "id": "e-cat-crown",
@@ -641,8 +651,8 @@
     "inputKey": "showcase/animal-cat-crown.jpg",
     "prompt": "给猫咪戴上更华丽的宝石皇冠,背景加金色光晕",
     "modality": "image-edit",
-    "beforeUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/animal-cat-crown.jpg",
-    "afterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/e-cat-crown.jpg"
+    "beforeUrl": "showcase/animal-cat-crown.jpg",
+    "afterUrl": "showcase/e-cat-crown.jpg"
   },
   {
     "id": "e-warrior-night",
@@ -652,8 +662,8 @@
     "inputKey": "showcase/warrior-cyber.jpg",
     "prompt": "把场景改成霓虹夜景,加入赛博朋克紫红光照,增强氛围",
     "modality": "image-edit",
-    "beforeUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/warrior-cyber.jpg",
-    "afterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/e-warrior-night.jpg"
+    "beforeUrl": "showcase/warrior-cyber.jpg",
+    "afterUrl": "showcase/e-warrior-night.jpg"
   },
   {
     "id": "a-grandma",
@@ -664,8 +674,8 @@
     "voice": "Serena",
     "text": "岁月温柔,愿你被这世界温柔以待。灵镜,让每一份美好都被看见。",
     "modality": "avatar",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/a-grandma.mp4",
-    "sourceUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/portrait-grandma.jpg"
+    "videoUrl": "showcase/a-grandma.mp4",
+    "sourceUrl": "showcase/portrait-grandma.jpg"
   },
   {
     "id": "a-girl",
@@ -676,8 +686,8 @@
     "voice": "Chelsie",
     "text": "嗨!我是你的 AI 数字人,影片、配音、配乐,一个平台全搞定!",
     "modality": "avatar",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/a-girl.mp4",
-    "sourceUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/girl-rainbow.jpg"
+    "videoUrl": "showcase/a-girl.mp4",
+    "sourceUrl": "showcase/girl-rainbow.jpg"
   },
   {
     "id": "v-phoenix",
@@ -688,8 +698,8 @@
     "inputKey": "showcase/myth-phoenix.jpg",
     "prompt": "凤凰羽翼轻展,烈焰流动,粒子飞舞,神话史诗感",
     "modality": "video",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/v-phoenix.mp4",
-    "posterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/myth-phoenix.jpg"
+    "videoUrl": "showcase/v-phoenix.mp4",
+    "posterUrl": "showcase/myth-phoenix.jpg"
   },
   {
     "id": "v-wedding",
@@ -700,8 +710,8 @@
     "inputKey": "showcase/wedding-redphoenix.jpg",
     "prompt": "裙摆水晶微微闪烁,金色羽翼轻动,光斑流转,华丽梦幻",
     "modality": "video",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/v-wedding.mp4",
-    "posterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/wedding-redphoenix.jpg"
+    "videoUrl": "showcase/v-wedding.mp4",
+    "posterUrl": "showcase/wedding-redphoenix.jpg"
   },
   {
     "id": "v-bamboo",
@@ -712,7 +722,7 @@
     "inputKey": "showcase/jiangnan-bamboo.jpg",
     "prompt": "竹叶随风沙沙摇曳,光斑在林间游移,阳光穿透竹影,清幽",
     "modality": "video",
-    "videoUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/v-bamboo.mp4",
-    "posterUrl": "https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/jiangnan-bamboo.jpg"
+    "videoUrl": "showcase/v-bamboo.mp4",
+    "posterUrl": "showcase/jiangnan-bamboo.jpg"
   }
 ]

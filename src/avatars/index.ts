@@ -10,28 +10,41 @@ import { TERMS_VERSION } from '../legal/index.js';
 const now = () => Date.now();
 
 // 预置形象(不入库,所有租户共享;平台自有授权素材,无授权问题)。
-// 带 gender/orientation/scene 元数据供 C5 筛选。PRD 建议 6-12 个,这里给 6 个起步。
+// 带 gender/orientation/scene 元数据供 C5 筛选。
+// thumbKey = 桶 key(showcase/<f>),随 git 进 prototype/showcase/。两条消费路径(去中心化):
+//   · 展示缩略图 → /api/showcase-asset/<f>(签名重定向自己桶 / 本地兜底,见 showcaseAssetUrl)。
+//   · 视频生成源帧 → worker.resolveImageUrl 走 getMediaPublisher().publish(thumbKey)(百炼可拉,与自定义形象同路径)。
 const PRESETS: {
-  id: string; name: string; thumb: string;
+  id: string; name: string; thumbKey: string;
   gender: 'male' | 'female'; orientation: 'portrait' | 'landscape'; scene: string;
 }[] = [
-  // 平台自产中式数字人形象(均为女性竖图,公网固定资产,worker.resolveImageUrl 直接喂百炼做口播)。
-  { id: 'preset-1', name: '田野记者 · 夏穗', gender: 'female', orientation: 'portrait', scene: '出镜', thumb: 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-preset-1.png' },
-  { id: 'preset-2', name: '科技主播 · 林溪', gender: 'female', orientation: 'portrait', scene: '科技', thumb: 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-preset-2.png' },
-  { id: 'preset-3', name: '文博讲解 · 苏窈', gender: 'female', orientation: 'portrait', scene: '文博', thumb: 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-preset-3.png' },
-  { id: 'preset-4', name: '时政主播 · 安宁', gender: 'female', orientation: 'portrait', scene: '新闻', thumb: 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-preset-4.png' },
-  { id: 'preset-5', name: '访谈主持 · 云岚', gender: 'female', orientation: 'portrait', scene: '访谈', thumb: 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-preset-5.png' },
-  { id: 'preset-6', name: '现场记者 · 程笑', gender: 'female', orientation: 'portrait', scene: '出镜', thumb: 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-preset-6.png' },
-  { id: 'preset-7', name: '新闻主播 · 叶澜', gender: 'female', orientation: 'portrait', scene: '新闻', thumb: 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/avatar-preset-7.png' },
+  { id: 'preset-1', name: '田野记者 · 夏穗', gender: 'female', orientation: 'portrait', scene: '出镜', thumbKey: 'showcase/avatar-preset-1.png' },
+  { id: 'preset-2', name: '科技主播 · 林溪', gender: 'female', orientation: 'portrait', scene: '科技', thumbKey: 'showcase/avatar-preset-2.png' },
+  { id: 'preset-3', name: '文博讲解 · 苏窈', gender: 'female', orientation: 'portrait', scene: '文博', thumbKey: 'showcase/avatar-preset-3.png' },
+  { id: 'preset-4', name: '时政主播 · 安宁', gender: 'female', orientation: 'portrait', scene: '新闻', thumbKey: 'showcase/avatar-preset-4.png' },
+  { id: 'preset-5', name: '访谈主持 · 云岚', gender: 'female', orientation: 'portrait', scene: '访谈', thumbKey: 'showcase/avatar-preset-5.png' },
+  { id: 'preset-6', name: '现场记者 · 程笑', gender: 'female', orientation: 'portrait', scene: '出镜', thumbKey: 'showcase/avatar-preset-6.png' },
+  { id: 'preset-7', name: '新闻主播 · 叶澜', gender: 'female', orientation: 'portrait', scene: '新闻', thumbKey: 'showcase/avatar-preset-7.png' },
   // 探索灵感库「数字人」示范脸入库为预置,供「去做同款数字人」?avatar= 预选(id 与 explore 映射一致)。
-  { id: 'preset-sage', name: '睿智长者 · 松鹤', gender: 'male', orientation: 'portrait', scene: '访谈', thumb: 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/portrait-sage.jpg' },
-  { id: 'preset-grandma', name: '慈祥长辈 · 秀兰', gender: 'female', orientation: 'portrait', scene: '生活', thumb: 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/portrait-grandma.jpg' },
-  { id: 'preset-girl', name: '元气少女 · 桃夭', gender: 'female', orientation: 'portrait', scene: '生活', thumb: 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/showcase/girl-rainbow.jpg' },
+  { id: 'preset-sage', name: '睿智长者 · 松鹤', gender: 'male', orientation: 'portrait', scene: '访谈', thumbKey: 'showcase/portrait-sage.jpg' },
+  { id: 'preset-grandma', name: '慈祥长辈 · 秀兰', gender: 'female', orientation: 'portrait', scene: '生活', thumbKey: 'showcase/portrait-grandma.jpg' },
+  { id: 'preset-girl', name: '元气少女 · 桃夭', gender: 'female', orientation: 'portrait', scene: '生活', thumbKey: 'showcase/girl-rainbow.jpg' },
 ];
 
-/** 预置形象(不入库,直接返回;所有租户共享)。 */
+/** 桶 key(showcase/<f>)→ 展示用 URL(本端点;段编码)。供前端缩略图。 */
+export function showcaseAssetUrl(key: string): string {
+  const sub = key.replace(/^showcase\//, '');
+  return `/api/showcase-asset/${sub.split('/').map(encodeURIComponent).join('/')}`;
+}
+
+/** 预置形象(不入库,直接返回;所有租户共享)。thumb=展示 URL;thumbKey=源帧 key(worker 用)。 */
 export function listPresets() {
-  return PRESETS.map((p) => ({ ...p, kind: 'preset' as const, status: 'ready' as const }));
+  return PRESETS.map((p) => ({
+    ...p,
+    thumb: showcaseAssetUrl(p.thumbKey), // 展示缩略图走本端点(去中心化)
+    kind: 'preset' as const,
+    status: 'ready' as const,
+  }));
 }
 
 export function isPreset(avatarRef: string): boolean {

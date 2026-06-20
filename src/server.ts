@@ -4,6 +4,7 @@
 // 托管 prototype/ 下的 9 个静态页,create.html 通过轮询接 /api/jobs。
 
 import express from 'express';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { config } from './config.js';
@@ -18,10 +19,11 @@ import { pricingRouter } from './api/pricing.js';
 import { ordersRouter } from './api/orders.js';
 import { adminRouter } from './api/admin.js';
 import { captchaRouter } from './api/captcha.js';
+import { showcaseRouter } from './api/showcase.js';
 import { attachUser } from './auth/middleware.js';
 import { bootstrapSuperadmin } from './auth/platform.js';
 import { startWorker } from './queue/worker.js';
-import { listPresets, presetSampleUrl } from './voices/index.js';
+import { listPresets } from './voices/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const prototypeDir = resolve(__dirname, '..', 'prototype');
@@ -45,6 +47,7 @@ export function createApp() {
   // /admin 已在上面注册,不会经过 attachUser。
   app.use(attachUser);
   app.use('/api', captchaRouter); // 滑块出题/校验(公开,登录前用)
+  app.use('/api', showcaseRouter); // 示范素材(公开,落地页登录前用):签名重定向 + 本地兜底
   app.use('/api', authRouter);
   app.use('/api', creditsRouter);
   app.use('/api', avatarsRouter);
@@ -83,20 +86,19 @@ if (isMain) {
         '生产请在 .env 配置 OSS。',
     );
   }
-  // 预置音色试听样本自检:小样走公共只读桶直链(见 voices/index.ts),启动时 HEAD 探一下可达性,
-  // 探不到 → 前端试听会失败,早告警。非阻塞、容错(探测失败不影响启动);只探第一个预置(代表整批)。
+  // 预置音色试听样本自检:小样随 git 进 prototype/showcase/voices/(去中心化,见 voices/index.ts +
+  // src/api/showcase.ts)。启动时查镜像内是否带这些文件 —— 缺了说明 LFS 未拉取(checkout 只有指针),
+  // 前端试听 + seed 都会失败,早告警。非阻塞;只查第一个预置(代表整批)。
   void (async () => {
     try {
       const first = listPresets()[0];
       if (!first) return;
-      const url = presetSampleUrl(first.id);
-      const resp = await fetch(url, { method: 'HEAD' }).catch(() => null);
-      if (!resp || !resp.ok) {
+      const diskPath = resolve(prototypeDir, 'showcase', 'voices', `${first.id}.wav`);
+      if (!existsSync(diskPath)) {
         console.warn(
-          `[警告] 预置音色试听样本公共直链不可达(${url})。` +
-            '前端「试听」预置音色会失败。公网部署一般可直接访问;' +
-            '若为私有化内网(访问不到公共桶),请配好存储 + DASHSCOPE_API_KEY 后跑一次种子脚本灌进自己桶:' +
-            '  DASHSCOPE_API_KEY=sk-xxx npx tsx scripts/seed-preset-samples.mjs  (幂等,可重复跑)',
+          `[警告] 预置音色试听样本缺失(${diskPath})。多半是 checkout 不完整(prototype/showcase/ 媒体未拉全)。` +
+            '前端「试听」与 seed-showcase 会失败。修:确认 `git status` 干净并完整 checkout,' +
+            '再重新 build 镜像;私有化离线场景请确保镜像内自带 prototype/showcase/ 媒体。',
         );
       }
     } catch {

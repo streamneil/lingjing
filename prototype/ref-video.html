@@ -638,14 +638,14 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
 
   // ── 茶广告多模态示范(文档旗舰示例)──
   const DEMO_PROMPT='全程使用视频1的第一视角构图,全程使用音频1作为背景音乐。第一人称视角果茶宣传广告,seedance牌「苹苹安安」苹果果茶限定款;首帧为图片1,你的手摘下一颗带晨露的阿克苏红苹果;6-8 秒第一人称手持举杯,将图片2中的果茶举到镜头前,尾帧定格为图片2。背景声音统一为女生音色。';
-  // 文档「多模态参考」公开示范素材(火山 TOS 公开 URL,前端直拉,不依赖平台 OSS 转存)
-  const DEMO_OUTPUT_URL='https://p9-arcosite.byteimg.com/obj/tos-cn-i-goo7wpa0wc/dab46ce2289a4a8ead76711bb02f2e1d';
-  // 走后端同源代理 /api/demo-assets/:name(TOS 直链无 CORS,前端直拉被浏览器拦)
+  // 果茶示范素材:随 git 进 prototype/showcase/ref-video/,走 /api/showcase-asset(去中心化,
+  // 不再依赖火山 TOS / byteimg 外链 —— 那些文档链会过期,且离线/私有化拉不到)。
+  const DEMO_OUTPUT_URL='/api/showcase-asset/ref-video/tea-output.mp4';
   const DEMO_INPUTS=[
-    { kind:'img', name:'tea-pic1.jpg',   url:'/api/demo-assets/tea-pic1',   type:'image/jpeg' },
-    { kind:'img', name:'tea-pic2.jpg',   url:'/api/demo-assets/tea-pic2',   type:'image/jpeg' },
-    { kind:'vid', name:'tea-video1.mp4', url:'/api/demo-assets/tea-video1', type:'video/mp4' },
-    { kind:'aud', name:'tea-audio1.mp3', url:'/api/demo-assets/tea-audio1', type:'audio/mpeg' },
+    { kind:'img', name:'tea-pic1.jpg',   url:'/api/showcase-asset/ref-video/tea-pic1.jpg',   type:'image/jpeg' },
+    { kind:'img', name:'tea-pic2.jpg',   url:'/api/showcase-asset/ref-video/tea-pic2.jpg',   type:'image/jpeg' },
+    { kind:'vid', name:'tea-video1.mp4', url:'/api/showcase-asset/ref-video/tea-video1.mp4', type:'video/mp4' },
+    { kind:'aud', name:'tea-audio1.mp3', url:'/api/showcase-asset/ref-video/tea-audio1.mp3', type:'audio/mpeg' },
   ];
   // 拉取示范素材成 File 并注入三数组(失败的素材跳过,不阻断已套用的提示词)
   async function loadDemoAssets(){

@@ -1332,30 +1332,8 @@ jobsRouter.get('/jobs/:id/download/:idx', requireAuth, async (req: Request, res:
   return res.end(buf);
 });
 
-// 示范素材同源代理 — ref-video 茶广告示范「一键套用」要把文档素材塞进上传区,
-// 但火山 TOS 直链无 CORS 头,前端 fetch 被浏览器拦截(同 OSS 下载那条根因)。
-// 由后端拉取再同源回传。安全:固定 allowlist(仅文档这 4 个公开 URL,杜绝 SSRF)。
-const DEMO_ASSETS: Record<string, { url: string; mime: string }> = {
-  'tea-pic1':  { url: 'https://ark-project.tos-cn-beijing.volces.com/doc_image/r2v_tea_pic1.jpg',   mime: 'image/jpeg' },
-  'tea-pic2':  { url: 'https://ark-project.tos-cn-beijing.volces.com/doc_image/r2v_tea_pic2.jpg',   mime: 'image/jpeg' },
-  'tea-video1':{ url: 'https://ark-project.tos-cn-beijing.volces.com/doc_video/r2v_tea_video1.mp4', mime: 'video/mp4' },
-  'tea-audio1':{ url: 'https://ark-project.tos-cn-beijing.volces.com/doc_audio/r2v_tea_audio1.mp3', mime: 'audio/mpeg' },
-};
-jobsRouter.get('/demo-assets/:name', requireAuth, async (req: Request, res: Response) => {
-  const entry = DEMO_ASSETS[req.params.name!];
-  if (!entry) return res.status(404).json({ error: '未知示范素材' });
-  try {
-    const r = await fetch(entry.url);
-    if (!r.ok) return res.status(502).json({ error: '示范素材暂不可用' });
-    const buf = Buffer.from(await r.arrayBuffer());
-    res.setHeader('Content-Type', entry.mime);
-    res.setHeader('Content-Length', String(buf.length));
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    return res.end(buf);
-  } catch {
-    return res.status(502).json({ error: '示范素材拉取失败' });
-  }
-});
+// (已移除 /api/demo-assets 火山 TOS 同源代理:果茶示范素材已随 git 进 prototype/showcase/ref-video/,
+//  统一走公开端点 /api/showcase-asset/(签名重定向自己桶 / 本地兜底),去中心化、离线/私有化可用。)
 
 // 失败重试 — 仅 admin/creator,且只能重试本租户的
 jobsRouter.post('/jobs/:id/retry', requireRole('admin', 'creator'), (req: Request, res: Response) => {

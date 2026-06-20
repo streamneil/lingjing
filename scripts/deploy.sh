@@ -64,7 +64,7 @@ fi
 # ── 3. 等 app 健康(最多 ~90s)──
 log "等待 app 健康检查通过…"
 for i in $(seq 1 18); do
-  state="$(docker compose ps --format '{{.Name}} {{.Health}}' 2>/dev/null | awk '/app/{print $2}' | head -1)"
+  state="$(docker compose ps app --format '{{.Health}}' 2>/dev/null | head -1)"
   if [ "$state" = "healthy" ]; then log "✓ app healthy"; break; fi
   if [ "$i" = "18" ]; then
     log "✗ app 90s 内未 healthy,打印近期日志:"; docker compose logs --tail 40 app
@@ -78,6 +78,13 @@ if [ "$RESTART_ONLY" != true ]; then
   log "灌平台默认数据(积分套餐)…"
   docker compose exec -T app sh -c 'DB_FILE=${DB_FILE:-/data/lingjing.db} npx tsx scripts/seed-platform.mjs' \
     || log "⚠ 种子步骤未成功(不阻断部署),可稍后手动:docker compose exec app npx tsx scripts/seed-platform.mjs"
+
+  # ── 4b. 示范素材灌桶(去中心化:落地页/探索/试听/形象/参考生成影片素材 → 运营自己的 OSS)──
+  # 幂等(已存在跳过)。失败会让落地页/探索裂图,故这里"大声"提示重跑(端点仍会回退镜像内文件兜底,
+  # 但走桶/CDN 出口更省 Node)。媒体随镜像自带,从本地树读,air-gap 也能灌。
+  log "灌示范素材到对象存储(showcase/*:图文/音色/视频/果茶)…"
+  docker compose exec -T app sh -c 'npx tsx scripts/seed-showcase.mjs' \
+    || die "✗ 示范素材灌桶失败 —— 落地页/探索可能裂图。修好 OSS 配置后重跑(幂等):docker compose exec app npx tsx scripts/seed-showcase.mjs"
 fi
 
 # ── 5. 状态汇总 ──
@@ -85,4 +92,4 @@ log "当前服务状态:"
 docker compose ps
 log "完成。访问 https://$(grep -E '^LJ_DOMAIN=' .env | cut -d= -f2-)/admin/login 用超管登录。"
 log "下一步:/admin →「厂商 / Key」配百炼/火山/Google key → 新建租户 → 开户,即可开张。"
-log "(示范图文 + 预置音色试听走公共桶,已自带;看日志:docker compose logs -f app)"
+log "(示范素材已随仓自带 + 灌进你自己的 OSS,完全自包含,无外部桶依赖;看日志:docker compose logs -f app)"
