@@ -123,6 +123,39 @@ cp .env.example .env && chmod 600 .env
 > 运营**生成的内容**写进 `.env` 配的 `OSS_BUCKET`,与示范素材(`showcase/` 前缀)同桶不同前缀、互不干扰。
 > 预置形象的**视频生成源帧**例外:经发布策略(托管=签名直链;私有化见 `TODOS.md` T-PUBLIC-URL)保证百炼可拉。
 
+### Gemini(Nano Banana)走代理(中国大陆 ECS 必读)
+
+百炼 / 火山在国内直连即可,**Google Gemini(Nano Banana 2 / Pro)在大陆 ECS 直连会被墙** → 报错「无法连接 Google Gemini(fetch failed)」。两条路:**① 不用 Gemini**(在 `/admin →「AI 图片模型」`关掉两个 gemini,主用百炼 `qwen-image/wan` + 火山 `seedream`);**② 给 Gemini 配出网代理**(下面)。
+
+⚠️ 两个坑先知道:
+- **Node 的 `fetch` 不读 `HTTP_PROXY` 环境变量**(跟 curl 不同)。所以宿主机代理 `curl --proxy` 能通、平台仍 fetch failed。平台已改为给 Gemini 这一个请求显式挂代理(`GEMINI_PROXY`),**只有 Gemini 走代理**,百炼/火山/OSS 仍直连不绕远。
+- **容器里的 `127.0.0.1` ≠ 宿主机**。代理跑在宿主机,容器要用 `host.docker.internal` 才够得到。
+
+配置四步(假设宿主机已有 clash 在 `127.0.0.1:7890`,部署见 `clash-server-proxy` 技能):
+
+1. **让 clash 能被容器访问**:clash 配置设 `allow-lan: true`(默认只听 127.0.0.1,容器够不到),`systemctl restart clash`。
+   ⚠️ allow-lan 会在公网网卡也开端口,**务必在阿里云安全组把 `7890` 和控制口 `9091` 对公网封死**(只内部用)。
+2. **compose 让容器解析宿主机**:`docker-compose.yml` 的 `app:` 服务下加
+   ```yaml
+       extra_hosts:
+         - "host.docker.internal:host-gateway"
+   ```
+3. **`.env` 配代理地址**(用 `host.docker.internal`,不是 `127.0.0.1`):
+   ```
+   GEMINI_PROXY=http://host.docker.internal:7890
+   ```
+   (取值优先级 `GEMINI_PROXY` > `HTTPS_PROXY` > `https_proxy`;不填 = 直连,本地开发不受影响。)
+4. **拉新代码 + 重建 + 重建容器**:`cd ~/workspace/lingjing && git pull --ff-only && ./scripts/deploy.sh`
+   (重建镜像把代码/依赖烤进去,重建容器吃到 `extra_hosts` + 新 `.env`。)
+
+**验证**(在容器内确认能经代理出网):
+```bash
+docker compose exec app node -e "const{ProxyAgent,fetch}=require('undici');fetch('https://www.gstatic.com/generate_204',{dispatcher:new ProxyAgent('http://host.docker.internal:7890')}).then(r=>console.log('OK',r.status)).catch(e=>console.log('FAIL',e.message))"
+```
+`OK 204` = 容器能经代理出网,去页面生成 Nano Banana 即可;`FAIL …` = 代理地址/allow-lan 没对,按生成时的报错提示排查(报错已会区分「容器内 127.0.0.1≠宿主机」等情形)。
+
+> 备选:不想加 `extra_hosts` 可直接用 docker 网桥网关 IP,如 `GEMINI_PROXY=http://172.17.0.1:7890`(前提同样是 clash `allow-lan`);但 compose 自定义网络的网关未必是 `172.17.0.1`,故 `host.docker.internal` 更稳。
+
 ---
 
 ## 目录结构
