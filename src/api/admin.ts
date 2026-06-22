@@ -219,8 +219,18 @@ function consumptionInWindow(sinceMs: number, untilMs: number, tenantId?: string
 
 /** 瓶颈灯阈值(规划轮定稿):把"何时扩容"从拍脑袋变成数据驱动。
  *  green=健康 / amber=排队偏高(考虑拆多 worker)/ red=已达瓶颈(扩容或查百炼配额)。 */
-function bottleneckLevel(queued: number, avgQueueWaitMs: number, failRate: number): 'green' | 'amber' | 'red' {
-  if (queued > 15 || avgQueueWaitMs > 120_000 || failRate > 0.1) return 'red';
+// 瓶颈灯。区分两类红:拥堵(队列/等待)与 失败率偏高。
+// failRate 仅在样本足够时才计入(否则今天就 1 个任务、失败 1 次 = 100% 会误报"已达瓶颈")。
+const FAILRATE_MIN_SAMPLE = 20; // 今日 done+failed 达此量,失败率才作为健康判据
+function bottleneckLevel(
+  queued: number,
+  avgQueueWaitMs: number,
+  failRate: number,
+  sampleSize: number,
+): 'green' | 'amber' | 'red' {
+  const congested = queued > 15 || avgQueueWaitMs > 120_000;
+  const failing = sampleSize >= FAILRATE_MIN_SAMPLE && failRate > 0.1;
+  if (congested || failing) return 'red';
   if (queued > 5 || avgQueueWaitMs > 30_000) return 'amber';
   return 'green';
 }
@@ -268,7 +278,7 @@ adminRouter.get('/api/metrics/overview', requirePlatformAdmin, (_req: Request, r
     .get(Date.now()) as { avg: number | null };
   const avgQueueWaitMs = Math.round(wait.avg ?? 0);
 
-  const level = bottleneckLevel(queued, avgQueueWaitMs, failRate);
+  const level = bottleneckLevel(queued, avgQueueWaitMs, failRate, todayDone + todayFailed);
 
   // new 意向线索待跟进数(咨询式购买落库后无通知,这里给运营一个可见信号,防热线索冷掉)。
   const newLeads = countLeadsByStatus('new');
