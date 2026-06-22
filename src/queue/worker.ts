@@ -859,9 +859,13 @@ function startQueueWatchdog(): void {
   const checkMs = 60_000; // 每分钟扫一次
   watchdogTimer = setInterval(() => {
     if (stopped) return;
-    // worker 心跳必须新鲜,才敢判定「卡住」(否则是 worker 死了,等重启 recover,不误杀)
-    if (Date.now() - workerHeartbeat > HEARTBEAT_FRESH_MS) return;
-    const cutoff = Date.now() - config.worker.queuedTimeoutMs;
+    // 两档兜底,保证 queued job 绝不无限卡:
+    //  · 心跳新鲜(worker 正常轮询)→ 排队超 queuedTimeoutMs 即判卡住、失败。
+    //  · 心跳过期(worker loop 卡死但事件循环还活 → 健康检查只探 /healthz Web、docker 不重启 →
+    //    谁也不兜底)→ 用 2× 硬保底:排队超 2×queuedTimeoutMs 一律失败。绝不让用户的 job 永远排队。
+    //    (整进程死掉时本 setInterval 也不跑;那种由 docker restart + 启动 recoverStuckJobs 兜。)
+    const heartbeatFresh = Date.now() - workerHeartbeat <= HEARTBEAT_FRESH_MS;
+    const cutoff = Date.now() - config.worker.queuedTimeoutMs * (heartbeatFresh ? 1 : 2);
     let stale: { id: string; tenant_id: string }[];
     try {
       stale = db
@@ -877,7 +881,7 @@ function startQueueWatchdog(): void {
         .run('排队超时:长时间未能进入生成(服务繁忙或调度异常),已退还预扣积分,请重试', Date.now(), j.id);
       if (r.changes === 1) {
         release(j.tenant_id, j.id); // 退预扣(只退不补)
-        console.warn(`[worker] 看门狗:job ${j.id} 排队超时,标 failed + 退预扣`);
+        console.warn(`[worker] 看门狗:job ${j.id} 排队超时(heartbeatFresh=${heartbeatFresh}),标 failed + 退预扣`);
       }
     }
   }, checkMs);
