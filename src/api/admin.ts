@@ -56,6 +56,12 @@ import {
   readPadminToken,
   requirePlatformAdmin,
   consumeCaptchaToken,
+  listPlatformAdmins,
+  countPlatformAdmins,
+  createPlatformAdmin,
+  setPlatformAdminPassword,
+  deletePlatformAdmin,
+  clearPlatformSessionsExcept,
 } from '../auth/platform.js';
 import type { Role } from '../db/index.js';
 import multer from 'multer';
@@ -120,6 +126,52 @@ adminRouter.post('/logout', requirePlatformAdmin, (req: Request, res: Response) 
 // 当前超管(前端判断登录态)
 adminRouter.get('/api/me', requirePlatformAdmin, (req: Request, res: Response) => {
   return res.json(req.padmin);
+});
+
+// ── 超管账户管理(列表 / 添加 / 改密 / 删除;全部经平台审计,记录操作超管)──
+// 任一已登录超管均可管理超管(平级)。护栏:防删自己、防删最后一个、改密幂等。
+adminRouter.get('/api/superadmins', requirePlatformAdmin, (req: Request, res: Response) => {
+  const me = req.padmin!.id;
+  return res.json({ superadmins: listPlatformAdmins().map((s) => ({ ...s, isSelf: s.id === me })) });
+});
+
+adminRouter.post('/api/superadmins', requirePlatformAdmin, async (req: Request, res: Response) => {
+  const { username, password } = req.body ?? {};
+  try {
+    const created = await createPlatformAdmin(username, password);
+    writePlatformAudit(req.padmin!.id, 'padmin_create', PLATFORM_TENANT, created.username, padminIp(req));
+    return res.status(201).json({ id: created.id, username: created.username, createdAt: created.createdAt });
+  } catch (e) {
+    return res.status(400).json({ error: e instanceof Error ? e.message : '添加超管失败' });
+  }
+});
+
+// 改超管密码(含自己)。改自己:保留当前端 session,作废其它端;改他人:作废其全部 session 强制重登。
+adminRouter.post('/api/superadmins/:id/password', requirePlatformAdmin, async (req: Request, res: Response) => {
+  const id = req.params.id!;
+  const { newPassword } = req.body ?? {};
+  const target = listPlatformAdmins().find((s) => s.id === id);
+  if (!target) return res.status(404).json({ error: '超管不存在' });
+  try {
+    const ok = await setPlatformAdminPassword(id, newPassword);
+    if (!ok) return res.status(404).json({ error: '超管不存在' });
+    clearPlatformSessionsExcept(id, id === req.padmin!.id ? readPadminToken(req) : undefined);
+    writePlatformAudit(req.padmin!.id, 'padmin_reset_pw', PLATFORM_TENANT, target.username, padminIp(req));
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(400).json({ error: e instanceof Error ? e.message : '改密失败' });
+  }
+});
+
+adminRouter.delete('/api/superadmins/:id', requirePlatformAdmin, (req: Request, res: Response) => {
+  const id = req.params.id!;
+  if (id === req.padmin!.id) return res.status(400).json({ error: '不能删除当前登录的超管(自己)' });
+  if (countPlatformAdmins() <= 1) return res.status(400).json({ error: '至少保留一个超管,不能删除最后一个' });
+  const target = listPlatformAdmins().find((s) => s.id === id);
+  if (!target) return res.status(404).json({ error: '超管不存在' });
+  deletePlatformAdmin(id);
+  writePlatformAudit(req.padmin!.id, 'padmin_delete', PLATFORM_TENANT, target.username, padminIp(req));
+  return res.json({ ok: true });
 });
 
 // ── 运营监控驾驶舱(平台超管:看各租户任务/并发/瓶颈)──

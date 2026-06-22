@@ -198,3 +198,64 @@ export function requirePlatformAdmin(req: Request, res: Response, next: NextFunc
   req.padmin = padmin;
   next();
 }
+
+// ── 超管账户管理(/plan: 添加超管 + 改密 + 删除;全部经 admin 路由 + 平台审计)──
+// 安全:这些只在 requirePlatformAdmin 后调用(调用者已是超管);删除/改密的越权护栏在路由层
+// (防删自己 / 防删最后一个),与 audit 一并在 admin.ts。
+
+export interface PlatformAdminListItem { id: string; username: string; createdAt: number }
+
+export function listPlatformAdmins(): PlatformAdminListItem[] {
+  return (db.prepare(`SELECT id, username, created_at FROM platform_admin ORDER BY created_at ASC`).all() as PlatformAdminRow[])
+    .map((p) => ({ id: p.id, username: p.username, createdAt: p.created_at }));
+}
+
+export function countPlatformAdmins(): number {
+  return (db.prepare(`SELECT COUNT(*) AS n FROM platform_admin`).get() as { n: number }).n;
+}
+
+function normPadminUsername(u: unknown): string {
+  const name = typeof u === 'string' ? u.trim() : '';
+  if (name.length < 3 || name.length > 32) throw new Error('用户名需 3-32 个字符');
+  if (!/^[\w.@-]+$/.test(name)) throw new Error('用户名仅限字母/数字/._@-');
+  return name;
+}
+function assertPadminPassword(pw: unknown): asserts pw is string {
+  if (typeof pw !== 'string' || pw.length < 8) throw new Error('密码至少 8 位');
+  if (pw.length > 200) throw new Error('密码过长');
+}
+
+/** 新增平台超管(用户名唯一)。返回新建条目。 */
+export async function createPlatformAdmin(username: string, password: string): Promise<PlatformAdminListItem> {
+  const name = normPadminUsername(username);
+  assertPadminPassword(password);
+  if (db.prepare(`SELECT 1 FROM platform_admin WHERE username=?`).get(name)) throw new Error('超管用户名已存在');
+  const id = randomUUID();
+  const t = now();
+  const hash = await hashPassword(password);
+  db.prepare(`INSERT INTO platform_admin (id,username,password_hash,created_at) VALUES (?,?,?,?)`).run(id, name, hash, t);
+  return { id, username: name, createdAt: t };
+}
+
+/** 改某超管密码(免旧密码:调用者已是超管)。不存在 → false。 */
+export async function setPlatformAdminPassword(id: string, newPassword: string): Promise<boolean> {
+  assertPadminPassword(newPassword);
+  if (!db.prepare(`SELECT 1 FROM platform_admin WHERE id=?`).get(id)) return false;
+  const hash = await hashPassword(newPassword);
+  db.prepare(`UPDATE platform_admin SET password_hash=? WHERE id=?`).run(hash, id);
+  return true;
+}
+
+/** 删超管(连同其所有 session)。护栏(防自删/防删最后一个)在路由层。不存在 → false。
+ *  顺序:先删 session 再删超管 —— platform_session.padmin_id 有 FK 指向 platform_admin,
+ *  反过来会触发 FOREIGN KEY constraint。整体放事务保证原子。 */
+export const deletePlatformAdmin = db.transaction((id: string): boolean => {
+  db.prepare(`DELETE FROM platform_session WHERE padmin_id=?`).run(id);
+  return db.prepare(`DELETE FROM platform_admin WHERE id=?`).run(id).changes === 1;
+});
+
+/** 作废某超管的 session;keepToken 指定则保留(改密后:其它端强制重登,当前端不掉线)。 */
+export function clearPlatformSessionsExcept(padminId: string, keepToken?: string): void {
+  if (keepToken) db.prepare(`DELETE FROM platform_session WHERE padmin_id=? AND token!=?`).run(padminId, keepToken);
+  else db.prepare(`DELETE FROM platform_session WHERE padmin_id=?`).run(padminId);
+}

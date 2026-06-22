@@ -172,6 +172,7 @@
     <button class="nav-item" data-nav="invoices"><span class="nav-dot"></span>发票开具</button>
     <button class="nav-item" data-nav="consumption"><span class="nav-dot"></span>消耗流水</button>
     <button class="nav-item" data-nav="audit"><span class="nav-dot"></span>平台审计</button>
+    <button class="nav-item" data-nav="superadmins"><span class="nav-dot"></span>超管管理</button>
   </nav>
 
   <div class="page">
@@ -407,6 +408,28 @@
       </table>
     </div>
     </section>
+
+    <!-- ── 超管管理 ── -->
+    <section class="sec" data-sec="superadmins" id="sec-superadmins">
+    <div class="ph">
+      <div><h1>超管管理</h1><p>平台超级管理员账户。可新增超管、改密码(含自己)、删除。所有操作记入「平台审计」并标明操作超管。</p></div>
+    </div>
+    <div class="card" style="padding:16px;margin-bottom:14px;max-width:600px">
+      <div style="font-weight:600;margin-bottom:10px">新增超管</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input id="saUser" placeholder="用户名(3-32,字母/数字/._@-)" style="flex:1;min-width:180px">
+        <input id="saPass" type="text" placeholder="密码(至少 8 位)" style="flex:1;min-width:160px">
+        <button class="ok" id="saAddBtn" onclick="doAddSuperadmin()" style="padding:10px 18px;flex:none">添加</button>
+      </div>
+      <div class="mmsg" id="saMsg" style="margin-top:8px"></div>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>用户名</th><th>创建时间</th><th>操作</th></tr></thead>
+        <tbody id="saRows"><tr><td colspan="3" class="empty">加载中…</td></tr></tbody>
+      </table>
+    </div>
+    </section>
   </div><!-- /.page -->
   </div><!-- /.shell -->
 
@@ -590,6 +613,19 @@
       <p style="font-size:11.5px;color:var(--t4);margin-top:8px">重置后该用户当前所有登录会话立即失效,需用新密码重新登录。</p>
       <div class="mmsg" id="rMsg"></div>
       <div class="mbtns"><button class="cancel" onclick="closeOv('resetOv')">取消</button><button class="ok" id="rOk" onclick="submitReset()">确认重置</button></div>
+    </div>
+  </div>
+
+  <!-- 改超管密码(二级弹窗)-->
+  <div class="ov" id="saPwOv" style="z-index:420">
+    <div class="modal">
+      <h3>改超管密码</h3>
+      <p class="mdesc" id="saPwFor"></p>
+      <label>新密码(至少 8 位)</label>
+      <input id="saPwPass" type="text" placeholder="设置新密码">
+      <p style="font-size:11.5px;color:var(--t4);margin-top:8px">改他人:其所有会话立即失效;改自己:其它端失效,当前端不掉线。</p>
+      <div class="mmsg" id="saPwMsg"></div>
+      <div class="mbtns"><button class="cancel" onclick="closeOv('saPwOv')">取消</button><button class="ok" id="saPwOk" onclick="submitSaPw()">确认</button></div>
     </div>
   </div>
 
@@ -820,6 +856,7 @@
     image_model_delete:'删除出图模型', image_model_reorder:'调整出图模型排序',
     pricing_plan_create:'新增套餐', pricing_plan_update:'修改套餐', pricing_plan_delete:'删除套餐',
     pricing_plan_reorder:'调整套餐排序', sales_lead_update:'更新意向线索',
+    padmin_create:'新增平台超管', padmin_reset_pw:'修改超管密码', padmin_delete:'删除平台超管',
   };
   function paudTime(ts){ const d=new Date(ts),p=n=>String(n).padStart(2,'0'); return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }
   async function loadPlatformAudit(){
@@ -839,6 +876,54 @@
         </tr>`;
       }).join('');
     }catch(e){ tb.innerHTML='<tr><td colspan="5" class="empty">加载失败</td></tr>'; }
+  }
+
+  // ── 超管管理(列表 / 添加 / 改密 / 删除)──
+  async function loadSuperadmins(){
+    const tb=document.getElementById('saRows');
+    try{
+      const { superadmins }=await PA('GET','/api/superadmins');
+      if(!superadmins.length){ tb.innerHTML='<tr><td colspan="3" class="empty">暂无超管</td></tr>'; return; }
+      tb.innerHTML=superadmins.map(s=>`<tr>
+        <td class="tn">${esc(s.username)}${s.isSelf?' <span style="font-size:11px;color:var(--blue);border:1px solid var(--blue);border-radius:5px;padding:0 5px;margin-left:4px">我</span>':''}</td>
+        <td style="color:var(--t3);font-family:var(--f-mono);font-size:12px">${paudTime(s.createdAt)}</td>
+        <td>
+          <button class="act" onclick='openSaPw(${JSON.stringify(s.id)},${JSON.stringify(s.username)},${s.isSelf?'true':'false'})'>改密码</button>
+          ${s.isSelf?'':`<button class="act" style="color:var(--red,#e5484d)" onclick='doDeleteSuperadmin(${JSON.stringify(s.id)},${JSON.stringify(s.username)})'>删除</button>`}
+        </td></tr>`).join('');
+    }catch(e){ tb.innerHTML='<tr><td colspan="3" class="empty">加载失败</td></tr>'; }
+  }
+  async function doAddSuperadmin(){
+    const u=document.getElementById('saUser').value.trim(), p=document.getElementById('saPass').value;
+    const msg=document.getElementById('saMsg'); msg.textContent='';
+    if(!u||!p){ msg.textContent='请填用户名和密码'; return; }
+    const btn=document.getElementById('saAddBtn'); btn.disabled=true;
+    try{
+      await PA('POST','/api/superadmins',{username:u,password:p});
+      document.getElementById('saUser').value=''; document.getElementById('saPass').value='';
+      toast('✓ 已添加超管'); loadSuperadmins();
+    }catch(e){ msg.textContent=e.message||'添加失败'; }
+    finally{ btn.disabled=false; }
+  }
+  let saPwTarget=null;
+  function openSaPw(id,username,isSelf){
+    saPwTarget=id;
+    document.getElementById('saPwFor').textContent=(isSelf?'改自己的登录密码:':'目标超管:')+username;
+    document.getElementById('saPwPass').value=''; document.getElementById('saPwMsg').textContent='';
+    document.getElementById('saPwOv').classList.add('on');
+  }
+  async function submitSaPw(){
+    const p=document.getElementById('saPwPass').value, msg=document.getElementById('saPwMsg');
+    if(!p){ msg.textContent='请输入新密码'; return; }
+    const ok=document.getElementById('saPwOk'); ok.disabled=true;
+    try{ await PA('POST',`/api/superadmins/${saPwTarget}/password`,{newPassword:p}); closeOv('saPwOv'); toast('✓ 密码已更新'); loadSuperadmins(); }
+    catch(e){ msg.textContent=e.message||'改密失败'; }
+    finally{ ok.disabled=false; }
+  }
+  async function doDeleteSuperadmin(id,username){
+    if(!confirm(`确认删除超管「${username}」?其所有登录会话将立即失效,且不可恢复。`)) return;
+    try{ await PA('DELETE',`/api/superadmins/${id}`); toast('✓ 已删除'); loadSuperadmins(); }
+    catch(e){ toast(e.message||'删除失败'); }
   }
 
   // ── AI 图片模型管理 ──
@@ -1488,7 +1573,7 @@
   window.loadProviders=loadProviders;
 
   // ── 左侧菜单 SPA 路由(hash 决定当前 section,刷新保持,懒加载各 section)──
-  const SECTIONS=['monitor','tenants','image-models','providers','pricing','plans','leads','orders','invoices','consumption','audit'];
+  const SECTIONS=['monitor','tenants','image-models','providers','pricing','plans','leads','orders','invoices','consumption','audit','superadmins'];
   // 各 section 首次进入时调用对应 loader(切回已加载的不重拉,靠 loaded 标记防重复)
   // ── 积分消耗流水(对账)──
   const CON_MOD={ai_image:'AI 生图',video_t2v:'文生视频',video_i2v:'图生视频',video_edit:'视频编辑',tts:'语音合成',video:'数字人视频'};
@@ -1543,6 +1628,7 @@
     invoices:loadInvoices,
     consumption:loadConsumption,
     audit:loadPlatformAudit,
+    superadmins:loadSuperadmins,
   };
   const loaded={};   // section → 是否已首次加载
   let curSec='monitor';
