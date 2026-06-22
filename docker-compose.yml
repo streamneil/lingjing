@@ -50,6 +50,13 @@ services:
       # worker 并发池(默认 16)。4c8g 偏激进,如压不住可在 .env 调小,如 WORKER_POOL_SIZE=8。
       WORKER_POOL_SIZE: ${WORKER_POOL_SIZE:-16}
       DB_FILE: /data/lingjing.db
+      # Gemini 出网代理(大陆 ECS 直连 Google 被墙时在 .env 填;仅 Gemini 走代理,百炼/火山直连)。
+      # 容器内 127.0.0.1≠宿主机 → 用 host.docker.internal(见下方 extra_hosts);留空=直连。详见 README。
+      GEMINI_PROXY: ${GEMINI_PROXY:-}
+    # 让容器能解析宿主机(Gemini 走宿主机 clash 代理时:GEMINI_PROXY=http://host.docker.internal:7890)。
+    # 无害:没配 GEMINI_PROXY 时没人解析它。需 Docker 20.10+。
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     # 不对外映射端口:只 caddy 同网络反代 app:9372。
     volumes:
       - app-data:/data
