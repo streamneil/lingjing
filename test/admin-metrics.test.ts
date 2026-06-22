@@ -115,7 +115,7 @@ describe('overview 聚合', () => {
     expect(b.failRate).toBeCloseTo(1 / 4, 5); // 1 失败 / 4 终态
     // 平均耗时 = (60s + 180s + 30s) / 3 = 90s
     expect(b.avgDurationMs).toBe(90000);
-    expect(b.level).toBe('red'); // queued=1 虽低,但失败率 25% > 10% → red
+    expect(b.level).toBe('green'); // 失败率 25% 但样本仅 4 终态 < 20 → 不以失败率判红(避免单次失败误报「已达瓶颈」);queued=1 也不拥堵
   });
 });
 
@@ -141,15 +141,24 @@ describe('瓶颈灯阈值边界', () => {
   it('queued=16 → red(越过 15)', async () => {
     expect(await levelForQueued(16)).toBe('red');
   });
-  it('失败率 > 10% → red', async () => {
+  it('失败率 > 10% 且样本足够(≥20)→ red', async () => {
     db.prepare(`DELETE FROM job`).run();
-    // 8 完成 + 2 失败 = 20% 失败率 > 10%
-    for (let i = 0; i < 8; i++) seedJob({ tenant: tenantA, status: 'done', createdAt: todayStart + 1000, startedAt: todayStart + 2000, updatedAt: todayStart + 12000 });
-    for (let i = 0; i < 2; i++) seedJob({ tenant: tenantA, status: 'failed', createdAt: todayStart + 1000 });
+    // 16 完成 + 4 失败 = 20 终态、20% 失败率 > 10% 且样本达最小阈值 → red
+    for (let i = 0; i < 16; i++) seedJob({ tenant: tenantA, status: 'done', createdAt: todayStart + 1000, startedAt: todayStart + 2000, updatedAt: todayStart + 12000 });
+    for (let i = 0; i < 4; i++) seedJob({ tenant: tenantA, status: 'failed', createdAt: todayStart + 1000 });
     const c = await padminLogin();
     const r = await c.get('/admin/api/metrics/overview');
     expect(r.body.failRate).toBeCloseTo(0.2, 5);
     expect(r.body.level).toBe('red');
+  });
+  it('失败率高但样本不足(<20)→ 不判红(防单次失败误报「已达瓶颈」)', async () => {
+    db.prepare(`DELETE FROM job`).run();
+    // 仅 1 个任务、失败 1 次 = 100% 失败率,但样本 1 < 20 → 不以失败率判红
+    seedJob({ tenant: tenantA, status: 'failed', createdAt: todayStart + 1000 });
+    const c = await padminLogin();
+    const r = await c.get('/admin/api/metrics/overview');
+    expect(r.body.failRate).toBeCloseTo(1, 5);
+    expect(r.body.level).toBe('green');
   });
 });
 

@@ -80,7 +80,7 @@ describe('队列:enqueueJob type + markDone output_kind', () => {
     const id = enqueueJob('ai_image', { prompt: '一只猫', count: 2 }, T);
     let row = getJob(id)!;
     expect(row.type).toBe('ai_image');
-    expect(row.output_kind).toBe('video'); // 默认值(未完成)
+    expect(row.output_kind).toBe('image'); // 创建即按 type 定(修:失败图片任务不再停在默认 'video' → 前端不卡 Loading)
 
     markDone(id, JSON.stringify(['images/t/a.png', 'images/t/b.png']), 'none', 'image');
     row = getJob(id)!;

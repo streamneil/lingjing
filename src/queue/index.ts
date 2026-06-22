@@ -11,6 +11,14 @@ import type { VideoGenInput } from '../gateway/types.js';
 
 const now = () => Date.now();
 
+/** job type → 产物类型(右画廊渲染依据)。在创建时就定,而非靠 markDone 兜底 —— 否则
+ *  失败的 job 永远停在列默认值 'video',图片/音频任务失败会被前端当视频渲染 → 一直 Loading。 */
+export function outputKindForType(type: string): 'image' | 'audio' | 'video' {
+  if (type === 'ai_image') return 'image';
+  if (type === 'tts' || type === 'ai_music') return 'audio';
+  return 'video'; // video / video_edit / text2video / img2video / ref_video …
+}
+
 /** 入队一个生成任务(通用,按 type),返回 jobId。
  *  多工具平台:type 决定 worker 走哪个 runner;input 是该工具的入参(JSON 序列化存)。 */
 export function enqueueJob(
@@ -21,10 +29,11 @@ export function enqueueJob(
 ): string {
   const id = randomUUID();
   const t = now();
+  // output_kind 创建即按 type 定(修:失败任务此前停在列默认 'video' → 图片/音频失败被当视频 → 前端卡 Loading)。
   db.prepare(
-    `INSERT INTO job (id, tenant_id, type, status, input_json, created_by, created_at, updated_at)
-     VALUES (?, ?, ?, 'queued', ?, ?, ?, ?)`,
-  ).run(id, tenantId, type, JSON.stringify(input), createdBy, t, t);
+    `INSERT INTO job (id, tenant_id, type, status, input_json, output_kind, created_by, created_at, updated_at)
+     VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?)`,
+  ).run(id, tenantId, type, JSON.stringify(input), outputKindForType(type), createdBy, t, t);
   return id;
 }
 

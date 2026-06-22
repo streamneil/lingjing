@@ -48,16 +48,37 @@ export class GeminiGateway implements SyncImageGateway {
     if (opts.aspectRatio) imageCfg.aspectRatio = opts.aspectRatio;
     if (opts.imageSize && supportsImageSize) imageCfg.imageSize = opts.imageSize;
     if (Object.keys(imageCfg).length) generationConfig.imageConfig = imageCfg;
-    const res = await fetch(`${geminiBaseUrl()}/models/${modelId}:generateContent`, {
-      method: 'POST',
-      headers: { 'x-goog-api-key': getProviderKey(GEMINI_PROVIDER), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts }], generationConfig }),
-      signal,
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${geminiBaseUrl()}/models/${modelId}:generateContent`, {
+        method: 'POST',
+        headers: { 'x-goog-api-key': getProviderKey(GEMINI_PROVIDER), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts }], generationConfig }),
+        signal,
+      });
+    } catch (e) {
+      // fetch 抛错 = 网络层失败(连不上/DNS/TLS),非 HTTP 错误码。中国大陆服务器直连 Google
+      // 会被墙 → 原始报错只有含糊的 "fetch failed"。这里换成可操作的提示。
+      const m = e instanceof Error ? e.message : String(e);
+      throw new Error(
+        `无法连接 Google Gemini(${m})。常见原因:服务器访问不到 generativelanguage.googleapis.com` +
+          `(中国大陆 ECS 直连 Google 会被墙,需配出网代理 DASHSCOPE/HTTPS_PROXY,或在 /admin 关掉 Gemini 模型、` +
+          `改用百炼/火山的图片模型)。`,
+      );
+    }
     const text = await res.text();
     let json: any;
     try { json = JSON.parse(text); } catch { json = { _raw: text.slice(0, 800) }; }
-    if (!res.ok) throw new Error(`Gemini 生成失败 HTTP ${res.status}: ${JSON.stringify(json?.error ?? json)}`);
+    if (!res.ok) {
+      const detail = JSON.stringify(json?.error ?? json);
+      // 429 free_tier limit:0 = 该 Google Key 免费层对该模型无配额 → 需开通计费,非平台 bug。
+      if (res.status === 429)
+        throw new Error(
+          `Gemini 配额不足(HTTP 429)。该 Google API Key 对 ${modelId} 的配额为 0(多为免费层)` +
+            `—— 需在 Google AI Studio / Cloud 项目开通计费(付费层)后才可用 Nano Banana。原始:${detail}`,
+        );
+      throw new Error(`Gemini 生成失败 HTTP ${res.status}: ${detail}`);
+    }
     // 取所有候选里的图片 part(base64)。
     const outParts: Array<{ thought?: boolean; inline_data?: { data?: string; mime_type?: string }; inlineData?: { data?: string; mimeType?: string } }> =
       json?.candidates?.[0]?.content?.parts ?? [];
