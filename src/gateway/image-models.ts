@@ -348,3 +348,40 @@ export function sizeParams(
       return { size: whSize(def, ratio, resolution, snap) };
   }
 }
+
+// ── 默认图片模型种子(开箱即完整)──────────────────────────────────────────
+// 背景:isEnabled() 要求 DB 行(model_pricing / image_model_override),无行 = 不启用。
+// 代码内置的 IMAGE_MODELS 若没对应 DB 行,前端「AI 图片/编辑器」下拉就"暂无可用模型"。
+// 这批默认行以前只在 scripts/seed-demo.mjs(开发种子)里,生产 deploy.sh 不跑 → 线上空。
+// 故抽成本函数,由 app 启动时自动灌(server.ts,表空才灌、幂等、不覆盖 admin 改过的),
+// 与默认积分套餐同理。seed-demo.mjs 也复用本函数(单一真源)。
+// 数值来源:2026-06 价格页;price_tier = ceil(真实元/张 × 35),cost_source=doc。
+const DEFAULT_IMAGE_MODEL_SEED: [string, string, string, number, number, number, string, string, number][] = [
+  // key, label, modelId, priceTier, realCost, maxImages, shapeTemplate, modes, sortOrder
+  ['qwen-image',        '标准',              'qwen-image',         9,  0.25, 1, 'qwen-image',         'text2img',          0],
+  ['z-image',           '极速',              'z-image-turbo',      4,  0.10, 1, 'z-image',            'text2img',          1],
+  ['qwen-image-2.0',    '千问2.0',           'qwen-image-2.0',     7,  0.20, 6, 'qwen-image-2.0-pro', 'text2img',          2],
+  ['qwen-image-2.0-pro','专业 (千问2.0 Pro)', 'qwen-image-2.0-pro', 18, 0.50, 6, 'qwen-image-2.0-pro', 'text2img,img2img',  3],
+  ['qwen-image-edit',   '图像编辑',           'qwen-image-edit',    11, 0.30, 1, 'qwen-image-edit',    'img2img',           5],
+  ['wan2.2-flash',      '万相2.2 极速',       'wan2.2-t2i-flash',   5,  0.14, 4, 'wan2.2-flash',       'text2img',          6],
+  ['wan2.7-image',      '万相2.7 编辑',       'wan2.7-image',       7,  0.20, 4, 'wan2.7-image',       'text2img,img2img',  7],
+  ['wan2.7-image-pro',  '万相2.7 编辑 Pro',   'wan2.7-image-pro',   18, 0.50, 4, 'wan2.7-image-pro',   'text2img,img2img',  8],
+];
+
+/** 灌默认图片模型(幂等:逐 key,已存在则跳过,绝不覆盖 admin 改过的)。返回新建数量。 */
+export function seedDefaultImageModels(): number {
+  const exists = db.prepare('SELECT 1 FROM image_model_override WHERE key=?');
+  const ins = db.prepare(
+    `INSERT INTO image_model_override
+       (key,label,model_id,enabled,price_tier,real_cost_yuan,cost_source,max_images,shape_template,modes,sort_order,created_at)
+     VALUES (?,?,?,1,?,?,'doc',?,?,?,?,?)`,
+  );
+  let n = 0;
+  const now = Date.now();
+  for (const [key, label, modelId, tier, cost, maxImg, tmpl, modes, sort] of DEFAULT_IMAGE_MODEL_SEED) {
+    if (exists.get(key)) continue;
+    ins.run(key, label, modelId, tier, cost, maxImg, tmpl, modes, sort, now);
+    n++;
+  }
+  return n;
+}
