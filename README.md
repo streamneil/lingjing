@@ -59,8 +59,8 @@ cp .env.example .env && chmod 600 .env
 
 | 操作 | 命令 |
 |---|---|
-| 首次部署 / 更新代码 | `./scripts/deploy.sh`(git pull → 重建 → 等健康 → 灌示范素材) |
-| 不拉代码、按现码重建 | `./scripts/deploy.sh --no-pull` |
+| 首次部署 / 更新代码(git 部署) | `./scripts/deploy.sh`(git pull → 重建 → 等健康 → 灌示范素材) |
+| 按现有文件重建(scp/rsync 部署) | `./scripts/deploy.sh --no-pull`(跳过 git pull,直接重建) |
 | 只重启 app(不拉码、不重建) | `./scripts/deploy.sh --restart` |
 | 看实时日志 | `docker compose logs -f app` |
 | 数据备份(SQLite 在线一致) | `./scripts/backup.sh`(可挂 cron 定时) |
@@ -68,6 +68,24 @@ cp .env.example .env && chmod 600 .env
 
 > `deploy.sh` 任一步失败即退出(`set -e`),不留半拉子状态;示范素材灌桶失败**只告警不阻断**
 > (端点会回退伺服镜像内文件,站点照常显示)。积分套餐由 app 启动自动种子,无需手动跑。
+
+#### 两种部署方式 → 对应的更新姿势
+
+**镜像是本机现编的**:`deploy.sh` 跑 `docker compose up -d --build`,按 `Dockerfile`(`npm ci` +
+`COPY . .` 把代码和 `prototype/showcase/` 媒体烤进镜像)编出 `lingjing-app` 镜像。**改了代码必须重建,
+否则跑的还是旧镜像**(`docker compose restart` / 不带 `--build` 的 `up` 都不会更新代码)。
+
+- **git clone 部署**(服务器上 `git clone` 的目录,有 `.git`):
+  更新就一条 —— `./scripts/deploy.sh`(自动 `git pull` 最新 main 再重建)。
+
+- **scp / rsync 部署**(本机拷贝上去,目录无 `.git`):代码不靠 git 进来,流程是:
+  ```bash
+  # 1) 本机:同步最新代码上去(务必含 prototype/showcase/ 媒体;排除 node_modules)
+  rsync -avz --delete --exclude node_modules --exclude .git ./ root@<ECS_IP>:~/workspace/lingjing/
+  # 2) ECS:按现有文件重建(deploy.sh 检测到无 .git 会自动跳过 git pull,等价 --no-pull)
+  cd ~/workspace/lingjing && ./scripts/deploy.sh --no-pull
+  ```
+  > scp 漏拷 `prototype/showcase/`(~208M)会导致落地页/探索裂图;`node_modules` 不用拷(镜像内 `npm ci` 自装)。
 
 ### 部署完成后怎么校验(5 分钟过一遍)
 
