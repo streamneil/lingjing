@@ -17,7 +17,7 @@ import { settingsRouter } from './api/settings.js';
 import { legalRouter } from './api/legal.js';
 import { pricingRouter } from './api/pricing.js';
 import { seedDefaultPlans } from './pricing/index.js';
-import { seedDefaultImageModels } from './gateway/image-models.js';
+import { seedPlatformDefaults } from './seed/platform-defaults.js';
 import { ordersRouter } from './api/orders.js';
 import { adminRouter } from './api/admin.js';
 import { captchaRouter } from './api/captcha.js';
@@ -87,13 +87,15 @@ if (isMain) {
   } catch (e) {
     console.warn('[启动] 默认积分套餐自动种子失败(不阻断启动):', e instanceof Error ? e.message : e);
   }
-  // 首启自动灌默认图片模型(表空时;幂等)。image-models 的 isEnabled 要求 DB 行,无行则
-  // 「AI 图片/编辑器」下拉"暂无可用模型"。生产 deploy.sh 不跑 seed-demo,故在此自灌兜底。
+  // 首启自动灌平台默认数据(图片/视频模型 + 统一定价 model_pricing,含豆包 Seedream/Gemini;表空时、幂等)。
+  // image-models 的 isEnabled 要求 DB 行,无行则「AI 图片/编辑器」下拉"暂无可用模型"。生产 deploy.sh
+  // 不跑 seed-demo,故在此自灌兜底(与默认积分套餐同理)。
   try {
-    const n = seedDefaultImageModels();
-    if (n > 0) console.log(`[启动] 已自动灌默认图片模型 ${n} 个(/admin →「AI 图片模型」可改价/启停)`);
+    const r = seedPlatformDefaults();
+    if (r.image || r.video || r.pricing)
+      console.log(`[启动] 已自动灌平台默认数据:图片模型 ${r.image}、视频档 ${r.video}、统一定价 ${r.pricing} 行(/admin 可改价/启停)`);
   } catch (e) {
-    console.warn('[启动] 默认图片模型自动种子失败(不阻断启动):', e instanceof Error ? e.message : e);
+    console.warn('[启动] 平台默认数据自动种子失败(不阻断启动):', e instanceof Error ? e.message : e);
   }
   // OSS 未配齐告警(Docker 部署就绪 D15):wan2.2-s2v 需公网可达素材 URL,
   // 内网 minio 百炼访问不到。没配 OSS 时生成会卡 pending 超时,这里早告警而非运行时才暴雷。

@@ -356,7 +356,7 @@ export function sizeParams(
 // 故抽成本函数,由 app 启动时自动灌(server.ts,表空才灌、幂等、不覆盖 admin 改过的),
 // 与默认积分套餐同理。seed-demo.mjs 也复用本函数(单一真源)。
 // 数值来源:2026-06 价格页;price_tier = ceil(真实元/张 × 35),cost_source=doc。
-const DEFAULT_IMAGE_MODEL_SEED: [string, string, string, number, number, number, string, string, number][] = [
+export const DEFAULT_IMAGE_MODEL_SEED: [string, string, string, number, number, number, string, string, number][] = [
   // key, label, modelId, priceTier, realCost, maxImages, shapeTemplate, modes, sortOrder
   ['qwen-image',        '标准',              'qwen-image',         9,  0.25, 1, 'qwen-image',         'text2img',          0],
   ['z-image',           '极速',              'z-image-turbo',      4,  0.10, 1, 'z-image',            'text2img',          1],

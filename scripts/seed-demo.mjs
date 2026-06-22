@@ -6,7 +6,7 @@
 import { createTenant, createUser } from '../src/auth/index.ts';
 import { grant } from '../src/credits/index.ts';
 import { db } from '../src/db/index.ts';
-import { seedDefaultImageModels } from '../src/gateway/image-models.ts';
+import { seedPlatformDefaults } from '../src/seed/platform-defaults.ts';
 
 // 幂等:逐个用户名独立判断(用户名全局唯一)。
 // 之前只查 demoadmin 一个,若 demoadmin 不存在但 editor 已存在,会在建 editor 时撞唯一索引崩溃。
@@ -31,84 +31,13 @@ if (userExists('demoadmin') && userExists('editor')) {
   console.log('(平台超管 admin 由 SUPERADMIN_PASS 环境变量首启自动创建,登录 /admin/login)');
 }
 
-// ── 图片模型定价 + 能力 ──
-// 单一真源:src/gateway/image-models.ts 的 seedDefaultImageModels()(app 启动也调它)。
-// 幂等:只插缺失的行,绝不覆盖 admin 已改的价/能力。
+// ── 平台默认数据(图片/视频模型 + 统一定价 model_pricing,含豆包/Gemini)──
+// 单一真源:src/seed/platform-defaults.ts 的 seedPlatformDefaults()(app 启动也调它)。幂等。
 {
-  const seeded = seedDefaultImageModels();
-  if (seeded) console.log(`图片模型定价已种子 ${seeded} 个(真实成本×35,cost_source=doc)`);
+  const r = seedPlatformDefaults();
+  if (r.image || r.video || r.pricing)
+    console.log(`平台默认数据已种子:图片模型 ${r.image}、视频档 ${r.video}、统一定价 ${r.pricing} 行(图片/视频/TTS/豆包/Gemini)`);
 }
-
-// ── 视频模型真实成本(video_model_override;按文档真实元/秒,非 ÷35 反推)──
-// 一模型多档=多行,id="{key}:{variant}";enabled=1(视频现状全部可用,种子保持)。
-// variant:720P/1080P/audio-720P/audio-1080P。售价由 sellPrice(成本×倍率) 实时算,这里只存成本。
-const VIDEO_SEED = [
-  // 大师(万相2.7)t2v/i2v/r2v/编辑:720P 0.6、1080P 1.0 元/秒
-  ['wan2.7-t2v','720P',0.6],['wan2.7-t2v','1080P',1.0],
-  ['wan2.7-i2v','720P',0.6],['wan2.7-i2v','1080P',1.0],
-  ['wan2.7-r2v','720P',0.6],['wan2.7-r2v','1080P',1.0],
-  ['wan2.7-videoedit','720P',0.6],['wan2.7-videoedit','1080P',1.0],
-  // HappyHorse t2v/i2v/r2v/编辑:720P 0.9、1080P 1.6 元/秒
-  ['happyhorse-1.0-t2v','720P',0.9],['happyhorse-1.0-t2v','1080P',1.6],
-  ['happyhorse-1.0-i2v','720P',0.9],['happyhorse-1.0-i2v','1080P',1.6],
-  ['happyhorse-1.0-r2v','720P',0.9],['happyhorse-1.0-r2v','1080P',1.6],
-  ['happyhorse-1.0-video-edit','720P',0.9],['happyhorse-1.0-video-edit','1080P',1.6],
-  // 可灵 V3:无声 720P 0.6 / 1080P 0.8;有声 720P 0.9 / 1080P 1.2
-  ['kling-v3-t2v','720P',0.6],['kling-v3-t2v','1080P',0.8],
-  ['kling-v3-t2v','audio-720P',0.9],['kling-v3-t2v','audio-1080P',1.2],
-];
-const vovExists = db.prepare('SELECT 1 FROM video_model_override WHERE id=?');
-const insVov = db.prepare(
-  `INSERT INTO video_model_override (id,model_key,variant,real_cost_yuan,cost_source,enabled,updated_at)
-   VALUES (?,?,?,?, 'doc', 1, ?)`,
-);
-let vSeeded = 0;
-for (const [key, variant, cost] of VIDEO_SEED) {
-  const id = `${key}:${variant}`;
-  if (vovExists.get(id)) continue;
-  insVov.run(id, key, variant, cost, Date.now());
-  vSeeded++;
-}
-if (vSeeded) console.log(`视频模型成本已种子 ${vSeeded} 行(真实元/秒,enabled=1)`);
-
-// ── TTS 真实成本/字符 + 全局参数兜底(platform_config 建表时已 seed markup;这里补 TTS 成本)──
-db.prepare(`INSERT OR IGNORE INTO platform_config (key,value) VALUES ('tts_cost_per_char','0.00008')`).run(); // 0.8元/万字符
-
-// ── model_pricing:全模态统一定价表直种(2026-06,新装直种免依赖 db/index.ts 迁移)──
-// 复用上面 IMG_SEED / VIDEO_SEED 的真实成本;TTS 单行。INSERT OR IGNORE 幂等(已有则不动 admin 改过的)。
-const insMp = db.prepare(
-  `INSERT OR IGNORE INTO model_pricing (id,model_key,modality,unit,variant,real_cost_yuan,cost_source,enabled,sort_order,updated_at)
-   VALUES (?,?,?,?,?,?,'doc',?,?,?)`,
-);
-let mpSeeded = 0;
-for (const [key, , , , cost, , , , sort] of IMG_SEED) {
-  if (insMp.run(key, key, 'image', '张', null, cost, 1, sort ?? 0, Date.now()).changes) mpSeeded++;
-}
-for (const [key, variant, cost] of VIDEO_SEED) {
-  if (insMp.run(`${key}:${variant}`, key, 'video', '秒', variant, cost, 1, 0, Date.now()).changes) mpSeeded++;
-}
-if (insMp.run('tts', 'tts', 'tts', '万字', '每字', 0.00008, 1, 0, Date.now()).changes) mpSeeded++;
-
-// ── 火山豆包真实定价(PR-2a;火山文档价格示例折算)──
-// 图片:固定元/张(doc)。视频:5秒 720p 价格示例折每秒(2.0=4.97/5≈1.0、fast=4.0/5=0.8)。
-// 真实成本入库 → sellPrice=⌈成本×35⌉ 自动算 → isEnabled=true 上线。
-const DOUBAO_SEED = [
-  // [id, model_key, modality, unit, variant, realCost]
-  ['doubao-seedream-4.0', 'doubao-seedream-4.0', 'image', '张', null, 0.20],
-  ['doubao-seedream-4.5', 'doubao-seedream-4.5', 'image', '张', null, 0.25],
-  ['doubao-seedream-5.0-lite', 'doubao-seedream-5.0-lite', 'image', '张', null, 0.22],
-  ['doubao-seedance-2.0:720P', 'doubao-seedance-2.0', 'video', '秒', '720P', 1.0],   // 4.97/5 秒 ≈ 1.0
-  ['doubao-seedance-2.0:1080P', 'doubao-seedance-2.0', 'video', '秒', '1080P', 2.5], // 12.39/5 秒 ≈ 2.48→2.5
-  ['doubao-seedance-2.0-fast:720P', 'doubao-seedance-2.0-fast', 'video', '秒', '720P', 0.8], // 4.0/5 秒 = 0.8
-  // Google Gemini(Nano Banana,文档收口:只这 2 个模型):美元×7.2 汇率折人民币(后台可调)。
-  // 图片暂不分辨率分档,用 2K 档单一成本(后期分档见 TODOS)。
-  ['gemini-3.1-flash-image', 'gemini-3.1-flash-image', 'image', '张', null, 0.73], // Nano Banana 2:$0.101(2K)×7.2≈0.73→⌈×35⌉=26
-  ['gemini-3-pro-image', 'gemini-3-pro-image', 'image', '张', null, 0.96],         // Nano Banana Pro:$0.134(1–2K)×7.2≈0.96→⌈×35⌉=34
-];
-for (const [id, key, modality, unit, variant, cost] of DOUBAO_SEED) {
-  if (insMp.run(id, key, modality, unit, variant, cost, 1, 0, Date.now()).changes) mpSeeded++;
-}
-if (mpSeeded) console.log(`统一定价表 model_pricing 已种子 ${mpSeeded} 行(图片/视频/TTS/豆包/Gemini)`);
 
 // 强制 WAL checkpoint:让写入立即落主库,避免另起的服务进程读到旧快照
 try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch { /* noop */ }
