@@ -11,6 +11,7 @@
 // 文档:https://ai.google.dev/gemini-api/docs/image-generation
 
 import { getImageModel } from './image-models.js';
+import { fetch as undiciFetch, ProxyAgent, type Dispatcher } from 'undici';
 import { getProviderKey, getProviderBaseUrl } from './provider-keys.js';
 import { storage } from '../storage/index.js';
 import { getMediaPublisher } from './media-publisher.js';
@@ -21,6 +22,23 @@ const GEMINI_FALLBACK_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
 function geminiBaseUrl(): string {
   return getProviderBaseUrl(GEMINI_PROVIDER) || GEMINI_FALLBACK_BASE;
+}
+
+// 出网代理(仅 Gemini 用)。中国大陆 ECS 直连 Google 被墙 → 必须走代理(如本机 clash 7890)。
+// 只挂在 Gemini 这一个 fetch 上,百炼/火山/OSS 等国内流量仍直连,不会被绕到海外代理变慢/出错。
+// Node 全局 fetch(undici)不认 HTTP_PROXY 环境变量,必须显式传 dispatcher —— 这正是 curl 能通、
+// 平台却 fetch failed 的原因。容器内 127.0.0.1≠宿主机,代理地址要用 host.docker.internal/网桥 IP。
+// 取值优先级:GEMINI_PROXY(显式专用)> HTTPS_PROXY > https_proxy。未设 = 直连(本地开发)。
+let _proxyAgent: ProxyAgent | null = null;
+let _proxyAgentUrl: string | undefined;
+function geminiDispatcher(): Dispatcher | undefined {
+  const url = process.env.GEMINI_PROXY || process.env.HTTPS_PROXY || process.env.https_proxy;
+  if (!url) return undefined;
+  if (!_proxyAgent || _proxyAgentUrl !== url) {
+    _proxyAgent = new ProxyAgent(url); // 缓存(按 url),不每次新建
+    _proxyAgentUrl = url;
+  }
+  return _proxyAgent;
 }
 
 /** 把输入图公网 URL 拉成 base64 内联(Gemini 不吃 URL,只吃 inline_data)。 */
@@ -48,22 +66,28 @@ export class GeminiGateway implements SyncImageGateway {
     if (opts.aspectRatio) imageCfg.aspectRatio = opts.aspectRatio;
     if (opts.imageSize && supportsImageSize) imageCfg.imageSize = opts.imageSize;
     if (Object.keys(imageCfg).length) generationConfig.imageConfig = imageCfg;
-    let res: Response;
+    let res: Awaited<ReturnType<typeof undiciFetch>>;
     try {
-      res = await fetch(`${geminiBaseUrl()}/models/${modelId}:generateContent`, {
+      // 用 undici 的 fetch + dispatcher 走代理(全局 fetch 不认 dispatcher 跨实例);未配代理时 dispatcher=undefined=直连。
+      res = await undiciFetch(`${geminiBaseUrl()}/models/${modelId}:generateContent`, {
         method: 'POST',
         headers: { 'x-goog-api-key': getProviderKey(GEMINI_PROVIDER), 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ parts }], generationConfig }),
         signal,
+        dispatcher: geminiDispatcher(),
       });
     } catch (e) {
       // fetch 抛错 = 网络层失败(连不上/DNS/TLS),非 HTTP 错误码。中国大陆服务器直连 Google
       // 会被墙 → 原始报错只有含糊的 "fetch failed"。这里换成可操作的提示。
       const m = e instanceof Error ? e.message : String(e);
+      const proxied = process.env.GEMINI_PROXY || process.env.HTTPS_PROXY || process.env.https_proxy;
       throw new Error(
-        `无法连接 Google Gemini(${m})。常见原因:服务器访问不到 generativelanguage.googleapis.com` +
-          `(中国大陆 ECS 直连 Google 会被墙,需配出网代理 DASHSCOPE/HTTPS_PROXY,或在 /admin 关掉 Gemini 模型、` +
-          `改用百炼/火山的图片模型)。`,
+        `无法连接 Google Gemini(${m})。服务器访问不到 generativelanguage.googleapis.com。` +
+          (proxied
+            ? `已配代理 ${proxied} 但仍失败 —— 容器内 127.0.0.1≠宿主机,代理地址要用 host.docker.internal 或网桥 IP,` +
+              `且代理须监听该地址(clash allow-lan);确认 curl --proxy ${proxied} 在容器内能通。`
+            : `中国大陆 ECS 直连 Google 会被墙 —— 在 .env 配 GEMINI_PROXY(如 http://host.docker.internal:7890)走出网代理,` +
+              `或在 /admin 关掉 Gemini、改用百炼/火山的图片模型。`),
       );
     }
     const text = await res.text();
