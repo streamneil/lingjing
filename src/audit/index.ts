@@ -115,12 +115,19 @@ export function countAudit(tenantId: string, actingUserId?: string, isAdmin = fa
 }
 
 /** 平台级审计:所有超管操作(跨所有目标租户 + 纯平台操作),供 /admin 追溯。带操作者名 + 模块。 */
-export function listPlatformAudit(limit = 200): AuditRow[] {
+export function listPlatformAudit(limit = 200, offset = 0): AuditRow[] {
   return db
     .prepare(
       `SELECT l.*, ${ACTOR_NAME_SELECT}, ${MODULE_SELECT}
          FROM audit_log l${ACTOR_NAME_JOIN}
-        WHERE l.actor_type='platform_admin' ORDER BY l.created_at DESC LIMIT ?`,
+        WHERE l.actor_type='platform_admin' ORDER BY l.created_at DESC LIMIT ? OFFSET ?`,
     )
-    .all(limit) as AuditRow[];
+    .all(limit, offset) as AuditRow[];
+}
+
+/** 平台审计总条数(分页用)。 */
+export function countPlatformAudit(): number {
+  return (db
+    .prepare(`SELECT COUNT(*) AS n FROM audit_log WHERE actor_type='platform_admin'`)
+    .get() as { n: number }).n;
 }

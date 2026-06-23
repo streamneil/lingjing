@@ -11,7 +11,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 process.env.DB_FILE = ':memory:';
 
 const { db } = await import('../src/db/index.js');
-const { writeAudit, listAudit, listPlatformAudit } = await import('../src/audit/index.js');
+const { writeAudit, listAudit, listPlatformAudit, writePlatformAudit, countPlatformAudit } = await import('../src/audit/index.js');
 const { createTenant, createUser } = await import('../src/auth/index.js');
 const { enqueueJob } = await import('../src/queue/index.js');
 
@@ -116,5 +116,18 @@ describe('listAudit() 带模块 module(JOIN job)', () => {
     writeAudit(tenantId, uid, 'upload_image_input', 'image-inputs/x.png', '1.2.3.4', 'user');
     const row = listAudit(tenantId).find((a) => a.action === 'upload_image_input');
     expect(row!.module ?? null).toBeNull(); // 后端不派生;前端按 action 固定显图像编辑
+  });
+});
+
+describe('平台审计分页(listPlatformAudit limit/offset + countPlatformAudit)', () => {
+  it('limit/offset 切片不重叠 + count 准确', () => {
+    const before = countPlatformAudit();
+    for (let i = 0; i < 5; i++) writePlatformAudit('padmin-x', 'tenant_create', tenantId, 'pg' + i, '127.0.0.1');
+    expect(countPlatformAudit()).toBe(before + 5);
+    const p1 = listPlatformAudit(2, 0);
+    const p2 = listPlatformAudit(2, 2);
+    expect(p1.length).toBe(2);
+    expect(p2.length).toBe(2);
+    expect(new Set([...p1, ...p2].map((r) => r.id)).size).toBe(4); // 两页无重叠
   });
 });

@@ -47,7 +47,7 @@ import { IMAGE_MODELS } from '../gateway/image-models.js';
 import type { ImageModelOverrideRow } from '../db/index.js';
 import { setProviderKey, ProviderKeyError } from '../gateway/provider-keys.js';
 import type { ProviderRow } from '../db/index.js';
-import { writePlatformAudit, PLATFORM_TENANT, listPlatformAudit } from '../audit/index.js';
+import { writePlatformAudit, PLATFORM_TENANT, listPlatformAudit, countPlatformAudit } from '../audit/index.js';
 import {
   platformLogin,
   platformLogout,
@@ -1400,8 +1400,9 @@ adminRouter.post('/api/payee', requirePlatformAdmin, (req: Request, res: Respons
 // ── 平台审计:所有超管操作(跨租户 + 纯平台),供超管追溯 ──
 // 平台操作绝不进租户审计(信任边界,见 audit/index.ts listAudit);这里是唯一查看入口。
 adminRouter.get('/api/audit', requirePlatformAdmin, (req: Request, res: Response) => {
-  const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 200));
-  const rows = listPlatformAudit(limit);
+  const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+  const offset = Math.max(0, Number(req.query.offset) || 0);
+  const rows = listPlatformAudit(limit, offset);
   // 解析目标租户名(纯平台操作 tenant_id=PLATFORM_TENANT → 显「平台」)。
   const names = new Map<string, string>();
   for (const r of rows) {
@@ -1420,5 +1421,8 @@ adminRouter.get('/api/audit', requirePlatformAdmin, (req: Request, res: Response
       tenant: r.tenant_id === PLATFORM_TENANT ? null : names.get(r.tenant_id) ?? null,
       ip: r.ip,
     })),
+    total: countPlatformAudit(),
+    limit,
+    offset,
   });
 });

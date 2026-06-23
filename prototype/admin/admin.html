@@ -60,6 +60,7 @@
   .acts{display:flex;gap:7px;justify-content:flex-end}
   .act{background:var(--field);border:1px solid var(--line);color:var(--t2);padding:6px 12px;border-radius:8px;font-size:12px;font-family:var(--f);cursor:pointer;transition:.15s}
   .act:hover{border-color:var(--line-hi);color:var(--t1)}
+  .act.on{background:var(--card-hi);border-color:var(--t3);color:var(--t1);font-weight:600} /* tab/筛选 选中态 */
   .act.pri:hover{border-color:var(--amber);color:var(--amber)}
   .empty{padding:50px;text-align:center;color:var(--t4);font-size:13px}
   /* 弹窗(.bl-ov 同款) */
@@ -414,6 +415,7 @@
         <tbody id="paudRows"><tr><td colspan="5" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
+    <div id="audPager" style="display:flex;gap:10px;justify-content:flex-end;align-items:center;margin-top:12px;font-size:12px;color:var(--t3)"></div>
     </section>
 
     <!-- ── 超管管理 ── -->
@@ -941,10 +943,23 @@
     padmin_create:'新增平台超管', padmin_reset_pw:'修改超管密码', padmin_delete:'删除平台超管',
   };
   function paudTime(ts){ const d=new Date(ts),p=n=>String(n).padStart(2,'0'); return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }
+  const AUD_LIMIT=50; let audOffset=0;
+  function audRenderPager(total){
+    const pg=document.getElementById('audPager'); if(!pg) return;
+    if(total<=AUD_LIMIT){ pg.innerHTML=total?`共 ${fmtN(total)} 条`:''; return; }
+    const page=Math.floor(audOffset/AUD_LIMIT)+1, pages=Math.ceil(total/AUD_LIMIT);
+    const prevD=audOffset<=0?'disabled style="opacity:.4"':'', nextD=audOffset+AUD_LIMIT>=total?'disabled style="opacity:.4"':'';
+    pg.innerHTML=`<span>共 ${fmtN(total)} 条</span>
+      <button class="act" ${prevD} onclick="audPage(-1)">上一页</button>
+      <span>第 ${page} / ${pages} 页</span>
+      <button class="act" ${nextD} onclick="audPage(1)">下一页</button>`;
+  }
+  function audPage(d){ const no=audOffset+d*AUD_LIMIT; if(no<0) return; audOffset=no; loadPlatformAudit(); }
   async function loadPlatformAudit(){
     const tb=document.getElementById('paudRows');
     try{
-      const { audit }=await PA('GET','/api/audit?limit=200');
+      const { audit, total }=await PA('GET',`/api/audit?limit=${AUD_LIMIT}&offset=${audOffset}`);
+      audRenderPager(total||0);
       if(!audit.length){ tb.innerHTML='<tr><td colspan="5" class="empty">暂无平台操作记录</td></tr>'; return; }
       tb.innerHTML=audit.map(a=>{
         const label=PAUD_CN[a.action]||a.action;
