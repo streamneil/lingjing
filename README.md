@@ -139,7 +139,7 @@ cp .env.example .env && chmod 600 .env
    ```
    GEMINI_PROXY=http://host.docker.internal:7890
    ```
-   (取值优先级 `GEMINI_PROXY` > `HTTPS_PROXY` > `https_proxy`;不填 = 直连,本地开发不受影响。)
+   (只认 `GEMINI_PROXY` 这一个变量,不读通用 `HTTPS_PROXY`,避免被环境噪声误导;不填 = 直连,本地开发不受影响。)
 3. **拉新代码 + 重建 + 重建容器**:`cd ~/workspace/lingjing && git pull --ff-only && ./scripts/deploy.sh`
    (重建容器吃到新 `.env`。)
 
