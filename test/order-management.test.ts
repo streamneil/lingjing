@@ -8,7 +8,7 @@ const { createPlan } = await import('../src/pricing/index.js');
 const {
   createOrder, claimPaid, cancelOrder, rejectOrder, confirmAndCredit,
   requestInvoice, issueInvoice, setPayee,
-  listOrdersForAdmin, adminOrderCounts, getOrderDetailForAdmin,
+  listOrdersForAdmin, countOrdersForAdmin, adminOrderCounts, getOrderDetailForAdmin,
 } = await import('../src/orders/index.js');
 
 let tId = '', adminU = '', PADMIN = 'padmin-test';
@@ -92,6 +92,31 @@ describe('adminOrderCounts(增量,排除跨文件干扰)', () => {
     expect(c.byInvoice.none - base.byInvoice.none).toBe(1);
     expect(c.byInvoice.requested - base.byInvoice.requested).toBe(3);
     expect(c.byInvoice.issued - base.byInvoice.issued).toBe(1);
+  });
+});
+
+describe('搜索 + 分页(countOrdersForAdmin / q / limit·offset)', () => {
+  it('count 与 list 同口径', () => {
+    expect(countOrdersForAdmin({ view: 'all', q: '订单管理台' })).toBe(9);
+    expect(countOrdersForAdmin({ view: 'credited', q: '订单管理台' })).toBe(5);
+  });
+  it('q 按租户名 / 订单号 模糊匹配', () => {
+    expect(mine(listOrdersForAdmin({ view: 'all', q: '订单管理台', limit: 50 })).length).toBe(9);
+    const no = listOrdersForAdmin({ view: 'all', q: '订单管理台', limit: 1 })[0]!.order_no;
+    const hit = listOrdersForAdmin({ view: 'all', q: no, limit: 50 });
+    expect(hit.length).toBe(1);
+    expect(hit[0]!.order_no).toBe(no);
+  });
+  it('q 无匹配 → 空', () => {
+    expect(listOrdersForAdmin({ view: 'all', q: '不存在的租户XYZ', limit: 50 }).length).toBe(0);
+    expect(countOrdersForAdmin({ view: 'all', q: '不存在的租户XYZ' })).toBe(0);
+  });
+  it('limit / offset 分页', () => {
+    const page1 = listOrdersForAdmin({ view: 'all', q: '订单管理台', limit: 4, offset: 0 });
+    const page2 = listOrdersForAdmin({ view: 'all', q: '订单管理台', limit: 4, offset: 4 });
+    expect(page1.length).toBe(4);
+    expect(page2.length).toBe(4);
+    expect(new Set([...page1, ...page2].map((o) => o.id)).size).toBe(8); // 无重叠
   });
 });
 

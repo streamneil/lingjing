@@ -374,12 +374,18 @@
       <button class="act" data-inv="requested">开票中<span class="om-ct" data-ct="inv_requested"></span></button>
       <button class="act" data-inv="issued">已开票<span class="om-ct" data-ct="inv_issued"></span></button>
     </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
+      <input id="omSearch" type="search" placeholder="搜 租户名 / 订单号" autocomplete="off"
+        style="flex:1;max-width:300px;background:var(--field);border:1px solid var(--line);border-radius:9px;padding:9px 12px;color:var(--t1);font-size:13px;font-family:var(--f);outline:none">
+      <span id="omTotal" style="font-size:12px;color:var(--t3);white-space:nowrap"></span>
+    </div>
     <div class="tbl">
       <table>
-        <thead><tr><th>租户</th><th>订单号</th><th>创建时间</th><th>套餐</th><th>金额</th><th>到账积分</th><th>支付状态</th><th>发票</th><th style="text-align:right">操作</th></tr></thead>
+        <thead><tr><th>租户 / 发起人</th><th>订单号</th><th>创建时间</th><th>套餐</th><th>金额</th><th>到账积分</th><th>支付状态</th><th>发票</th><th style="text-align:right">操作</th></tr></thead>
         <tbody id="omRows"><tr><td colspan="9" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
+    <div id="omPager" style="display:flex;gap:10px;justify-content:flex-end;align-items:center;margin-top:12px;font-size:12px;color:var(--t3)"></div>
     </section>
 
     <!-- ── 平台审计日志 ── -->
@@ -730,7 +736,14 @@
 
   // ── 订单管理(对公收款 + 开票 合一;订单为主体)──
   const J=JSON.stringify;
-  let omView='todo', omInv='any', omDrawerId=null;
+  const OM_LIMIT=50;
+  let omView='todo', omInv='any', omDrawerId=null, omQ='', omOffset=0, omSearchTimer=null;
+  function omAge(o){ // 待支付/待确认 显示账龄(已等多久),防压单
+    if(o.status!=='pending_payment'&&o.status!=='paid_claimed') return '';
+    const ms=Date.now()-o.createdAt; const d=Math.floor(ms/86400000), h=Math.floor(ms/3600000);
+    const txt=d>=1?`已等 ${d} 天`:(h>=1?`已等 ${h} 小时`:'刚刚');
+    return ` <span style="font-size:11px;color:var(--t4)">· ${txt}</span>`;
+  }
   // 状态色系:琥珀=运营要动手(待确认/开票中);绿=钱到位;蓝=单据出;红=异常;灰=不用管。
   const OM_ST={pending_payment:['待支付','--t3'],paid_claimed:['待确认','--amber'],credited:['已完成','--green'],rejected:['已驳回','--red'],cancelled:['已取消','--t4']};
   const OM_EMPTY={todo:'✓ 没有待处理的订单',all:'暂无订单',pending_payment:'暂无待支付订单',paid_claimed:'暂无待确认订单',credited:'暂无已完成订单',rejected:'暂无被驳回的订单',cancelled:'暂无已取消订单'};
@@ -739,7 +752,9 @@
   function omInvCell(o){
     if(o.status!=='credited') return '<span style="color:var(--t4)">—</span>';
     if(o.invoiceStatus==='requested') return omChip('开票中','--amber');
-    if(o.invoiceStatus==='issued') return omChip('已开票','--blue')+(o.invoiceNo?`<div style="font-size:11px;color:var(--t4);font-family:var(--f-mono);margin-top:1px">${esc(o.invoiceNo)}</div>`:'');
+    if(o.invoiceStatus==='issued') return omChip('已开票','--blue')
+      +(o.invoiceNo?`<div style="font-size:11px;color:var(--t4);font-family:var(--f-mono);margin-top:1px">${esc(o.invoiceNo)}</div>`:'')
+      +(o.invoiceId?`<a href="/admin/api/admin-invoices/${encodeURIComponent(o.invoiceId)}/pdf" target="_blank" onclick="event.stopPropagation()" style="font-size:11px;color:var(--blue)">下载发票</a>`:'');
     return '<span style="color:var(--t4)">未开票</span>';
   }
   function omActionCell(o){
@@ -754,37 +769,56 @@
     Object.entries(c.byStatus||{}).forEach(([k,v])=>set(k,v));
     set('inv_none',c.byInvoice?.none); set('inv_requested',c.byInvoice?.requested); set('inv_issued',c.byInvoice?.issued);
   }
+  function omRenderPager(total){
+    const pg=document.getElementById('omPager'); if(!pg) return;
+    document.getElementById('omTotal').textContent=`共 ${fmtN(total)} 单`;
+    if(total<=OM_LIMIT){ pg.innerHTML=''; return; }
+    const page=Math.floor(omOffset/OM_LIMIT)+1, pages=Math.ceil(total/OM_LIMIT);
+    const prevD=omOffset<=0?'disabled style="opacity:.4"':'', nextD=omOffset+OM_LIMIT>=total?'disabled style="opacity:.4"':'';
+    pg.innerHTML=`<button class="act" ${prevD} onclick="omPage(-1)">上一页</button>
+      <span>第 ${page} / ${pages} 页</span>
+      <button class="act" ${nextD} onclick="omPage(1)">下一页</button>`;
+  }
+  function omPage(d){ const no=omOffset+d*OM_LIMIT; if(no<0) return; omOffset=no; loadOrderMgmt(); }
   async function loadOrderMgmt(){
     const tb=document.getElementById('omRows');
     try{
-      const q=omView==='todo'?'view=todo':`view=${omView}&invoice=${omInv}`;
-      const { orders, counts }=await PA('GET','/api/recharge-orders?'+q);
-      omSetCounts(counts);
-      if(!orders.length){ tb.innerHTML=`<tr><td colspan="9" class="empty">${OM_EMPTY[omView]||'暂无订单'}</td></tr>`; return; }
+      let qs=`view=${omView}`+(omView!=='todo'?`&invoice=${omInv}`:'')+`&limit=${OM_LIMIT}&offset=${omOffset}`;
+      if(omQ) qs+=`&q=${encodeURIComponent(omQ)}`;
+      const { orders, counts, total }=await PA('GET','/api/recharge-orders?'+qs);
+      omSetCounts(counts); omRenderPager(total||0);
+      if(!orders.length){ tb.innerHTML=`<tr><td colspan="9" class="empty">${omQ?'没有匹配「'+esc(omQ)+'」的订单':(OM_EMPTY[omView]||'暂无订单')}</td></tr>`; return; }
       tb.innerHTML=orders.map(o=>`<tr style="cursor:pointer" onclick='openOrderDrawer(${J(o.id)})'>
-        <td><div class="tn">${esc(o.tenantName||'—')}</div></td>
+        <td><div class="tn">${esc(o.tenantName||'—')}</div>${o.actorName?`<div style="font-size:11px;color:var(--t4)">${esc(o.actorName)}</div>`:''}</td>
         <td style="font-family:var(--f-mono);font-size:12px">${esc(o.orderNo)}</td>
         <td style="color:var(--t3);font-family:var(--f-mono);font-size:12px">${fmtTime(o.createdAt)}</td>
         <td>${esc(o.planName)}</td>
         <td class="bal">¥${fmtN(o.priceYuan)}</td>
         <td style="color:var(--t2)">${fmtN(o.credits+o.bonusCredits)}</td>
-        <td>${omStatusChip(o.status)}</td>
+        <td>${omStatusChip(o.status)}${omAge(o)}</td>
         <td>${omInvCell(o)}</td>
         <td style="text-align:right">${omActionCell(o)}</td>
       </tr>`).join('');
     }catch(e){ tb.innerHTML='<tr><td colspan="9" class="empty">加载失败</td></tr>'; }
   }
+  // 搜索(防抖,回到第一页)
+  (function(){ const s=document.getElementById('omSearch'); if(s) s.addEventListener('input',()=>{
+    clearTimeout(omSearchTimer); omSearchTimer=setTimeout(()=>{ omQ=s.value.trim(); omOffset=0; loadOrderMgmt(); },300);
+  }); })();
   async function omReload(){ await loadOrderMgmt(); if(omDrawerId && document.getElementById('omDrawerOv').classList.contains('on')) await openOrderDrawer(omDrawerId,true); }
   // tab(订单状态)+ 发票子筛选 切换
   document.querySelectorAll('#omTabs button').forEach(b=>b.onclick=()=>{
     document.querySelectorAll('#omTabs button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
-    omView=b.dataset.v;
+    omView=b.dataset.v; omOffset=0;
+    // 切订单状态 tab 时把发票子筛选复位到「全部」—— 否则如「待确认 ∩ 已开票」会得到空列表,令人困惑。
+    omInv='any';
+    document.querySelectorAll('#omInvFilter button').forEach(x=>x.classList.toggle('on',x.dataset.inv==='any'));
     document.getElementById('omInvFilter').style.display=omView==='todo'?'none':''; // 待办是跨轴并集,隐藏发票子筛选避免歧义
     loadOrderMgmt();
   });
   document.querySelectorAll('#omInvFilter button').forEach(b=>b.onclick=()=>{
     document.querySelectorAll('#omInvFilter button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
-    omInv=b.dataset.inv; loadOrderMgmt();
+    omInv=b.dataset.inv; omOffset=0; loadOrderMgmt();
   });
   async function confirmOrder(id, no){
     if(!await askConfirm({title:'确认到账',msg:`确认订单 ${no} 已到账?积分将自动入账(不可撤销)。`,okText:'确认到账'})) return;
@@ -818,7 +852,7 @@
       if(iv){
         const merged=iv.orderCount>1?`<div style="font-size:12px;color:var(--amber);margin-top:4px">此发票含 ${iv.orderCount} 单(${sib.map(s=>esc(s.orderNo)).join('、')}),开具将一并置为已开票</div>`:'';
         if(iv.status==='requested') tl+=step('开票中','--amber',iv.createdAt,`抬头「${esc(iv.title)}」税号 ${esc(iv.taxNo)} · ¥${fmtN(iv.amountYuan)}${merged}`);
-        else tl+=step('已开票','--blue',iv.issuedAt,`发票号 ${esc(iv.invoiceNo||'—')} · ¥${fmtN(iv.amountYuan)}${merged}`);
+        else tl+=step('已开票','--blue',iv.issuedAt,`发票号 ${esc(iv.invoiceNo||'—')} · ¥${fmtN(iv.amountYuan)} · <a href="/admin/api/admin-invoices/${encodeURIComponent(iv.id)}/pdf" target="_blank" style="color:var(--blue)">下载发票</a>${merged}`);
       }
       // 末步去掉竖线尾巴
       tl=tl.replace(/(<span style="flex:1;width:1px;background:var\(--line\)"><\/span>)(?![\s\S]*<span style="flex:1;width:1px)/,'');

@@ -166,9 +166,15 @@ export function listOrdersByStatus(status: OrderStatus, limit = 200): RechargeOr
 // 否则按 status('all' 不过滤)+ invoice 子筛选('any'|'none'|'requested'|'issued')组合。
 export type AdminOrderView = 'todo' | OrderStatus | 'all';
 export type AdminInvoiceFilter = 'any' | 'none' | 'requested' | 'issued';
-export function listOrdersForAdmin(
-  opts: { view?: AdminOrderView; invoice?: AdminInvoiceFilter; limit?: number } = {},
-): RechargeOrderRow[] {
+export interface AdminOrderQuery {
+  view?: AdminOrderView;
+  invoice?: AdminInvoiceFilter;
+  q?: string; // 关键词:租户名 或 订单号 模糊匹配(超管找特定单/租户)
+  limit?: number;
+  offset?: number;
+}
+// WHERE 构建(list 与 count 共用,口径一致)。需 JOIN o/t/iv 三表。
+function buildAdminOrderWhere(opts: AdminOrderQuery): { clause: string; params: unknown[] } {
   const where: string[] = [];
   const params: unknown[] = [];
   if (opts.view === 'todo') {
@@ -182,7 +188,17 @@ export function listOrdersForAdmin(
     else if (opts.invoice === 'requested') where.push(`iv.status='requested'`);
     else if (opts.invoice === 'issued') where.push(`iv.status='issued'`);
   }
-  const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const q = opts.q?.trim();
+  if (q) {
+    where.push(`(t.name LIKE ? ESCAPE '\\' OR o.order_no LIKE ? ESCAPE '\\')`);
+    const like = `%${q.replace(/[%_\\]/g, (m) => '\\' + m)}%`;
+    params.push(like, like);
+  }
+  return { clause: where.length ? `WHERE ${where.join(' AND ')}` : '', params };
+}
+
+export function listOrdersForAdmin(opts: AdminOrderQuery = {}): RechargeOrderRow[] {
+  const { clause, params } = buildAdminOrderWhere(opts);
   return db
     .prepare(
       `SELECT o.*, t.name AS tenantName, COALESCE(u.display_name, u.username) AS actorName,
@@ -193,9 +209,24 @@ export function listOrdersForAdmin(
          LEFT JOIN invoice_order io ON io.order_id = o.id
          LEFT JOIN invoice iv ON iv.id = io.invoice_id
          ${clause}
-        ORDER BY o.created_at DESC, o.rowid DESC LIMIT ?`,
+        ORDER BY o.created_at DESC, o.rowid DESC LIMIT ? OFFSET ?`,
     )
-    .all(...params, opts.limit ?? 300) as RechargeOrderRow[];
+    .all(...params, opts.limit ?? 50, opts.offset ?? 0) as RechargeOrderRow[];
+}
+
+// 当前筛选下的总单数(分页用;与 list 同一 WHERE)。LIKE 用 ESCAPE 配合上面的转义。
+export function countOrdersForAdmin(opts: AdminOrderQuery = {}): number {
+  const { clause, params } = buildAdminOrderWhere(opts);
+  return (db
+    .prepare(
+      `SELECT COUNT(*) AS n
+         FROM recharge_order o
+         LEFT JOIN tenant t ON t.id = o.tenant_id
+         LEFT JOIN invoice_order io ON io.order_id = o.id
+         LEFT JOIN invoice iv ON iv.id = io.invoice_id
+         ${clause}`,
+    )
+    .get(...params) as { n: number }).n;
 }
 
 // tab/筛选角标计数(一次性,供「订单管理」头部)。

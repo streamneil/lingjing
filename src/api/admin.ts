@@ -68,6 +68,7 @@ import multer from 'multer';
 import { putObject, getObject } from '../storage/index.js';
 import {
   listOrdersForAdmin,
+  countOrdersForAdmin,
   adminOrderCounts,
   getOrderDetailForAdmin,
   getOrder,
@@ -1218,8 +1219,13 @@ adminRouter.get('/api/recharge-orders', requirePlatformAdmin, (req: Request, res
   const invoice = (req.query.invoice as string) || 'any';
   const validInv = ['any', 'none', 'requested', 'issued'];
   if (!validInv.includes(invoice)) return res.status(400).json({ error: '无效发票筛选' });
+  const q = typeof req.query.q === 'string' ? req.query.q.slice(0, 100) : undefined;
+  const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+  const offset = Math.max(0, Number(req.query.offset) || 0);
 
-  const orders = listOrdersForAdmin({ view: view as never, invoice: invoice as never });
+  const filter = { view: view as never, invoice: invoice as never, q };
+  const orders = listOrdersForAdmin({ ...filter, limit, offset });
+  const total = countOrdersForAdmin(filter);
   // 经办超管名(confirmed_by → platform_admin.username);租户名/发起人名已在 JOIN 里。
   const padmins = new Map<string, string>();
   for (const o of orders) {
@@ -1233,7 +1239,10 @@ adminRouter.get('/api/recharge-orders', requirePlatformAdmin, (req: Request, res
     orders: orders.map((o) =>
       serializeAdminOrder(o, o.tenantName ?? '', o.confirmed_by ? padmins.get(o.confirmed_by) : null),
     ),
-    counts: adminOrderCounts(),
+    counts: adminOrderCounts(), // tab/筛选角标(全局,不随 q/分页变)
+    total, // 当前筛选(含 q)的总单数,供分页
+    limit,
+    offset,
   });
 });
 
@@ -1343,6 +1352,21 @@ adminRouter.post(
     res.json({ ok: true });
   },
 );
+
+// 下载已开票 PDF(超管;流式 inline)。仅 issued 且有 pdf_key 时可下。
+adminRouter.get('/api/admin-invoices/:id/pdf', requirePlatformAdmin, async (req: Request, res: Response) => {
+  const inv = getInvoice(req.params.id!);
+  if (!inv || !inv.pdf_key) return res.status(404).json({ error: '发票 PDF 不存在' });
+  try {
+    const buf = await getObject(inv.pdf_key);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${inv.invoice_no || inv.id}.pdf"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.send(buf);
+  } catch {
+    res.status(404).json({ error: '发票 PDF 文件不存在' });
+  }
+});
 
 // 驳回开票:requested → 删行(退回,用户可重申)。
 adminRouter.post('/api/admin-invoices/:id/reject', requirePlatformAdmin, (req: Request, res: Response) => {
