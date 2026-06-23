@@ -376,8 +376,8 @@
     </div>
     <div class="tbl">
       <table>
-        <thead><tr><th>租户</th><th>订单号</th><th>套餐</th><th>金额</th><th>支付状态</th><th>发票</th><th style="text-align:right">操作</th></tr></thead>
-        <tbody id="omRows"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody>
+        <thead><tr><th>租户</th><th>订单号</th><th>创建时间</th><th>套餐</th><th>金额</th><th>到账积分</th><th>支付状态</th><th>发票</th><th style="text-align:right">操作</th></tr></thead>
+        <tbody id="omRows"><tr><td colspan="9" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
     </section>
@@ -739,7 +739,7 @@
   function omInvCell(o){
     if(o.status!=='credited') return '<span style="color:var(--t4)">—</span>';
     if(o.invoiceStatus==='requested') return omChip('开票中','--amber');
-    if(o.invoiceStatus==='issued') return omChip('已开票','--blue');
+    if(o.invoiceStatus==='issued') return omChip('已开票','--blue')+(o.invoiceNo?`<div style="font-size:11px;color:var(--t4);font-family:var(--f-mono);margin-top:1px">${esc(o.invoiceNo)}</div>`:'');
     return '<span style="color:var(--t4)">未开票</span>';
   }
   function omActionCell(o){
@@ -760,17 +760,19 @@
       const q=omView==='todo'?'view=todo':`view=${omView}&invoice=${omInv}`;
       const { orders, counts }=await PA('GET','/api/recharge-orders?'+q);
       omSetCounts(counts);
-      if(!orders.length){ tb.innerHTML=`<tr><td colspan="7" class="empty">${OM_EMPTY[omView]||'暂无订单'}</td></tr>`; return; }
+      if(!orders.length){ tb.innerHTML=`<tr><td colspan="9" class="empty">${OM_EMPTY[omView]||'暂无订单'}</td></tr>`; return; }
       tb.innerHTML=orders.map(o=>`<tr style="cursor:pointer" onclick='openOrderDrawer(${J(o.id)})'>
         <td><div class="tn">${esc(o.tenantName||'—')}</div></td>
         <td style="font-family:var(--f-mono);font-size:12px">${esc(o.orderNo)}</td>
+        <td style="color:var(--t3);font-family:var(--f-mono);font-size:12px">${fmtTime(o.createdAt)}</td>
         <td>${esc(o.planName)}</td>
         <td class="bal">¥${fmtN(o.priceYuan)}</td>
+        <td style="color:var(--t2)">${fmtN(o.credits+o.bonusCredits)}</td>
         <td>${omStatusChip(o.status)}</td>
         <td>${omInvCell(o)}</td>
         <td style="text-align:right">${omActionCell(o)}</td>
       </tr>`).join('');
-    }catch(e){ tb.innerHTML='<tr><td colspan="7" class="empty">加载失败</td></tr>'; }
+    }catch(e){ tb.innerHTML='<tr><td colspan="9" class="empty">加载失败</td></tr>'; }
   }
   async function omReload(){ await loadOrderMgmt(); if(omDrawerId && document.getElementById('omDrawerOv').classList.contains('on')) await openOrderDrawer(omDrawerId,true); }
   // tab(订单状态)+ 发票子筛选 切换
