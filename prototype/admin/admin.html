@@ -172,8 +172,7 @@
     <button class="nav-item" data-nav="pricing"><span class="nav-dot"></span>定价管理</button>
     <button class="nav-item" data-nav="plans"><span class="nav-dot"></span>积分套餐</button>
     <button class="nav-item" data-nav="leads"><span class="nav-dot"></span>意向线索<span class="nav-badge" id="navLeadBadge"></span></button>
-    <button class="nav-item" data-nav="orders"><span class="nav-dot"></span>对公收款</button>
-    <button class="nav-item" data-nav="invoices"><span class="nav-dot"></span>发票开具</button>
+    <button class="nav-item" data-nav="ordermgmt"><span class="nav-dot"></span>订单管理</button>
     <button class="nav-item" data-nav="consumption"><span class="nav-dot"></span>消耗流水</button>
     <button class="nav-item" data-nav="audit"><span class="nav-dot"></span>平台审计</button>
     <button class="nav-item" data-nav="superadmins"><span class="nav-dot"></span>超管管理</button>
@@ -353,34 +352,32 @@
     </div>
     </section>
 
-    <!-- ── 对公收款核对 ── -->
-    <section class="sec" data-sec="orders" id="sec-orders">
+    <!-- ── 订单管理(对公收款 + 开票 合一,订单为主体)── -->
+    <section class="sec" data-sec="ordermgmt" id="sec-ordermgmt">
     <div class="ph">
-      <div><h1>对公收款核对</h1><p>用户提交「我已打款」的充值订单。核对对公账户实际到账后点「确认到账」,积分自动入账(只发一次)。已到账/已驳回订单永久可查,留经办人与时间。</p></div>
+      <div><h1>订单管理</h1><p>各租户充值订单的全生命周期:支付 → 到账 → 开票。一页可查可办。点行看详情(时间线 + 开票)。</p></div>
       <button class="btn-new" onclick="openPayee()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>对公收款信息</button>
     </div>
-    <div class="bl-seg" id="orderSeg" style="display:flex;gap:6px;margin-bottom:14px">
-      <button class="act on" data-s="paid_claimed">待核对</button>
-      <button class="act" data-s="credited">已到账</button>
-      <button class="act" data-s="rejected">已驳回</button>
+    <div class="bl-seg" id="omTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+      <button class="act on" data-v="todo">⚿ 待办<span class="om-ct" data-ct="todo"></span></button>
+      <button class="act" data-v="all">全部<span class="om-ct" data-ct="all"></span></button>
+      <button class="act" data-v="pending_payment">待支付<span class="om-ct" data-ct="pending_payment"></span></button>
+      <button class="act" data-v="paid_claimed">待确认<span class="om-ct" data-ct="paid_claimed"></span></button>
+      <button class="act" data-v="credited">已完成<span class="om-ct" data-ct="credited"></span></button>
+      <button class="act" data-v="rejected">已驳回<span class="om-ct" data-ct="rejected"></span></button>
+      <button class="act" data-v="cancelled">已取消<span class="om-ct" data-ct="cancelled"></span></button>
+    </div>
+    <div id="omInvFilter" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:14px;font-size:12px;color:var(--t3)">
+      发票:
+      <button class="act on" data-inv="any">全部</button>
+      <button class="act" data-inv="none">未开票<span class="om-ct" data-ct="inv_none"></span></button>
+      <button class="act" data-inv="requested">开票中<span class="om-ct" data-ct="inv_requested"></span></button>
+      <button class="act" data-inv="issued">已开票<span class="om-ct" data-ct="inv_issued"></span></button>
     </div>
     <div class="tbl">
       <table>
-        <thead><tr><th>租户</th><th>订单号</th><th>套餐</th><th>金额</th><th>到账积分</th><th>回单</th><th style="text-align:right">操作 / 处理记录</th></tr></thead>
-        <tbody id="orderRows"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody>
-      </table>
-    </div>
-    </section>
-
-    <!-- ── 发票开具 ── -->
-    <section class="sec" data-sec="invoices" id="sec-invoices">
-    <div class="ph">
-      <div><h1>发票开具</h1><p>租户管理员申请开票(可多单合并)。<b>开具前请核对所含订单均已到账、金额无误</b>,确认后回填发票号、上传 PDF 置「已开票」。</p></div>
-    </div>
-    <div class="tbl">
-      <table>
-        <thead><tr><th>抬头</th><th>税号</th><th>金额</th><th>所含订单</th><th style="text-align:right">操作</th></tr></thead>
-        <tbody id="invRows"><tr><td colspan="5" class="empty">加载中…</td></tr></tbody>
+        <thead><tr><th>租户</th><th>订单号</th><th>套餐</th><th>金额</th><th>支付状态</th><th>发票</th><th style="text-align:right">操作</th></tr></thead>
+        <tbody id="omRows"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
     </section>
@@ -471,6 +468,13 @@
       <label>发票号</label><input id="isNo" placeholder="发票号码">
       <label>发票 PDF(必传)</label><input id="isPdf" type="file" accept="application/pdf">
       <div class="mbtns"><button class="cancel" onclick="closeOv('issueOv')">取消</button><button class="ok" onclick="submitIssue()">确认开票</button></div>
+    </div>
+  </div>
+
+  <!-- 订单详情(时间线 + 开票;z-index 低于 issueOv,使开票弹窗叠在其上)-->
+  <div class="ov" id="omDrawerOv" style="z-index:300">
+    <div class="modal" style="max-width:min(92vw,520px)">
+      <div id="omDrawerBody"></div>
     </div>
   </div>
 
@@ -724,84 +728,114 @@
     }catch(e){ rows.innerHTML='<tr><td colspan="6" class="empty">加载失败</td></tr>'; }
   }
 
-  // ── 对公收款核对 ──
-  let orderStatus='paid_claimed';
-  const ORDER_EMPTY={paid_claimed:'暂无待核对的打款',credited:'暂无已到账订单',rejected:'暂无已驳回订单'};
-  async function loadOrders(){
-    const tb=document.getElementById('orderRows');
+  // ── 订单管理(对公收款 + 开票 合一;订单为主体)──
+  const J=JSON.stringify;
+  let omView='todo', omInv='any', omDrawerId=null;
+  // 状态色系:琥珀=运营要动手(待确认/开票中);绿=钱到位;蓝=单据出;红=异常;灰=不用管。
+  const OM_ST={pending_payment:['待支付','--t3'],paid_claimed:['待确认','--amber'],credited:['已完成','--green'],rejected:['已驳回','--red'],cancelled:['已取消','--t4']};
+  const OM_EMPTY={todo:'✓ 没有待处理的订单',all:'暂无订单',pending_payment:'暂无待支付订单',paid_claimed:'暂无待确认订单',credited:'暂无已完成订单',rejected:'暂无被驳回的订单',cancelled:'暂无已取消订单'};
+  function omChip(label,v){ return `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:var(${v})"><span style="width:7px;height:7px;border-radius:50%;background:var(${v})"></span>${label}</span>`; }
+  function omStatusChip(s){ const m=OM_ST[s]||[s,'--t3']; return omChip(m[0],m[1]); }
+  function omInvCell(o){
+    if(o.status!=='credited') return '<span style="color:var(--t4)">—</span>';
+    if(o.invoiceStatus==='requested') return omChip('开票中','--amber');
+    if(o.invoiceStatus==='issued') return omChip('已开票','--blue');
+    return '<span style="color:var(--t4)">未开票</span>';
+  }
+  function omActionCell(o){
+    if(o.status==='paid_claimed') return `<div class="acts"><button class="act pri" onclick='event.stopPropagation();confirmOrder(${J(o.id)},${J(o.orderNo)})'>确认到账</button><button class="act" onclick='event.stopPropagation();rejectOrder(${J(o.id)})'>驳回</button></div>`;
+    if(o.status==='credited'&&o.invoiceStatus==='requested') return `<div class="acts"><button class="act pri" onclick='event.stopPropagation();openIssue(${J(o.invoiceId)},${J(o.tenantName||"")})'>开具发票</button><button class="act" onclick='event.stopPropagation();rejectInvoice(${J(o.invoiceId)})'>驳回开票</button></div>`;
+    return '<span style="color:var(--t4);font-size:12px">明细 ›</span>';
+  }
+  function omSetCounts(c){
+    if(!c) return;
+    const set=(k,v)=>document.querySelectorAll(`.om-ct[data-ct="${k}"]`).forEach(el=>{ el.textContent=v?` ${v}`:''; el.style.opacity=v?'':'.4'; });
+    set('todo',c.todo); set('all',c.all);
+    Object.entries(c.byStatus||{}).forEach(([k,v])=>set(k,v));
+    set('inv_none',c.byInvoice?.none); set('inv_requested',c.byInvoice?.requested); set('inv_issued',c.byInvoice?.issued);
+  }
+  async function loadOrderMgmt(){
+    const tb=document.getElementById('omRows');
     try{
-      const { orders }=await PA('GET','/api/recharge-orders?status='+orderStatus);
-      if(!orders.length){ tb.innerHTML=`<tr><td colspan="7" class="empty">${ORDER_EMPTY[orderStatus]||'暂无订单'}</td></tr>`; return; }
-      tb.innerHTML=orders.map(o=>{
-        const receipt=o.hasReceipt?`<button class="act" onclick='previewReceipt(${JSON.stringify(o.id)},${JSON.stringify(o.orderNo)})'>查看回执</button>`:'<span style="color:var(--t4)">无</span>';
-        // 末列按状态:待核对→操作按钮;已到账→✓ 谁/何时;已驳回→✗ 谁/何时 + 原因。
-        let last;
-        if(o.status==='paid_claimed'){
-          last=`<div class="acts">
-            <button class="act pri" onclick='confirmOrder(${JSON.stringify(o.id)},${JSON.stringify(o.orderNo)})'>确认到账</button>
-            <button class="act" onclick='rejectOrder(${JSON.stringify(o.id)})'>驳回</button></div>`;
-        } else if(o.status==='credited'){
-          last=`<div style="text-align:right;font-size:12px;line-height:1.5">
-            <div style="color:var(--green);font-weight:600">✓ 已到账</div>
-            <div style="color:var(--t3)">${esc(o.confirmedByName||'—')}${o.confirmedAt?' · '+fmtTime(o.confirmedAt):''}</div></div>`;
-        } else {
-          last=`<div style="text-align:right;font-size:12px;line-height:1.5">
-            <div style="color:var(--red);font-weight:600">✗ 已驳回</div>
-            <div style="color:var(--t3)">${esc(o.confirmedByName||'—')}${o.confirmedAt?' · '+fmtTime(o.confirmedAt):''}</div>
-            ${o.adminNote?`<div style="color:var(--t4)">原因:${esc(o.adminNote)}</div>`:''}</div>`;
-        }
-        return `<tr>
-        <td><div class="tn">${esc(o.tenantName||'—')}</div><div class="tid" style="font-size:11px;color:var(--t4)">${esc(o.tenantId)}</div></td>
+      const q=omView==='todo'?'view=todo':`view=${omView}&invoice=${omInv}`;
+      const { orders, counts }=await PA('GET','/api/recharge-orders?'+q);
+      omSetCounts(counts);
+      if(!orders.length){ tb.innerHTML=`<tr><td colspan="7" class="empty">${OM_EMPTY[omView]||'暂无订单'}</td></tr>`; return; }
+      tb.innerHTML=orders.map(o=>`<tr style="cursor:pointer" onclick='openOrderDrawer(${J(o.id)})'>
+        <td><div class="tn">${esc(o.tenantName||'—')}</div></td>
         <td style="font-family:var(--f-mono);font-size:12px">${esc(o.orderNo)}</td>
         <td>${esc(o.planName)}</td>
         <td class="bal">¥${fmtN(o.priceYuan)}</td>
-        <td>${fmtN(o.credits+o.bonusCredits)}</td>
-        <td>${receipt}</td>
-        <td>${last}</td>
-      </tr>`;}).join('');
+        <td>${omStatusChip(o.status)}</td>
+        <td>${omInvCell(o)}</td>
+        <td style="text-align:right">${omActionCell(o)}</td>
+      </tr>`).join('');
     }catch(e){ tb.innerHTML='<tr><td colspan="7" class="empty">加载失败</td></tr>'; }
   }
-  document.querySelectorAll('#orderSeg button').forEach(b=>b.onclick=()=>{
-    document.querySelectorAll('#orderSeg button').forEach(x=>x.classList.remove('on'));
-    b.classList.add('on'); orderStatus=b.dataset.s; loadOrders();
+  async function omReload(){ await loadOrderMgmt(); if(omDrawerId && document.getElementById('omDrawerOv').classList.contains('on')) await openOrderDrawer(omDrawerId,true); }
+  // tab(订单状态)+ 发票子筛选 切换
+  document.querySelectorAll('#omTabs button').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#omTabs button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+    omView=b.dataset.v;
+    document.getElementById('omInvFilter').style.display=omView==='todo'?'none':''; // 待办是跨轴并集,隐藏发票子筛选避免歧义
+    loadOrderMgmt();
+  });
+  document.querySelectorAll('#omInvFilter button').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#omInvFilter button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+    omInv=b.dataset.inv; loadOrderMgmt();
   });
   async function confirmOrder(id, no){
     if(!await askConfirm({title:'确认到账',msg:`确认订单 ${no} 已到账?积分将自动入账(不可撤销)。`,okText:'确认到账'})) return;
-    try{ await PA('POST',`/api/recharge-orders/${id}/confirm`); toast('✓ 已确认到账,积分已入账'); await loadOrders(); await loadTenants(); }
+    try{ await PA('POST',`/api/recharge-orders/${id}/confirm`); toast('✓ 已确认到账,积分已入账'); await omReload(); await loadTenants(); }
     catch(e){ toast(e.message||'确认失败'); }
   }
   async function rejectOrder(id){
     const note=await askPrompt({title:'驳回打款',msg:'驳回原因(用户可见):',placeholder:'如:回单金额与订单不符',okText:'确认驳回',danger:true});
     if(note==null) return;
-    try{ await PA('POST',`/api/recharge-orders/${id}/reject`,{note}); toast('✓ 已驳回'); await loadOrders(); }
+    try{ await PA('POST',`/api/recharge-orders/${id}/reject`,{note}); toast('✓ 已驳回'); await omReload(); }
     catch(e){ toast(e.message||'驳回失败'); }
   }
-
-  // ── 发票开具 ──
-  let issueId=null;
-  async function loadInvoices(){
-    const tb=document.getElementById('invRows');
+  // ── 订单详情抽屉(时间线 + 开票)──
+  async function openOrderDrawer(id, silent){
+    omDrawerId=id;
+    const body=document.getElementById('omDrawerBody');
+    if(!silent){ body.innerHTML='<div class="empty" style="padding:30px">加载中…</div>'; document.getElementById('omDrawerOv').classList.add('on'); }
     try{
-      const { invoices }=await PA('GET','/api/admin-invoices?status=requested');
-      if(!invoices.length){ tb.innerHTML='<tr><td colspan="5" class="empty">暂无待开票申请</td></tr>'; return; }
-      tb.innerHTML=invoices.map(iv=>{
-        const orders=(iv.orderNos||[]);
-        const ordTxt=orders.length?`${orders.length} 单:${orders.map(esc).join('、')}`:'—';
-        return `<tr>
-        <td>${esc(iv.title)}</td>
-        <td style="font-family:var(--f-mono);font-size:12px">${esc(iv.taxNo)}</td>
-        <td class="bal">¥${fmtN(iv.amountYuan)}</td>
-        <td style="font-size:12px;color:var(--t3)">${ordTxt}</td>
-        <td><div class="acts">
-          <button class="act pri" onclick='openIssue(${JSON.stringify(iv.id)},${JSON.stringify(iv.title)})'>开票</button>
-          <button class="act" onclick='rejectInvoice(${JSON.stringify(iv.id)})'>驳回</button>
-        </div></td>
-      </tr>`;}).join('');
-    }catch(e){ tb.innerHTML='<tr><td colspan="5" class="empty">加载失败</td></tr>'; }
+      const { order:o, invoice:iv, siblingOrders:sib }=await PA('GET',`/api/recharge-orders/${id}/detail`);
+      const step=(label,color,time,sub)=>`<div style="display:flex;gap:10px;padding:0 0 14px">
+        <div style="display:flex;flex-direction:column;align-items:center"><span style="width:9px;height:9px;border-radius:50%;background:var(${color});margin-top:3px"></span><span style="flex:1;width:1px;background:var(--line)"></span></div>
+        <div style="flex:1"><div style="font-weight:600;font-size:13px;color:var(${color})">${label}</div>${sub?`<div style="font-size:12px;color:var(--t3);margin-top:2px">${sub}</div>`:''}${time?`<div style="font-size:11px;color:var(--t4);font-family:var(--f-mono);margin-top:1px">${fmtTime(time)}</div>`:''}</div></div>`;
+      let tl=step('下单', '--t3', o.createdAt, o.actorName?'发起人:'+esc(o.actorName):'');
+      if(o.status!=='pending_payment'&&o.status!=='cancelled'){
+        const rc=o.hasReceipt?` · <a href="javascript:;" style="color:var(--blue)" onclick='previewReceipt(${J(o.id)},${J(o.orderNo)})'>看回执</a>`:'';
+        tl+=step('已打款','--amber',null,'用户已提交打款'+rc);
+      }
+      if(o.status==='credited') tl+=step('已到账','--green',o.confirmedAt,`经办:${esc(o.confirmedByName||'—')} · 入账 ${fmtN(o.credits+o.bonusCredits)} 积分`);
+      if(o.status==='rejected') tl+=step('已驳回','--red',o.confirmedAt,`经办:${esc(o.confirmedByName||'—')}${o.adminNote?' · 原因:'+esc(o.adminNote):''}`);
+      if(o.status==='cancelled') tl+=step('已取消','--t4',null,'用户取消');
+      if(iv){
+        const merged=iv.orderCount>1?`<div style="font-size:12px;color:var(--amber);margin-top:4px">此发票含 ${iv.orderCount} 单(${sib.map(s=>esc(s.orderNo)).join('、')}),开具将一并置为已开票</div>`:'';
+        if(iv.status==='requested') tl+=step('开票中','--amber',iv.createdAt,`抬头「${esc(iv.title)}」税号 ${esc(iv.taxNo)} · ¥${fmtN(iv.amountYuan)}${merged}`);
+        else tl+=step('已开票','--blue',iv.issuedAt,`发票号 ${esc(iv.invoiceNo||'—')} · ¥${fmtN(iv.amountYuan)}${merged}`);
+      }
+      // 末步去掉竖线尾巴
+      tl=tl.replace(/(<span style="flex:1;width:1px;background:var\(--line\)"><\/span>)(?![\s\S]*<span style="flex:1;width:1px)/,'');
+      let actions='';
+      if(o.status==='paid_claimed') actions=`<button class="ok" onclick='confirmOrder(${J(o.id)},${J(o.orderNo)})'>确认到账</button><button class="cancel" onclick='rejectOrder(${J(o.id)})'>驳回</button>`;
+      else if(o.status==='credited'&&o.invoiceStatus==='requested') actions=`<button class="ok" onclick='openIssue(${J(o.invoiceId)},${J(o.tenantName||"")})'>开具发票</button><button class="cancel" onclick='rejectInvoice(${J(o.invoiceId)})'>驳回开票</button>`;
+      body.innerHTML=`
+        <h3>订单 ${esc(o.orderNo)}</h3>
+        <p class="mdesc">${esc(o.tenantName||'—')} · ${esc(o.planName)} · ¥${fmtN(o.priceYuan)} / ${fmtN(o.credits+o.bonusCredits)} 积分</p>
+        <div style="margin:16px 0 6px">${tl}</div>
+        <div class="mbtns">${actions}<button class="cancel" onclick="closeOv('omDrawerOv')">关闭</button></div>`;
+    }catch(e){ body.innerHTML='<div class="empty" style="padding:30px">加载失败</div>'; }
   }
+
+  // ── 开票(回填发票号 + 上传 PDF;入口在订单详情抽屉 / 行内操作)──
+  let issueId=null;
   function openIssue(id, title){
     issueId=id;
-    document.getElementById('issueInfo').textContent=`为「${title}」开具普票。回填发票号,可选上传 PDF。`;
+    document.getElementById('issueInfo').textContent=`为「${title}」开具普票。回填发票号 + 上传 PDF。`;
     document.getElementById('isNo').value=''; document.getElementById('isPdf').value='';
     document.getElementById('issueOv').classList.add('on');
   }
@@ -816,7 +850,7 @@
       if(res.status===401){ location.href='/admin/login'; return; }
       const data=await res.json().catch(()=>null);
       if(!res.ok) throw new Error((data&&data.error)||'开票失败');
-      closeOv('issueOv'); toast('✓ 已开票'); await loadInvoices();
+      closeOv('issueOv'); toast('✓ 已开票'); await omReload();
     }catch(e){ toast(e.message||'开票失败'); }
   }
 
@@ -828,7 +862,7 @@
   }
   async function rejectInvoice(id){
     if(!await askConfirm({title:'驳回开票',msg:'驳回该开票申请?用户可重新提交。',okText:'确认驳回',danger:true})) return;
-    try{ await PA('POST',`/api/admin-invoices/${id}/reject`); toast('✓ 已驳回'); await loadInvoices(); }
+    try{ await PA('POST',`/api/admin-invoices/${id}/reject`); toast('✓ 已驳回'); await omReload(); }
     catch(e){ toast(e.message||'驳回失败'); }
   }
 
@@ -1583,7 +1617,7 @@
   window.loadProviders=loadProviders;
 
   // ── 左侧菜单 SPA 路由(hash 决定当前 section,刷新保持,懒加载各 section)──
-  const SECTIONS=['monitor','tenants','image-models','providers','pricing','plans','leads','orders','invoices','consumption','audit','superadmins'];
+  const SECTIONS=['monitor','tenants','image-models','providers','pricing','plans','leads','ordermgmt','consumption','audit','superadmins'];
   // 各 section 首次进入时调用对应 loader(切回已加载的不重拉,靠 loaded 标记防重复)
   // ── 积分消耗流水(对账)──
   const CON_MOD={ai_image:'AI 生图',video_t2v:'文生视频',video_i2v:'图生视频',video_edit:'视频编辑',tts:'语音合成',video:'数字人视频'};
@@ -1634,8 +1668,7 @@
     pricing:loadPricing,        // 内部会追加 loadUnifiedPricing
     plans:loadPlans,
     leads:loadLeads,
-    orders:loadOrders,
-    invoices:loadInvoices,
+    ordermgmt:loadOrderMgmt,
     consumption:loadConsumption,
     audit:loadPlatformAudit,
     superadmins:loadSuperadmins,

@@ -810,6 +810,9 @@ export interface RechargeOrderRow {
   updated_at: number;
   actorName?: string | null; // 发起人名(listOrdersForActor JOIN user 派生;非表列。admin 看全机构时显谁下的单)
   invoiceStatus?: string | null; // 开票状态(JOIN invoice_order+invoice 派生;NULL=未开/requested=开票中/issued=已开)
+  tenantName?: string | null; // 租户名(admin 视图 JOIN tenant 派生;非表列)
+  invoiceId?: string | null; // 关联发票 id(admin 视图 JOIN 派生;抽屉开票/驳回用)
+  invoiceNo?: string | null; // 发票号(已开票时 JOIN 派生)
 }
 
 export type InvoiceStatus = 'requested' | 'issued';

@@ -161,6 +161,113 @@ export function listOrdersByStatus(status: OrderStatus, limit = 200): RechargeOr
     .all(status, limit) as RechargeOrderRow[];
 }
 
+// ── 「订单管理」统一视图(超管侧;订单为主体,JOIN 租户/发起人/发票)──
+// view='todo' = 运营待办:待确认 ∪ (已完成且开票中)。一个跨轴并集,不能靠单一 status 表达,故单列。
+// 否则按 status('all' 不过滤)+ invoice 子筛选('any'|'none'|'requested'|'issued')组合。
+export type AdminOrderView = 'todo' | OrderStatus | 'all';
+export type AdminInvoiceFilter = 'any' | 'none' | 'requested' | 'issued';
+export function listOrdersForAdmin(
+  opts: { view?: AdminOrderView; invoice?: AdminInvoiceFilter; limit?: number } = {},
+): RechargeOrderRow[] {
+  const where: string[] = [];
+  const params: unknown[] = [];
+  if (opts.view === 'todo') {
+    where.push(`(o.status='paid_claimed' OR (o.status='credited' AND iv.status='requested'))`);
+  } else if (opts.view && opts.view !== 'all') {
+    where.push(`o.status=?`);
+    params.push(opts.view);
+  }
+  if (!opts.view || opts.view !== 'todo') {
+    if (opts.invoice === 'none') where.push(`o.status='credited' AND iv.id IS NULL`); // 未开票=已完成且无发票
+    else if (opts.invoice === 'requested') where.push(`iv.status='requested'`);
+    else if (opts.invoice === 'issued') where.push(`iv.status='issued'`);
+  }
+  const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  return db
+    .prepare(
+      `SELECT o.*, t.name AS tenantName, COALESCE(u.display_name, u.username) AS actorName,
+              iv.id AS invoiceId, iv.status AS invoiceStatus, iv.invoice_no AS invoiceNo
+         FROM recharge_order o
+         LEFT JOIN tenant t ON t.id = o.tenant_id
+         LEFT JOIN user u ON u.id = o.created_by
+         LEFT JOIN invoice_order io ON io.order_id = o.id
+         LEFT JOIN invoice iv ON iv.id = io.invoice_id
+         ${clause}
+        ORDER BY o.created_at DESC, o.rowid DESC LIMIT ?`,
+    )
+    .all(...params, opts.limit ?? 300) as RechargeOrderRow[];
+}
+
+// tab/筛选角标计数(一次性,供「订单管理」头部)。
+export function adminOrderCounts(): {
+  todo: number; all: number;
+  byStatus: Record<OrderStatus, number>;
+  byInvoice: { none: number; requested: number; issued: number };
+} {
+  const byStatus: Record<OrderStatus, number> = {
+    pending_payment: 0, paid_claimed: 0, credited: 0, rejected: 0, cancelled: 0,
+  };
+  for (const r of db.prepare(`SELECT status, COUNT(*) AS n FROM recharge_order GROUP BY status`).all() as {
+    status: OrderStatus; n: number;
+  }[]) {
+    if (r.status in byStatus) byStatus[r.status] = r.n;
+  }
+  const all = Object.values(byStatus).reduce((a, b) => a + b, 0);
+  const todo = (db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM recharge_order o
+         LEFT JOIN invoice_order io ON io.order_id = o.id
+         LEFT JOIN invoice iv ON iv.id = io.invoice_id
+        WHERE o.status='paid_claimed' OR (o.status='credited' AND iv.status='requested')`,
+    )
+    .get() as { n: number }).n;
+  // 发票子筛选(按订单计):未开票=已完成且无发票;开票中/已开票=订单关联发票的状态。
+  const none = (db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM recharge_order o
+        WHERE o.status='credited' AND NOT EXISTS (SELECT 1 FROM invoice_order io WHERE io.order_id=o.id)`,
+    )
+    .get() as { n: number }).n;
+  const invCount = (st: InvoiceStatus) =>
+    (db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM invoice_order io JOIN invoice iv ON iv.id=io.invoice_id WHERE iv.status=?`,
+      )
+      .get(st) as { n: number }).n;
+  return { todo, all, byStatus, byInvoice: { none, requested: invCount('requested'), issued: invCount('issued') } };
+}
+
+// 订单详情(抽屉用):订单 + 经办超管名 + 关联发票(含同票兄弟单)。
+export function getOrderDetailForAdmin(id: string): {
+  order: RechargeOrderRow;
+  confirmedByName: string | null;
+  invoice: InvoiceRow | null;
+  siblingOrders: { orderNo: string; priceYuan: number; isSelf: boolean }[];
+} | null {
+  const order = getOrder(id);
+  if (!order) return null;
+  const tn = db.prepare(`SELECT name FROM tenant WHERE id=?`).get(order.tenant_id) as { name: string } | undefined;
+  order.tenantName = tn?.name ?? '(已删租户)';
+  const u = db.prepare(`SELECT COALESCE(display_name, username) AS n FROM user WHERE id=?`).get(order.created_by) as
+    | { n: string } | undefined;
+  order.actorName = u?.n ?? null;
+  let confirmedByName: string | null = null;
+  if (order.confirmed_by) {
+    const a = db.prepare(`SELECT username FROM platform_admin WHERE id=?`).get(order.confirmed_by) as
+      | { username: string } | undefined;
+    confirmedByName = a?.username ?? '(已删超管)';
+  }
+  const invoice = getInvoiceByOrder(id, order.tenant_id) ?? null;
+  order.invoiceStatus = invoice?.status ?? null;
+  order.invoiceId = invoice?.id ?? null;
+  order.invoiceNo = invoice?.invoice_no ?? null;
+  const siblingOrders = (invoice?.orderIds ?? []).map((oid) => {
+    const so = getOrder(oid);
+    return { orderNo: so?.order_no ?? oid, priceYuan: so?.price_yuan ?? 0, isSelf: oid === id };
+  });
+  return { order, confirmedByName, invoice, siblingOrders };
+}
+
 // ── 订单状态迁移(单一原子来源)──
 // 条件 UPDATE WHERE status=from,可选 patch 额外列。返 changes===1。
 // 所有非建单的订单写都走这里;并发后来者 changes=0,天然幂等(钱路守卫基石)。

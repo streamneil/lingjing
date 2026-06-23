@@ -67,7 +67,9 @@ import type { Role } from '../db/index.js';
 import multer from 'multer';
 import { putObject, getObject } from '../storage/index.js';
 import {
-  listOrdersByStatus,
+  listOrdersForAdmin,
+  adminOrderCounts,
+  getOrderDetailForAdmin,
   getOrder,
   confirmAndCredit,
   rejectOrder,
@@ -1192,31 +1194,33 @@ function serializeAdminOrder(o: ReturnType<typeof getOrder> & object, tenantName
     credits: o!.credits,
     bonusCredits: o!.bonus_credits,
     status: o!.status,
+    paymentMethod: o!.payment_method, // 前端按它判「待确认」是否对公特有(未来在线支付不出此态)
     hasReceipt: !!o!.receipt_key,
     adminNote: o!.admin_note,
     createdAt: o!.created_at,
+    actorName: o!.actorName ?? null, // 发起人(谁下的单)
+    // 发票子状态(JOIN 派生):null=未开票 / requested=开票中 / issued=已开票。
+    invoiceStatus: o!.invoiceStatus ?? null,
+    invoiceId: o!.invoiceId ?? null,
+    invoiceNo: o!.invoiceNo ?? null,
     // 处理留痕(确认到账/驳回 的经办人 + 时间)——已到账/已驳回订单要可追溯,不能处理完就查不到。
     confirmedAt: o!.confirmed_at ?? null,
     confirmedByName: confirmedByName ?? null,
   };
 }
 
-// 列待核对(paid_claimed)订单。带租户名供超管识别是哪个机构提交的。
+// 「订单管理」统一列表:订单生命周期 view(todo|all|各状态)+ 发票子筛选(any|none|requested|issued)+ 角标计数。
+// 合并了旧「对公收款」+「发票开具」两块的读取;订单为主体,发票作子状态。
 adminRouter.get('/api/recharge-orders', requirePlatformAdmin, (req: Request, res: Response) => {
-  const status = (req.query.status as string) || 'paid_claimed';
-  const valid = ['pending_payment', 'paid_claimed', 'credited', 'rejected', 'cancelled'];
-  if (!valid.includes(status)) return res.status(400).json({ error: '无效状态' });
-  const orders = listOrdersByStatus(status as never);
-  // 批量解析租户名(避免 N 次单查)。
-  const names = new Map<string, string>();
-  for (const o of orders) {
-    if (names.has(o.tenant_id)) continue;
-    const t = db.prepare(`SELECT name FROM tenant WHERE id=?`).get(o.tenant_id) as
-      | { name: string }
-      | undefined;
-    names.set(o.tenant_id, t?.name ?? '(已删租户)');
-  }
-  // 批量解析经办超管名(confirmed_by → platform_admin.username),用于「谁确认/驳回的」留痕。
+  const view = (req.query.view as string) || (req.query.status as string) || 'todo';
+  const validView = ['todo', 'all', 'pending_payment', 'paid_claimed', 'credited', 'rejected', 'cancelled'];
+  if (!validView.includes(view)) return res.status(400).json({ error: '无效视图' });
+  const invoice = (req.query.invoice as string) || 'any';
+  const validInv = ['any', 'none', 'requested', 'issued'];
+  if (!validInv.includes(invoice)) return res.status(400).json({ error: '无效发票筛选' });
+
+  const orders = listOrdersForAdmin({ view: view as never, invoice: invoice as never });
+  // 经办超管名(confirmed_by → platform_admin.username);租户名/发起人名已在 JOIN 里。
   const padmins = new Map<string, string>();
   for (const o of orders) {
     if (!o.confirmed_by || padmins.has(o.confirmed_by)) continue;
@@ -1227,8 +1231,26 @@ adminRouter.get('/api/recharge-orders', requirePlatformAdmin, (req: Request, res
   }
   res.json({
     orders: orders.map((o) =>
-      serializeAdminOrder(o, names.get(o.tenant_id) ?? '', o.confirmed_by ? padmins.get(o.confirmed_by) : null),
+      serializeAdminOrder(o, o.tenantName ?? '', o.confirmed_by ? padmins.get(o.confirmed_by) : null),
     ),
+    counts: adminOrderCounts(),
+  });
+});
+
+// 订单详情(抽屉):订单 + 经办人 + 关联发票(含同票兄弟单)。
+adminRouter.get('/api/recharge-orders/:id/detail', requirePlatformAdmin, (req: Request, res: Response) => {
+  const d = getOrderDetailForAdmin(req.params.id!);
+  if (!d) return res.status(404).json({ error: '订单不存在' });
+  res.json({
+    order: serializeAdminOrder(d.order, d.order.tenantName ?? '', d.confirmedByName),
+    invoice: d.invoice
+      ? {
+          id: d.invoice.id, status: d.invoice.status, title: d.invoice.title, taxNo: d.invoice.tax_no,
+          amountYuan: d.invoice.amount_yuan, invoiceNo: d.invoice.invoice_no, createdAt: d.invoice.created_at,
+          issuedAt: d.invoice.issued_at, orderCount: (d.invoice.orderIds ?? []).length,
+        }
+      : null,
+    siblingOrders: d.siblingOrders, // [{orderNo, priceYuan, isSelf}]
   });
 });
 
