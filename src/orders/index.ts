@@ -549,7 +549,7 @@ export const requestInvoice = db.transaction(
 // 超管开具:requested → issued(发票号 + PDF)。开具前**重校**所含订单仍全 credited + Σ金额=发票金额
 //   (用户「确认订单 + 审查入账」),不符拒开。自己重加载 invoice_order,不依赖外传订单。
 export const issueInvoice = db.transaction(
-  (id: string, invoiceNo: string, pdfKey: string | null): boolean => {
+  (id: string, invoiceNo: string | null, pdfKey: string | null): boolean => { // 发票号选填:空=null(列表回退「下载发票」)
     const inv = db.prepare(`SELECT * FROM invoice WHERE id=?`).get(id) as InvoiceRow | undefined;
     if (!inv || inv.status !== 'requested') return false;
     // 重校(审查入账):所含订单仍全 credited + Σ金额=发票金额。

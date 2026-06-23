@@ -1335,20 +1335,19 @@ adminRouter.post(
   requirePlatformAdmin,
   invoicePdfUpload.single('pdf'),
   async (req: Request, res: Response) => {
-    const { invoiceNo } = (req.body ?? {}) as { invoiceNo?: string };
-    if (!invoiceNo || !invoiceNo.trim()) return res.status(400).json({ error: '请填写发票号' });
+    // 发票号选填(空 → null;列表/抽屉回退为「下载发票」可点链接)。PDF 仍必传 —— 它才是要下载的发票本体。
+    const invoiceNo = typeof (req.body?.invoiceNo) === 'string' ? req.body.invoiceNo.trim() || null : null;
     const inv = getInvoice(req.params.id!);
     if (!inv) return res.status(404).json({ error: '发票不存在' });
-    // 开票必传 PDF(用户决策:已开票要能下载平台上传的发票 PDF)。
     const file = req.file;
     if (!file) return res.status(400).json({ error: '请上传发票 PDF' });
     if (file.mimetype !== 'application/pdf')
       return res.status(400).json({ error: '发票文件仅支持 PDF' });
     const pdfKey = `invoices/${inv.tenant_id}/${inv.id}.pdf`;
     await putObject(pdfKey, file.buffer, 'application/pdf');
-    const ok = issueInvoice(inv.id, invoiceNo.trim(), pdfKey);
+    const ok = issueInvoice(inv.id, invoiceNo, pdfKey);
     if (!ok) return res.status(409).json({ error: '发票非待开票状态' });
-    writePlatformAudit(req.padmin!.id, 'invoice_issue', inv.tenant_id, `${inv.id}/${invoiceNo.trim()}`, padminIp(req));
+    writePlatformAudit(req.padmin!.id, 'invoice_issue', inv.tenant_id, `${inv.id}/${invoiceNo ?? '无号'}`, padminIp(req));
     res.json({ ok: true });
   },
 );

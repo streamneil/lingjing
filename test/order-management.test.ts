@@ -139,6 +139,19 @@ describe('getOrderDetailForAdmin', () => {
   });
 });
 
+describe('发票号选填(issueInvoice 允许 null)', () => {
+  it('不填发票号 → 已开票,invoice_no=null', () => {
+    const pid = createPlan({ name: '选填票', priceYuan: 333, credits: 3330 }).id;
+    const oid = createOrder({ tenantId: tId, userId: adminU, planId: pid }).id;
+    claimPaid(oid, tId, null); confirmAndCredit(oid, PADMIN);
+    const inv = requestInvoice({ orderIds: [oid], tenantId: tId, userId: adminU, title: '选填', taxNo: 'TX' });
+    expect(issueInvoice(inv.id, null, 'invoices/y.pdf')).toBe(true);
+    const d = getOrderDetailForAdmin(oid)!;
+    expect(d.invoice?.status).toBe('issued');
+    expect(d.invoice?.invoice_no).toBeNull();
+  });
+});
+
 // 放最后:会取消 oPending,不影响前面的断言。
 describe('cancelStalePendingOrders(待支付超时自动取消)', () => {
   const isPending = (id: string) => listOrdersForAdmin({ view: 'pending_payment', limit: 99 }).some((o) => o.id === id);

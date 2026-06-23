@@ -471,7 +471,7 @@
     <div class="modal">
       <h3>开具发票</h3>
       <p class="mdesc" id="issueInfo"></p>
-      <label>发票号</label><input id="isNo" placeholder="发票号码">
+      <label>发票号(选填)</label><input id="isNo" placeholder="不填则列表显示「下载发票」">
       <label>发票 PDF(必传)</label><input id="isPdf" type="file" accept="application/pdf">
       <div class="mbtns"><button class="cancel" onclick="closeOv('issueOv')">取消</button><button class="ok" onclick="submitIssue()">确认开票</button></div>
     </div>
@@ -755,7 +755,7 @@
     if(o.invoiceStatus==='requested') return omChip('开票中','--amber');
     if(o.invoiceStatus==='issued'){
       // 发票号本身即下载链接(点击下载 PDF),不再单独「下载发票」按钮。
-      const num=esc(o.invoiceNo||'查看发票');
+      const num=esc(o.invoiceNo||'下载发票'); // 发票号选填:空则显示「下载发票」(链接仍可下 PDF)
       const cell=o.invoiceId
         ? `<a href="/admin/api/admin-invoices/${encodeURIComponent(o.invoiceId)}/pdf" target="_blank" onclick="event.stopPropagation()" title="点击下载发票 PDF" style="font-size:11px;color:var(--blue);font-family:var(--f-mono);text-decoration:underline;text-underline-offset:2px">${num}</a>`
         : `<span style="font-size:11px;color:var(--t4);font-family:var(--f-mono)">${num}</span>`;
@@ -861,7 +861,7 @@
       if(iv){
         const merged=iv.orderCount>1?`<div style="font-size:12px;color:var(--amber);margin-top:4px">此发票含 ${iv.orderCount} 单(${sib.map(s=>esc(s.orderNo)).join('、')}),开具将一并置为已开票</div>`:'';
         if(iv.status==='requested') tl+=step('开票中','--amber',iv.createdAt,`抬头「${esc(iv.title)}」税号 ${esc(iv.taxNo)} · ¥${fmtN(iv.amountYuan)}${merged}`);
-        else tl+=step('已开票','--blue',iv.issuedAt,`发票号 ${esc(iv.invoiceNo||'—')} · ¥${fmtN(iv.amountYuan)} · <a href="/admin/api/admin-invoices/${encodeURIComponent(iv.id)}/pdf" target="_blank" style="color:var(--blue)">下载发票</a>${merged}`);
+        else tl+=step('已开票','--blue',iv.issuedAt,`${iv.invoiceNo?'发票号 '+esc(iv.invoiceNo)+' · ':''}¥${fmtN(iv.amountYuan)} · <a href="/admin/api/admin-invoices/${encodeURIComponent(iv.id)}/pdf" target="_blank" style="color:var(--blue)">下载发票</a>${merged}`);
       }
       // 末步去掉竖线尾巴
       tl=tl.replace(/(<span style="flex:1;width:1px;background:var\(--line\)"><\/span>)(?![\s\S]*<span style="flex:1;width:1px)/,'');
@@ -880,13 +880,12 @@
   let issueId=null;
   function openIssue(id, title){
     issueId=id;
-    document.getElementById('issueInfo').textContent=`为「${title}」开具普票。回填发票号 + 上传 PDF。`;
+    document.getElementById('issueInfo').textContent=`为「${title}」开具普票。发票号选填,PDF 必传。`;
     document.getElementById('isNo').value=''; document.getElementById('isPdf').value='';
     document.getElementById('issueOv').classList.add('on');
   }
   async function submitIssue(){
-    const no=document.getElementById('isNo').value.trim();
-    if(!no){ toast('请填写发票号'); return; }
+    const no=document.getElementById('isNo').value.trim(); // 选填:空则不传,列表回退「下载发票」
     const pdf=document.getElementById('isPdf').files[0];
     if(!pdf){ toast('请上传发票 PDF'); return; } // 开票必传 PDF(用户决策)
     try{
