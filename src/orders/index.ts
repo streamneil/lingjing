@@ -348,10 +348,10 @@ export function cancelOrder(id: string, tenantId: string): boolean {
   return transitionOrder(id, 'pending_payment', 'cancelled', {}, tenantId);
 }
 
-// 待支付超时自动取消。⚠️ 默认 15 分钟 —— 对公银行转账实际常需数小时/数天,这个窗口偏短,
-// 可能误杀正在走财务流程的真实单。如需放宽改这个常量即可(如 24h = 24*60*60*1000)。
+// 待支付超时自动取消。默认 2 小时 —— 兼顾对公转账的财务处理时间(15 分钟太短会误杀真实单),
+// 又不让废弃单长期堆在「待支付」。如需再调改这个常量即可(如 24h = 24*60*60*1000)。
 // 仅取消 pending_payment(尚未「我已打款」、未预扣积分,取消无副作用);paid_claimed 不动。
-export const PENDING_PAYMENT_TTL_MS = 15 * 60 * 1000;
+export const PENDING_PAYMENT_TTL_MS = 2 * 60 * 60 * 1000;
 export function cancelStalePendingOrders(maxAgeMs: number = PENDING_PAYMENT_TTL_MS): number {
   const cutoff = now() - maxAgeMs;
   const rows = db
@@ -359,7 +359,7 @@ export function cancelStalePendingOrders(maxAgeMs: number = PENDING_PAYMENT_TTL_
     .all(cutoff) as { id: string; tenant_id: string }[];
   let n = 0;
   for (const r of rows) {
-    if (transitionOrder(r.id, 'pending_payment', 'cancelled', { admin_note: '待支付超时自动取消(超过 15 分钟未支付)' }, r.tenant_id)) n++;
+    if (transitionOrder(r.id, 'pending_payment', 'cancelled', { admin_note: '待支付超时自动取消(超过 2 小时未支付)' }, r.tenant_id)) n++;
   }
   return n;
 }
