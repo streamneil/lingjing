@@ -61,28 +61,50 @@ showcaseRouter.get('/showcase-asset/*', async (req: Request, res: Response) => {
   const { subpath, diskPath } = resolved;
   const key = `showcase/${subpath}`;
 
-  // 1. 配了 OSS:签名直链 302(OSS 直出,Node 不承出口)。桶里没有 → 落到本地兜底。
-  if (storageBackendName === 'oss') {
+  // dl=1:同源回字节(给前端 fetch→Blob→File 用,如「参考生成影片」套用示范带附件)。
+  // 普通展示(<img>/<video> src)走 302 直链最省带宽;但浏览器 fetch() 跟随 302 到 OSS 签名直链
+  // 会撞 CORS(OSS 无 Access-Control-Allow-Origin)→ 故取字节场景必须同源返回,不重定向。
+  const wantBytes = req.query.dl === '1' || req.query.dl === 'true';
+
+  // 1. 展示场景(非 dl)+ 配了 OSS:签名直链 302(OSS 直出,Node 不承出口)。
+  if (storageBackendName === 'oss' && !wantBytes) {
     try {
-      const signed = await getSignedUrl(key, SIGNED_TTL);
-      // 注:对象不存在 OSS 仍会签出 URL(取时才 403/404)。生产部署 deploy.sh 先 seed 再放量;
-      // 万一未 seed,本地文件存在则优先本地兜底,避免 302 到一个 404。
-      if (!existsSync(diskPath)) return res.redirect(302, signed);
-      // 本地有副本(镜像自带):redirect 到 OSS;本地仅作 OSS 签名失败时的兜底(下方 catch)。
-      return res.redirect(302, signed);
+      return res.redirect(302, await getSignedUrl(key, SIGNED_TTL));
     } catch {
       /* 签名失败 → 落到本地兜底 */
     }
   }
 
-  // 2. 没配 OSS(本地/私有化 MinIO)或签名失败:伺服仓内提交的文件(air-gap 必达)。
-  if (!existsSync(diskPath) || !statSync(diskPath).isFile()) {
-    return res.status(404).json({ error: '示范素材暂不可用(未 seed 且镜像内无副本)' });
+  // 2. 本地副本(镜像自带,随 git):dl 与无 OSS 都优先走它 —— 同源、最快、air-gap 必达。
+  if (existsSync(diskPath) && statSync(diskPath).isFile()) {
+    res.setHeader('Content-Type', MIME[extname(diskPath).toLowerCase()] ?? 'application/octet-stream');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('Accept-Ranges', 'bytes'); // express 的 createReadStream 不自动分段;此处声明,后续可加 range
+    createReadStream(diskPath).on('error', () => {
+      if (!res.headersSent) res.status(500).json({ error: '示范素材读取失败' });
+    }).pipe(res);
+    return;
   }
-  res.setHeader('Content-Type', MIME[extname(diskPath).toLowerCase()] ?? 'application/octet-stream');
-  res.setHeader('Cache-Control', 'public, max-age=86400');
-  res.setHeader('Accept-Ranges', 'bytes'); // express 的 createReadStream 不自动分段;此处声明,后续可加 range
-  createReadStream(diskPath).on('error', () => {
-    if (!res.headersSent) res.status(500).json({ error: '示范素材读取失败' });
-  }).pipe(res);
+
+  // 3. dl 但镜像内无副本、且配了 OSS:服务端取签名直链、流式转发(同源,绕过浏览器 CORS)。
+  if (wantBytes && storageBackendName === 'oss') {
+    try {
+      const upstream = await fetch(await getSignedUrl(key, SIGNED_TTL));
+      if (!upstream.ok || !upstream.body) throw new Error(`OSS ${upstream.status}`);
+      res.setHeader(
+        'Content-Type',
+        upstream.headers.get('content-type') || MIME[extname(diskPath).toLowerCase()] || 'application/octet-stream',
+      );
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      const { Readable } = await import('node:stream');
+      Readable.fromWeb(upstream.body as Parameters<typeof Readable.fromWeb>[0]).on('error', () => {
+        if (!res.headersSent) res.status(502).json({ error: '示范素材代理失败' });
+      }).pipe(res);
+      return;
+    } catch {
+      return res.status(502).json({ error: '示范素材代理失败(未 seed 或 OSS 不可达)' });
+    }
+  }
+
+  return res.status(404).json({ error: '示范素材暂不可用(未 seed 且镜像内无副本)' });
 });

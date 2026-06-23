@@ -653,7 +653,8 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     let failed=0;
     await Promise.all(DEMO_INPUTS.map(async a=>{
       try{
-        const r=await fetch(a.url,{credentials:'same-origin'}); if(!r.ok) throw new Error(r.status);
+        // ?dl=1:同源回字节(showcase 端点否则会 302 到 OSS 签名直链,fetch 跟随会撞 CORS)。
+        const r=await fetch(a.url+'?dl=1',{credentials:'same-origin'}); if(!r.ok) throw new Error(r.status);
         const blob=await r.blob();
         const file=new File([blob], a.name, { type:a.type||blob.type });
         const arr=({img:imgFiles,vid:vidFiles,aud:audFiles})[a.kind];
