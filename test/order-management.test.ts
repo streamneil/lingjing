@@ -9,6 +9,7 @@ const {
   createOrder, claimPaid, cancelOrder, rejectOrder, confirmAndCredit,
   requestInvoice, issueInvoice, setPayee,
   listOrdersForAdmin, countOrdersForAdmin, adminOrderCounts, getOrderDetailForAdmin,
+  cancelStalePendingOrders,
 } = await import('../src/orders/index.js');
 
 let tId = '', adminU = '', PADMIN = 'padmin-test';
@@ -135,5 +136,22 @@ describe('getOrderDetailForAdmin', () => {
   });
   it('不存在 → null', () => {
     expect(getOrderDetailForAdmin('nope')).toBeNull();
+  });
+});
+
+// 放最后:会取消 oPending,不影响前面的断言。
+describe('cancelStalePendingOrders(待支付超时自动取消)', () => {
+  const isPending = (id: string) => listOrdersForAdmin({ view: 'pending_payment', limit: 99 }).some((o) => o.id === id);
+  it('未超时不取消', () => {
+    expect(cancelStalePendingOrders(60 * 60 * 1000)).toBe(0); // 1h 窗口,刚建的单不动
+    expect(isPending(oPending)).toBe(true);
+  });
+  it('超时 → 取消(仅 pending_payment;待确认不动)', () => {
+    expect(isPending(oPending)).toBe(true);
+    const n = cancelStalePendingOrders(-1); // 窗口 -1ms = 全部待支付视为超时
+    expect(n).toBeGreaterThanOrEqual(1);
+    expect(isPending(oPending)).toBe(false);
+    expect(listOrdersForAdmin({ view: 'cancelled', limit: 99 }).some((o) => o.id === oPending)).toBe(true);
+    expect(listOrdersForAdmin({ view: 'paid_claimed', limit: 99 }).some((o) => o.id === oPaid)).toBe(true); // 待确认未被误伤
   });
 });

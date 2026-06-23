@@ -746,20 +746,29 @@
   }
   // 状态色系:琥珀=运营要动手(待确认/开票中);绿=钱到位;蓝=单据出;红=异常;灰=不用管。
   const OM_ST={pending_payment:['待支付','--t3'],paid_claimed:['待确认','--amber'],credited:['已完成','--green'],rejected:['已驳回','--red'],cancelled:['已取消','--t4']};
+  const OM_PM={offline_bank:'对公转账',wechat:'微信支付',alipay:'支付宝'};
   const OM_EMPTY={todo:'✓ 没有待处理的订单',all:'暂无订单',pending_payment:'暂无待支付订单',paid_claimed:'暂无待确认订单',credited:'暂无已完成订单',rejected:'暂无被驳回的订单',cancelled:'暂无已取消订单'};
   function omChip(label,v){ return `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:var(${v})"><span style="width:7px;height:7px;border-radius:50%;background:var(${v})"></span>${label}</span>`; }
   function omStatusChip(s){ const m=OM_ST[s]||[s,'--t3']; return omChip(m[0],m[1]); }
   function omInvCell(o){
     if(o.status!=='credited') return '<span style="color:var(--t4)">—</span>';
     if(o.invoiceStatus==='requested') return omChip('开票中','--amber');
-    if(o.invoiceStatus==='issued') return omChip('已开票','--blue')
-      +(o.invoiceNo?`<div style="font-size:11px;color:var(--t4);font-family:var(--f-mono);margin-top:1px">${esc(o.invoiceNo)}</div>`:'')
-      +(o.invoiceId?`<a href="/admin/api/admin-invoices/${encodeURIComponent(o.invoiceId)}/pdf" target="_blank" onclick="event.stopPropagation()" style="font-size:11px;color:var(--blue)">下载发票</a>`:'');
+    if(o.invoiceStatus==='issued'){
+      // 发票号本身即下载链接(点击下载 PDF),不再单独「下载发票」按钮。
+      const num=esc(o.invoiceNo||'查看发票');
+      const cell=o.invoiceId
+        ? `<a href="/admin/api/admin-invoices/${encodeURIComponent(o.invoiceId)}/pdf" target="_blank" onclick="event.stopPropagation()" title="点击下载发票 PDF" style="font-size:11px;color:var(--blue);font-family:var(--f-mono);text-decoration:underline;text-underline-offset:2px">${num}</a>`
+        : `<span style="font-size:11px;color:var(--t4);font-family:var(--f-mono)">${num}</span>`;
+      return omChip('已开票','--blue')+`<div style="margin-top:1px">${cell}</div>`;
+    }
     return '<span style="color:var(--t4)">未开票</span>';
   }
+  // 操作改为紧凑可点文字(不再用大按钮),主操作上色、次操作弱化,中点分隔。
   function omActionCell(o){
-    if(o.status==='paid_claimed') return `<div class="acts"><button class="act pri" onclick='event.stopPropagation();confirmOrder(${J(o.id)},${J(o.orderNo)})'>确认到账</button><button class="act" onclick='event.stopPropagation();rejectOrder(${J(o.id)})'>驳回</button></div>`;
-    if(o.status==='credited'&&o.invoiceStatus==='requested') return `<div class="acts"><button class="act pri" onclick='event.stopPropagation();openIssue(${J(o.invoiceId)},${J(o.tenantName||"")})'>开具发票</button><button class="act" onclick='event.stopPropagation();rejectInvoice(${J(o.invoiceId)})'>驳回开票</button></div>`;
+    const A=(label,color,call)=>`<a onclick='event.stopPropagation();${call}' style="cursor:pointer;color:var(${color});font-size:12.5px;white-space:nowrap">${label}</a>`;
+    const dot=' <span style="color:var(--t4)">·</span> ';
+    if(o.status==='paid_claimed') return A('确认到账','--amber',`confirmOrder(${J(o.id)},${J(o.orderNo)})`)+dot+A('驳回','--t3',`rejectOrder(${J(o.id)})`);
+    if(o.status==='credited'&&o.invoiceStatus==='requested') return A('开具发票','--blue',`openIssue(${J(o.invoiceId)},${J(o.tenantName||"")})`)+dot+A('驳回开票','--t3',`rejectInvoice(${J(o.invoiceId)})`);
     return '<span style="color:var(--t4);font-size:12px">明细 ›</span>';
   }
   function omSetCounts(c){
@@ -793,11 +802,11 @@
         <td style="font-family:var(--f-mono);font-size:12px">${esc(o.orderNo)}</td>
         <td style="color:var(--t3);font-family:var(--f-mono);font-size:12px">${fmtTime(o.createdAt)}</td>
         <td>${esc(o.planName)}</td>
-        <td class="bal">¥${fmtN(o.priceYuan)}</td>
+        <td class="bal">¥${fmtN(o.priceYuan)}<div style="font-size:11px;color:var(--t4);font-weight:400">${OM_PM[o.paymentMethod]||o.paymentMethod||''}</div></td>
         <td style="color:var(--t2)">${fmtN(o.credits+o.bonusCredits)}</td>
         <td>${omStatusChip(o.status)}${omAge(o)}</td>
         <td>${omInvCell(o)}</td>
-        <td style="text-align:right">${omActionCell(o)}</td>
+        <td style="text-align:right;white-space:nowrap">${omActionCell(o)}</td>
       </tr>`).join('');
     }catch(e){ tb.innerHTML='<tr><td colspan="9" class="empty">加载失败</td></tr>'; }
   }
@@ -861,7 +870,7 @@
       else if(o.status==='credited'&&o.invoiceStatus==='requested') actions=`<button class="ok" onclick='openIssue(${J(o.invoiceId)},${J(o.tenantName||"")})'>开具发票</button><button class="cancel" onclick='rejectInvoice(${J(o.invoiceId)})'>驳回开票</button>`;
       body.innerHTML=`
         <h3>订单 ${esc(o.orderNo)}</h3>
-        <p class="mdesc">${esc(o.tenantName||'—')} · ${esc(o.planName)} · ¥${fmtN(o.priceYuan)} / ${fmtN(o.credits+o.bonusCredits)} 积分</p>
+        <p class="mdesc">${esc(o.tenantName||'—')} · ${esc(o.planName)} · ¥${fmtN(o.priceYuan)} / ${fmtN(o.credits+o.bonusCredits)} 积分 · ${OM_PM[o.paymentMethod]||o.paymentMethod||'—'}</p>
         <div style="margin:16px 0 6px">${tl}</div>
         <div class="mbtns">${actions}<button class="cancel" onclick="closeOv('omDrawerOv')">关闭</button></div>`;
     }catch(e){ body.innerHTML='<div class="empty" style="padding:30px">加载失败</div>'; }

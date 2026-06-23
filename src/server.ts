@@ -128,6 +128,13 @@ if (isMain) {
 
   const app = createApp();
   startWorker();
+  // 待支付订单超时自动取消(默认 15 分钟,见 cancelStalePendingOrders)。每分钟扫一次,启动先扫一次。
+  void (async () => {
+    const { cancelStalePendingOrders } = await import('./orders/index.js');
+    const sweep = () => { try { const n = cancelStalePendingOrders(); if (n) console.log(`[订单] 待支付超时自动取消 ${n} 单`); } catch { /* 不阻断 */ } };
+    sweep();
+    setInterval(sweep, 60_000).unref?.();
+  })();
   app.listen(config.port, () => {
     console.log(`灵镜启动: http://localhost:${config.port}`);
     console.log(`  worker: 已启动(DB 队列轮询)`);
