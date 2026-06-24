@@ -366,8 +366,9 @@ export const loginOrRegisterByPhone = db.transaction(
       const token = mintSession(existing.id, existing.tenant_id);
       return { ok: true, token, isNew: false, userId: existing.id, tenantId: existing.tenant_id };
     }
-    // 新号:建机构(默认名「我的机构」,admin 可在账户页改 brand_name)+ admin 用户(无密码)。
-    const tenant = createTenant(DEFAULT_TENANT_NAME, 'hosted');
+    // 新号:建机构 + admin 用户(无密码)。默认机构名带手机号尾 4 位,让超管租户列表能区分
+    // 一堆自助注册机构(否则全叫「我的机构」无法分辨);admin 可在系统设置改 brand_name 显示名。
+    const tenant = createTenant(`${DEFAULT_TENANT_NAME}·${phone.slice(-4)}`, 'hosted');
     const u: UserRow = {
       id: randomUUID(), tenant_id: tenant.id, username: phone, display_name: phone,
       password_hash: '', phone, role: 'admin', status: 'active', last_active: null, created_at: now(),
