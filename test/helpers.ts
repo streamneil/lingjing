@@ -1,7 +1,15 @@
 // 测试用 HTTP 助手 — 启动 app、保持 cookie(支持登录后复用 session)。
 // 不引 supertest,直接用 node:http,少一个依赖。
+//
+// 并发隔离(2026-06-25):早期实现每个请求都 app.listen(0) + server.close(),
+// 全套 727 用例 × 每例多次请求 = 上千次临时端口 listen/close。并行 16 个 fork 跑时
+// 临时端口压力下偶发 listen/connect 失败(ECONNRESET / 端口竞争)→ 链路中某请求挂掉 →
+// 级联成随机用例的 401 / 断言失败(每轮换一个用例,典型资源竞争 flake)。
+// 改为「每个 app 复用一个常驻 server」:整文件只 listen 一次,所有请求复用该端口,从不 close;
+// server.unref() 保证进程仍能正常退出。端口 churn 从上千降到 1 → flake 消失。
 
 import http from 'node:http';
+import type { Server } from 'node:http';
 import type { Express } from 'express';
 
 export interface Res {
@@ -17,58 +25,69 @@ export interface RawRes {
   buf: Buffer;
 }
 
+// 每个 app 一个常驻监听 server(listen 一次,所有 Client / 请求复用)。
+// unref:不阻塞进程退出;从不 close:省掉每请求的 listen/close 端口 churn(flake 根因)。
+const _servers = new WeakMap<Express, Promise<number>>();
+function portFor(app: Express): Promise<number> {
+  let p = _servers.get(app);
+  if (!p) {
+    p = new Promise<number>((resolve, reject) => {
+      const server: Server = app.listen(0, () => resolve((server.address() as any).port));
+      server.once('error', reject);
+      server.unref();
+    });
+    _servers.set(app, p);
+  }
+  return p;
+}
+
 export class Client {
   private cookie: string | undefined;
   constructor(private app: Express) {}
 
-  private request(method: string, path: string, body?: unknown): Promise<Res> {
+  private async request(method: string, path: string, body?: unknown): Promise<Res> {
+    const port = await portFor(this.app);
     return new Promise((resolveP, reject) => {
-      const server = this.app.listen(0, () => {
-        const port = (server.address() as any).port;
-        const data = body !== undefined ? JSON.stringify(body) : undefined;
-        const headers: Record<string, string> = {};
-        if (data) {
-          headers['Content-Type'] = 'application/json';
-          headers['Content-Length'] = String(Buffer.byteLength(data));
-        }
-        if (this.cookie) headers['Cookie'] = this.cookie;
+      const data = body !== undefined ? JSON.stringify(body) : undefined;
+      const headers: Record<string, string> = {};
+      if (data) {
+        headers['Content-Type'] = 'application/json';
+        headers['Content-Length'] = String(Buffer.byteLength(data));
+      }
+      if (this.cookie) headers['Cookie'] = this.cookie;
 
-        const req = http.request({ host: '127.0.0.1', port, path, method, headers }, (res) => {
-          let buf = '';
-          res.on('data', (c) => (buf += c));
-          res.on('end', () => {
-            server.close();
-            const sc = res.headers['set-cookie']?.[0];
-            // 保存 session cookie(取 name=value 部分)供后续请求复用
-            if (sc) {
-              const nv = sc.split(';')[0]!;
-              this.cookie = nv;
-            }
-            let json: any;
-            try {
-              json = JSON.parse(buf);
-            } catch {
-              json = buf;
-            }
-            resolveP({ status: res.statusCode!, body: json, setCookie: sc, headers: res.headers });
-          });
+      const req = http.request({ host: '127.0.0.1', port, path, method, headers }, (res) => {
+        let buf = '';
+        res.on('data', (c) => (buf += c));
+        res.on('end', () => {
+          const sc = res.headers['set-cookie']?.[0];
+          // 保存 session cookie(取 name=value 部分)供后续请求复用
+          if (sc) {
+            const nv = sc.split(';')[0]!;
+            this.cookie = nv;
+          }
+          let json: any;
+          try {
+            json = JSON.parse(buf);
+          } catch {
+            json = buf;
+          }
+          resolveP({ status: res.statusCode!, body: json, setCookie: sc, headers: res.headers });
         });
-        req.on('error', (e) => {
-          server.close();
-          reject(e);
-        });
-        if (data) req.write(data);
-        req.end();
       });
+      req.on('error', reject);
+      if (data) req.write(data);
+      req.end();
     });
   }
 
   /** multipart/form-data 上传:fields 普通字段,files 文件(name → {filename, content, type})。 */
-  postMultipart(
+  async postMultipart(
     path: string,
     fields: Record<string, string>,
     files: Record<string, { filename: string; content: Buffer; type: string }>,
   ): Promise<Res> {
+    const port = await portFor(this.app);
     return new Promise((resolveP, reject) => {
       const boundary = '----ljtest' + Math.random().toString(36).slice(2);
       const parts: Buffer[] = [];
@@ -91,28 +110,23 @@ export class Client {
       parts.push(Buffer.from(`--${boundary}--\r\n`));
       const body = Buffer.concat(parts);
 
-      const server = this.app.listen(0, async () => {
-        const port = (server.address() as any).port;
-        const http = (await import('node:http')).default;
-        const headers: Record<string, string> = {
-          'Content-Type': `multipart/form-data; boundary=${boundary}`,
-          'Content-Length': String(body.length),
-        };
-        if (this.cookie) headers['Cookie'] = this.cookie;
-        const req = http.request({ host: '127.0.0.1', port, path, method: 'POST', headers }, (res) => {
-          let buf = '';
-          res.on('data', (c) => (buf += c));
-          res.on('end', () => {
-            server.close();
-            let json: any;
-            try { json = JSON.parse(buf); } catch { json = buf; }
-            resolveP({ status: res.statusCode!, body: json });
-          });
+      const headers: Record<string, string> = {
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': String(body.length),
+      };
+      if (this.cookie) headers['Cookie'] = this.cookie;
+      const req = http.request({ host: '127.0.0.1', port, path, method: 'POST', headers }, (res) => {
+        let buf = '';
+        res.on('data', (c) => (buf += c));
+        res.on('end', () => {
+          let json: any;
+          try { json = JSON.parse(buf); } catch { json = buf; }
+          resolveP({ status: res.statusCode!, body: json });
         });
-        req.on('error', (e) => { server.close(); reject(e); });
-        req.write(body);
-        req.end();
       });
+      req.on('error', reject);
+      req.write(body);
+      req.end();
     });
   }
 
@@ -139,26 +153,20 @@ export class Client {
     return this.request('DELETE', path);
   }
   /** 原始 GET:拿 status + headers + 二进制 body(下载端点测 Content-Disposition / 字节)。 */
-  getRaw(path: string): Promise<RawRes> {
+  async getRaw(path: string): Promise<RawRes> {
+    const port = await portFor(this.app);
     return new Promise((resolveP, reject) => {
-      const server = this.app.listen(0, () => {
-        const port = (server.address() as any).port;
-        const headers: Record<string, string> = {};
-        if (this.cookie) headers['Cookie'] = this.cookie;
-        const req = http.request({ host: '127.0.0.1', port, path, method: 'GET', headers }, (res) => {
-          const chunks: Buffer[] = [];
-          res.on('data', (c) => chunks.push(Buffer.from(c)));
-          res.on('end', () => {
-            server.close();
-            resolveP({ status: res.statusCode!, headers: res.headers, buf: Buffer.concat(chunks) });
-          });
+      const headers: Record<string, string> = {};
+      if (this.cookie) headers['Cookie'] = this.cookie;
+      const req = http.request({ host: '127.0.0.1', port, path, method: 'GET', headers }, (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c) => chunks.push(Buffer.from(c)));
+        res.on('end', () => {
+          resolveP({ status: res.statusCode!, headers: res.headers, buf: Buffer.concat(chunks) });
         });
-        req.on('error', (e) => {
-          server.close();
-          reject(e);
-        });
-        req.end();
       });
+      req.on('error', reject);
+      req.end();
     });
   }
   /** 丢弃当前 cookie(模拟未登录 / 新客户端)。 */
