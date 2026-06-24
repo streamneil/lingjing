@@ -45,6 +45,9 @@ window.LJ = (function () {
     // 便捷方法
     login: (username, password, captchaToken) =>
       call('POST', '/login', { username, password, captchaToken }),
+    // 短信验证码:发码(需滑块 token)+ 登录/注册(统一入口,后端按手机号是否存在分支)
+    smsSend: (phone, captchaToken) => call('POST', '/sms/send', { phone, captchaToken }),
+    smsLogin: (phone, code) => call('POST', '/sms/login', { phone, code }),
     logout: () => call('POST', '/logout'),
     me: () => call('GET', '/me'),
 

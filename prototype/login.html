@@ -93,6 +93,22 @@
   .pitch{ margin-top:20px; display:flex; align-items:center; justify-content:center; gap:18px; color:var(--t4); font-size:12px; font-family:var(--f-mono); flex-wrap:wrap; }
   .pitch .dot{width:5px;height:5px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);display:inline-block;margin-right:5px}
   .pitch span{white-space:nowrap}
+
+  /* 登录方式 tab(验证码 / 密码),等权两 tab */
+  .tabs{display:flex;gap:4px;background:var(--field);border:1px solid var(--line);border-radius:12px;padding:4px;margin-bottom:22px}
+  .tab{flex:1;text-align:center;padding:9px 0;font-size:13.5px;color:var(--t3);border-radius:9px;cursor:pointer;font-weight:600;transition:.18s;background:none;border:none;font-family:var(--f)}
+  .tab.active{background:var(--card-hi);color:var(--t1);box-shadow:0 1px 0 rgba(255,255,255,.05) inset,0 2px 8px -4px rgba(0,0,0,.6)}
+  .panel{display:none}
+  .panel.active{display:block}
+  /* 验证码行:输入框 + 获取按钮 */
+  .code-row{display:flex;gap:9px}
+  .code-row input{flex:1;letter-spacing:6px;font-family:var(--f-mono);font-size:16px;text-align:center}
+  .send-btn{flex:0 0 auto;white-space:nowrap;background:var(--blue-bg);color:var(--blue);border:1px solid rgba(77,141,255,.28);border-radius:12px;padding:0 16px;font-size:13px;font-weight:600;font-family:var(--f);cursor:pointer;transition:.15s}
+  .send-btn:hover:not(:disabled){background:rgba(77,141,255,.2)}
+  .send-btn:disabled{opacity:.5;cursor:not-allowed;color:var(--t3)}
+  .affordance{font-size:11.5px;color:var(--t3);margin-top:9px;line-height:1.6;display:flex;align-items:center;gap:6px}
+  .affordance svg{width:13px;height:13px;flex:0 0 auto;color:var(--blue)}
+  .sent-hint{color:var(--green);font-size:12px;margin-top:9px;min-height:16px}
 </style>
 </head>
 <body>
@@ -103,28 +119,62 @@
       <div class="tag">一站式 AI 内容创作平台</div>
     </div>
 
-    <form class="card" id="lgForm">
-      <h2>欢迎回来</h2>
+    <div class="card">
+      <h2>欢迎来到灵镜</h2>
       <div class="sub">登录创作台,继续你的内容生产</div>
 
-      <div class="fld">
-        <label>用户名</label>
-        <input id="username" placeholder="你的登录账号" autocomplete="username" required autofocus>
+      <div class="tabs" role="tablist">
+        <button class="tab active" id="tabSms" role="tab" aria-selected="true">验证码登录</button>
+        <button class="tab" id="tabPw" role="tab" aria-selected="false">密码登录</button>
       </div>
-      <div class="fld">
-        <label>密码</label>
-        <div class="pw-wrap">
-          <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" required>
-          <button type="button" class="pw-eye" id="pwEye" aria-label="显示密码">显示</button>
+
+      <!-- 验证码登录 / 注册(统一入口) -->
+      <form class="panel active" id="smsForm">
+        <div class="fld">
+          <label>手机号</label>
+          <input id="smsPhone" type="tel" inputmode="numeric" maxlength="11" placeholder="请输入手机号" autocomplete="tel" required autofocus>
         </div>
-      </div>
-      <div class="fld" style="margin-bottom:6px">
-        <label>安全验证</label>
-        <div id="lgCaptcha"></div>
-      </div>
-      <button class="submit" id="lgBtn" type="submit" disabled>登 录</button>
-      <div class="err" id="lgErr"></div>
-    </form>
+        <div class="fld" style="margin-bottom:6px">
+          <label>安全验证</label>
+          <div id="smsCaptcha"></div>
+        </div>
+        <div class="fld">
+          <label>验证码</label>
+          <div class="code-row">
+            <input id="smsCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 位验证码">
+            <button type="button" class="send-btn" id="sendBtn" disabled>获取验证码</button>
+          </div>
+          <div class="sent-hint" id="sentHint" aria-live="polite"></div>
+        </div>
+        <button class="submit" id="smsBtn" type="submit" disabled>登 录 / 注 册</button>
+        <div class="affordance">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+          <span>未注册的手机号,验证后将自动创建账号</span>
+        </div>
+        <div class="err" id="smsErr" aria-live="polite"></div>
+      </form>
+
+      <!-- 密码登录(回落) -->
+      <form class="panel" id="pwForm">
+        <div class="fld">
+          <label>用户名</label>
+          <input id="username" placeholder="你的登录账号" autocomplete="username">
+        </div>
+        <div class="fld">
+          <label>密码</label>
+          <div class="pw-wrap">
+            <input id="password" type="password" placeholder="••••••••" autocomplete="current-password">
+            <button type="button" class="pw-eye" id="pwEye" aria-label="显示密码">显示</button>
+          </div>
+        </div>
+        <div class="fld" style="margin-bottom:6px">
+          <label>安全验证</label>
+          <div id="pwCaptcha"></div>
+        </div>
+        <button class="submit" id="pwBtn" type="submit" disabled>登 录</button>
+        <div class="err" id="pwErr" aria-live="polite"></div>
+      </form>
+    </div>
 
     <div class="pitch">
       <span><span class="dot"></span>云端秒级生成</span>
@@ -137,30 +187,91 @@
 <script src="api.js"></script>
 <script src="captcha.js"></script>
 <script>
-  const form=document.getElementById('lgForm'),btn=document.getElementById('lgBtn'),err=document.getElementById('lgErr');
-  const pw=document.getElementById('password'),eye=document.getElementById('pwEye');
-  eye.addEventListener('click',()=>{ const show=pw.type==='password'; pw.type=show?'text':'password'; eye.textContent=show?'隐藏':'显示'; pw.focus(); });
+  const $=(id)=>document.getElementById(id);
+  const isPhone=(p)=>/^1[3-9]\d{9}$/.test(p);
+  const mask=(p)=>p.slice(0,3)+'****'+p.slice(7);
 
-  // 滑块行为验证:过验后启用登录按钮,记下一次性 captchaToken。
-  let captchaToken=null;
-  const cap=LJCaptcha.mount(document.getElementById('lgCaptcha'),{
-    onPass:(t)=>{ captchaToken=t; btn.disabled=false; },
-    onReset:()=>{ captchaToken=null; btn.disabled=true; },
+  // ── tab 切换(验证码 / 密码)──
+  const tabSms=$('tabSms'),tabPw=$('tabPw'),smsForm=$('smsForm'),pwForm=$('pwForm');
+  function selectTab(sms){
+    tabSms.classList.toggle('active',sms); tabPw.classList.toggle('active',!sms);
+    tabSms.setAttribute('aria-selected',sms); tabPw.setAttribute('aria-selected',!sms);
+    smsForm.classList.toggle('active',sms); pwForm.classList.toggle('active',!sms);
+    (sms?$('smsPhone'):$('username')).focus();
+  }
+  tabSms.addEventListener('click',()=>selectTab(true));
+  tabPw.addEventListener('click',()=>selectTab(false));
+
+  // ── 验证码登录 / 注册 ──
+  const smsPhone=$('smsPhone'),smsCode=$('smsCode'),sendBtn=$('sendBtn'),smsBtn=$('smsBtn'),
+        smsErr=$('smsErr'),sentHint=$('sentHint');
+  let smsToken=null, countdown=0, codeSent=false;
+  function refreshSend(){ sendBtn.disabled=!(countdown===0 && smsToken && isPhone(smsPhone.value.trim())); }
+  function refreshSubmit(){ smsBtn.disabled=!(codeSent && smsCode.value.trim().length===6); }
+  const smsCap=LJCaptcha.mount($('smsCaptcha'),{
+    onPass:(t)=>{ smsToken=t; refreshSend(); },
+    onReset:()=>{ smsToken=null; refreshSend(); },
+  });
+  smsPhone.addEventListener('input',()=>{ smsPhone.value=smsPhone.value.replace(/\D/g,''); refreshSend(); });
+  smsCode.addEventListener('input',()=>{ smsCode.value=smsCode.value.replace(/\D/g,''); refreshSubmit(); });
+
+  function startCountdown(){
+    countdown=60; sendBtn.textContent=countdown+'s'; refreshSend();
+    const t=setInterval(()=>{ countdown--; if(countdown<=0){ clearInterval(t); countdown=0; sendBtn.textContent='重新获取'; } else sendBtn.textContent=countdown+'s'; refreshSend(); },1000);
+  }
+
+  sendBtn.addEventListener('click',async()=>{
+    smsErr.textContent=''; const phone=smsPhone.value.trim();
+    if(!isPhone(phone)){ smsErr.innerHTML='✕ 请输入有效的手机号'; return; }
+    if(!smsToken){ smsErr.innerHTML='✕ 请先完成滑块验证'; return; }
+    sendBtn.disabled=true; sendBtn.textContent='发送中…';
+    try{
+      await LJ.smsSend(phone,smsToken);
+      sentHint.textContent='✓ 验证码已发往 '+mask(phone);
+      codeSent=true; smsCode.focus(); refreshSubmit();
+      smsToken=null; smsCap.reset(); // token 一次性,重发需重新滑块
+      startCountdown();
+    }catch(ex){
+      smsErr.innerHTML='✕ '+(ex.message||'发送失败'); sendBtn.textContent='获取验证码';
+      smsToken=null; smsCap.reset(); refreshSend();
+    }
   });
 
-  form.addEventListener('submit',async(e)=>{
-    e.preventDefault(); err.textContent='';
-    if(!captchaToken){ err.innerHTML='✕ 请先完成滑块验证'; return; }
-    btn.disabled=true; btn.textContent='登录中…';
+  smsForm.addEventListener('submit',async(e)=>{
+    e.preventDefault(); smsErr.textContent='';
+    const phone=smsPhone.value.trim(), code=smsCode.value.trim();
+    if(!isPhone(phone)||code.length!==6){ smsErr.innerHTML='✕ 请填写手机号与 6 位验证码'; return; }
+    smsBtn.disabled=true; smsBtn.textContent='登录中…';
     try{
-      await LJ.login(document.getElementById('username').value.trim(),pw.value,captchaToken);
+      await LJ.smsLogin(phone,code);
       location.href='explore.html';
     }catch(ex){
-      err.innerHTML='✕ '+(ex.message||'登录失败'); btn.textContent='登 录';
-      // 登录失败:抖动 + 清空密码 + 重新聚焦;captchaToken 已被服务端消费,重置滑块重领。
+      smsErr.innerHTML='✕ '+(ex.message||'登录失败'); smsBtn.textContent='登 录 / 注 册';
+      smsCode.classList.add('shake'); setTimeout(()=>smsCode.classList.remove('shake'),420);
+      smsCode.value=''; smsCode.focus(); refreshSubmit();
+    }
+  });
+
+  // ── 密码登录(回落)──
+  const pw=$('password'),eye=$('pwEye'),pwBtn=$('pwBtn'),pwErr=$('pwErr');
+  eye.addEventListener('click',()=>{ const show=pw.type==='password'; pw.type=show?'text':'password'; eye.textContent=show?'隐藏':'显示'; pw.focus(); });
+  let pwToken=null;
+  const pwCap=LJCaptcha.mount($('pwCaptcha'),{
+    onPass:(t)=>{ pwToken=t; pwBtn.disabled=false; },
+    onReset:()=>{ pwToken=null; pwBtn.disabled=true; },
+  });
+  pwForm.addEventListener('submit',async(e)=>{
+    e.preventDefault(); pwErr.textContent='';
+    if(!pwToken){ pwErr.innerHTML='✕ 请先完成滑块验证'; return; }
+    pwBtn.disabled=true; pwBtn.textContent='登录中…';
+    try{
+      await LJ.login($('username').value.trim(),pw.value,pwToken);
+      location.href='explore.html';
+    }catch(ex){
+      pwErr.innerHTML='✕ '+(ex.message||'登录失败'); pwBtn.textContent='登 录';
       pw.classList.add('shake'); setTimeout(()=>pw.classList.remove('shake'),420);
       pw.value=''; pw.focus();
-      captchaToken=null; cap.reset(); // token 一次性,失败后必须重新验
+      pwToken=null; pwCap.reset();
     }
   });
 </script>
