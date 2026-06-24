@@ -146,6 +146,37 @@ db.exec(`
   );
 `);
 
+// ── 短信验证码登录 / 自助注册(/plan-ceo-review + /plan-eng-review,2026-06-24)──
+// sms_code:验证码不落明文(code_hash=sha256(phone:code))。purpose 枚举服务 4 流程
+//   (login|register|reset|rebind),verify 须绑 (phone,purpose) 且执行特权副作用同事务消费。
+//   单活码:每 (phone,purpose) 只保留最新一条(发码前先删旧)。attempts ≤5 即作废(6 位防暴破)。
+// sms_send_log:append-only 发送流水,做「每手机号 60s / 每手机号日 / 每 IP 日」限频计数
+//   (sms_code 消费即删会丢计数,故独立计数表);保留 30 天,惰性清。超管只读视图读它。
+db.exec(`
+  CREATE TABLE IF NOT EXISTS sms_code (
+    id          TEXT PRIMARY KEY,
+    phone       TEXT NOT NULL,
+    purpose     TEXT NOT NULL,            -- login | register | reset | rebind
+    code_hash   TEXT NOT NULL,            -- sha256(phone:code),不落明文
+    attempts    INTEGER NOT NULL DEFAULT 0,
+    ip          TEXT,
+    created_at  INTEGER NOT NULL,
+    expires_at  INTEGER NOT NULL,
+    UNIQUE (phone, purpose)               -- 单活码:同手机号同用途只一条(发码前 DELETE 旧的)
+  );
+  CREATE INDEX IF NOT EXISTS idx_sms_code_exp ON sms_code(expires_at);
+
+  CREATE TABLE IF NOT EXISTS sms_send_log (
+    id          TEXT PRIMARY KEY,
+    phone       TEXT NOT NULL,
+    ip          TEXT,
+    purpose     TEXT,
+    created_at  INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_sms_send_phone ON sms_send_log(phone, created_at);
+  CREATE INDEX IF NOT EXISTS idx_sms_send_ip ON sms_send_log(ip, created_at);
+`);
+
 // audit_log 加 actor_type 列(/plan-ceo-review D11):区分操作者是租户 user 还是平台超管。
 //   user_id 语义 = actor_id;actor_type=platform_admin 时 user_id 指向 platform_admin.id。
 //   跨租户充值记目标租户 tenant_id,租户 admin 能在自己审计看到"平台充值 N"。
@@ -246,6 +277,10 @@ addColumnIfMissing('audit_log', 'detail', `detail TEXT`);
 addColumnIfMissing('avatar', 'orientation', `orientation TEXT DEFAULT 'portrait'`);
 addColumnIfMissing('avatar', 'is_default', `is_default INTEGER NOT NULL DEFAULT 0`);
 addColumnIfMissing('user', 'display_name', `display_name TEXT`);
+// 短信登录:user.phone(可空,部分唯一索引 —— NULL 不参与唯一,老用户无手机号)。
+//   新手机号自助注册时 username=phone(Fork2);无密码用户 password_hash 存哨兵 ''(Fork1,免迁移)。
+addColumnIfMissing('user', 'phone', `phone TEXT`);
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_user_phone ON user(phone) WHERE phone IS NOT NULL`);
 addColumnIfMissing('authorization', 'terms_version', `terms_version TEXT`);
 addColumnIfMissing('voice', 'provider_voice_id', `provider_voice_id TEXT`);
 // 多工具平台:job.output_kind 区分产物类型(video|image|audio),右画廊按此渲染。
@@ -413,6 +448,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS platform_config (key TEXT PRIMARY KEY, value
   seedCfg.run('markup_x35', '35'); // 3.5 倍毛利 × 10 积分/元
   seedCfg.run('credits_per_yuan', '10');
   seedCfg.run('floor_x35', '10'); // 倍率地板:markup_x35 ≥ 10 才保本(建议运营设 ≥30 守毛利)
+  seedCfg.run('self_serve_trial_credits', '200'); // 自助注册到账试用积分(够试跳 ~1 条;运营可调,0=不送)
 }
 // video_model_override:视频/数字人后台可改成本+启停(照 image_model_override 范式)。
 //   一模型多档=多行(id="{key}:{variant}");enabled 默认 1 —— 视频现状全部可用,默认0会误杀生成。
@@ -894,7 +930,8 @@ export interface UserRow {
   tenant_id: string;
   username: string;
   display_name: string | null;
-  password_hash: string;
+  password_hash: string; // bcrypt;哨兵 '' = 未设密码(手机号自助注册用户,Fork1)
+  phone: string | null; // 登录手机号(全局唯一 where not null);老用户为 null
   role: Role;
   status: UserStatus;
   last_active: number | null;

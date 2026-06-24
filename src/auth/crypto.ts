@@ -12,7 +12,7 @@
 // 实测 20 并发登录 1097ms→261ms(18→77 logins/s,4.3×)且不再冻结读写。
 // hash 格式仍为 $2b$,与历史 bcryptjs 存量 hash 双向兼容,无需迁移密码。
 
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import bcrypt from 'bcrypt';
 
 const BCRYPT_ROUNDS = 10;
@@ -45,4 +45,23 @@ export function genTempPassword(len = 12): string {
   let out = '';
   for (let i = 0; i < len; i++) out += TMP_ALPHABET[bytes[i]! % TMP_ALPHABET.length];
   return out;
+}
+
+// ── 短信验证码(SMS OTP)──
+// 决策来源:/plan-ceo-review(6 位,覆盖原 4 位需求)+ /plan-eng-review。
+// 用 crypto 随机源取均匀 6 位数字(不用 Math.random,且避免取模偏置:拒绝采样)。
+/** 生成 6 位纯数字验证码(crypto 随机,均匀分布,允许前导零)。 */
+export function genNumericCode(len = 6): string {
+  let out = '';
+  while (out.length < len) {
+    for (const b of randomBytes(len)) {
+      if (b < 250) { out += String(b % 10); if (out.length === len) break; } // 250..255 丢弃,消除取模偏置
+    }
+  }
+  return out;
+}
+
+/** 验证码不落明文:存 sha256(phone:code)。验证时重算比对(快、无 bcrypt 开销;OTP 短时一次性,sha256 足够)。 */
+export function hashSmsCode(phone: string, code: string): string {
+  return createHash('sha256').update(`${phone}:${code}`).digest('hex');
 }

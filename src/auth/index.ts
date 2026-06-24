@@ -14,6 +14,8 @@ import {
   type SessionRow,
 } from '../db/index.js';
 import { hashPassword, verifyPassword, dummyVerify, genToken, genTempPassword } from './crypto.js';
+import { consumeSmsCode, consumeMessage } from './sms.js';
+import { grant } from '../credits/index.js';
 
 const now = () => Date.now();
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 天
@@ -82,6 +84,22 @@ export function seatUsage(tenantId: string): { used: number; limit: number } {
 // 建一个叫 admin 的用户造成"我以为我是超管"的混淆,不承担安全职责。
 const RESERVED_USERNAMES = new Set(['admin', 'administrator', 'root', 'superadmin', 'system']);
 
+// 同步插入核心:席位校验(仅 creator)+ 用户名唯一 + 写入(含 phone)。串行化防 TOCTOU 超卖。
+// 必须在事务内调用。供 createUser(密码 hash 后)与 loginOrRegisterByPhone(哨兵 '' 免 hash → 全同步)共用(DRY)。
+function insertUserRow(u: UserRow): void {
+  if (u.role === 'creator' && countCreatorsHoldingSeat(u.tenant_id) >= seatLimit(u.tenant_id)) {
+    throw memberErr('SEATS_FULL', `创作席位已满(${countCreatorsHoldingSeat(u.tenant_id)}/${seatLimit(u.tenant_id)}),请升级套餐或移除其他创作者`);
+  }
+  // 用户名全局唯一:登录只凭账号即可定位租户,无需手输机构 ID。
+  if (db.prepare(`SELECT 1 FROM user WHERE username=?`).get(u.username)) {
+    throw new Error('用户名已被占用(全平台唯一,请换一个)');
+  }
+  db.prepare(
+    `INSERT INTO user (id,tenant_id,username,display_name,password_hash,phone,role,status,last_active,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+  ).run(u.id, u.tenant_id, u.username, u.display_name, u.password_hash, u.phone, u.role, u.status, u.last_active, u.created_at);
+}
+
 export async function createUser(
   tenantId: string,
   username: string,
@@ -100,27 +118,19 @@ export async function createUser(
     username,
     display_name: (displayName && displayName.trim()) || username, // 昵称优先;空回落用户名
     password_hash: passwordHash,
+    phone: null, // 后台开户的成员无手机号;手机号自助注册走 loginOrRegisterByPhone
     role,
     status: 'active',
     last_active: null,
     created_at: now(),
   };
-  // 事务内:席位校验(仅 creator)+ 用户名唯一校验 + 写入,串行化防 TOCTOU 超卖(同 credits.reserve)。
-  const tx = db.transaction(() => {
-    if (role === 'creator' && countCreatorsHoldingSeat(tenantId) >= seatLimit(tenantId)) {
-      throw memberErr('SEATS_FULL', `创作席位已满(${countCreatorsHoldingSeat(tenantId)}/${seatLimit(tenantId)}),请升级套餐或移除其他创作者`);
-    }
-    // 用户名全局唯一:登录只凭账号即可定位租户,无需手输机构 ID。
-    if (db.prepare(`SELECT 1 FROM user WHERE username=?`).get(username)) {
-      throw new Error('用户名已被占用(全平台唯一,请换一个)');
-    }
-    db.prepare(
-      `INSERT INTO user (id,tenant_id,username,display_name,password_hash,role,status,last_active,created_at)
-       VALUES (?,?,?,?,?,?,?,?,?)`,
-    ).run(u.id, u.tenant_id, u.username, u.display_name, u.password_hash, u.role, u.status, u.last_active, u.created_at);
-  });
-  tx();
+  db.transaction(() => insertUserRow(u))();
   return u;
+}
+
+/** 是否已设密码。哨兵 '' = 未设(手机号自助注册用户,Fork1)。判定只此一处,防「is-password-user」两处漂移(外部声音#2)。 */
+export function userHasPassword(u: { password_hash: string }): boolean {
+  return !!u.password_hash;
 }
 
 /** 停用/启用成员。actingUserId:不能停用自己,也不能停用机构最后一个 active admin。
@@ -293,6 +303,8 @@ export interface AuthedUser {
   username: string;
   displayName: string;
   role: Role;
+  phone: string | null; // 绑定手机号(脱敏前端再处理);未绑定为 null(账户页提示绑定,#9)
+  hasPassword: boolean; // 是否已设密码;false → 账户页提示设密码(#7)
 }
 
 /** 用 (username, password) 登录(用户名全局唯一,租户从账号反查),成功返回 session token。 */
@@ -307,6 +319,8 @@ export async function login(username: string, password: string): Promise<string>
     throw fail();
   }
   if (u.status === 'disabled') throw new Error('账号已被停用');
+  // 哨兵 '' = 未设密码(手机号注册用户):密码登录不通,引导走验证码。dummyVerify 抵时序。
+  if (!userHasPassword(u)) { await dummyVerify(password); throw new Error('该账号未设置密码,请用验证码登录'); }
   if (!(await verifyPassword(password, u.password_hash))) throw fail();
 
   const token = genToken();
@@ -320,6 +334,54 @@ export async function login(username: string, password: string): Promise<string>
 export function logout(token: string): void {
   db.prepare(`DELETE FROM session WHERE token=?`).run(token);
 }
+
+// ── 手机验证码登录 / 自助注册(统一入口,需求#5/#6;/plan-ceo-review + /plan-eng-review)──
+/** 写 session 行,返回 token(供密码登录与手机登录共用)。 */
+function mintSession(userId: string, tenantId: string): string {
+  const token = genToken();
+  const t = now();
+  db.prepare(
+    `INSERT INTO session (token,user_id,tenant_id,created_at,expires_at) VALUES (?,?,?,?,?)`,
+  ).run(token, userId, tenantId, t, t + SESSION_TTL_MS);
+  return token;
+}
+
+export type PhoneAuthResult =
+  | { ok: true; token: string; isNew: boolean; userId: string; tenantId: string }
+  | { ok: false; error: string };
+
+/** 验证码登录或注册(同一入口,验码已在此事务内消费)。
+ *  老号 → 直接登录(#6);新号 → 建机构(默认名)+ 设为 admin(username=phone,哨兵 '' 免密)+ 试用积分(#5)。
+ *  哨兵 '' 免 bcrypt → 全同步:createTenant + insertUserRow + grant + mintSession 同一事务,失败全回滚
+ *  (含并发同号:UNIQUE(phone) 让后到者插入失败 → 抛错回滚 → 前端重试走登录分支)。 */
+export const loginOrRegisterByPhone = db.transaction(
+  (phone: string, code: string, ip: string | null): PhoneAuthResult => {
+    const consume = consumeSmsCode(phone, 'login', code, ip);
+    if (consume !== 'ok') return { ok: false, error: consumeMessage(consume)! };
+    const existing = db
+      .prepare(`SELECT id, tenant_id, status FROM user WHERE phone=?`)
+      .get(phone) as { id: string; tenant_id: string; status: UserStatus } | undefined;
+    if (existing) {
+      if (existing.status === 'disabled') return { ok: false, error: '账号已被停用' };
+      const token = mintSession(existing.id, existing.tenant_id);
+      return { ok: true, token, isNew: false, userId: existing.id, tenantId: existing.tenant_id };
+    }
+    // 新号:建机构(默认名「我的机构」,admin 可在账户页改 brand_name)+ admin 用户(无密码)。
+    const tenant = createTenant(DEFAULT_TENANT_NAME, 'hosted');
+    const u: UserRow = {
+      id: randomUUID(), tenant_id: tenant.id, username: phone, display_name: phone,
+      password_hash: '', phone, role: 'admin', status: 'active', last_active: null, created_at: now(),
+    };
+    insertUserRow(u);
+    // 试用积分:运营可在 platform_config 调(0=不送);受同套发送/注册防滥用闸约束(已知 COGS 风险)。
+    const trial = Number(
+      (db.prepare(`SELECT value FROM platform_config WHERE key='self_serve_trial_credits'`).get() as { value?: string } | undefined)?.value,
+    ) || 0;
+    if (trial > 0) grant(tenant.id, trial, '自助注册试用积分');
+    const token = mintSession(u.id, tenant.id);
+    return { ok: true, token, isNew: true, userId: u.id, tenantId: tenant.id };
+  },
+);
 
 /** 校验 session token,返回当前用户(含最新角色/状态),无效返回 null。 */
 export function resolveSession(token: string | undefined): AuthedUser | null {
@@ -364,6 +426,7 @@ export function resolveSession(token: string | undefined): AuthedUser | null {
     isCustomBranded,
     logoVer: orgLogoKey ? orgLogoKey.slice(-12) : '0', // 换/恢复 logo 后变 → ?v= 破缓存
     username: u.username, displayName: u.display_name || u.username, role: u.role,
+    phone: u.phone, hasPassword: userHasPassword(u),
   };
 }
 
