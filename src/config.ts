@@ -121,6 +121,28 @@ export const config = {
     password: () => required('SUPERADMIN_PASS'),
   },
 
+  // ── 短信验证码登录 / 自助注册（/plan-ceo-review + /plan-eng-review，2026-06-24）──
+  // provider 自动选择:aliyun 配齐（AK+签名+模板）则用阿里云,否则回落 ConsoleSmsSender
+  //   （开发/私有化:把验证码打印到服务端日志,前端流程照常可联调,签名审批前可上线）。
+  // AccessKey 可复用 OSS 同账号的（RAM 授权 AliyunDysmsFullAccess）。
+  sms: {
+    provider: optional('SMS_PROVIDER', '') as '' | 'aliyun' | 'console', // 空=自动
+    aliyun: {
+      accessKeyId: optional('SMS_ALIYUN_AK_ID', '') || optional('OSS_ACCESS_KEY_ID', ''),
+      accessKeySecret: optional('SMS_ALIYUN_AK_SECRET', '') || optional('OSS_ACCESS_KEY_SECRET', ''),
+      signName: optional('SMS_SIGN_NAME', ''), // 阿里云控制台审核通过的签名
+      templateCode: optional('SMS_TEMPLATE_CODE', ''), // 模板 CODE（含 ${code} 变量）
+      endpoint: optional('SMS_ENDPOINT', 'dysmsapi.aliyuncs.com'),
+    },
+    codeTtlMs: 5 * 60 * 1000, // 验证码 5 分钟有效（需求#1）
+    resendCooldownMs: 60 * 1000, // 同手机号 60s 只能发 1 条（需求#3）
+    maxVerifyAttempts: 5, // 每码验证失败 ≤5 次即作废（需求#4，防 6 位暴破）
+    perIpDailyCap: Math.max(1, Number(optional('SMS_IP_DAILY_CAP', '60')) || 60), // 每 IP 日发送上限（软信号,政企 NAT 放宽）
+    perPhoneDailyCap: Math.max(1, Number(optional('SMS_PHONE_DAILY_CAP', '10')) || 10), // 每手机号日上限(主闸)
+    perIpVerifyFailDailyCap: Math.max(1, Number(optional('SMS_IP_VERIFY_FAIL_CAP', '50')) || 50), // 每 IP 日验证失败上限(防跨号穷举)
+    sendLogRetentionMs: 30 * 24 * 60 * 60 * 1000, // sms_send_log 保留 30 天(>1 月清除)
+  },
+
   // ── worker 并发（2026-06-16 并发改造）──
   worker: {
     // 同时在飞的 job 上限。job 是 I/O 密集（轮询远程厂商，~零 CPU），一个 Node 进程能扛数十个。

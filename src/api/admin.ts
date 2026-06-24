@@ -43,6 +43,7 @@ import {
 } from '../pricing/index.js';
 import type { LeadStatus } from '../db/index.js';
 import { countLeadsByStatus } from '../pricing/index.js';
+import { smsSendStats } from '../auth/sms.js';
 import { IMAGE_MODELS } from '../gateway/image-models.js';
 import type { ImageModelOverrideRow } from '../db/index.js';
 import { setProviderKey, ProviderKeyError } from '../gateway/provider-keys.js';
@@ -133,6 +134,12 @@ adminRouter.get('/api/me', requirePlatformAdmin, (req: Request, res: Response) =
 
 // ── 超管账户管理(列表 / 添加 / 改密 / 删除;全部经平台审计,记录操作超管)──
 // 任一已登录超管均可管理超管(平级)。护栏:防删自己、防删最后一个、改密幂等。
+// 短信发送量只读看板(E5):近 30 天发送/验证失败聚合,按天/IP/手机号脱敏。
+// 开放自助注册下的最小成本可视(E3 跳过后拿回部分 COGS 可见性,/plan-eng-review)。
+adminRouter.get('/api/sms-stats', requirePlatformAdmin, (_req: Request, res: Response) => {
+  return res.json(smsSendStats(30));
+});
+
 adminRouter.get('/api/superadmins', requirePlatformAdmin, (req: Request, res: Response) => {
   const me = req.padmin!.id;
   return res.json({ superadmins: listPlatformAdmins().map((s) => ({ ...s, isSelf: s.id === me })) });

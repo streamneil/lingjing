@@ -15,7 +15,10 @@ import {
   updateDisplayName,
   changePassword,
   tenantAdminResetPassword,
+  loginOrRegisterByPhone,
 } from '../auth/index.js';
+import { sendSmsCode, normalizePhone, assertVerifyAllowed, RateLimitError } from '../auth/sms.js';
+import { SmsSendError } from '../sms/sender.js';
 import {
   setSessionCookie,
   clearSessionCookie,
@@ -49,6 +52,52 @@ authRouter.post('/login', async (req: Request, res: Response) => {
   } catch (e) {
     return res.status(401).json({ error: e instanceof Error ? e.message : '登录失败' });
   }
+});
+
+// 发验证码:phone 先校验(不浪费滑块)→ 消费 captcha_token → 限频 + 发短信。
+// 失败分类:429 限频(带 retryAfter 供倒计时)/ 502 短信服务(config 错误大声记日志)/ 400 参数。
+authRouter.post('/sms/send', async (req: Request, res: Response) => {
+  const { phone: rawPhone, captchaToken } = req.body ?? {};
+  let phone: string;
+  try { phone = normalizePhone(rawPhone); } catch (e) { return res.status(400).json({ error: e instanceof Error ? e.message : '手机号无效' }); }
+  if (!consumeCaptchaToken(captchaToken)) return res.status(400).json({ error: '请先完成滑块验证' });
+  const ip = req.socket?.remoteAddress ?? null;
+  try {
+    await sendSmsCode(phone, 'login', ip);
+    return res.json({ ok: true });
+  } catch (e) {
+    if (e instanceof RateLimitError) {
+      return res.status(429).json({ error: e.message, code: e.code, retryAfter: e.retryAfterSec });
+    }
+    if (e instanceof SmsSendError) {
+      // 配置错(签名/模板/AK)用户看不出但运维须知 —— 大声记日志告警。
+      if (e.kind === 'config') console.error('[短信·配置错误] 检查阿里云签名/模板/AccessKey:', e.providerCode, e.message);
+      const msg = e.kind === 'transient' ? '发送过于频繁,请稍后再试'
+        : e.kind === 'rejected' ? '该手机号无法接收短信' : '短信服务异常,请稍后再试';
+      return res.status(502).json({ error: msg });
+    }
+    console.error('[短信·send 未知错误]', e);
+    return res.status(500).json({ error: '发送失败,请稍后再试' });
+  }
+});
+
+// 验证码登录/注册(统一入口):验码闸 → loginOrRegisterByPhone(老号登录/新号建机构)。
+// captcha 在发码时已过;此处只验码,故无需再 captcha。验失败上限走 assertVerifyAllowed(防穷举)。
+authRouter.post('/sms/login', (req: Request, res: Response) => {
+  const { phone: rawPhone, code } = req.body ?? {};
+  let phone: string;
+  try { phone = normalizePhone(rawPhone); } catch (e) { return res.status(400).json({ error: e instanceof Error ? e.message : '手机号无效' }); }
+  if (!code || typeof code !== 'string') return res.status(400).json({ error: '请输入验证码' });
+  const ip = req.socket?.remoteAddress ?? null;
+  try { assertVerifyAllowed(ip); } catch (e) {
+    if (e instanceof RateLimitError) return res.status(429).json({ error: e.message, code: e.code });
+    throw e;
+  }
+  const r = loginOrRegisterByPhone(phone, code.trim(), ip);
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  setSessionCookie(res, r.token);
+  writeAudit(r.tenantId, r.userId, r.isNew ? 'register_self_serve' : 'login_sms', null, ip);
+  return res.json({ ok: true, isNew: r.isNew });
 });
 
 authRouter.post('/logout', requireAuth, (req: Request, res: Response) => {
