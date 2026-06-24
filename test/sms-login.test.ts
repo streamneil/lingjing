@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { randomUUID } from 'node:crypto';
 
 process.env.DB_FILE = ':memory:';
+process.env.SMS_PROVIDER = 'console'; // 强制 ConsoleSmsSender:测试不依赖 .env 是否配了真实阿里云短信(否则发码走真网络失败)
 
 const { createApp } = await import('../src/server.js');
 const { db } = await import('../src/db/index.js');
