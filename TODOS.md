@@ -184,3 +184,25 @@ docs/superpowers/specs/2026-06-18-nano-banana-resolutions-design.md 的 Flash 14
 - **Why:** 换个部署/桶时这 3 处仍指向 lh-lingjing → 复用预览裂图(指向错桶)。正解:走一个鉴权签名端点 `/api/sign?key=`(按租户签自己桶的 key),或复用 works 已有签名 URL,不要前端拼桶域名。
 - **Context:** 2026-06 示范媒体去中心化(/api/showcase-asset)的遗留邻项;示范媒体已全部自包含,这条是用户资产预览,影响面小(仅复用交互),单列。
 - **Depends on / blocked by:** 不阻塞部署。
+
+### T-SMS-COST-CEILING:自助注册的成本-DoS 闸(试用积分门控 + 全局短信/新机构日上限)
+- **What:** 给开放自助注册加全局闸:① 试用积分门控(注册默认 0 或极小额,真发 200 需一个门控动作);② 全局每日「新机构数 + 短信发送量」上限,超阈停发/停建兜底。
+- **Why:** /plan-ceo-review + 外部声音两模型一致告警:国内接码平台便宜,N 手机号 → N 机构 ×200 积分 = 按真实模型成本免费生成;captcha+限频挡脚本但挡不住代理池/SIM 农场。本轮用户选保留现状(200 自动 + 无上限),此为已知开放风险。
+- **Context:** CEO plan ~/.gstack/projects/streamneil-lingjing/ceo-plans/2026-06-24-sms-login.md(OPEN RISK 段)。短信登录 PR 上线后盯 recharge/grant 异常 + 短信量。
+- **Effort:** S(human)→ S(CC)。**Priority:** P2(上线即暴露成本面)。
+- **Depends on / blocked by:** 短信登录主功能上线。
+
+### T-SMS-WELCOME-STATE:新管理员欢迎/空组织首次引导(E2,跳过)
+- **What:** 自助注册的 admin 一进来是空机构(无成员/积分/作品),给个引导空状态(去试用/去充值/改 brand_name)。
+- **Why:** 减少首次跳出。本轮用户选不做(不重复提示设密码/补机构信息,#7 已在账户页覆盖)。
+- **Effort:** S/M(human)→ S(CC)。**Priority:** P3。
+
+### T-SMS-BUDGET-DASH:短信预算告警 + 超管可见(E3,跳过)
+- **What:** 超管后台看得见短信发送量 + 超阈告警。
+- **Why:** 开放注册下的运营可观测。与 T-SMS-COST-CEILING 互补(那条是硬闸,这条是看板/告警)。本轮用户选不做。
+- **Effort:** S/M(human)→ S(CC)。**Priority:** P3。
+
+### T-SMS-TRUSTED-DEVICE:可信设备免滑块(E4,跳过)
+- **What:** 30 天内记住设备,老用户登录免再拖滑块(发短信仍验证)。
+- **Why:** 老用户体验。本轮用户选不做(每次滑块,简单一致)。
+- **Effort:** M(human)→ S(CC)。**Priority:** P3。
