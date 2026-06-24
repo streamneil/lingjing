@@ -79,6 +79,8 @@ describe('统一入口 /sms/login', () => {
     expect(u.username).toBe(phone);
     expect(u.password_hash).toBe(''); // 哨兵:未设密码
     expect(balance(u.tenant_id)).toBe(200); // 默认试用积分
+    const tn = db.prepare(`SELECT name FROM tenant WHERE id=?`).get(u.tenant_id) as any;
+    expect(tn.name).toContain(phone.slice(-4)); // 默认机构名含手机尾4位,超管租户列表可区分
   });
 
   it('已有手机号 → 直接登录,不重复建机构', async () => {
