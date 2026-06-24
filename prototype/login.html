@@ -172,7 +172,36 @@
           <div id="pwCaptcha"></div>
         </div>
         <button class="submit" id="pwBtn" type="submit" disabled>登 录</button>
+        <div style="text-align:center;margin-top:14px"><a href="#" id="forgotLink" style="color:var(--t3);font-size:12.5px;text-decoration:none">忘记密码?</a></div>
         <div class="err" id="pwErr" aria-live="polite"></div>
+      </form>
+
+      <!-- 忘记密码(#8):绑定手机号 → 验证码 → 设新密码 -->
+      <form class="panel" id="fgForm">
+        <div class="sub" style="margin-bottom:18px">填写账号绑定的手机号,通过验证码重置密码。</div>
+        <div class="fld">
+          <label>手机号</label>
+          <input id="fgPhone" type="tel" inputmode="numeric" maxlength="11" placeholder="账号绑定的手机号" autocomplete="tel">
+        </div>
+        <div class="fld" style="margin-bottom:6px">
+          <label>安全验证</label>
+          <div id="fgCaptcha"></div>
+        </div>
+        <div class="fld">
+          <label>验证码</label>
+          <div class="code-row">
+            <input id="fgCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 位验证码">
+            <button type="button" class="send-btn" id="fgSend" disabled>获取验证码</button>
+          </div>
+          <div class="sent-hint" id="fgHint" aria-live="polite"></div>
+        </div>
+        <div class="fld">
+          <label>新密码(≥6 位)</label>
+          <input id="fgPw" type="password" placeholder="设置新密码" autocomplete="new-password">
+        </div>
+        <button class="submit" id="fgBtn" type="submit">重 置 密 码</button>
+        <div style="text-align:center;margin-top:12px"><a href="#" id="fgBack" style="color:var(--t3);font-size:12.5px;text-decoration:none">← 返回登录</a></div>
+        <div class="err" id="fgErr" aria-live="polite"></div>
       </form>
     </div>
 
@@ -272,6 +301,56 @@
       pw.classList.add('shake'); setTimeout(()=>pw.classList.remove('shake'),420);
       pw.value=''; pw.focus();
       pwToken=null; pwCap.reset();
+    }
+  });
+
+  // ── 忘记密码(#8):绑定手机号 → 验证码 → 设新密码 ──
+  const tabsEl=document.querySelector('.tabs'),fgForm=$('fgForm'),fgPhone=$('fgPhone'),fgCode=$('fgCode'),
+        fgPw=$('fgPw'),fgSend=$('fgSend'),fgBtn=$('fgBtn'),fgErr=$('fgErr'),fgHint=$('fgHint');
+  let fgToken=null, fgCountdown=0;
+  function fgRefreshSend(){ fgSend.disabled=!(fgCountdown===0 && fgToken && isPhone(fgPhone.value.trim())); }
+  const fgCap=LJCaptcha.mount($('fgCaptcha'),{ onPass:(t)=>{ fgToken=t; fgRefreshSend(); }, onReset:()=>{ fgToken=null; fgRefreshSend(); } });
+  fgPhone.addEventListener('input',()=>{ fgPhone.value=fgPhone.value.replace(/\D/g,''); fgRefreshSend(); });
+  fgCode.addEventListener('input',()=>{ fgCode.value=fgCode.value.replace(/\D/g,''); });
+
+  function showForgot(on){
+    tabsEl.style.display=on?'none':'';
+    smsForm.classList.remove('active'); pwForm.classList.toggle('active',!on); fgForm.classList.toggle('active',on);
+    if(on) fgPhone.focus(); else selectTab(false);
+  }
+  $('forgotLink').addEventListener('click',(e)=>{ e.preventDefault(); showForgot(true); });
+  $('fgBack').addEventListener('click',(e)=>{ e.preventDefault(); showForgot(false); });
+
+  function fgStartCountdown(){
+    fgCountdown=60; fgSend.textContent='60s'; fgRefreshSend();
+    const t=setInterval(()=>{ fgCountdown--; if(fgCountdown<=0){ clearInterval(t); fgCountdown=0; fgSend.textContent='重新获取'; } else fgSend.textContent=fgCountdown+'s'; fgRefreshSend(); },1000);
+  }
+  fgSend.addEventListener('click',async()=>{
+    fgErr.textContent=''; const phone=fgPhone.value.trim();
+    if(!isPhone(phone)){ fgErr.innerHTML='✕ 请输入有效的手机号'; return; }
+    if(!fgToken){ fgErr.innerHTML='✕ 请先完成滑块验证'; return; }
+    fgSend.disabled=true; fgSend.textContent='发送中…';
+    try{
+      await LJ.post('/sms/send',{phone,captchaToken:fgToken,purpose:'reset'});
+      fgHint.textContent='✓ 若该手机号已绑定账号,验证码已发送'; // 不泄露存在性
+      fgCode.focus(); fgToken=null; fgCap.reset(); fgStartCountdown();
+    }catch(ex){
+      fgErr.innerHTML='✕ '+(ex.message||'发送失败'); fgSend.textContent='获取验证码';
+      fgToken=null; fgCap.reset(); fgRefreshSend();
+    }
+  });
+  fgForm.addEventListener('submit',async(e)=>{
+    e.preventDefault(); fgErr.textContent='';
+    const phone=fgPhone.value.trim(), code=fgCode.value.trim(), npw=fgPw.value;
+    if(!isPhone(phone)||code.length!==6){ fgErr.innerHTML='✕ 请填写手机号与 6 位验证码'; return; }
+    if(npw.length<6){ fgErr.innerHTML='✕ 新密码至少 6 位'; return; }
+    fgBtn.disabled=true; fgBtn.textContent='重置中…';
+    try{
+      await LJ.post('/sms/forgot',{phone,code,newPassword:npw});
+      showForgot(false);
+      pwErr.style.color='var(--green)'; pwErr.innerHTML='✓ 密码已重置,请用新密码登录';
+    }catch(ex){
+      fgErr.innerHTML='✕ '+(ex.message||'重置失败'); fgBtn.disabled=false; fgBtn.textContent='重 置 密 码';
     }
   });
 </script>

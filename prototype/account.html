@@ -102,9 +102,28 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
 
             <div class="ac-div"></div>
 
-            <h2>登录密码</h2>
-            <div class="sub">定期更换密码,保护账号安全。修改后其它设备会被登出。</div>
+            <!-- 手机号(#9):未绑定提示绑定;绑定后可验证码登录 + 找回密码 -->
+            <h2 id="acPhoneTitle">手机号</h2>
+            <div class="sub" id="acPhoneSub">绑定手机号可用于验证码登录与找回密码。</div>
             <div class="ac-field">
+              <label>手机号</label>
+              <div style="display:flex;gap:8px">
+                <input id="acPhone" type="tel" inputmode="numeric" maxlength="11" placeholder="请输入手机号">
+                <button class="ac-pill" id="acPhoneSend" type="button" style="flex:0 0 auto;white-space:nowrap;background:var(--blue-bg,rgba(77,141,255,.13));color:var(--blue)" onclick="sendPhoneCode()">获取验证码</button>
+              </div>
+            </div>
+            <div class="ac-field">
+              <label>验证码</label>
+              <input id="acPhoneCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 位验证码">
+            </div>
+            <button class="ac-pill" id="acPhoneSave" type="button" onclick="savePhone()">绑定手机号</button>
+            <div class="ac-msg" id="acPhoneMsg" aria-live="polite"></div>
+
+            <div class="ac-div"></div>
+
+            <h2 id="acPwTitle">登录密码</h2>
+            <div class="sub" id="acPwSub">定期更换密码,保护账号安全。修改后其它设备会被登出。</div>
+            <div class="ac-field" id="acOpField">
               <label>原密码</label>
               <input id="acOp" type="password" placeholder="当前密码">
             </div>
@@ -128,6 +147,9 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   <script src="api.js"></script>
   <script>
     const ROLE_CN = { admin:['ac-rbdg-admin','管理员'], creator:['ac-rbdg-creator','创作者'] };
+    let HAS_PW = true;
+    const mask = (p) => (p && p.length === 11) ? p.slice(0,3) + '****' + p.slice(7) : p;
+    const isPhone = (p) => /^1[3-9]\d{9}$/.test(p);
 
     async function loadMe(){
       const u = await LJ.me();
@@ -141,6 +163,55 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       document.getElementById('acRole2').textContent = r[1];
       document.getElementById('acDn').value = u.displayName || '';
       document.getElementById('acUn').value = u.username;
+
+      // 手机号(#9):已绑定显示脱敏 + 「更换」;未绑定琥珀色提示绑定。
+      const sub = document.getElementById('acPhoneSub'), save = document.getElementById('acPhoneSave');
+      if (u.phone) {
+        sub.textContent = '已绑定 ' + mask(u.phone) + '。更换手机号需用新号重新验证。';
+        save.textContent = '更换手机号';
+      } else {
+        sub.innerHTML = '<span style="color:var(--amber)">你还未绑定手机号。</span>绑定后可用验证码登录,并用于找回密码。';
+      }
+      // 密码(#7):无密码 → 设置模式(隐藏原密码,改标题/文案)。
+      HAS_PW = !!u.hasPassword;
+      if (!HAS_PW) {
+        document.getElementById('acPwTitle').textContent = '设置密码';
+        document.getElementById('acPwSub').innerHTML = '<span style="color:var(--amber)">你还没有设置密码。</span>设置后可用账号 + 密码登录(验证码登录始终可用)。';
+        document.getElementById('acOpField').style.display = 'none';
+        document.getElementById('acSavePw').textContent = '设置密码';
+      }
+    }
+
+    // ── 手机号绑定/换绑(#9)──
+    let phoneCountdown = 0;
+    function phoneTick(){
+      const btn = document.getElementById('acPhoneSend');
+      if (phoneCountdown <= 0) { btn.disabled = false; btn.textContent = '重新获取'; return; }
+      btn.disabled = true; btn.textContent = phoneCountdown + 's'; phoneCountdown--; setTimeout(phoneTick, 1000);
+    }
+    function sendPhoneCode(){
+      const phone = document.getElementById('acPhone').value.trim();
+      const msg = document.getElementById('acPhoneMsg'); msg.style.color = 'var(--red)';
+      if (!isPhone(phone)) { msg.textContent = '请输入有效的手机号'; return; }
+      const btn = document.getElementById('acPhoneSend'); btn.disabled = true; btn.textContent = '发送中…';
+      LJ.post('/me/phone/send', { phone }).then(() => {
+        msg.style.color = 'var(--green)'; msg.textContent = '验证码已发送至 ' + mask(phone);
+        document.getElementById('acPhoneCode').focus();
+        phoneCountdown = 60; phoneTick();
+      }).catch(e => { msg.textContent = e.message || '发送失败'; btn.disabled = false; btn.textContent = '获取验证码'; });
+    }
+    async function savePhone(){
+      const phone = document.getElementById('acPhone').value.trim(), code = document.getElementById('acPhoneCode').value.trim();
+      const msg = document.getElementById('acPhoneMsg'); msg.style.color = 'var(--red)';
+      if (!isPhone(phone)) { msg.textContent = '请输入有效的手机号'; return; }
+      if (code.length !== 6) { msg.textContent = '请输入 6 位验证码'; return; }
+      const btn = document.getElementById('acPhoneSave'); btn.disabled = true; btn.textContent = '绑定中…';
+      try {
+        await LJ.post('/me/phone', { phone, code });
+        msg.style.color = 'var(--green)'; msg.textContent = '✓ 手机号已绑定';
+        window.LJToast && window.LJToast('✓ 手机号已绑定');
+        setTimeout(() => location.reload(), 900);
+      } catch (e) { msg.textContent = e.message || '绑定失败'; btn.disabled = false; btn.textContent = '绑定手机号'; }
     }
 
     async function saveDn(){
@@ -176,17 +247,22 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     async function savePw(){
       const op=document.getElementById('acOp').value, n=document.getElementById('acNp').value, n2=document.getElementById('acNp2').value;
       const msg=document.getElementById('acPwMsg'); msg.style.color='var(--red)';
-      if(!op||!n){ msg.textContent='请填写原密码和新密码'; return; }
+      if(!n){ msg.textContent='请填写新密码'; return; }
+      if(HAS_PW && !op){ msg.textContent='请填写原密码'; return; }
       if(n!==n2){ msg.textContent='两次新密码不一致'; return; }
       if(n.length<6){ msg.textContent='新密码至少 6 位'; return; }
-      const btn=document.getElementById('acSavePw'); btn.disabled=true; btn.textContent='修改中…';
+      const btn=document.getElementById('acSavePw'); const label=HAS_PW?'确认修改':'设置密码';
+      btn.disabled=true; btn.textContent=HAS_PW?'修改中…':'设置中…';
       try{
-        await LJ.post('/me/password',{oldPassword:op,newPassword:n});
-        msg.style.color='var(--green)'; msg.textContent='✓ 密码已修改,其它设备已登出';
+        // 无密码用户首次设密码:不带 oldPassword(后端按 hasPassword 分支)。
+        await LJ.post('/me/password', HAS_PW ? {oldPassword:op,newPassword:n} : {newPassword:n});
+        msg.style.color='var(--green)';
+        msg.textContent = HAS_PW ? '✓ 密码已修改,其它设备已登出' : '✓ 密码已设置';
         ['acOp','acNp','acNp2'].forEach(id=>document.getElementById(id).value='');
-        window.LJToast && window.LJToast('✓ 密码已更新');
-      }catch(e){ msg.textContent=e.message||'修改失败'; }
-      finally{ btn.disabled=false; btn.textContent='确认修改'; }
+        window.LJToast && window.LJToast(HAS_PW?'✓ 密码已更新':'✓ 密码已设置');
+        if(!HAS_PW) setTimeout(()=>location.reload(), 900); // 首设后刷新切回「修改密码」态
+      }catch(e){ msg.textContent=e.message||(HAS_PW?'修改失败':'设置失败'); }
+      finally{ btn.disabled=false; btn.textContent=label; }
     }
 
     loadMe();

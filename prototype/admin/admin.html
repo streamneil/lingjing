@@ -176,6 +176,7 @@
     <button class="nav-item" data-nav="ordermgmt"><span class="nav-dot"></span>订单管理</button>
     <button class="nav-item" data-nav="consumption"><span class="nav-dot"></span>消耗流水</button>
     <button class="nav-item" data-nav="audit"><span class="nav-dot"></span>平台审计</button>
+    <button class="nav-item" data-nav="sms"><span class="nav-dot"></span>短信监控</button>
     <button class="nav-item" data-nav="superadmins"><span class="nav-dot"></span>超管管理</button>
   </nav>
 
@@ -416,6 +417,14 @@
       </table>
     </div>
     <div id="audPager" style="display:flex;gap:10px;justify-content:flex-end;align-items:center;margin-top:12px;font-size:12px;color:var(--t3)"></div>
+    </section>
+
+    <!-- ── 短信监控(E5)── -->
+    <section class="sec" data-sec="sms" id="sec-sms">
+    <div class="ph">
+      <div><h1>短信监控</h1><p>近 30 天验证码发送量(按天 / IP / 手机号脱敏)+ 验证失败。开放自助注册下的成本与防刷可视。</p></div>
+    </div>
+    <div id="smsStatsBody"><p class="empty">加载中…</p></div>
     </section>
 
     <!-- ── 超管管理 ── -->
@@ -1676,7 +1685,29 @@
   window.loadProviders=loadProviders;
 
   // ── 左侧菜单 SPA 路由(hash 决定当前 section,刷新保持,懒加载各 section)──
-  const SECTIONS=['monitor','tenants','image-models','providers','pricing','plans','leads','ordermgmt','consumption','audit','superadmins'];
+  const SECTIONS=['monitor','tenants','image-models','providers','pricing','plans','leads','ordermgmt','consumption','audit','sms','superadmins'];
+
+  // ── 短信监控(E5):近 30 天发送量/验证失败,按天/IP/手机号脱敏 ──
+  async function loadSmsStats(){
+    const wrap=document.getElementById('smsStatsBody');
+    try{
+      const s=await PA('GET','/api/sms-stats');
+      const t=s.total||{sends:0,fails:0};
+      const days=(s.byDay||[]).map(d=>`<tr><td style="font-family:var(--f-mono)">${esc(d.day)}</td><td style="text-align:right">${d.sends}</td><td style="text-align:right;color:var(--t3)">${d.fails}</td></tr>`).join('')||'<tr><td colspan="3" class="empty">近 30 天无发送</td></tr>';
+      const ips=(s.topIps||[]).map(r=>`<tr><td style="font-family:var(--f-mono)">${esc(r.ip)}</td><td style="text-align:right">${r.sends}</td></tr>`).join('')||'<tr><td colspan="2" class="empty">—</td></tr>';
+      const phones=(s.topPhones||[]).map(r=>`<tr><td style="font-family:var(--f-mono)">${esc(r.phone)}</td><td style="text-align:right">${r.sends}</td></tr>`).join('')||'<tr><td colspan="2" class="empty">—</td></tr>';
+      wrap.innerHTML=`
+        <div style="display:flex;gap:14px;margin-bottom:16px;flex-wrap:wrap">
+          <div class="card" style="padding:14px 18px;min-width:140px"><div style="font-size:12px;color:var(--t3)">近 30 天发送</div><div style="font-size:24px;font-weight:700">${t.sends}</div></div>
+          <div class="card" style="padding:14px 18px;min-width:140px"><div style="font-size:12px;color:var(--t3)">验证失败</div><div style="font-size:24px;font-weight:700;color:var(--amber)">${t.fails}</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:14px">
+          <div class="tbl"><table><thead><tr><th>日期</th><th style="text-align:right">发送</th><th style="text-align:right">验证失败</th></tr></thead><tbody>${days}</tbody></table></div>
+          <div class="tbl"><table><thead><tr><th>Top IP</th><th style="text-align:right">发送</th></tr></thead><tbody>${ips}</tbody></table></div>
+          <div class="tbl"><table><thead><tr><th>Top 手机号(脱敏)</th><th style="text-align:right">发送</th></tr></thead><tbody>${phones}</tbody></table></div>
+        </div>`;
+    }catch(e){ wrap.innerHTML='<p class="empty">加载失败:'+esc(e.message||'')+'</p>'; }
+  }
   // 各 section 首次进入时调用对应 loader(切回已加载的不重拉,靠 loaded 标记防重复)
   // ── 积分消耗流水(对账)──
   const CON_MOD={ai_image:'AI 生图',video_t2v:'文生视频',video_i2v:'图生视频',video_edit:'视频编辑',tts:'语音合成',video:'数字人视频'};
@@ -1730,6 +1761,7 @@
     ordermgmt:loadOrderMgmt,
     consumption:loadConsumption,
     audit:loadPlatformAudit,
+    sms:loadSmsStats,
     superadmins:loadSuperadmins,
   };
   const loaded={};   // section → 是否已首次加载

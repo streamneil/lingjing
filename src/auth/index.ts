@@ -448,3 +448,50 @@ export async function changePassword(userId: string, oldPassword: string, newPas
   if (keepToken) db.prepare(`DELETE FROM session WHERE user_id=? AND token!=?`).run(userId, keepToken);
   else db.prepare(`DELETE FROM session WHERE user_id=?`).run(userId);
 }
+
+// ── 首次设密码 / 忘记密码 / 绑定手机(PR3:账户页 #7/#9 + 忘记密码 #8)──
+
+/** 首次设密码(#7,无密码用户)。仅当前为哨兵 '' 才允许;已有密码须走 changePassword(需旧密码)。
+ *  首设不踢现有会话(当前会话保留,无须强制重登)。 */
+export async function setInitialPassword(userId: string, newPassword: string): Promise<void> {
+  if (newPassword.length < 6) throw new Error('新密码至少 6 位');
+  const u = db.prepare(`SELECT password_hash FROM user WHERE id=?`).get(userId) as { password_hash: string } | undefined;
+  if (!u) throw new Error('用户不存在');
+  if (userHasPassword(u)) throw new Error('已设置密码,请使用修改密码');
+  const hash = await hashPassword(newPassword);
+  db.prepare(`UPDATE user SET password_hash=? WHERE id=?`).run(hash, userId);
+}
+
+/** 某手机号绑定到哪个用户(忘记密码静默判断 / 换绑冲突预检);未绑定 → null。 */
+export function phoneOwner(phone: string): string | null {
+  const r = db.prepare(`SELECT id FROM user WHERE phone=?`).get(phone) as { id: string } | undefined;
+  return r?.id ?? null;
+}
+
+/** 忘记密码(#8):验码(reset,绑定 phone)→ 设新密码 → 作废该用户所有会话。返回 {ok,error?}。
+ *  消费即删 → 验过即不可重放;查不到用户用通用文案(不泄露存在性)。 */
+export async function resetPasswordByPhone(
+  phone: string, code: string, newPassword: string, ip: string | null,
+): Promise<{ ok: boolean; error?: string; userId?: string; tenantId?: string }> {
+  if (newPassword.length < 6) return { ok: false, error: '新密码至少 6 位' };
+  const consume = db.transaction(() => consumeSmsCode(phone, 'reset', code, ip))();
+  if (consume !== 'ok') return { ok: false, error: consumeMessage(consume)! };
+  const u = db.prepare(`SELECT id, tenant_id FROM user WHERE phone=?`).get(phone) as { id: string; tenant_id: string } | undefined;
+  if (!u) return { ok: false, error: '验证码已失效,请重新获取' }; // 码已验过但无绑定:通用文案
+  const hash = await hashPassword(newPassword);
+  db.prepare(`UPDATE user SET password_hash=? WHERE id=?`).run(hash, u.id);
+  db.prepare(`DELETE FROM session WHERE user_id=?`).run(u.id); // 改密作废所有会话,强制重登
+  return { ok: true, userId: u.id, tenantId: u.tenant_id };
+}
+
+/** 绑定/换绑手机(#9):验码(rebind,发往新号)→ 冲突检查 → 写 user.phone。同步单事务。 */
+export const bindPhoneByCode = db.transaction(
+  (userId: string, newPhone: string, code: string, ip: string | null): { ok: boolean; error?: string } => {
+    const consume = consumeSmsCode(newPhone, 'rebind', code, ip);
+    if (consume !== 'ok') return { ok: false, error: consumeMessage(consume)! };
+    const owner = db.prepare(`SELECT id FROM user WHERE phone=?`).get(newPhone) as { id: string } | undefined;
+    if (owner && owner.id !== userId) return { ok: false, error: '该手机号已被其他账号绑定' };
+    db.prepare(`UPDATE user SET phone=? WHERE id=?`).run(newPhone, userId);
+    return { ok: true };
+  },
+);

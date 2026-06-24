@@ -16,8 +16,12 @@ import {
   changePassword,
   tenantAdminResetPassword,
   loginOrRegisterByPhone,
+  setInitialPassword,
+  resetPasswordByPhone,
+  bindPhoneByCode,
+  phoneOwner,
 } from '../auth/index.js';
-import { sendSmsCode, normalizePhone, assertVerifyAllowed, RateLimitError } from '../auth/sms.js';
+import { sendSmsCode, normalizePhone, assertVerifyAllowed, RateLimitError, type SmsPurpose } from '../auth/sms.js';
 import { SmsSendError } from '../sms/sender.js';
 import {
   setSessionCookie,
@@ -57,13 +61,17 @@ authRouter.post('/login', async (req: Request, res: Response) => {
 // 发验证码:phone 先校验(不浪费滑块)→ 消费 captcha_token → 限频 + 发短信。
 // 失败分类:429 限频(带 retryAfter 供倒计时)/ 502 短信服务(config 错误大声记日志)/ 400 参数。
 authRouter.post('/sms/send', async (req: Request, res: Response) => {
-  const { phone: rawPhone, captchaToken } = req.body ?? {};
+  const { phone: rawPhone, captchaToken, purpose: rawPurpose } = req.body ?? {};
+  // 公开发码仅 login(登录/注册)与 reset(忘记密码);rebind 走需登录的 /me/phone/send。
+  const purpose: SmsPurpose = rawPurpose === 'reset' ? 'reset' : 'login';
   let phone: string;
   try { phone = normalizePhone(rawPhone); } catch (e) { return res.status(400).json({ error: e instanceof Error ? e.message : '手机号无效' }); }
   if (!consumeCaptchaToken(captchaToken)) return res.status(400).json({ error: '请先完成滑块验证' });
   const ip = req.socket?.remoteAddress ?? null;
+  // 忘记密码:未绑定该号 → 静默成功(不发短信、不泄露存在性,#8)。
+  if (purpose === 'reset' && !phoneOwner(phone)) return res.json({ ok: true });
   try {
-    await sendSmsCode(phone, 'login', ip);
+    await sendSmsCode(phone, purpose, ip);
     return res.json({ ok: true });
   } catch (e) {
     if (e instanceof RateLimitError) {
@@ -100,6 +108,63 @@ authRouter.post('/sms/login', (req: Request, res: Response) => {
   return res.json({ ok: true, isNew: r.isNew });
 });
 
+// 忘记密码(#8,公开):验 reset 码(绑定手机号)→ 设新密码 → 作废会话。发码走 /sms/send {purpose:'reset'}。
+authRouter.post('/sms/forgot', async (req: Request, res: Response) => {
+  const { phone: rawPhone, code, newPassword } = req.body ?? {};
+  let phone: string;
+  try { phone = normalizePhone(rawPhone); } catch (e) { return res.status(400).json({ error: e instanceof Error ? e.message : '手机号无效' }); }
+  if (!code || typeof code !== 'string') return res.status(400).json({ error: '请输入验证码' });
+  if (!newPassword || typeof newPassword !== 'string') return res.status(400).json({ error: '请输入新密码' });
+  const ip = req.socket?.remoteAddress ?? null;
+  try { assertVerifyAllowed(ip); } catch (e) {
+    if (e instanceof RateLimitError) return res.status(429).json({ error: e.message, code: e.code });
+    throw e;
+  }
+  const r = await resetPasswordByPhone(phone, code.trim(), newPassword, ip);
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  writeAudit(r.tenantId!, r.userId!, 'password_reset', null, ip);
+  return res.json({ ok: true });
+});
+
+// 绑定/换绑手机:发码(需登录,发往新号;rebind 不另要 captcha —— 登录态 + 限频已是闸)。
+authRouter.post('/me/phone/send', requireAuth, async (req: Request, res: Response) => {
+  let phone: string;
+  try { phone = normalizePhone(req.body?.phone); } catch (e) { return res.status(400).json({ error: e instanceof Error ? e.message : '手机号无效' }); }
+  // 已被他人绑定 → 不发码(防向他人号码发骚扰短信 + 提前告知冲突)。
+  const owner = phoneOwner(phone);
+  if (owner && owner !== req.user!.id) return res.status(409).json({ error: '该手机号已被其他账号绑定' });
+  const ip = req.socket?.remoteAddress ?? null;
+  try {
+    await sendSmsCode(phone, 'rebind', ip);
+    return res.json({ ok: true });
+  } catch (e) {
+    if (e instanceof RateLimitError) return res.status(429).json({ error: e.message, code: e.code, retryAfter: e.retryAfterSec });
+    if (e instanceof SmsSendError) {
+      if (e.kind === 'config') console.error('[短信·配置错误]', e.providerCode, e.message);
+      return res.status(502).json({ error: e.kind === 'rejected' ? '该手机号无法接收短信' : '短信服务异常,请稍后再试' });
+    }
+    console.error('[短信·rebind 未知错误]', e);
+    return res.status(500).json({ error: '发送失败,请稍后再试' });
+  }
+});
+
+// 验证 + 绑定手机(#9)。
+authRouter.post('/me/phone', requireAuth, (req: Request, res: Response) => {
+  const { phone: rawPhone, code } = req.body ?? {};
+  let phone: string;
+  try { phone = normalizePhone(rawPhone); } catch (e) { return res.status(400).json({ error: e instanceof Error ? e.message : '手机号无效' }); }
+  if (!code || typeof code !== 'string') return res.status(400).json({ error: '请输入验证码' });
+  const ip = req.socket?.remoteAddress ?? null;
+  try { assertVerifyAllowed(ip); } catch (e) {
+    if (e instanceof RateLimitError) return res.status(429).json({ error: e.message, code: e.code });
+    throw e;
+  }
+  const r = bindPhoneByCode(req.user!.id, phone, code.trim(), ip);
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  audit(req, 'phone_bind', phone);
+  return res.json({ ok: true, phone });
+});
+
 authRouter.post('/logout', requireAuth, (req: Request, res: Response) => {
   // token 在 cookie 里;middleware 已校验。直接清 cookie + 删 session。
   const raw = req.headers.cookie ?? '';
@@ -127,8 +192,15 @@ authRouter.put('/me', requireAuth, (req: Request, res: Response) => {
 // 改密码(校验原密码;成功后作废其它会话,当前会话保留)
 authRouter.post('/me/password', requireAuth, async (req: Request, res: Response) => {
   const { oldPassword, newPassword } = req.body ?? {};
-  if (!oldPassword || !newPassword) return res.status(400).json({ error: '缺少原密码 / 新密码' });
+  if (!newPassword) return res.status(400).json({ error: '缺少新密码' });
   try {
+    // 无密码用户(手机号注册,哨兵 '')→ 首次设密码(#7),无需旧密码,不踢当前会话。
+    if (!req.user!.hasPassword) {
+      await setInitialPassword(req.user!.id, newPassword);
+      audit(req, 'set_password');
+      return res.json({ ok: true, set: true });
+    }
+    if (!oldPassword) return res.status(400).json({ error: '缺少原密码' });
     // 当前 session token 从 cookie 取,改密后保留它(不把自己踢下线)
     const m = (req.headers.cookie ?? '').match(/lj_session=([^;]+)/);
     const keep = m ? decodeURIComponent(m[1]!) : undefined;
