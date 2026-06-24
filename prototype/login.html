@@ -96,22 +96,25 @@
   .tabs{display:flex;gap:4px;background:var(--field);border:1px solid var(--line);border-radius:12px;padding:4px;margin-bottom:22px}
   .tab{flex:1;text-align:center;padding:9px 0;font-size:13.5px;color:var(--t3);border-radius:9px;cursor:pointer;font-weight:600;transition:.18s;background:none;border:none;font-family:var(--f)}
   .tab.active{background:var(--card-hi);color:var(--t1);box-shadow:0 1px 0 rgba(255,255,255,.05) inset,0 2px 8px -4px rgba(0,0,0,.6)}
-  /* 面板:两登录页等高(min-height 锁死,切 tab 不跳)。忘记密码更高,自然撑开。 */
+  /* 面板:两登录页结构对称(字段/字段/状态行/按钮/说明行)→ 自然等高、按钮严格对齐,无需 min-height
+     (旧 min-height 会在按钮下方留多余空白)。忘记密码面板多一个新密码框,切到它时卡片自然变高,可接受。 */
   .panel{display:none}
-  .panel.active{display:block;min-height:318px}
-  #fgForm.active{min-height:0}
+  .panel.active{display:block}
   /* 验证码行:输入框 + 获取按钮 等高同风格 */
   .code-row{display:flex;gap:10px;align-items:stretch}
   .code-row input{flex:1;letter-spacing:4px;font-family:var(--f-mono);font-size:16px;text-align:center}
   .send-btn{flex:0 0 116px;height:48px;display:flex;align-items:center;justify-content:center;white-space:nowrap;background:var(--card-hi);color:var(--t1);border:1px solid var(--line-hi);border-radius:12px;font-size:13.5px;font-weight:600;font-family:var(--f);cursor:pointer;transition:.15s}
   .send-btn:hover:not(:disabled){border-color:var(--blue);color:var(--blue)}
   .send-btn:disabled{opacity:.45;cursor:not-allowed}
-  .affordance{font-size:11.5px;color:var(--t3);margin-top:11px;line-height:1.6;display:flex;align-items:center;gap:6px}
-  .affordance svg{width:13px;height:13px;flex:0 0 auto;color:var(--blue)}
-  .sent-hint{color:var(--green);font-size:12px;margin-top:9px;min-height:16px}
-  .link-row{text-align:center;margin-top:14px}
-  .link-row a{color:var(--t3);font-size:12.5px;text-decoration:none;transition:.15s}
-  .link-row a:hover{color:var(--t1)}
+  /* 状态行:两面板都有(密码登录留空、验证码登录显「已发往…」),占位等高 → 下方按钮严格对齐 */
+  .status{min-height:16px;margin:9px 0 2px;font-size:12px;line-height:1.35;color:var(--green)}
+  /* 按钮下方说明行:密码登录=忘记密码/去注册;验证码登录=自动注册说明。单行等高 → 两面板总高一致 */
+  .meta{display:flex;align-items:center;gap:12px;margin-top:14px;font-size:12px;min-height:17px}
+  .meta a{color:var(--t3);text-decoration:none;transition:.15s}
+  .meta a:hover{color:var(--t1)}
+  .meta-links{justify-content:space-between}
+  .meta-note{color:var(--t3);line-height:1.5}
+  .meta-note svg{width:13px;height:13px;flex:0 0 auto;color:var(--blue)}
 
   /* 安全验证弹窗:点「获取验证码」/「登录」时按需出现,过验后自动执行动作 */
   .cap-modal{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;padding:24px}
@@ -155,8 +158,12 @@
             <button type="button" class="pw-eye" id="pwEye" aria-label="显示密码">显示</button>
           </div>
         </div>
+        <div class="status" id="pwStatus" aria-live="polite"></div>
         <button class="submit" id="pwBtn" type="submit">登 录</button>
-        <div class="link-row"><a href="#" id="forgotLink">忘记密码?</a></div>
+        <div class="meta meta-links">
+          <a href="#" id="forgotLink">忘记密码?</a>
+          <a href="#" id="goRegister">还没有账号?去注册</a>
+        </div>
         <div class="err" id="pwErr" aria-live="polite"></div>
       </form>
 
@@ -172,10 +179,10 @@
             <input id="smsCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 位验证码">
             <button type="button" class="send-btn" id="sendBtn" disabled>获取验证码</button>
           </div>
-          <div class="sent-hint" id="sentHint" aria-live="polite"></div>
         </div>
+        <div class="status" id="sentHint" aria-live="polite"></div>
         <button class="submit" id="smsBtn" type="submit" disabled>登 录 / 注 册</button>
-        <div class="affordance">
+        <div class="meta meta-note">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
           <span>未注册的手机号,验证后将自动创建账号</span>
         </div>
@@ -253,6 +260,7 @@
   }
   tabPw.addEventListener('click',()=>selectTab(true));
   tabSms.addEventListener('click',()=>selectTab(false));
+  $('goRegister').addEventListener('click',(e)=>{ e.preventDefault(); selectTab(false); }); // 去注册 → 切到验证码登录
 
   // ── 密码登录(默认主路径)──
   const username=$('username'),pw=$('password'),eye=$('pwEye'),pwBtn=$('pwBtn'),pwErr=$('pwErr');
