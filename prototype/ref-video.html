@@ -220,7 +220,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
           <div class="seg-row" id="resSeg"></div>
           <div class="pop-label">长度</div>
           <div class="seg-row" id="durSeg"></div>
-          <div class="opt-toggle" id="audioToggle"><span class="ol">生成有声视频</span><input type="checkbox" id="audioChk"></div>
+          <div class="opt-toggle" id="audioToggle"><span class="ol">生成有声视频</span><input type="checkbox" id="audioChk" checked></div>
         </div>
       </div>
       <div class="pop-anchor">
@@ -297,6 +297,9 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   let imgFiles=[], vidFiles=[], audFiles=[];
   function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   function curModel(){ return allModels.find(m=>m.key===model); }
+  // 提示词字数上限随所选模型(单一真相源 video-models.ts;经 /r2v-models 下发 maxPromptChars)。
+  function promptMax(){ const m=curModel(); return (m&&m.maxPromptChars)||500; }
+  function renderPromptMax(){ const mx=promptMax(); ta.maxLength=mx; const el=document.getElementById('maxChars'); if(el)el.textContent=mx; if(ta.value.length>mx)ta.value=ta.value.slice(0,mx); cnt.textContent=ta.value.length; }
   const RATIO_GLYPH={'16:9':[20,11],'9:16':[11,20],'1:1':[18,18],'3:4':[14,18],'4:3':[18,14],'21:9':[20,9]};
 
   // ── 模型下拉(GET /r2v-models)──
@@ -305,7 +308,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     try{ const r=await LJ.get('/r2v-models'); allModels=r.models||[]; if(r.default) model=r.default; renderAll(); }
     catch(e){ modelOpts.innerHTML='<div class="pop-opt"><span class="nm">模型加载失败</span></div>'; }
   }
-  function renderAll(){ renderModels(); renderMMArea(); renderRes(); renderRatios(); renderDur(); renderAudioToggle(); renderRefHelper(); syncPills(); refreshBtn(); scheduleEstimate(); }
+  function renderAll(){ renderModels(); renderMMArea(); renderRes(); renderRatios(); renderDur(); renderAudioToggle(); renderRefHelper(); renderPromptMax(); syncPills(); refreshBtn(); scheduleEstimate(); }
   function renderModels(){
     if(allModels.length && !allModels.find(m=>m.key===model)) model=allModels[0].key;
     modelOpts.innerHTML=allModels.map(m=>`<div class="pop-opt${m.key===model?' on':''}" data-k="${m.key}"><span class="nm">${esc(m.label)}</span><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg></div>`).join('') || '<div class="pop-opt"><span class="nm">暂无可用模型</span></div>';
@@ -393,7 +396,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     const el=document.getElementById('refHelper');
     el.innerHTML=chips.length?chips.map(c=>`<span class="ref-chip" data-ref="${c}">+ ${c}</span>`).join(''):'';
     el.querySelectorAll('.ref-chip').forEach(c=>c.onclick=()=>{
-      const t=c.dataset.ref; ta.value=(ta.value+(ta.value&&!/\s$/.test(ta.value)?'':'')+t).slice(0,500);
+      const t=c.dataset.ref; ta.value=(ta.value+(ta.value&&!/\s$/.test(ta.value)?'':'')+t).slice(0,promptMax());
       cnt.textContent=ta.value.length; ta.focus(); refreshBtn(); scheduleEstimate();
     });
   }
@@ -692,7 +695,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     const applyBtn=document.getElementById('demoApply');
     applyBtn.onclick=async()=>{
       if(applyBtn.disabled) return;
-      ta.value=DEMO_PROMPT.slice(0,500); cnt.textContent=ta.value.length;
+      ta.value=DEMO_PROMPT.slice(0,promptMax()); cnt.textContent=ta.value.length;
       ratio='16:9'; renderRatios(); syncPills(); refreshBtn(); scheduleEstimate();
       const t0=applyBtn.textContent; applyBtn.disabled=true; applyBtn.textContent='载入示范素材…';
       let failed=0; try{ failed=await loadDemoAssets(); }catch(e){ failed=DEMO_INPUTS.length; }
