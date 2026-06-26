@@ -1,700 +1,1307 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>图片转影片 · 灵镜</title>
-<link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
-<link rel="stylesheet" href="app.css">
-<style>
-  /* 记录卡(复用文字转影片样式)*/
-  .card-meta { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 2px; }
-  .card-meta .chip { font-size:11px; color:var(--t3); background:var(--field); border:1px solid var(--line); border-radius:7px; padding:2px 8px; }
-  .card-acts { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
-  .card-acts button { display:inline-flex; align-items:center; gap:5px; font-size:12.5px; color:var(--t2); background:var(--field); border:1px solid var(--line); border-radius:9px; padding:7px 13px; cursor:pointer; transition:.15s; }
-  .card-acts button:hover { border-color:var(--line-hi); color:var(--t1); }
-  .card-acts button svg { width:14px; height:14px; }
-  .tx-wrap { flex:1; min-width:0; display:flex; flex-direction:column; padding-top:6px; }
-  .tx-wrap .tx { padding-top:0; }
-  .tx.clamp { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
-  .tx-toggle { font-size:12px; color:var(--blue); cursor:pointer; margin-top:4px; display:none; align-self:flex-start; }
-  .tx-toggle.show { display:inline-block; }
-  /* 成品视频:缩略尺度约束盒,按原始比例自适应(16:9→320×180、9:16→157×280),与图片记录缩略一致 */
-  .fvid { display:block; width:auto; height:auto; max-width:min(320px,100%); max-height:280px; border-radius:12px; background:#000; border:1px solid var(--line); }
-  /* 记录卡里输入图缩略带(与 ai-image-edit 同款:label + 可放大)*/
-  .in-thumbs { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin:8px 0 2px; }
-  .in-thumbs .lbl { font-size:11px; color:var(--t4); margin-right:2px; }
-  .in-thumbs img { width:44px; height:44px; object-fit:cover; border-radius:7px; border:1px solid var(--line); cursor:zoom-in; }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>图片转影片 · 灵镜</title>
+  <link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
+  <link rel="stylesheet" href="app.css">
+  <style>
+    /* 记录卡(复用文字转影片样式)*/
+    .card-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 8px 0 2px;
+    }
 
-  /* 任务 tab(开始图 / 图片间 / 参考图)— 与 ai-image .sub-tabs 同款,button 元素(键盘可达)*/
-  .task-tabs { display:flex; gap:6px; background:var(--field); border:1px solid var(--line); border-radius:11px; padding:4px; margin-bottom:12px; }
-  .task-tab { flex:1; text-align:center; font-size:13px; color:var(--t3); padding:9px 6px; border-radius:8px; cursor:pointer; transition:.15s; background:none; border:none; font-family:inherit; }
-  .task-tab:hover { color:var(--t1); }
-  .task-tab.on { background:var(--card-hi); color:var(--t1); box-shadow:0 1px 0 rgba(0,0,0,.15); }
+    .card-meta .chip {
+      font-size: 11px;
+      color: var(--t3);
+      background: var(--field);
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 2px 8px;
+    }
 
-  /* 输入图区 — 与 AI 图片「图片转图片」同款:外卡 var(--card) + 1:1 方格 tiles + 空态 170px 大上传区 */
-  /* 图片区固定高(196px):三 tab 与空/有图各态等高不跳;196 给空态上传区(图标+文字+按钮)留足舒展空间,不贴边 */
-  .img-tiles-card { border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:14px; height:196px; box-sizing:border-box; display:flex; flex-direction:column; }
-  .img-tiles-card > #imgArea { flex:1; min-height:0; display:flex; flex-direction:column; } /* imgArea 撑满卡;内含 .img-tiles + 可选 .area-hint */
-  .img-tiles { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; flex:1; min-height:0; }
-  .img-tiles.empty { display:block; height:100%; } /* 空态:大上传区占满整高整宽 */
-  .img-tiles:not(.empty):not(.dual2) { grid-template-rows:1fr; } /* 单/多图同行:格子填满高度 */
-  .img-tiles.dual2 { grid-template-columns:1fr auto 1fr; align-items:center; } /* 图片间:开始|⇄|结束 */
-  /* 格子高度跟随固定卡(aspect 改 auto,由 100% 高 + grid 列宽决定),不再用 1:1 撑出高矮不一 */
-  .img-tile { position:relative; height:100%; border-radius:12px; overflow:hidden; border:1px solid var(--line); background:var(--field); }
-  .img-tile img { width:100%; height:100%; object-fit:cover; display:block; }
-  .img-tile .rmx { position:absolute; top:6px; right:6px; width:22px; height:22px; background:rgba(0,0,0,.6); border-radius:50%; display:grid; place-items:center; color:#fff; font-size:13px; line-height:1; cursor:pointer; border:none; padding:0; }
-  .img-tile .num { position:absolute; top:6px; left:6px; font-size:11px; background:rgba(0,0,0,.62); color:#fff; padding:1px 7px; border-radius:6px; z-index:1; }
-  .img-tile.add { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; border:1.5px dashed var(--line-hi); cursor:pointer; color:var(--t3); transition:.15s; }
-  .img-tile.add:hover, .img-tile.add.drag { border-color:var(--blue); color:var(--t1); background:var(--card); }
-  .img-tile.add .plus { font-size:30px; font-weight:300; line-height:1; }
-  .img-tile.add .lbl { font-size:12.5px; }
-  /* 空态高度 = 一行 tile 高度 = (容器宽 - 2*gap)/3,与有图态完全等高,切换不跳动 */
-  .img-drop { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; height:100%; box-sizing:border-box; border:1.5px dashed var(--line-hi); border-radius:12px; background:var(--field); cursor:pointer; color:var(--t3); transition:.15s; padding:12px 16px; text-align:center; }
-  .img-drop:hover, .img-drop.drag { border-color:var(--blue); background:var(--card-hi); }
-  .img-drop .di svg { width:38px; height:38px; color:var(--t3); }
-  .img-drop .dt { font-size:14px; color:var(--t2); }
-  .img-drop .da { display:inline-flex; align-items:center; gap:6px; font-size:12.5px; color:var(--t3); background:var(--card); border:1px solid var(--line); border-radius:9px; padding:8px 14px; }
-  .img-drop .da svg { width:15px; height:15px; }
-  .swap-btn { flex:0 0 auto; width:32px; height:32px; border-radius:50%; background:var(--field); border:1px solid var(--line); color:var(--t3); display:grid; place-items:center; cursor:pointer; transition:.15s; }
-  .swap-btn:hover { color:var(--t1); border-color:var(--line-hi); }
-  .swap-btn svg { width:15px; height:15px; }
-  .swap-btn:disabled { opacity:.3; cursor:default; }
-  .area-hint { font-size:11px; color:var(--t4); margin:7px 0 0; }
-  .fmt-hint { font-size:11px; color:var(--t4); margin:7px 0 0; line-height:1.5; }
+    .card-acts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
 
-  /* 段选(解析度 / 时长)+ 比例 */
-  .seg-row { display:flex; gap:8px; }
-  .seg-row .seg { flex:1; display:flex; align-items:center; justify-content:center; text-align:center; min-height:42px; padding:10px; border-radius:10px; background:var(--field); border:1px solid var(--line); color:var(--t3); font-size:13px; cursor:pointer; transition:.15s; }
-  .seg-row .seg:hover { color:var(--t1); }
-  .seg-row .seg.on { background:var(--card-hi); color:var(--t1); border-color:var(--line-hi); }
-  .ratio-row { display:flex; gap:5px; flex-wrap:wrap; align-items:stretch; }
-  .ratio-cell { flex:1; min-width:54px; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:4px; padding:8px 2px; border:1px solid var(--line); border-radius:9px; background:var(--field); color:var(--t3); cursor:pointer; transition:.15s; }
-  .ratio-cell:hover { color:var(--t1); border-color:var(--line-hi); }
-  .ratio-cell.on { background:var(--card-hi); color:var(--t1); border-color:var(--line-hi); }
-  .ratio-cell .glyph { width:18px; height:18px; border:1.6px solid currentColor; border-radius:3px; }
-  .ratio-cell .lbl { font-size:10.5px; font-family:var(--f-mono); }
-  .cfg-label { font-size:12px; color:var(--t3); margin:14px 0 7px; }
-  .opt-toggle { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:11px 13px; border:1px solid var(--line); border-radius:10px; background:var(--field); margin-top:8px; }
-  .opt-toggle .ol { font-size:13px; color:var(--t2); }
-  .opt-toggle input[type=checkbox] { width:auto; }
-  .neg-input { width:100%; padding:9px 11px; background:var(--field); border:1px solid var(--line); border-radius:9px; color:var(--t1); font-size:13px; margin-top:8px; }
-  /* 授权同意(同 AI 图片编辑)*/
-  .consent { display:flex; gap:9px; align-items:flex-start; margin-top:12px; font-size:11.5px; color:var(--t3); line-height:1.5; }
-  .consent input { width:auto; margin-top:2px; }
+    .card-acts button {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12.5px;
+      color: var(--t2);
+      background: var(--field);
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      padding: 7px 13px;
+      cursor: pointer;
+      transition: .15s;
+    }
 
-  /* 大图查看器(与 ai-image-edit 同款)*/
-  .lightbox { position:fixed; inset:0; background:rgba(0,0,0,.88); backdrop-filter:blur(4px); z-index:500; display:none; align-items:center; justify-content:center; padding:40px; cursor:zoom-out; }
-  .lightbox.on { display:flex; }
-  .lightbox img { max-width:92vw; max-height:88vh; border-radius:12px; cursor:default; }
-  .lightbox .lb-x { position:absolute; top:22px; right:26px; width:42px; height:42px; border-radius:50%; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.18); display:grid; place-items:center; cursor:pointer; }
-  .lightbox .lb-x svg { width:22px; height:22px; color:#fff; }
-</style>
-<script defer src="shell.js"></script>
+    .card-acts button:hover {
+      border-color: var(--line-hi);
+      color: var(--t1);
+    }
+
+    .card-acts button svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .tx-wrap {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      padding-top: 6px;
+    }
+
+    .tx-wrap .tx {
+      padding-top: 0;
+    }
+
+    .tx.clamp {
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .tx-toggle {
+      font-size: 12px;
+      color: var(--blue);
+      cursor: pointer;
+      margin-top: 4px;
+      display: none;
+      align-self: flex-start;
+    }
+
+    .tx-toggle.show {
+      display: inline-block;
+    }
+
+    /* 成品视频:缩略尺度约束盒,按原始比例自适应(16:9→320×180、9:16→157×280),与图片记录缩略一致 */
+    .fvid {
+      display: block;
+      width: auto;
+      height: auto;
+      max-width: min(320px, 100%);
+      max-height: 280px;
+      border-radius: 12px;
+      background: #000;
+      border: 1px solid var(--line);
+    }
+
+    /* 记录卡里输入图缩略带(与 ai-image-edit 同款:label + 可放大)*/
+    .in-thumbs {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 8px 0 2px;
+    }
+
+    .in-thumbs .lbl {
+      font-size: 11px;
+      color: var(--t4);
+      margin-right: 2px;
+    }
+
+    .in-thumbs img {
+      width: 44px;
+      height: 44px;
+      object-fit: cover;
+      border-radius: 7px;
+      border: 1px solid var(--line);
+      cursor: zoom-in;
+    }
+
+    /* 任务 tab(开始图 / 图片间 / 参考图)— 与 ai-image .sub-tabs 同款,button 元素(键盘可达)*/
+    .task-tabs {
+      display: flex;
+      gap: 6px;
+      background: var(--field);
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      padding: 4px;
+      margin-bottom: 12px;
+    }
+
+    .task-tab {
+      flex: 1;
+      text-align: center;
+      font-size: 13px;
+      color: var(--t3);
+      padding: 9px 6px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: .15s;
+      background: none;
+      border: none;
+      font-family: inherit;
+    }
+
+    .task-tab:hover {
+      color: var(--t1);
+    }
+
+    .task-tab.on {
+      background: var(--card-hi);
+      color: var(--t1);
+      box-shadow: 0 1px 0 rgba(0, 0, 0, .15);
+    }
+
+    /* 输入图区 — 与 AI 图片「图片转图片」同款:外卡 var(--card) + 1:1 方格 tiles + 空态 170px 大上传区 */
+    /* 图片区固定高(196px):三 tab 与空/有图各态等高不跳;196 给空态上传区(图标+文字+按钮)留足舒展空间,不贴边 */
+    .img-tiles-card {
+      border: 1px solid var(--line);
+      border-radius: var(--r);
+      background: var(--card);
+      padding: 14px;
+      height: 196px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .img-tiles-card>#imgArea {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* imgArea 撑满卡;内含 .img-tiles + 可选 .area-hint */
+    .img-tiles {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .img-tiles.empty {
+      display: block;
+      height: 100%;
+    }
+
+    /* 空态:大上传区占满整高整宽 */
+    .img-tiles:not(.empty):not(.dual2) {
+      grid-template-rows: 1fr;
+    }
+
+    /* 单/多图同行:格子填满高度 */
+    .img-tiles.dual2 {
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+    }
+
+    /* 图片间:开始|⇄|结束 */
+    /* 格子高度跟随固定卡(aspect 改 auto,由 100% 高 + grid 列宽决定),不再用 1:1 撑出高矮不一 */
+    .img-tile {
+      position: relative;
+      height: 100%;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background: var(--field);
+    }
+
+    .img-tile img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .img-tile .rmx {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 22px;
+      height: 22px;
+      background: rgba(0, 0, 0, .6);
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-size: 13px;
+      line-height: 1;
+      cursor: pointer;
+      border: none;
+      padding: 0;
+    }
+
+    .img-tile .num {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      font-size: 11px;
+      background: rgba(0, 0, 0, .62);
+      color: #fff;
+      padding: 1px 7px;
+      border-radius: 6px;
+      z-index: 1;
+    }
+
+    .img-tile.add {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border: 1.5px dashed var(--line-hi);
+      cursor: pointer;
+      color: var(--t3);
+      transition: .15s;
+    }
+
+    .img-tile.add:hover,
+    .img-tile.add.drag {
+      border-color: var(--blue);
+      color: var(--t1);
+      background: var(--card);
+    }
+
+    .img-tile.add .plus {
+      font-size: 30px;
+      font-weight: 300;
+      line-height: 1;
+    }
+
+    .img-tile.add .lbl {
+      font-size: 12.5px;
+    }
+
+    /* 空态高度 = 一行 tile 高度 = (容器宽 - 2*gap)/3,与有图态完全等高,切换不跳动 */
+    .img-drop {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      height: 100%;
+      box-sizing: border-box;
+      border: 1.5px dashed var(--line-hi);
+      border-radius: 12px;
+      background: var(--field);
+      cursor: pointer;
+      color: var(--t3);
+      transition: .15s;
+      padding: 12px 16px;
+      text-align: center;
+    }
+
+    .img-drop:hover,
+    .img-drop.drag {
+      border-color: var(--blue);
+      background: var(--card-hi);
+    }
+
+    .img-drop .di svg {
+      width: 38px;
+      height: 38px;
+      color: var(--t3);
+    }
+
+    .img-drop .dt {
+      font-size: 14px;
+      color: var(--t2);
+    }
+
+    .img-drop .da {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12.5px;
+      color: var(--t3);
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      padding: 8px 14px;
+    }
+
+    .img-drop .da svg {
+      width: 15px;
+      height: 15px;
+    }
+
+    .swap-btn {
+      flex: 0 0 auto;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--field);
+      border: 1px solid var(--line);
+      color: var(--t3);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      transition: .15s;
+    }
+
+    .swap-btn:hover {
+      color: var(--t1);
+      border-color: var(--line-hi);
+    }
+
+    .swap-btn svg {
+      width: 15px;
+      height: 15px;
+    }
+
+    .swap-btn:disabled {
+      opacity: .3;
+      cursor: default;
+    }
+
+    .area-hint {
+      font-size: 11px;
+      color: var(--t4);
+      margin: 7px 0 0;
+    }
+
+    .fmt-hint {
+      font-size: 11px;
+      color: var(--t4);
+      margin: 7px 0 0;
+      line-height: 1.5;
+    }
+
+    /* 段选(解析度 / 时长)+ 比例 */
+    .seg-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .seg-row .seg {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      min-height: 42px;
+      padding: 10px;
+      border-radius: 10px;
+      background: var(--field);
+      border: 1px solid var(--line);
+      color: var(--t3);
+      font-size: 13px;
+      cursor: pointer;
+      transition: .15s;
+    }
+
+    .seg-row .seg:hover {
+      color: var(--t1);
+    }
+
+    .seg-row .seg.on {
+      background: var(--card-hi);
+      color: var(--t1);
+      border-color: var(--line-hi);
+    }
+
+    .ratio-row {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      align-items: stretch;
+    }
+
+    .ratio-cell {
+      flex: 1;
+      min-width: 54px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 4px;
+      padding: 8px 2px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--field);
+      color: var(--t3);
+      cursor: pointer;
+      transition: .15s;
+    }
+
+    .ratio-cell:hover {
+      color: var(--t1);
+      border-color: var(--line-hi);
+    }
+
+    .ratio-cell.on {
+      background: var(--card-hi);
+      color: var(--t1);
+      border-color: var(--line-hi);
+    }
+
+    .ratio-cell .glyph {
+      width: 18px;
+      height: 18px;
+      border: 1.6px solid currentColor;
+      border-radius: 3px;
+    }
+
+    .ratio-cell .lbl {
+      font-size: 10.5px;
+      font-family: var(--f-mono);
+    }
+
+    .cfg-label {
+      font-size: 12px;
+      color: var(--t3);
+      margin: 14px 0 7px;
+    }
+
+    .opt-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 11px 13px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--field);
+      margin-top: 8px;
+    }
+
+    .opt-toggle .ol {
+      font-size: 13px;
+      color: var(--t2);
+    }
+
+    .opt-toggle input[type=checkbox] {
+      width: auto;
+    }
+
+    .neg-input {
+      width: 100%;
+      padding: 9px 11px;
+      background: var(--field);
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      color: var(--t1);
+      font-size: 13px;
+      margin-top: 8px;
+    }
+
+    /* 授权同意(同 AI 图片编辑)*/
+    .consent {
+      display: flex;
+      gap: 9px;
+      align-items: flex-start;
+      margin-top: 12px;
+      font-size: 11.5px;
+      color: var(--t3);
+      line-height: 1.5;
+    }
+
+    .consent input {
+      width: auto;
+      margin-top: 2px;
+    }
+
+    /* 大图查看器(与 ai-image-edit 同款)*/
+    .lightbox {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .88);
+      backdrop-filter: blur(4px);
+      z-index: 500;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      cursor: zoom-out;
+    }
+
+    .lightbox.on {
+      display: flex;
+    }
+
+    .lightbox img {
+      max-width: 92vw;
+      max-height: 88vh;
+      border-radius: 12px;
+      cursor: default;
+    }
+
+    .lightbox .lb-x {
+      position: absolute;
+      top: 22px;
+      right: 26px;
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, .12);
+      border: 1px solid rgba(255, 255, 255, .18);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+    }
+
+    .lightbox .lb-x svg {
+      width: 22px;
+      height: 22px;
+      color: #fff;
+    }
+  </style>
+  <script defer src="shell.js"></script>
 </head>
+
 <body data-page="img2video" data-crumb="创作工具 > 图片转影片">
-<div class="shell" id="shell-mount">
- 
-<!--SIDEBAR:START 由 build-sidebar.mjs 生成,勿手改-->
-<aside class="sidebar">
-<a class="sb-brand" href="explore.html" title="灵镜 · 探索">
-<span class="logo-mark" id="lj-brand-mark"><svg viewBox="0 0 100 100" fill="none"><circle cx="37" cy="50" r="29" stroke="#0E0E0E" stroke-width="5"/><circle cx="63" cy="50" r="29" stroke="#0E0E0E" stroke-width="5"/><path d="M50 24.08 A29 29 0 0 1 50 75.92 A29 29 0 0 1 50 24.08 Z" fill="#0E0E0E"/></svg></span>
-<span class="nm">Lingjing</span><span class="cjk">灵镜</span>
-</a>
-<nav class="sb-nav"><a class="sb-item" data-page="explore" href="explore.html" data-label="探索"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m15 9-3.5 1.5L10 14l3.5-1.5L15 9Z"/></svg><span>探索</span></a><a class="sb-item" data-page="assets" href="assets.html" data-label="我的资产"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg><span>我的资产</span></a><div class="sb-group">创作工具</div><div id="sb-tools"><a class="sb-item sb-tool" data-page="ref-video" href="ref-video.html" data-label="参考生成影片" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="14" rx="2"/><path d="m17 9 4-2v10l-4-2"/><path d="m8 10 2 2-2 2"/></svg><span>参考生成影片</span><span class="nbadge">新</span></a><a class="sb-item sb-tool active" data-page="img2video" href="img2video.html" data-label="图片转影片" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="14" height="14" rx="2"/><circle cx="8" cy="9" r="1.6"/><path d="m4 16 4-4 3 3"/><path d="m17 10 4-2v10l-4-2"/></svg><span>图片转影片</span></a><a class="sb-item sb-tool" data-page="text2video" href="text2video.html" data-label="文字转影片" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6h14M9 6v12M7 18h4"/><path d="m16 11 4-2v8l-4-2"/></svg><span>文字转影片</span></a><a class="sb-item sb-tool" data-page="ai-image" href="ai-image.html" data-label="AI 图片" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="9" cy="9" r="1.6"/><path d="m5 17 4-4 3 3 3-3 4 4"/></svg><span>AI 图片</span><span class="nano">Nano Banana</span></a><a class="sb-item sb-tool" data-page="ai-image-edit" href="ai-image-edit.html" data-label="AI 图片编辑器" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="13" height="13" rx="2"/><path d="m5 15 3-3 2 2"/><path d="M14 18.5 19 13.5l2.5 2.5-5 5H14v-2.5Z"/></svg><span>AI 图片编辑器</span></a><a class="sb-item sb-tool" data-page="ai-video-edit" href="video-edit.html" data-label="AI 影片编辑器" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="13" rx="2"/><path d="m8 9 4 2.5L8 14V9Z"/><path d="M15 18.5 20 13.5l2 2-5 5H15v-2.5Z"/></svg><span>AI 影片编辑器</span></a><a class="sb-item sb-tool" data-page="ai-avatar" href="avatars.html" data-label="AI 虚拟人" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg><span>AI 虚拟人</span></a><a class="sb-item sb-tool" data-page="ai-music" href="ai-music.html" data-label="AI 音乐" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg><span>AI 音乐</span></a><a class="sb-item sb-tool" data-page="tts" href="tts.html" data-label="文字转语音" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg><span>文字转语音</span></a></div><div class="sb-group">财务中心</div><a class="sb-item" data-page="billing" href="billing.html" data-label="用量计费"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 14 3-4 4 3 4-6"/></svg><span>用量计费</span></a><a class="sb-item" data-page="orders" href="orders.html" data-label="充值订单"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/></svg><span>充值订单</span></a><a class="sb-item" data-page="invoices" href="invoices.html" data-label="发票管理"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h11l3 3v15l-2-1.2L15 21l-2-1.2L11 21l-2-1.2L7 21l-2-1.2V3Z"/><path d="M8 8h7M8 12h7M8 16h4"/></svg><span>发票管理</span></a><div class="sb-group">经营管理</div><a class="sb-item" data-page="members" href="members.html" data-label="成员与权限"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg><span>成员与权限</span></a><a class="sb-item" data-page="settings" href="settings.html" data-label="系统设置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H1a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 2.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H7a1.6 1.6 0 0 0 1-1.5V1a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V7a1.6 1.6 0 0 0 1.5 1H23a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z"/></svg><span>系统设置</span></a></nav>
-</aside>
-<script>/* 品牌即时渲染:此内联脚本紧跟 .sb-brand,解析到此即同步执行(早于首次绘制),
+  <div class="shell" id="shell-mount">
+
+    <!--SIDEBAR:START 由 build-sidebar.mjs 生成,勿手改-->
+    <aside class="sidebar">
+      <a class="sb-brand" href="explore.html" title="灵镜 · 探索">
+        <span class="logo-mark" id="lj-brand-mark"><svg viewBox="0 0 100 100" fill="none">
+            <circle cx="37" cy="50" r="29" stroke="#0E0E0E" stroke-width="5" />
+            <circle cx="63" cy="50" r="29" stroke="#0E0E0E" stroke-width="5" />
+            <path d="M50 24.08 A29 29 0 0 1 50 75.92 A29 29 0 0 1 50 24.08 Z" fill="#0E0E0E" />
+          </svg></span>
+        <span class="nm">Lingjing</span><span class="cjk">灵镜</span>
+      </a>
+      <nav class="sb-nav"><a class="sb-item" data-page="explore" href="explore.html" data-label="探索"><svg
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+            stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9" />
+            <path d="m15 9-3.5 1.5L10 14l3.5-1.5L15 9Z" />
+          </svg><span>探索</span></a><a class="sb-item" data-page="assets" href="assets.html" data-label="我的资产"><svg
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
+          </svg><span>我的资产</span></a>
+        <div class="sb-group">创作工具</div>
+        <div id="sb-tools"><a class="sb-item sb-tool" data-page="ref-video" href="ref-video.html" data-label="参考生成影片"
+            data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+              stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="5" width="14" height="14" rx="2" />
+              <path d="m17 9 4-2v10l-4-2" />
+              <path d="m8 10 2 2-2 2" />
+            </svg><span>参考生成影片</span><span class="nbadge">新</span></a><a class="sb-item sb-tool active"
+            data-page="img2video" href="img2video.html" data-label="图片转影片" data-requires-create><svg viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="14" height="14" rx="2" />
+              <circle cx="8" cy="9" r="1.6" />
+              <path d="m4 16 4-4 3 3" />
+              <path d="m17 10 4-2v10l-4-2" />
+            </svg><span>图片转影片</span></a><a class="sb-item sb-tool" data-page="text2video" href="text2video.html"
+            data-label="文字转影片" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M5 6h14M9 6v12M7 18h4" />
+              <path d="m16 11 4-2v8l-4-2" />
+            </svg><span>文字转影片</span></a><a class="sb-item sb-tool" data-page="ai-image" href="ai-image.html"
+            data-label="AI 图片" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="4" y="4" width="16" height="16" rx="2" />
+              <circle cx="9" cy="9" r="1.6" />
+              <path d="m5 17 4-4 3 3 3-3 4 4" />
+            </svg><span>AI 图片</span><span class="nano">Nano Banana</span></a><a class="sb-item sb-tool"
+            data-page="ai-image-edit" href="ai-image-edit.html" data-label="AI 图片编辑器" data-requires-create><svg
+              viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+              stroke-linejoin="round">
+              <rect x="4" y="4" width="13" height="13" rx="2" />
+              <path d="m5 15 3-3 2 2" />
+              <path d="M14 18.5 19 13.5l2.5 2.5-5 5H14v-2.5Z" />
+            </svg><span>AI 图片编辑器</span></a><a class="sb-item sb-tool" data-page="ai-video-edit" href="video-edit.html"
+            data-label="AI 影片编辑器" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="5" width="14" height="13" rx="2" />
+              <path d="m8 9 4 2.5L8 14V9Z" />
+              <path d="M15 18.5 20 13.5l2 2-5 5H15v-2.5Z" />
+            </svg><span>AI 影片编辑器</span></a><a class="sb-item sb-tool" data-page="ai-avatar" href="avatars.html"
+            data-label="AI 虚拟人" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M5.5 21a6.5 6.5 0 0 1 13 0" />
+            </svg><span>AI 虚拟人</span></a><a class="sb-item sb-tool" data-page="ai-music" href="ai-music.html"
+            data-label="AI 音乐" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 18V5l10-2v13" />
+              <circle cx="6" cy="18" r="3" />
+              <circle cx="16" cy="16" r="3" />
+            </svg><span>AI 音乐</span></a><a class="sb-item sb-tool" data-page="tts" href="tts.html" data-label="文字转语音"
+            data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2" />
+            </svg><span>文字转语音</span></a></div>
+        <div class="sb-group">财务中心</div><a class="sb-item" data-page="billing" href="billing.html"
+          data-label="用量计费"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 3v18h18" />
+            <path d="m7 14 3-4 4 3 4-6" />
+          </svg><span>用量计费</span></a><a class="sb-item" data-page="orders" href="orders.html" data-label="充值订单"><svg
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+            stroke-linejoin="round">
+            <rect x="2" y="5" width="20" height="14" rx="2" />
+            <path d="M2 10h20" />
+            <path d="M6 15h4" />
+          </svg><span>充值订单</span></a><a class="sb-item" data-page="invoices" href="invoices.html" data-label="发票管理"><svg
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M5 3h11l3 3v15l-2-1.2L15 21l-2-1.2L11 21l-2-1.2L7 21l-2-1.2V3Z" />
+            <path d="M8 8h7M8 12h7M8 16h4" />
+          </svg><span>发票管理</span></a>
+        <div class="sb-group">经营管理</div><a class="sb-item" data-page="members" href="members.html"
+          data-label="成员与权限"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+          </svg><span>成员与权限</span></a><a class="sb-item" data-page="settings" href="settings.html"
+          data-label="系统设置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+            stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H1a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 2.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H7a1.6 1.6 0 0 0 1-1.5V1a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V7a1.6 1.6 0 0 0 1.5 1H23a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z" />
+          </svg><span>系统设置</span></a>
+      </nav>
+    </aside>
+    <script>/* 品牌即时渲染:此内联脚本紧跟 .sb-brand,解析到此即同步执行(早于首次绘制),
 按 localStorage 缓存把默认「Lingjing 灵镜」改成机构真实名/Logo → Chrome/Safari 0 闪。
 shell.js(defer)随后用 LJ.me() 校正并写回缓存。 */
-(function(){try{var c=JSON.parse(localStorage.getItem('ljBrand')||'null');if(!c)return;
-var b=document.currentScript.previousElementSibling;
-var brand=b&&b.querySelector?b.querySelector('.sb-brand'):null;if(!brand)return;
-if(c.showName){var nm=brand.querySelector('.nm'),cj=brand.querySelector('.cjk');if(nm)nm.textContent=c.showName;if(cj)cj.style.display='none';brand.title=c.showName;}
-if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Image();img.src=c.logoUrl;img.style.cssText='width:100%;height:100%;object-fit:contain;border-radius:7px';img.onload=function(){m.innerHTML='';m.appendChild(img);};}}
-}catch(e){}})();
-</script>
-<!--SIDEBAR:END-->
-<div class="main-col">
-  <div class="studio">
-  <!-- 左:配置 -->
-  <div class="cfg">
-    <div class="cfg-h"><span class="dot"></span>图片转影片 AI</div>
+      (function () {
+        try {
+          var c = JSON.parse(localStorage.getItem('ljBrand') || 'null'); if (!c) return;
+          var b = document.currentScript.previousElementSibling;
+          var brand = b && b.querySelector ? b.querySelector('.sb-brand') : null; if (!brand) return;
+          if (c.showName) { var nm = brand.querySelector('.nm'), cj = brand.querySelector('.cjk'); if (nm) nm.textContent = c.showName; if (cj) cj.style.display = 'none'; brand.title = c.showName; }
+          if (c.logoUrl) { var m = brand.querySelector('#lj-brand-mark'); if (m) { var img = new Image(); img.src = c.logoUrl; img.style.cssText = 'width:100%;height:100%;object-fit:contain;border-radius:7px'; img.onload = function () { m.innerHTML = ''; m.appendChild(img); }; } }
+        } catch (e) { }
+      })();
+    </script>
+    <!--SIDEBAR:END-->
+    <div class="main-col">
+      <div class="studio">
+        <!-- 左:配置 -->
+        <div class="cfg">
+          <div class="cfg-h"><span class="dot"></span>图片转影片 AI</div>
 
-    <!-- 任务 tab:任务优先,三 tab 常显(design-review D1);模型列表随任务过滤 -->
-    <div class="task-tabs" id="taskTabs">
-      <button type="button" class="task-tab" data-task="first_frame">开始图</button>
-      <button type="button" class="task-tab" data-task="first_last">图片间</button>
-      <button type="button" class="task-tab" data-task="reference">参考图</button>
-    </div>
+          <!-- 任务 tab:任务优先,三 tab 常显(design-review D1);模型列表随任务过滤 -->
+          <div class="task-tabs" id="taskTabs">
+            <button type="button" class="task-tab" data-task="first_frame">开始图</button>
+            <button type="button" class="task-tab" data-task="first_last">图片间</button>
+            <button type="button" class="task-tab" data-task="reference">参考图</button>
+          </div>
 
-    <!-- 输入图区(按 task 切换形态;外卡与 ai-image 图转图同款)-->
-    <div class="img-tiles-card"><div id="imgArea"></div></div>
-    <div class="fmt-hint">支持 JPG / PNG / WEBP / BMP / TIFF / GIF,单张 ≤ 10MB。暂不支持 HEIC(iPhone 实况照片,请在相册导出为 JPG 或截图后上传)。</div>
-    <input type="file" id="filePick" accept="image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif,.jpg,.jpeg,.png,.webp,.bmp,.tiff,.gif" multiple style="display:none">
+          <!-- 输入图区(按 task 切换形态;外卡与 ai-image 图转图同款)-->
+          <div class="img-tiles-card">
+            <div id="imgArea"></div>
+          </div>
+          <div class="fmt-hint">支持 JPG / PNG / WEBP / BMP / TIFF / GIF,单张 ≤ 10MB。暂不支持 HEIC(iPhone 实况照片,请在相册导出为 JPG
+            或截图后上传)。</div>
+          <input type="file" id="filePick"
+            accept="image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif,.jpg,.jpeg,.png,.webp,.bmp,.tiff,.gif"
+            multiple style="display:none">
 
-    <!-- 提示词 -->
-    <div class="cfg-label" id="promptLabel">提示</div>
-    <div class="script">
-      <textarea id="prompt" maxlength="2000" placeholder="请描述影片内容(可选)。"></textarea>
-      <div class="f"><span class="h" id="estLabel">预估 — 点</span><span class="c"><b id="cnt">0</b> / <span id="maxChars">2000</span></span></div>
-    </div>
+          <!-- 提示词 -->
+          <div class="cfg-label" id="promptLabel">提示</div>
+          <div class="script">
+            <textarea id="prompt" maxlength="2000" placeholder="请描述影片内容(可选)。"></textarea>
+            <div class="f"><span class="h" id="estLabel">预估 — 点</span><span class="c"><b id="cnt">0</b> / <span
+                  id="maxChars">2000</span></span></div>
+          </div>
 
-    <div class="cfg-sp"></div>
+          <div class="cfg-sp"></div>
 
-    <!-- 紧凑配置栏:模型 pill + 设置 pill(解析度/比例/时长/模型特有 收进 popover)+ seed -->
-    <div class="cfgbar">
-      <div class="pop-anchor" style="flex:1">
-        <div class="cpill" id="modelPill" onclick="togglePop('model')"><span class="v" id="modelPillV">模型</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
-        <div class="pop" id="pop-model"><div class="pop-label">模型</div><div id="modelOpts"></div></div>
-      </div>
-      <div class="pop-anchor" style="flex:1.2">
-        <div class="cpill" id="setPill" onclick="togglePop('set')"><span class="v" id="setPillV">720P · 5秒</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
-        <div class="pop" id="pop-set">
-          <div class="pop-label">解析度</div>
-          <div class="seg-row" id="resSeg"></div>
-          <div class="pop-label" id="ratioLabel">比例</div>
-          <div class="ratio-row" id="ratioRow"></div>
-          <div class="pop-label">长度</div>
-          <div class="seg-row" id="durSeg"></div>
-          <div id="modelOpts2"></div>
+          <!-- 紧凑配置栏:模型 pill + 设置 pill(解析度/比例/时长/模型特有 收进 popover)+ seed -->
+          <div class="cfgbar">
+            <div class="pop-anchor" style="flex:1">
+              <div class="cpill" id="modelPill" onclick="togglePop('model')"><span class="v"
+                  id="modelPillV">模型</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2">
+                  <path d="m6 9 6 6 6-6" />
+                </svg></div>
+              <div class="pop" id="pop-model">
+                <div class="pop-label">模型</div>
+                <div id="modelOpts"></div>
+              </div>
+            </div>
+            <div class="pop-anchor" style="flex:1.2">
+              <div class="cpill" id="setPill" onclick="togglePop('set')"><span class="v" id="setPillV">720P ·
+                  5秒</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="m6 9 6 6 6-6" />
+                </svg></div>
+              <div class="pop" id="pop-set">
+                <div class="pop-label">解析度</div>
+                <div class="seg-row" id="resSeg"></div>
+                <div class="pop-label" id="ratioLabel">比例</div>
+                <div class="ratio-row" id="ratioRow"></div>
+                <div class="pop-label">长度</div>
+                <div class="seg-row" id="durSeg"></div>
+                <div id="modelOpts2"></div>
+              </div>
+            </div>
+            <div class="pop-anchor">
+              <div class="cpill fixed" id="seedPill" onclick="togglePop('seed')" title="随机种子 Seed"
+                aria-label="随机种子 Seed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                  stroke-linecap="round">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 7v5l3 2" />
+                </svg></div>
+              <div class="pop" id="pop-seed" style="left:auto;right:0;width:200px">
+                <div class="pop-label">Seed(随机种子)</div>
+                <input id="seedInput" type="text" inputmode="numeric" placeholder="随机"
+                  style="width:100%;padding:9px 11px;background:var(--field);border:1px solid var(--line);border-radius:9px;color:var(--t1);font-size:13px;font-family:var(--f-mono)">
+              </div>
+            </div>
+          </div>
+          <div class="pop-ov" id="popOv" onclick="closePops()"></div>
+
+          <label class="consent"><input type="checkbox"
+              id="consentChk"><span>我确认对上传的图片拥有合法使用权,且内容不侵犯他人肖像权、著作权等合法权益,并同意按《用户协议》生成 AI 影片。</span></label>
+
+          <div class="cbtn-wrap">
+            <button class="cbtn" id="createBtn">
+              <span id="cbtnLabel">创建</span> <span class="gem"><svg viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
+                  <path d="M6 3h12l4 6-10 12L2 9l4-6Z" />
+                </svg> <b id="estGem">—</b></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 右:生成记录 -->
+        <div class="feed">
+          <div class="feed-tabs">
+            <button class="ftab active" data-st="all">全部</button>
+            <button class="ftab" data-st="running">生成中</button>
+            <button class="ftab" data-st="done">已完成</button>
+            <button class="ftab" data-st="failed">失败</button>
+          </div>
+          <div class="feed-list">
+            <div class="fitem feed-empty" id="emptyHint">
+              <div class="feed-empty-in">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                  <rect x="3" y="4" width="14" height="14" rx="2" />
+                  <circle cx="8" cy="9" r="1.6" />
+                  <path d="m4 16 4-4 3 3" />
+                  <path d="m17 10 4-2v10l-4-2" />
+                </svg>
+                <div class="t">还没有影片作品</div>
+                <div class="s">上传图片、点「创建」就能生成第一条。</div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="pop-anchor">
-        <div class="cpill fixed" id="seedPill" onclick="togglePop('seed')" title="随机种子 Seed" aria-label="随机种子 Seed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
-        <div class="pop" id="pop-seed" style="left:auto;right:0;width:200px">
-          <div class="pop-label">Seed(随机种子)</div>
-          <input id="seedInput" type="text" inputmode="numeric" placeholder="随机" style="width:100%;padding:9px 11px;background:var(--field);border:1px solid var(--line);border-radius:9px;color:var(--t1);font-size:13px;font-family:var(--f-mono)">
-        </div>
-      </div>
     </div>
-    <div class="pop-ov" id="popOv" onclick="closePops()"></div>
 
-    <label class="consent"><input type="checkbox" id="consentChk"><span>我确认对上传的图片拥有合法使用权,且内容不侵犯他人肖像权、著作权等合法权益,并同意按《用户协议》生成 AI 影片。</span></label>
-
-    <div class="cbtn-wrap">
-      <button class="cbtn" id="createBtn">
-        <span id="cbtnLabel">创建</span> <span class="gem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg> <b id="estGem">—</b></span>
-      </button>
+    <!-- 大图查看器 -->
+    <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+      <div class="lb-x" onclick="closeLightbox()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2.2">
+          <path d="M18 6 6 18M6 6l12 12" />
+        </svg></div>
+      <img id="lightboxImg" src="" alt="" onclick="event.stopPropagation()">
     </div>
-  </div>
 
-  <!-- 右:生成记录 -->
-  <div class="feed">
-    <div class="feed-tabs">
-      <button class="ftab active" data-st="all">全部</button>
-      <button class="ftab" data-st="running">生成中</button>
-      <button class="ftab" data-st="done">已完成</button>
-      <button class="ftab" data-st="failed">失败</button>
-    </div>
-    <div class="feed-list">
-      <div class="fitem feed-empty" id="emptyHint">
-        <div class="feed-empty-in">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="4" width="14" height="14" rx="2"/><circle cx="8" cy="9" r="1.6"/><path d="m4 16 4-4 3 3"/><path d="m17 10 4-2v10l-4-2"/></svg>
-          <div class="t">还没有影片作品</div>
-          <div class="s">上传图片、点「创建」就能生成第一条。</div>
-        </div>
-      </div>
-    </div>
-  </div>
- </div>
-</div>
+    <script src="tools.js"></script>
+    <script src="api.js"></script>
+    <script>
+      const ta = document.getElementById('prompt'), cnt = document.getElementById('cnt'), btn = document.getElementById('createBtn');
+      const feedList = document.querySelector('.feed-list');
+      let model = '', allModels = [], task = 'first_frame', ratio = '16:9', resolution = '720P', duration = 5, negativePrompt = '', promptExtend = false, seed = '';
+      // 输入图状态:单/双槽 slots(固定位:开始图/结束图),参考多图 refs
+      let firstFrame = null, lastFrame = null, refFiles = []; // {file,url}
+      // 重新提示复用原 job 输入图(免重传;贴 ai-image-edit 的 reuseRefs 模式)
+      let reuseRefs = null, reuseUrls = null;
+      let pickTarget = null; // 'first' | 'last' | 'ref'
 
-<!-- 大图查看器 -->
-<div class="lightbox" id="lightbox" onclick="closeLightbox()">
-  <div class="lb-x" onclick="closeLightbox()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
-  <img id="lightboxImg" src="" alt="" onclick="event.stopPropagation()">
-</div>
+      function esc(s) { return (s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+      function curModel() { return allModels.find(m => m.key === model); }
+      function usableModels() { return allModels.filter(m => (m.tasks || []).includes(task)); }
+      function reuseActive() { return !!(reuseRefs && reuseRefs.length) && !firstFrame && !lastFrame && !refFiles.length; }
+      function clearReuse() { reuseRefs = null; reuseUrls = null; }
+      const RATIO_GLYPH = { '16:9': [20, 11], '9:16': [11, 20], '1:1': [18, 18], '3:4': [14, 18], '4:3': [18, 14], '4:5': [14, 18], '5:4': [18, 14], '9:21': [9, 20], '21:9': [20, 9] };
+      const TASK_LABEL = { first_frame: '开始图', first_last: '图片间', reference: '参考图' };
 
-<script src="tools.js"></script>
-<script src="api.js"></script>
-<script>
-  const ta=document.getElementById('prompt'), cnt=document.getElementById('cnt'), btn=document.getElementById('createBtn');
-  const feedList=document.querySelector('.feed-list');
-  let model='', allModels=[], task='first_frame', ratio='16:9', resolution='720P', duration=5, negativePrompt='', promptExtend=true, seed='';
-  // 输入图状态:单/双槽 slots(固定位:开始图/结束图),参考多图 refs
-  let firstFrame=null, lastFrame=null, refFiles=[]; // {file,url}
-  // 重新提示复用原 job 输入图(免重传;贴 ai-image-edit 的 reuseRefs 模式)
-  let reuseRefs=null, reuseUrls=null;
-  let pickTarget=null; // 'first' | 'last' | 'ref'
-
-  function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-  function curModel(){ return allModels.find(m=>m.key===model); }
-  function usableModels(){ return allModels.filter(m=>(m.tasks||[]).includes(task)); }
-  function reuseActive(){ return !!(reuseRefs&&reuseRefs.length) && !firstFrame && !lastFrame && !refFiles.length; }
-  function clearReuse(){ reuseRefs=null; reuseUrls=null; }
-  const RATIO_GLYPH={'16:9':[20,11],'9:16':[11,20],'1:1':[18,18],'3:4':[14,18],'4:3':[18,14],'4:5':[14,18],'5:4':[18,14],'9:21':[9,20],'21:9':[20,9]};
-  const TASK_LABEL={first_frame:'开始图',first_last:'图片间',reference:'参考图'};
-
-  // ── 模型下拉(GET /i2v-models)。任务优先:列表按当前 task 过滤(贴 ai-image 按 mode 过滤)──
-  const modelOpts=document.getElementById('modelOpts');
-  async function loadModels(){
-    try{ const r=await LJ.get('/i2v-models'); allModels=r.models||[]; if(r.default) model=r.default; renderTaskTabs(); renderModels(); }
-    catch(e){ modelOpts.innerHTML='<div class="pop-opt"><span class="nm">模型加载失败</span></div>'; }
-  }
-  function renderModels(){
-    const usable=usableModels();
-    if(usable.length && !usable.find(m=>m.key===model)) model=usable[0].key;
-    modelOpts.innerHTML=usable.map(m=>`<div class="pop-opt${m.key===model?' on':''}" data-k="${m.key}">
+      // ── 模型下拉(GET /i2v-models)。任务优先:列表按当前 task 过滤(贴 ai-image 按 mode 过滤)──
+      const modelOpts = document.getElementById('modelOpts');
+      async function loadModels() {
+        try { const r = await LJ.get('/i2v-models'); allModels = r.models || []; if (r.default) model = r.default; renderTaskTabs(); renderModels(); }
+        catch (e) { modelOpts.innerHTML = '<div class="pop-opt"><span class="nm">模型加载失败</span></div>'; }
+      }
+      function renderModels() {
+        const usable = usableModels();
+        if (usable.length && !usable.find(m => m.key === model)) model = usable[0].key;
+        modelOpts.innerHTML = usable.map(m => `<div class="pop-opt${m.key === model ? ' on' : ''}" data-k="${m.key}">
       <span class="nm">${esc(m.label)}</span>
       <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg></div>`).join('')
-      || '<div class="pop-opt"><span class="nm">该任务暂无可用模型</span></div>';
-    modelOpts.querySelectorAll('.pop-opt[data-k]').forEach(el=>el.onclick=()=>{ model=el.dataset.k; onModelChange(); closePops(); });
-    onModelChange();
-  }
-  function markModelOpt(){ modelOpts.querySelectorAll('.pop-opt[data-k]').forEach(el=>el.classList.toggle('on', el.dataset.k===model)); }
+          || '<div class="pop-opt"><span class="nm">该任务暂无可用模型</span></div>';
+        modelOpts.querySelectorAll('.pop-opt[data-k]').forEach(el => el.onclick = () => { model = el.dataset.k; onModelChange(); closePops(); });
+        onModelChange();
+      }
+      function markModelOpt() { modelOpts.querySelectorAll('.pop-opt[data-k]').forEach(el => el.classList.toggle('on', el.dataset.k === model)); }
 
-  // 切模型(同任务内):重渲模型相关控件。不再反向操纵 tab(D1:任务优先)。
-  function onModelChange(){
-    const m=curModel(); if(!m) return;
-    document.getElementById('maxChars').textContent=m.maxPromptChars; ta.maxLength=m.maxPromptChars;
-    markModelOpt();
-    renderImgArea(); renderRes(); renderRatios(); renderDur(); renderModelOpts(); syncPills(); refreshPromptLabel(); scheduleEstimate(); refreshBtn();
-  }
-  // 切任务:三 tab 常显常可点;当前模型不支持新任务 → 自动落到第一个可用模型 + Toast(D2)
-  function switchTask(t){
-    if(t===task) return;
-    task=t;
-    if(reuseActive()) clearReuse(); // 复用态跨任务无意义(图数/语义都变),清掉避免混淆
-    const m=curModel();
-    const needSwitch=!m || !(m.tasks||[]).includes(task);
-    renderTaskTabs();
-    renderModels(); // 重过滤;不支持则回落第一个可用(renderModels 内)并重渲全部
-    if(needSwitch){ const nm=curModel(); if(nm&&window.LJToast) LJToast(`已切换为「${nm.label}」(该模型支持${TASK_LABEL[task]})`); }
-  }
-  function renderTaskTabs(){
-    document.querySelectorAll('.task-tab').forEach(b=>b.classList.toggle('on', b.dataset.task===task));
-  }
-  document.querySelectorAll('.task-tab').forEach(b=>b.onclick=()=>switchTask(b.dataset.task));
+      // 切模型(同任务内):重渲模型相关控件。不再反向操纵 tab(D1:任务优先)。
+      function onModelChange() {
+        const m = curModel(); if (!m) return;
+        document.getElementById('maxChars').textContent = m.maxPromptChars; ta.maxLength = m.maxPromptChars;
+        markModelOpt();
+        renderImgArea(); renderRes(); renderRatios(); renderDur(); renderModelOpts(); syncPills(); refreshPromptLabel(); scheduleEstimate(); refreshBtn();
+      }
+      // 切任务:三 tab 常显常可点;当前模型不支持新任务 → 自动落到第一个可用模型 + Toast(D2)
+      function switchTask(t) {
+        if (t === task) return;
+        task = t;
+        if (reuseActive()) clearReuse(); // 复用态跨任务无意义(图数/语义都变),清掉避免混淆
+        const m = curModel();
+        const needSwitch = !m || !(m.tasks || []).includes(task);
+        renderTaskTabs();
+        renderModels(); // 重过滤;不支持则回落第一个可用(renderModels 内)并重渲全部
+        if (needSwitch) { const nm = curModel(); if (nm && window.LJToast) LJToast(`已切换为「${nm.label}」(该模型支持${TASK_LABEL[task]})`); }
+      }
+      function renderTaskTabs() {
+        document.querySelectorAll('.task-tab').forEach(b => b.classList.toggle('on', b.dataset.task === task));
+      }
+      document.querySelectorAll('.task-tab').forEach(b => b.onclick = () => switchTask(b.dataset.task));
 
-  // 提示词标签 + 占位:参考生必填且建议含 [图N];首帧/首尾帧可选
-  function refreshPromptLabel(){
-    const lbl=document.getElementById('promptLabel');
-    if(task==='reference'){ lbl.textContent='提示(必填)'; ta.placeholder='用 [图1]、[图2] 指代参考图,描述要生成的画面。例:[图1]中的女性站在[图2]的街道上行走。'; }
-    else { lbl.textContent='提示(可选)'; ta.placeholder='可补充影片动态描述(可选)。'; }
-  }
+      // 提示词标签 + 占位:参考生必填且建议含 [图N];首帧/首尾帧可选
+      function refreshPromptLabel() {
+        const lbl = document.getElementById('promptLabel');
+        if (task === 'reference') { lbl.textContent = '提示(必填)'; ta.placeholder = '用 [图1]、[图2] 指代参考图,描述要生成的画面。例:[图1]中的女性站在[图2]的街道上行走。'; }
+        else { lbl.textContent = '提示(可选)'; ta.placeholder = '可补充影片动态描述(可选)。'; }
+      }
 
-  // ── 文件校验(贴 ai-image addFiles:HEIC 拒、类型白名单、10MB 上限)──
-  const OK_TYPES=['image/jpeg','image/png','image/webp','image/bmp','image/tiff','image/gif'];
-  const MAX_BYTES=10*1024*1024;
-  function isHeic(f){ return /heic|heif/i.test(f.type||'') || /\.(heic|heif)$/i.test(f.name||''); }
-  function validFile(f){
-    if(!f) return false;
-    if(isHeic(f)){ window.LJToast&&LJToast('暂不支持 HEIC,请在相册导出为 JPG 或截图后上传','err'); return false; }
-    const okType=OK_TYPES.includes(f.type) || (!f.type && /\.(jpe?g|png|webp|bmp|tiff?|gif)$/i.test(f.name||''));
-    if(!okType){ window.LJToast&&LJToast('不支持的格式:'+(f.type||f.name||'未知')+',请用 JPG/PNG/WEBP','err'); return false; }
-    if(f.size>MAX_BYTES){ window.LJToast&&LJToast('图片超过 10MB('+(f.size/1048576).toFixed(1)+'MB),请压缩后上传','err'); return false; }
-    return true;
-  }
-  // 入槽统一口(点击选择与拖放共用)。复用态一旦本地传图即失效。
-  function addFile(f, target){
-    if(!validFile(f)) return;
-    if(reuseActive()) clearReuse();
-    const rec={file:f,url:URL.createObjectURL(f)};
-    if(target==='first') firstFrame=rec;
-    else if(target==='last') lastFrame=rec;
-    else { const m=curModel(); const max=(m&&m.maxRefImages)||9; if(refFiles.length>=max){ window.LJToast&&LJToast(`参考图最多 ${max} 张`,'err'); return; } refFiles.push(rec); }
-    afterImgChange();
-  }
-  function bindDrop(el, handler){
-    if(!el) return;
-    el.addEventListener('dragover',e=>{ e.preventDefault(); el.classList.add('drag'); });
-    el.addEventListener('dragleave',()=>el.classList.remove('drag'));
-    el.addEventListener('drop',e=>{ e.preventDefault(); el.classList.remove('drag'); handler(e.dataTransfer.files); });
-  }
+      // ── 文件校验(贴 ai-image addFiles:HEIC 拒、类型白名单、10MB 上限)──
+      const OK_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/bmp', 'image/tiff', 'image/gif'];
+      const MAX_BYTES = 10 * 1024 * 1024;
+      function isHeic(f) { return /heic|heif/i.test(f.type || '') || /\.(heic|heif)$/i.test(f.name || ''); }
+      function validFile(f) {
+        if (!f) return false;
+        if (isHeic(f)) { window.LJToast && LJToast('暂不支持 HEIC,请在相册导出为 JPG 或截图后上传', 'err'); return false; }
+        const okType = OK_TYPES.includes(f.type) || (!f.type && /\.(jpe?g|png|webp|bmp|tiff?|gif)$/i.test(f.name || ''));
+        if (!okType) { window.LJToast && LJToast('不支持的格式:' + (f.type || f.name || '未知') + ',请用 JPG/PNG/WEBP', 'err'); return false; }
+        if (f.size > MAX_BYTES) { window.LJToast && LJToast('图片超过 10MB(' + (f.size / 1048576).toFixed(1) + 'MB),请压缩后上传', 'err'); return false; }
+        return true;
+      }
+      // 入槽统一口(点击选择与拖放共用)。复用态一旦本地传图即失效。
+      function addFile(f, target) {
+        if (!validFile(f)) return;
+        if (reuseActive()) clearReuse();
+        const rec = { file: f, url: URL.createObjectURL(f) };
+        if (target === 'first') firstFrame = rec;
+        else if (target === 'last') lastFrame = rec;
+        else { const m = curModel(); const max = (m && m.maxRefImages) || 9; if (refFiles.length >= max) { window.LJToast && LJToast(`参考图最多 ${max} 张`, 'err'); return; } refFiles.push(rec); }
+        afterImgChange();
+      }
+      function bindDrop(el, handler) {
+        if (!el) return;
+        el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag'); });
+        el.addEventListener('dragleave', () => el.classList.remove('drag'));
+        el.addEventListener('drop', e => { e.preventDefault(); el.classList.remove('drag'); handler(e.dataTransfer.files); });
+      }
 
-  // ── 输入图区:按 task 渲染(本地图 / 复用原图 两态;tiles 体系与 ai-image 图转图同款)──
-  const filePick=document.getElementById('filePick');
-  function slotView(slotKey){ // 本地优先;复用态映射 reuseUrls 槽位
-    if(slotKey==='first') return firstFrame ? firstFrame.url : (reuseActive()&&reuseUrls&&reuseUrls[0]) || null;
-    return lastFrame ? lastFrame.url : (reuseActive()&&reuseUrls&&reuseUrls[1]) || null;
-  }
-  function tileImgHtml(url,badge,attrs){
-    return `<div class="img-tile">${badge?`<span class="num">${esc(badge)}</span>`:''}<img src="${url}"><button type="button" class="rmx" ${attrs||''} aria-label="删除${esc(badge||'该图')}">×</button></div>`;
-  }
-  function tileAddHtml(label,attrs){
-    return `<div class="img-tile add" ${attrs||''}><span class="plus">+</span><span class="lbl">${esc(label)}</span></div>`;
-  }
-  function dropZoneHtml(){
-    return `<div class="img-drop" id="imgDrop">
+      // ── 输入图区:按 task 渲染(本地图 / 复用原图 两态;tiles 体系与 ai-image 图转图同款)──
+      const filePick = document.getElementById('filePick');
+      function slotView(slotKey) { // 本地优先;复用态映射 reuseUrls 槽位
+        if (slotKey === 'first') return firstFrame ? firstFrame.url : (reuseActive() && reuseUrls && reuseUrls[0]) || null;
+        return lastFrame ? lastFrame.url : (reuseActive() && reuseUrls && reuseUrls[1]) || null;
+      }
+      function tileImgHtml(url, badge, attrs) {
+        return `<div class="img-tile">${badge ? `<span class="num">${esc(badge)}</span>` : ''}<img src="${url}"><button type="button" class="rmx" ${attrs || ''} aria-label="删除${esc(badge || '该图')}">×</button></div>`;
+      }
+      function tileAddHtml(label, attrs) {
+        return `<div class="img-tile add" ${attrs || ''}><span class="plus">+</span><span class="lbl">${esc(label)}</span></div>`;
+      }
+      function dropZoneHtml() {
+        return `<div class="img-drop" id="imgDrop">
       <div class="di"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/><path d="M17 14v4M15 16h4"/></svg></div>
       <div class="dt">点击或拖放图片以上传</div>
       <div class="da"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z"/></svg>选择资产</div>
     </div>`;
-  }
-  function renderImgArea(){
-    const area=document.getElementById('imgArea');
-    if(task==='first_frame'){
-      const url=slotView('first');
-      if(!url){
-        // 带 area-hint(与参考图/图片间 tab 一致:dropzone 等高 + 下方说明,布局统一)
-        area.innerHTML=`<div class="img-tiles empty">${dropZoneHtml()}</div><div class="area-hint">上传一张图作为影片首帧。</div>`;
-        const dz=area.querySelector('#imgDrop'); dz.onclick=()=>pick('first');
-        bindDrop(dz, fs=>addFile(fs[0],'first'));
-      } else {
-        area.innerHTML=`<div class="img-tiles">${tileImgHtml(url,'开始图'+(reuseActive()?' · 原图':''),'data-slot="first"')}</div>`;
-        area.querySelector('.rmx').onclick=(e)=>{ e.stopPropagation(); firstFrame=null; clearReuse(); afterImgChange(); };
-        bindDrop(area.querySelector('.img-tile'), fs=>addFile(fs[0],'first')); // 拖图即替换
       }
-    } else if(task==='first_last'){
-      const u1=slotView('first'), u2=slotView('last'); const both=!!(u1&&u2);
-      const suffix=reuseActive()?' · 原图':'';
-      const cell=(u,lbl,slot)=> u ? tileImgHtml(u,lbl+suffix,`data-slot="${slot}"`) : tileAddHtml(lbl,`data-pick="${slot}" role="button" aria-label="上传${lbl}"`);
-      area.innerHTML=`<div class="img-tiles dual2">${cell(u1,'开始图','first')}
-        <button type="button" class="swap-btn" id="swapBtn" title="交换开始图与结束图" aria-label="交换开始图与结束图"${both?'':' disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg></button>
-        ${cell(u2,'结束图','last')}</div>
+      function renderImgArea() {
+        const area = document.getElementById('imgArea');
+        if (task === 'first_frame') {
+          const url = slotView('first');
+          if (!url) {
+            // 带 area-hint(与参考图/图片间 tab 一致:dropzone 等高 + 下方说明,布局统一)
+            area.innerHTML = `<div class="img-tiles empty">${dropZoneHtml()}</div><div class="area-hint">上传一张图作为影片首帧。</div>`;
+            const dz = area.querySelector('#imgDrop'); dz.onclick = () => pick('first');
+            bindDrop(dz, fs => addFile(fs[0], 'first'));
+          } else {
+            area.innerHTML = `<div class="img-tiles">${tileImgHtml(url, '开始图' + (reuseActive() ? ' · 原图' : ''), 'data-slot="first"')}</div>`;
+            area.querySelector('.rmx').onclick = (e) => { e.stopPropagation(); firstFrame = null; clearReuse(); afterImgChange(); };
+            bindDrop(area.querySelector('.img-tile'), fs => addFile(fs[0], 'first')); // 拖图即替换
+          }
+        } else if (task === 'first_last') {
+          const u1 = slotView('first'), u2 = slotView('last'); const both = !!(u1 && u2);
+          const suffix = reuseActive() ? ' · 原图' : '';
+          const cell = (u, lbl, slot) => u ? tileImgHtml(u, lbl + suffix, `data-slot="${slot}"`) : tileAddHtml(lbl, `data-pick="${slot}" role="button" aria-label="上传${lbl}"`);
+          area.innerHTML = `<div class="img-tiles dual2">${cell(u1, '开始图', 'first')}
+        <button type="button" class="swap-btn" id="swapBtn" title="交换开始图与结束图" aria-label="交换开始图与结束图"${both ? '' : ' disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg></button>
+        ${cell(u2, '结束图', 'last')}</div>
         <div class="area-hint">开始图 → 结束图 之间生成过渡影片(顺序固定,可用中间按钮交换)。</div>`;
-      area.querySelectorAll('[data-pick]').forEach(el=>{ el.onclick=()=>pick(el.dataset.pick); bindDrop(el, fs=>addFile(fs[0],el.dataset.pick)); });
-      area.querySelectorAll('.rmx[data-slot]').forEach(rm=>{
-        const slot=rm.dataset.slot;
-        rm.onclick=(e)=>{ e.stopPropagation(); if(reuseActive()){ clearReuse(); } else if(slot==='first'){ firstFrame=null; } else { lastFrame=null; } afterImgChange(); };
-        bindDrop(rm.closest('.img-tile'), fs=>addFile(fs[0],slot)); // 拖图即替换
-      });
-      const sw=area.querySelector('#swapBtn');
-      if(sw) sw.onclick=(e)=>{ e.stopPropagation(); swapFrames(); };
-    } else { // reference
-      const m=curModel(); const max=(m&&m.maxRefImages)||9;
-      const urls = reuseActive() ? (reuseUrls||[]) : refFiles.map(r=>r.url);
-      if(!urls.length){
-        area.innerHTML=`<div class="img-tiles empty">${dropZoneHtml()}</div><div class="area-hint">最多 ${max} 张。提示词用 [图N] 指代第 N 张。</div>`;
-        const dz=area.querySelector('#imgDrop'); dz.onclick=()=>pick('ref');
-        bindDrop(dz, fs=>Array.from(fs).forEach(f=>addFile(f,'ref')));
-      } else {
-        let tiles=urls.map((u,i)=>tileImgHtml(u,`图${i+1}`,`data-rm="${i}"`)).join('');
-        if(urls.length<max && !reuseActive()) tiles+=tileAddHtml('点击 / 拖放','id="addRef" role="button" aria-label="添加参考图"');
-        area.innerHTML=`<div class="img-tiles">${tiles}</div><div class="area-hint">已选 ${urls.length}/${max} 张${reuseActive()?'(复用上次原图,点 × 删除单张;如需新增请先清空再上传)':''}。提示词用 [图N] 指代第 N 张。</div>`;
-        const add=area.querySelector('#addRef'); if(add){ add.onclick=()=>pick('ref'); bindDrop(add, fs=>Array.from(fs).forEach(f=>addFile(f,'ref'))); }
-        area.querySelectorAll('.rmx[data-rm]').forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); const i=Number(el.dataset.rm);
-          if(reuseActive()){
-            // 复用态:删单张 = splice 该索引(reuseRefs/reuseUrls 同步);删到 0 张才彻底清复用态。
-            reuseRefs.splice(i,1); reuseUrls.splice(i,1);
-            if(!reuseRefs.length) clearReuse();
-          } else { refFiles.splice(i,1); }
-          afterImgChange(); });
+          area.querySelectorAll('[data-pick]').forEach(el => { el.onclick = () => pick(el.dataset.pick); bindDrop(el, fs => addFile(fs[0], el.dataset.pick)); });
+          area.querySelectorAll('.rmx[data-slot]').forEach(rm => {
+            const slot = rm.dataset.slot;
+            rm.onclick = (e) => { e.stopPropagation(); if (reuseActive()) { clearReuse(); } else if (slot === 'first') { firstFrame = null; } else { lastFrame = null; } afterImgChange(); };
+            bindDrop(rm.closest('.img-tile'), fs => addFile(fs[0], slot)); // 拖图即替换
+          });
+          const sw = area.querySelector('#swapBtn');
+          if (sw) sw.onclick = (e) => { e.stopPropagation(); swapFrames(); };
+        } else { // reference
+          const m = curModel(); const max = (m && m.maxRefImages) || 9;
+          const urls = reuseActive() ? (reuseUrls || []) : refFiles.map(r => r.url);
+          if (!urls.length) {
+            area.innerHTML = `<div class="img-tiles empty">${dropZoneHtml()}</div><div class="area-hint">最多 ${max} 张。提示词用 [图N] 指代第 N 张。</div>`;
+            const dz = area.querySelector('#imgDrop'); dz.onclick = () => pick('ref');
+            bindDrop(dz, fs => Array.from(fs).forEach(f => addFile(f, 'ref')));
+          } else {
+            let tiles = urls.map((u, i) => tileImgHtml(u, `图${i + 1}`, `data-rm="${i}"`)).join('');
+            if (urls.length < max && !reuseActive()) tiles += tileAddHtml('点击 / 拖放', 'id="addRef" role="button" aria-label="添加参考图"');
+            area.innerHTML = `<div class="img-tiles">${tiles}</div><div class="area-hint">已选 ${urls.length}/${max} 张${reuseActive() ? '(复用上次原图,点 × 删除单张;如需新增请先清空再上传)' : ''}。提示词用 [图N] 指代第 N 张。</div>`;
+            const add = area.querySelector('#addRef'); if (add) { add.onclick = () => pick('ref'); bindDrop(add, fs => Array.from(fs).forEach(f => addFile(f, 'ref'))); }
+            area.querySelectorAll('.rmx[data-rm]').forEach(el => el.onclick = (e) => {
+              e.stopPropagation(); const i = Number(el.dataset.rm);
+              if (reuseActive()) {
+                // 复用态:删单张 = splice 该索引(reuseRefs/reuseUrls 同步);删到 0 张才彻底清复用态。
+                reuseRefs.splice(i, 1); reuseUrls.splice(i, 1);
+                if (!reuseRefs.length) clearReuse();
+              } else { refFiles.splice(i, 1); }
+              afterImgChange();
+            });
+          }
+        }
       }
-    }
-  }
-  // 图片间:交换开始/结束(本地态换 slot;复用态换 refs+urls 序,提交体随之互换)
-  function swapFrames(){
-    if(reuseActive()){ if(reuseRefs&&reuseRefs.length===2){ reuseRefs.reverse(); reuseUrls.reverse(); } }
-    else { const t=firstFrame; firstFrame=lastFrame; lastFrame=t; }
-    afterImgChange();
-    window.LJToast&&LJToast('✓ 已交换开始图与结束图');
-  }
-  function pick(target){ pickTarget=target; filePick.value=''; filePick.click(); }
-  filePick.onchange=()=>{
-    const fs=Array.from(filePick.files||[]); if(!fs.length) return;
-    if(pickTarget==='ref') fs.forEach(f=>addFile(f,'ref'));
-    else addFile(fs[0], pickTarget==='last'?'last':'first');
-  };
-  function afterImgChange(){ renderImgArea(); refreshBtn(); scheduleEstimate(); }
+      // 图片间:交换开始/结束(本地态换 slot;复用态换 refs+urls 序,提交体随之互换)
+      function swapFrames() {
+        if (reuseActive()) { if (reuseRefs && reuseRefs.length === 2) { reuseRefs.reverse(); reuseUrls.reverse(); } }
+        else { const t = firstFrame; firstFrame = lastFrame; lastFrame = t; }
+        afterImgChange();
+        window.LJToast && LJToast('✓ 已交换开始图与结束图');
+      }
+      function pick(target) { pickTarget = target; filePick.value = ''; filePick.click(); }
+      filePick.onchange = () => {
+        const fs = Array.from(filePick.files || []); if (!fs.length) return;
+        if (pickTarget === 'ref') fs.forEach(f => addFile(f, 'ref'));
+        else addFile(fs[0], pickTarget === 'last' ? 'last' : 'first');
+      };
+      function afterImgChange() { renderImgArea(); refreshBtn(); scheduleEstimate(); }
 
-  // 解析度
-  function renderRes(){
-    const m=curModel(); const seg=document.getElementById('resSeg');
-    const opts=m.resolutions; if(!opts.includes(resolution)) resolution=opts[0];
-    seg.innerHTML=opts.map(r=>`<div class="seg${r===resolution?' on':''}" data-v="${r}">${r}</div>`).join('');
-    seg.querySelectorAll('.seg').forEach(s=>s.onclick=()=>{ seg.querySelectorAll('.seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); resolution=s.dataset.v; syncPills(); scheduleEstimate(); });
-  }
-  // 比例:仅参考生显(首帧/首尾帧跟首帧,ratios 空)
-  function renderRatios(){
-    const m=curModel(); const row=document.getElementById('ratioRow'); const lbl=document.getElementById('ratioLabel');
-    const showRatio = task==='reference' && m.ratios.length;
-    row.style.display=showRatio?'':'none'; lbl.style.display=showRatio?'':'none';
-    if(!showRatio) return;
-    if(!m.ratios.includes(ratio)) ratio=m.ratios[0];
-    row.innerHTML=m.ratios.map(r=>{ const g=RATIO_GLYPH[r]||[18,18];
-      return `<div class="ratio-cell${r===ratio?' on':''}" data-ratio="${r}"><span class="glyph" style="width:${g[0]}px;height:${g[1]}px"></span><span class="lbl">${r}</span></div>`; }).join('');
-    row.querySelectorAll('.ratio-cell').forEach(c=>c.onclick=()=>{ row.querySelectorAll('.ratio-cell').forEach(x=>x.classList.remove('on')); c.classList.add('on'); ratio=c.dataset.ratio; syncPills(); scheduleEstimate(); });
-  }
-  // 时长
-  function renderDur(){
-    const m=curModel(); const seg=document.getElementById('durSeg'); const [lo,hi]=m.durationRange;
-    const opts=[...new Set([lo,5,10,hi].filter(d=>d>=lo&&d<=hi))].sort((a,b)=>a-b);
-    if(!opts.includes(duration)) duration=m.defaultDuration;
-    seg.innerHTML=opts.map(d=>`<div class="seg${d===duration?' on':''}" data-d="${d}">${d}秒</div>`).join('');
-    seg.querySelectorAll('.seg').forEach(s=>s.onclick=()=>{ seg.querySelectorAll('.seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); duration=parseInt(s.dataset.d,10); syncPills(); scheduleEstimate(); });
-  }
-  // 模型特有控件(反向提示词 / 智能改写,仅 wan2.7)
-  function renderModelOpts(){
-    const m=curModel(); const box=document.getElementById('modelOpts2'); let h='';
-    if(m.supportsPromptExtend) h+=`<div class="opt-toggle"><span class="ol">智能改写提示词</span><input type="checkbox" id="extendChk"${promptExtend?' checked':''}></div>`;
-    if(m.supportsNegative) h+=`<input class="neg-input" id="negInput" placeholder="反向提示词(不希望出现的元素,可选)" value="${esc(negativePrompt)}">`;
-    box.innerHTML=h;
-    const e=document.getElementById('extendChk'); if(e) e.onchange=()=>{ promptExtend=e.checked; };
-    const n=document.getElementById('negInput'); if(n) n.oninput=()=>{ negativePrompt=n.value; };
-  }
-  function syncPills(){
-    const m=curModel();
-    document.getElementById('modelPillV').textContent=m?m.label:'模型';
-    const ratioPart = (task==='reference' && m && m.ratios.length) ? ' · '+ratio : '';
-    document.getElementById('setPillV').textContent=`${resolution} · ${duration}秒${ratioPart}`;
-  }
+      // 解析度
+      function renderRes() {
+        const m = curModel(); const seg = document.getElementById('resSeg');
+        const opts = m.resolutions; if (!opts.includes(resolution)) resolution = opts[0];
+        seg.innerHTML = opts.map(r => `<div class="seg${r === resolution ? ' on' : ''}" data-v="${r}">${r}</div>`).join('');
+        seg.querySelectorAll('.seg').forEach(s => s.onclick = () => { seg.querySelectorAll('.seg').forEach(x => x.classList.remove('on')); s.classList.add('on'); resolution = s.dataset.v; syncPills(); scheduleEstimate(); });
+      }
+      // 比例:仅参考生显(首帧/首尾帧跟首帧,ratios 空)
+      function renderRatios() {
+        const m = curModel(); const row = document.getElementById('ratioRow'); const lbl = document.getElementById('ratioLabel');
+        const showRatio = task === 'reference' && m.ratios.length;
+        row.style.display = showRatio ? '' : 'none'; lbl.style.display = showRatio ? '' : 'none';
+        if (!showRatio) return;
+        if (!m.ratios.includes(ratio)) ratio = m.ratios[0];
+        row.innerHTML = m.ratios.map(r => {
+          const g = RATIO_GLYPH[r] || [18, 18];
+          return `<div class="ratio-cell${r === ratio ? ' on' : ''}" data-ratio="${r}"><span class="glyph" style="width:${g[0]}px;height:${g[1]}px"></span><span class="lbl">${r}</span></div>`;
+        }).join('');
+        row.querySelectorAll('.ratio-cell').forEach(c => c.onclick = () => { row.querySelectorAll('.ratio-cell').forEach(x => x.classList.remove('on')); c.classList.add('on'); ratio = c.dataset.ratio; syncPills(); scheduleEstimate(); });
+      }
+      // 时长
+      function renderDur() {
+        const m = curModel(); const seg = document.getElementById('durSeg'); const [lo, hi] = m.durationRange;
+        const opts = [...new Set([lo, 5, 10, hi].filter(d => d >= lo && d <= hi))].sort((a, b) => a - b);
+        if (!opts.includes(duration)) duration = m.defaultDuration;
+        seg.innerHTML = opts.map(d => `<div class="seg${d === duration ? ' on' : ''}" data-d="${d}">${d}秒</div>`).join('');
+        seg.querySelectorAll('.seg').forEach(s => s.onclick = () => { seg.querySelectorAll('.seg').forEach(x => x.classList.remove('on')); s.classList.add('on'); duration = parseInt(s.dataset.d, 10); syncPills(); scheduleEstimate(); });
+      }
+      // 模型特有控件(反向提示词 / 智能改写,仅 wan2.7)
+      function renderModelOpts() {
+        const m = curModel(); const box = document.getElementById('modelOpts2'); let h = '';
+        if (m.supportsPromptExtend) h += `<div class="opt-toggle"><span class="ol">智能改写提示词</span><input type="checkbox" id="extendChk"${promptExtend ? ' checked' : ''}></div>`;
+        if (m.supportsNegative) h += `<input class="neg-input" id="negInput" placeholder="反向提示词(不希望出现的元素,可选)" value="${esc(negativePrompt)}">`;
+        box.innerHTML = h;
+        const e = document.getElementById('extendChk'); if (e) e.onchange = () => { promptExtend = e.checked; };
+        const n = document.getElementById('negInput'); if (n) n.oninput = () => { negativePrompt = n.value; };
+      }
+      function syncPills() {
+        const m = curModel();
+        document.getElementById('modelPillV').textContent = m ? m.label : '模型';
+        const ratioPart = (task === 'reference' && m && m.ratios.length) ? ' · ' + ratio : '';
+        document.getElementById('setPillV').textContent = `${resolution} · ${duration}秒${ratioPart}`;
+      }
 
-  // ── popover 开关 ──
-  function togglePop(which){
-    const map={model:'pop-model',set:'pop-set',seed:'pop-seed'}; const pillMap={model:'modelPill',set:'setPill',seed:'seedPill'};
-    const el=document.getElementById(map[which]); const isOpen=el.classList.contains('show'); closePops();
-    if(!isOpen){ el.classList.add('show'); document.getElementById('popOv').classList.add('show'); document.getElementById(pillMap[which]).classList.add('open'); window.LJPlacePop&&LJPlacePop(el, document.getElementById(pillMap[which])); }
-  }
-  function closePops(){ document.querySelectorAll('.pop.show').forEach(p=>{ p.classList.remove('show'); window.LJUnplacePop&&LJUnplacePop(p); }); document.querySelectorAll('.cpill.open').forEach(p=>p.classList.remove('open')); document.getElementById('popOv').classList.remove('show'); }
-  window.togglePop=togglePop; window.closePops=closePops;
-  // ── 大图查看器(输入图缩略放大,贴 ai-image-edit)──
-  window.openLightbox=(url)=>{ document.getElementById('lightboxImg').src=url; document.getElementById('lightbox').classList.add('on'); };
-  window.closeLightbox=()=>{ document.getElementById('lightbox').classList.remove('on'); document.getElementById('lightboxImg').src=''; };
-  document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeLightbox(); closePops(); } });
-  document.getElementById('seedInput').addEventListener('input',e=>{ seed=e.target.value.replace(/[^0-9]/g,''); e.target.value=seed; });
+      // ── popover 开关 ──
+      function togglePop(which) {
+        const map = { model: 'pop-model', set: 'pop-set', seed: 'pop-seed' }; const pillMap = { model: 'modelPill', set: 'setPill', seed: 'seedPill' };
+        const el = document.getElementById(map[which]); const isOpen = el.classList.contains('show'); closePops();
+        if (!isOpen) { el.classList.add('show'); document.getElementById('popOv').classList.add('show'); document.getElementById(pillMap[which]).classList.add('open'); window.LJPlacePop && LJPlacePop(el, document.getElementById(pillMap[which])); }
+      }
+      function closePops() { document.querySelectorAll('.pop.show').forEach(p => { p.classList.remove('show'); window.LJUnplacePop && LJUnplacePop(p); }); document.querySelectorAll('.cpill.open').forEach(p => p.classList.remove('open')); document.getElementById('popOv').classList.remove('show'); }
+      window.togglePop = togglePop; window.closePops = closePops;
+      // ── 大图查看器(输入图缩略放大,贴 ai-image-edit)──
+      window.openLightbox = (url) => { document.getElementById('lightboxImg').src = url; document.getElementById('lightbox').classList.add('on'); };
+      window.closeLightbox = () => { document.getElementById('lightbox').classList.remove('on'); document.getElementById('lightboxImg').src = ''; };
+      document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeLightbox(); closePops(); } });
+      document.getElementById('seedInput').addEventListener('input', e => { seed = e.target.value.replace(/[^0-9]/g, ''); e.target.value = seed; });
 
-  // 当前 task 所需输入图(顺序固定:首尾帧 = [开始, 结束];参考 = refs 序)
-  function orderedFiles(){
-    if(task==='first_frame') return firstFrame?[firstFrame.file]:[];
-    if(task==='first_last') return (firstFrame&&lastFrame)?[firstFrame.file,lastFrame.file]:[];
-    return refFiles.map(r=>r.file);
-  }
-  function neededCount(){ return task==='first_last'?2:1; }
-  function imagesReady(){
-    if(reuseActive()){
-      if(task==='first_frame') return reuseRefs.length===1;
-      if(task==='first_last') return reuseRefs.length===2;
-      return reuseRefs.length>=1;
-    }
-    if(task==='first_frame') return !!firstFrame;
-    if(task==='first_last') return !!firstFrame && !!lastFrame;
-    return refFiles.length>=1;
-  }
-  function imageCount(){ return reuseActive() ? reuseRefs.length : orderedFiles().length; }
-  function missingMsg(){
-    const m=curModel();
-    if(!imagesReady()){
-      if(task==='first_frame') return '请上传开始图';
-      if(task==='first_last') return (firstFrame||(reuseActive()&&reuseRefs.length>0))?'请上传结束图':'请上传开始图';
-      return '请上传至少 1 张参考图';
-    }
-    if(task==='reference' && m && m.promptRequired && !ta.value.trim()) return '请输入描述';
-    if(!document.getElementById('consentChk').checked) return '请勾选授权同意';
-    return '';
-  }
+      // 当前 task 所需输入图(顺序固定:首尾帧 = [开始, 结束];参考 = refs 序)
+      function orderedFiles() {
+        if (task === 'first_frame') return firstFrame ? [firstFrame.file] : [];
+        if (task === 'first_last') return (firstFrame && lastFrame) ? [firstFrame.file, lastFrame.file] : [];
+        return refFiles.map(r => r.file);
+      }
+      function neededCount() { return task === 'first_last' ? 2 : 1; }
+      function imagesReady() {
+        if (reuseActive()) {
+          if (task === 'first_frame') return reuseRefs.length === 1;
+          if (task === 'first_last') return reuseRefs.length === 2;
+          return reuseRefs.length >= 1;
+        }
+        if (task === 'first_frame') return !!firstFrame;
+        if (task === 'first_last') return !!firstFrame && !!lastFrame;
+        return refFiles.length >= 1;
+      }
+      function imageCount() { return reuseActive() ? reuseRefs.length : orderedFiles().length; }
+      function missingMsg() {
+        const m = curModel();
+        if (!imagesReady()) {
+          if (task === 'first_frame') return '请上传开始图';
+          if (task === 'first_last') return (firstFrame || (reuseActive() && reuseRefs.length > 0)) ? '请上传结束图' : '请上传开始图';
+          return '请上传至少 1 张参考图';
+        }
+        if (task === 'reference' && m && m.promptRequired && !ta.value.trim()) return '请输入描述';
+        if (!document.getElementById('consentChk').checked) return '请勾选授权同意';
+        return '';
+      }
 
-  async function uploadInputImages(){
-    if(reuseActive()) return reuseRefs.slice(); // 复用态:沿用原 refs(免重传,服务端 replay 同 key)
-    const files=orderedFiles(); if(!files.length) return [];
-    const fd=new FormData(); files.forEach(f=>fd.append('images',f)); fd.append('consent','true');
-    const r=await fetch('/api/image-uploads',{method:'POST',body:fd,credentials:'same-origin'});
-    if(!r.ok){ const j=await r.json().catch(()=>({})); throw new Error(j.error||'上传失败'); }
-    return (await r.json()).imageRefs;
-  }
+      async function uploadInputImages() {
+        if (reuseActive()) return reuseRefs.slice(); // 复用态:沿用原 refs(免重传,服务端 replay 同 key)
+        const files = orderedFiles(); if (!files.length) return [];
+        const fd = new FormData(); files.forEach(f => fd.append('images', f)); fd.append('consent', 'true');
+        const r = await fetch('/api/image-uploads', { method: 'POST', body: fd, credentials: 'same-origin' });
+        if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || '上传失败'); }
+        return (await r.json()).imageRefs;
+      }
 
-  // 提交/估价体(build 与 estimate 同参,reserve==settle)。估价用 imageRefs 占位(数量对即可)。
-  function jobBody(imageRefs){
-    const m=curModel(); const b={ type:'video_i2v', model, task, imageRefs, resolution, duration };
-    if(ta.value.trim()) b.prompt=ta.value.trim();
-    if(task==='reference' && m.ratios.length) b.ratio=ratio;
-    if(seed) b.seed=parseInt(seed,10);
-    if(m.supportsNegative && negativePrompt.trim()) b.negativePrompt=negativePrompt;
-    if(m.supportsPromptExtend) b.promptExtend=promptExtend;
-    return b;
-  }
+      // 提交/估价体(build 与 estimate 同参,reserve==settle)。估价用 imageRefs 占位(数量对即可)。
+      function jobBody(imageRefs) {
+        const m = curModel(); const b = { type: 'video_i2v', model, task, imageRefs, resolution, duration };
+        if (ta.value.trim()) b.prompt = ta.value.trim();
+        if (task === 'reference' && m.ratios.length) b.ratio = ratio;
+        if (seed) b.seed = parseInt(seed, 10);
+        if (m.supportsNegative && negativePrompt.trim()) b.negativePrompt = negativePrompt;
+        if (m.supportsPromptExtend) b.promptExtend = promptExtend;
+        return b;
+      }
 
-  let estTimer=null;
-  function scheduleEstimate(){
-    clearTimeout(estTimer);
-    estTimer=setTimeout(async()=>{
-      if(!imagesReady()){ document.getElementById('estLabel').textContent='预估 — 点'; document.getElementById('estGem').textContent='—'; return; }
-      try{ const placeholder=Array.from({length:imageCount()},(_,i)=>'est'+i); const r=await LJ.post('/jobs/estimate',jobBody(placeholder));
-        document.getElementById('estLabel').textContent='预估 '+r.cost+' 点';
-        document.getElementById('estGem').textContent=r.cost;
-      }catch(e){}
-    },350);
-  }
-  function refreshBtn(){
-    const msg=missingMsg(); const ok=!msg;
-    btn.classList.toggle('ready',ok); btn.disabled=!ok;
-    document.getElementById('cbtnLabel').textContent=ok?'创建':msg;
-  }
-  ta.addEventListener('input',()=>{ cnt.textContent=ta.value.length; refreshBtn(); scheduleEstimate(); });
-  document.getElementById('consentChk').addEventListener('change',refreshBtn);
+      let estTimer = null;
+      function scheduleEstimate() {
+        clearTimeout(estTimer);
+        estTimer = setTimeout(async () => {
+          if (!imagesReady()) { document.getElementById('estLabel').textContent = '预估 — 点'; document.getElementById('estGem').textContent = '—'; return; }
+          try {
+            const placeholder = Array.from({ length: imageCount() }, (_, i) => 'est' + i); const r = await LJ.post('/jobs/estimate', jobBody(placeholder));
+            document.getElementById('estLabel').textContent = '预估 ' + r.cost + ' 点';
+            document.getElementById('estGem').textContent = r.cost;
+          } catch (e) { }
+        }, 350);
+      }
+      function refreshBtn() {
+        const msg = missingMsg(); const ok = !msg;
+        btn.classList.toggle('ready', ok); btn.disabled = !ok;
+        document.getElementById('cbtnLabel').textContent = ok ? '创建' : msg;
+      }
+      ta.addEventListener('input', () => { cnt.textContent = ta.value.length; refreshBtn(); scheduleEstimate(); });
+      document.getElementById('consentChk').addEventListener('change', refreshBtn);
 
-  document.querySelectorAll('.ftab').forEach(t=>t.onclick=function(){
-    this.parentNode.querySelectorAll('.ftab').forEach(x=>x.classList.remove('active')); this.classList.add('active');
-    const k=this.dataset.st;
-    document.querySelectorAll('.feed-list .fitem[id^=job-]').forEach(it=>{ it.style.display=(k==='all'||(it.dataset.st||'')===k)?'':'none'; });
-  });
+      document.querySelectorAll('.ftab').forEach(t => t.onclick = function () {
+        this.parentNode.querySelectorAll('.ftab').forEach(x => x.classList.remove('active')); this.classList.add('active');
+        const k = this.dataset.st;
+        document.querySelectorAll('.feed-list .fitem[id^=job-]').forEach(it => { it.style.display = (k === 'all' || (it.dataset.st || '') === k) ? '' : 'none'; });
+      });
 
-  const jobInputs={};
-  function findLabel(k){ const m=allModels.find(x=>x.key===k); return m?m.label:undefined; }
+      const jobInputs = {};
+      function findLabel(k) { const m = allModels.find(x => x.key === k); return m ? m.label : undefined; }
 
-  function promptBubble(p){
-    if(!p) return '';
-    return `<div class="fbubble"><div class="tx-wrap"><div class="tx clamp">${esc(p)}</div><span class="tx-toggle" onclick="toggleTx(this)">展开</span></div></div>`;
-  }
-  window.toggleTx=function(el){ const tx=el.previousElementSibling; const c=tx.classList.toggle('clamp'); el.textContent=c?'展开':'收起'; };
-  function fitBubble(card){
-    if(!card) return;
-    const tx=card.querySelector('.tx.clamp'), tg=card.querySelector('.tx-toggle');
-    if(!tx||!tg) return;
-    tg.classList.toggle('show', tx.scrollHeight - tx.clientHeight > 2);
-  }
-  function inThumbs(urls){
-    if(!urls||!urls.length) return '';
-    return `<div class="in-thumbs"><span class="lbl">输入图</span>${urls.map(u=>`<img src="${esc(u)}" onclick="openLightbox('${esc(u)}')" alt="输入图">`).join('')}</div>`;
-  }
-  function metaChips(job){
-    const c=[]; if(job.modelLabel) c.push(job.modelLabel);
-    if(job.task) c.push(TASK_LABEL[job.task]||job.task);
-    if(job.sizeLabel) c.push(job.sizeLabel); if(job.duration) c.push(job.duration+'秒'); if(job.ratio) c.push(job.ratio);
-    return c.length?`<div class="card-meta">${c.map(x=>`<span class="chip">${esc(x)}</span>`).join('')}</div>`:'';
-  }
-  function cardActs(job,ok){
-    const re=`<button data-act="regen" onclick="regenJob('${job.id}',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>重新生成</button>`;
-    const rp=`<button onclick="repromptJob('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19 7-7 3 3-7 7-3-3z"/><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="m2 2 7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>重新提示</button>`;
-    const dl=ok&&(job.outputUrls||[]).length?`<button onclick="downloadVid('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg>下载</button>`:'';
-    const del=`<button onclick="delJob('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除</button>`;
-    return `<div class="card-acts">${re}${rp}${dl}${del}</div>`;
-  }
+      function promptBubble(p) {
+        if (!p) return '';
+        return `<div class="fbubble"><div class="tx-wrap"><div class="tx clamp">${esc(p)}</div><span class="tx-toggle" onclick="toggleTx(this)">展开</span></div></div>`;
+      }
+      window.toggleTx = function (el) { const tx = el.previousElementSibling; const c = tx.classList.toggle('clamp'); el.textContent = c ? '展开' : '收起'; };
+      function fitBubble(card) {
+        if (!card) return;
+        const tx = card.querySelector('.tx.clamp'), tg = card.querySelector('.tx-toggle');
+        if (!tx || !tg) return;
+        tg.classList.toggle('show', tx.scrollHeight - tx.clientHeight > 2);
+      }
+      function inThumbs(urls) {
+        if (!urls || !urls.length) return '';
+        return `<div class="in-thumbs"><span class="lbl">输入图</span>${urls.map(u => `<img src="${esc(u)}" onclick="openLightbox('${esc(u)}')" alt="输入图">`).join('')}</div>`;
+      }
+      function metaChips(job) {
+        const c = []; if (job.modelLabel) c.push(job.modelLabel);
+        if (job.task) c.push(TASK_LABEL[job.task] || job.task);
+        if (job.sizeLabel) c.push(job.sizeLabel); if (job.duration) c.push(job.duration + '秒'); if (job.ratio) c.push(job.ratio);
+        return c.length ? `<div class="card-meta">${c.map(x => `<span class="chip">${esc(x)}</span>`).join('')}</div>` : '';
+      }
+      function cardActs(job, ok) {
+        const re = `<button data-act="regen" onclick="regenJob('${job.id}',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>重新生成</button>`;
+        const rp = `<button onclick="repromptJob('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19 7-7 3 3-7 7-3-3z"/><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="m2 2 7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>重新提示</button>`;
+        const dl = ok && (job.outputUrls || []).length ? `<button onclick="downloadVid('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg>下载</button>` : '';
+        const del = `<button onclick="delJob('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除</button>`;
+        return `<div class="card-acts">${re}${rp}${dl}${del}</div>`;
+      }
 
-  function renderCard(job){
-    document.getElementById('emptyHint').style.display='none';
-    if(job.input) jobInputs[job.id]=job.input;
-    let card=document.getElementById('job-'+job.id); const existed=!!card;
-    if(!card){ card=document.createElement('div'); card.className='fitem'; card.id='job-'+job.id; feedList.insertBefore(card, feedList.firstChild); }
-    const head=(color,led,txt)=>`<div class="fmeta"><b>图片转影片</b><span class="ts">${(window.LJTimeAgo&&LJTimeAgo(job.createdAt))||'刚刚'}</span><span class="sp"></span><span class="st" style="color:${color}"><span class="led ${led}"></span>${txt}</span></div>`;
-    if((job.status==='queued'||job.status==='running') && existed && card.dataset.st==='running'){
-      const lbl=card.querySelector('.proc-in .lbl'); const bar=card.querySelector('.proc-bar i');
-      if(lbl) lbl.textContent=job.progress?('进度 '+job.progress+'%'):'已进入生成队列';
-      if(bar) bar.style.width=(job.progress||8)+'%';
-      return;
-    }
-    if(job.status==='queued'||job.status==='running'){
-      card.dataset.st='running';
-      card.innerHTML=head('var(--amber)','led-run',job.status==='queued'?'排队中':'生成中')+promptBubble(job.prompt)+inThumbs(job.inputUrls)+metaChips(job)+
-        `<div class="fvideo proc"><div class="proc-in"><div class="spinner"></div><div class="lbl">${job.progress?('进度 '+job.progress+'%'):'已进入生成队列'}</div><div class="proc-bar"><i style="width:${job.progress||8}%"></i></div><div style="font-size:11px;color:var(--t4);margin-top:8px">视频生成约需 1-5 分钟,请耐心等待</div></div></div>`;
-    } else if(job.status==='done'){
-      card.dataset.st='done';
-      const u=(job.outputUrls||[])[0];
-      const vid=u?`<video class="fvid" src="${u}" controls preload="metadata"></video>`:'<div style="color:var(--t4);padding:20px">已生成</div>';
-      card.innerHTML=head('var(--green)','led-ok','已完成')+promptBubble(job.prompt)+inThumbs(job.inputUrls)+metaChips(job)+vid+cardActs(job,true);
-    } else {
-      card.dataset.st='failed';
-      card.innerHTML=head('var(--red)','led-err','生成失败')+promptBubble(job.prompt)+inThumbs(job.inputUrls)+metaChips(job)+
-        `<div class="fvideo err"><div class="err-in"><div class="ei">!</div><div class="lbl">${esc(job.error||'生成失败,请重试')}</div></div></div>`+cardActs(job,false);
-    }
-    requestAnimationFrame(()=>fitBubble(card));
-  }
+      function renderCard(job) {
+        document.getElementById('emptyHint').style.display = 'none';
+        if (job.input) jobInputs[job.id] = job.input;
+        let card = document.getElementById('job-' + job.id); const existed = !!card;
+        if (!card) { card = document.createElement('div'); card.className = 'fitem'; card.id = 'job-' + job.id; feedList.insertBefore(card, feedList.firstChild); }
+        const head = (color, led, txt) => `<div class="fmeta"><b>图片转影片</b><span class="ts">${(window.LJTimeAgo && LJTimeAgo(job.createdAt)) || '刚刚'}</span><span class="sp"></span><span class="st" style="color:${color}"><span class="led ${led}"></span>${txt}</span></div>`;
+        if ((job.status === 'queued' || job.status === 'running') && existed && card.dataset.st === 'running') {
+          const lbl = card.querySelector('.proc-in .lbl'); const bar = card.querySelector('.proc-bar i');
+          if (lbl) lbl.textContent = job.progress ? ('进度 ' + job.progress + '%') : '已进入生成队列';
+          if (bar) bar.style.width = (job.progress || 8) + '%';
+          return;
+        }
+        if (job.status === 'queued' || job.status === 'running') {
+          card.dataset.st = 'running';
+          card.innerHTML = head('var(--amber)', 'led-run', job.status === 'queued' ? '排队中' : '生成中') + promptBubble(job.prompt) + inThumbs(job.inputUrls) + metaChips(job) +
+            `<div class="fvideo proc"><div class="proc-in"><div class="spinner"></div><div class="lbl">${job.progress ? ('进度 ' + job.progress + '%') : '已进入生成队列'}</div><div class="proc-bar"><i style="width:${job.progress || 8}%"></i></div><div style="font-size:11px;color:var(--t4);margin-top:8px">视频生成约需 1-5 分钟,请耐心等待</div></div></div>`;
+        } else if (job.status === 'done') {
+          card.dataset.st = 'done';
+          const u = (job.outputUrls || [])[0];
+          const vid = u ? `<video class="fvid" src="${u}" controls preload="metadata"></video>` : '<div style="color:var(--t4);padding:20px">已生成</div>';
+          card.innerHTML = head('var(--green)', 'led-ok', '已完成') + promptBubble(job.prompt) + inThumbs(job.inputUrls) + metaChips(job) + vid + cardActs(job, true);
+        } else {
+          card.dataset.st = 'failed';
+          card.innerHTML = head('var(--red)', 'led-err', '生成失败') + promptBubble(job.prompt) + inThumbs(job.inputUrls) + metaChips(job) +
+            `<div class="fvideo err"><div class="err-in"><div class="ei">!</div><div class="lbl">${esc(job.error || '生成失败,请重试')}</div></div></div>` + cardActs(job, false);
+        }
+        requestAnimationFrame(() => fitBubble(card));
+      }
 
-  // 重新生成:复用原 imageRefs + task(无需重新上传/consent)
-  const regenInFlight=new Set();
-  window.regenJob=async(id,b)=>{
-    if(regenInFlight.has(id)) return;
-    const inp=jobInputs[id]; if(!inp||!(inp.imageRefs||[]).length){ window.LJToast&&window.LJToast('原输入图丢失,无法重新生成','err'); return; }
-    regenInFlight.add(id);
-    if(b){ b.disabled=true; b.dataset.t=b.textContent; b.textContent='提交中…'; }
-    try{
-      const body={ type:'video_i2v', model:inp.model, task:inp.task, imageRefs:inp.imageRefs, resolution:inp.resolution, duration:inp.duration };
-      if(inp.prompt) body.prompt=inp.prompt;
-      if(inp.ratio) body.ratio=inp.ratio;
-      if(inp.negativePrompt) body.negativePrompt=inp.negativePrompt;
-      if(typeof inp.promptExtend==='boolean') body.promptExtend=inp.promptExtend;
-      if(typeof inp.seed==='number') body.seed=inp.seed;
-      const r=await LJ.createJob(body);
-      renderCard({ id:r.id, status:'queued', progress:0, prompt:inp.prompt, modelLabel:findLabel(inp.model), task:inp.task, ratio:inp.ratio, duration:inp.duration, sizeLabel:inp.resolution, inputUrls:inp.inputUrls });
-      jobInputs[r.id]=inp;
-      track(r.id, inp.prompt, inp.inputUrls);
-      window.LJToast&&window.LJToast('✓ 已重新提交生成');
-    }catch(e){ window.LJToast&&window.LJToast('重新生成失败:'+e.message,'err'); }
-    finally{ regenInFlight.delete(id); if(b){ b.disabled=false; if(b.dataset.t){ b.textContent=b.dataset.t; delete b.dataset.t; } } }
-  };
-  // 重新提示:回填提示词 + 任务 + 模型 + 参数到左侧,原图走 reuseRefs 免重传(贴 ai-image-edit)
-  window.repromptJob=(id)=>{
-    const inp=jobInputs[id]; if(!inp){ window.LJToast&&window.LJToast('原参数丢失','err'); return; }
-    if(inp.task && TASK_LABEL[inp.task]) task=inp.task;
-    if(inp.model && allModels.find(m=>m.key===inp.model)) model=inp.model;
-    if(inp.resolution) resolution=inp.resolution;
-    if(typeof inp.duration==='number') duration=inp.duration;
-    if(inp.ratio) ratio=inp.ratio;
-    negativePrompt=inp.negativePrompt||'';
-    if(typeof inp.promptExtend==='boolean') promptExtend=inp.promptExtend;
-    seed = inp.seed!=null ? String(inp.seed) : '';
-    const si=document.getElementById('seedInput'); if(si) si.value=seed;
-    firstFrame=null; lastFrame=null; refFiles=[];
-    reuseRefs=(inp.imageRefs||[]).slice(); reuseUrls=(inp.inputUrls||[]).slice();
-    renderTaskTabs(); renderModels(); // 任务优先:tab 高亮 + 模型按任务重过滤(onModelChange 在内)
-    ta.value=inp.prompt||''; cnt.textContent=ta.value.length;
-    refreshBtn(); scheduleEstimate(); ta.focus();
-    window.LJToast&&window.LJToast('✓ 已回填参数与原图,可改后创建');
-  };
-  window.delJob=async(id)=>{
-    if(!(await window.LJConfirm({title:'删除作品',body:'确认删除这条生成记录吗?删除后不可恢复。',confirmText:'删除',danger:true}))) return;
-    try{ await LJ.del('/jobs/'+id); const c=document.getElementById('job-'+id); if(c) c.remove(); delete jobInputs[id]; window.LJToast&&window.LJToast('✓ 已删除'); }
-    catch(e){ window.LJToast&&window.LJToast('删除失败:'+(e.message||'生成中不可删'),'err'); }
-  };
-  window.downloadVid=async(id)=>{
-    const card=document.getElementById('job-'+id); const v=card?card.querySelector('video'):null; if(!v) return;
-    await window.LJDownload(`/api/jobs/${id}/download/0`, `lingjing-${id}.mp4`);
-    window.LJToast && window.LJToast('✓ 已开始下载');
-  };
+      // 重新生成:复用原 imageRefs + task(无需重新上传/consent)
+      const regenInFlight = new Set();
+      window.regenJob = async (id, b) => {
+        if (regenInFlight.has(id)) return;
+        const inp = jobInputs[id]; if (!inp || !(inp.imageRefs || []).length) { window.LJToast && window.LJToast('原输入图丢失,无法重新生成', 'err'); return; }
+        regenInFlight.add(id);
+        if (b) { b.disabled = true; b.dataset.t = b.textContent; b.textContent = '提交中…'; }
+        try {
+          const body = { type: 'video_i2v', model: inp.model, task: inp.task, imageRefs: inp.imageRefs, resolution: inp.resolution, duration: inp.duration };
+          if (inp.prompt) body.prompt = inp.prompt;
+          if (inp.ratio) body.ratio = inp.ratio;
+          if (inp.negativePrompt) body.negativePrompt = inp.negativePrompt;
+          if (typeof inp.promptExtend === 'boolean') body.promptExtend = inp.promptExtend;
+          if (typeof inp.seed === 'number') body.seed = inp.seed;
+          const r = await LJ.createJob(body);
+          renderCard({ id: r.id, status: 'queued', progress: 0, prompt: inp.prompt, modelLabel: findLabel(inp.model), task: inp.task, ratio: inp.ratio, duration: inp.duration, sizeLabel: inp.resolution, inputUrls: inp.inputUrls });
+          jobInputs[r.id] = inp;
+          track(r.id, inp.prompt, inp.inputUrls);
+          window.LJToast && window.LJToast('✓ 已重新提交生成');
+        } catch (e) { window.LJToast && window.LJToast('重新生成失败:' + e.message, 'err'); }
+        finally { regenInFlight.delete(id); if (b) { b.disabled = false; if (b.dataset.t) { b.textContent = b.dataset.t; delete b.dataset.t; } } }
+      };
+      // 重新提示:回填提示词 + 任务 + 模型 + 参数到左侧,原图走 reuseRefs 免重传(贴 ai-image-edit)
+      window.repromptJob = (id) => {
+        const inp = jobInputs[id]; if (!inp) { window.LJToast && window.LJToast('原参数丢失', 'err'); return; }
+        if (inp.task && TASK_LABEL[inp.task]) task = inp.task;
+        if (inp.model && allModels.find(m => m.key === inp.model)) model = inp.model;
+        if (inp.resolution) resolution = inp.resolution;
+        if (typeof inp.duration === 'number') duration = inp.duration;
+        if (inp.ratio) ratio = inp.ratio;
+        negativePrompt = inp.negativePrompt || '';
+        if (typeof inp.promptExtend === 'boolean') promptExtend = inp.promptExtend;
+        seed = inp.seed != null ? String(inp.seed) : '';
+        const si = document.getElementById('seedInput'); if (si) si.value = seed;
+        firstFrame = null; lastFrame = null; refFiles = [];
+        reuseRefs = (inp.imageRefs || []).slice(); reuseUrls = (inp.inputUrls || []).slice();
+        renderTaskTabs(); renderModels(); // 任务优先:tab 高亮 + 模型按任务重过滤(onModelChange 在内)
+        ta.value = inp.prompt || ''; cnt.textContent = ta.value.length;
+        refreshBtn(); scheduleEstimate(); ta.focus();
+        window.LJToast && window.LJToast('✓ 已回填参数与原图,可改后创建');
+      };
+      window.delJob = async (id) => {
+        if (!(await window.LJConfirm({ title: '删除作品', body: '确认删除这条生成记录吗?删除后不可恢复。', confirmText: '删除', danger: true }))) return;
+        try { await LJ.del('/jobs/' + id); const c = document.getElementById('job-' + id); if (c) c.remove(); delete jobInputs[id]; window.LJToast && window.LJToast('✓ 已删除'); }
+        catch (e) { window.LJToast && window.LJToast('删除失败:' + (e.message || '生成中不可删'), 'err'); }
+      };
+      window.downloadVid = async (id) => {
+        const card = document.getElementById('job-' + id); const v = card ? card.querySelector('video') : null; if (!v) return;
+        await window.LJDownload(`/api/jobs/${id}/download/0`, `lingjing-${id}.mp4`);
+        window.LJToast && window.LJToast('✓ 已开始下载');
+      };
 
-  async function track(id, prompt, inputUrls){ try{ await LJ.pollJob(id, (job)=>renderCard({...job, prompt, inputUrls, ...(jobInputs[id]?{modelLabel:findLabel(jobInputs[id].model),task:jobInputs[id].task,ratio:jobInputs[id].ratio,duration:jobInputs[id].duration}:{})})); }catch(e){} }
+      async function track(id, prompt, inputUrls) { try { await LJ.pollJob(id, (job) => renderCard({ ...job, prompt, inputUrls, ...(jobInputs[id] ? { modelLabel: findLabel(jobInputs[id].model), task: jobInputs[id].task, ratio: jobInputs[id].ratio, duration: jobInputs[id].duration } : {}) })); } catch (e) { } }
 
-  async function loadHistory(){
-    let jobs=[]; try{ jobs=await LJ.listJobs(); }catch(e){ return; }
-    const mine=jobs.filter(j=>j.type==='video_i2v');
-    if(!mine.length) return;
-    document.getElementById('emptyHint').style.display='none';
-    for(const j of [...mine].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))){
-      jobInputs[j.id]={ model:j.model, task:j.task, prompt:j.script, imageRefs:j.imageRefs, inputUrls:j.inputUrls, resolution:j.resolution, ratio:j.ratio, duration:j.duration, negativePrompt:j.negativePrompt, promptExtend:j.promptExtend, seed:j.seed };
-      renderCard({...j, prompt:j.script});
-      if(j.status==='queued'||j.status==='running') track(j.id, j.script, j.inputUrls);
-    }
-  }
+      async function loadHistory() {
+        let jobs = []; try { jobs = await LJ.listJobs(); } catch (e) { return; }
+        const mine = jobs.filter(j => j.type === 'video_i2v');
+        if (!mine.length) return;
+        document.getElementById('emptyHint').style.display = 'none';
+        for (const j of [...mine].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))) {
+          jobInputs[j.id] = { model: j.model, task: j.task, prompt: j.script, imageRefs: j.imageRefs, inputUrls: j.inputUrls, resolution: j.resolution, ratio: j.ratio, duration: j.duration, negativePrompt: j.negativePrompt, promptExtend: j.promptExtend, seed: j.seed };
+          renderCard({ ...j, prompt: j.script });
+          if (j.status === 'queued' || j.status === 'running') track(j.id, j.script, j.inputUrls);
+        }
+      }
 
-  btn.addEventListener('click', async ()=>{
-    if(btn.disabled) return;
-    btn.disabled=true; const prev=btn.innerHTML; btn.textContent=reuseActive()?'提交中…':'上传中…';
-    try{
-      const imageRefs=await uploadInputImages();
-      if(!imageRefs.length) throw new Error('请先上传图片');
-      btn.textContent='提交中…';
-      const body=jobBody(imageRefs);
-      const r=await LJ.createJob(body);
-      const thumbs = reuseActive() ? (reuseUrls||[]).slice()
-        : (task==='reference' ? refFiles.map(x=>x.url) : [firstFrame,lastFrame].filter(Boolean).map(x=>x.url));
-      jobInputs[r.id]={ model:body.model, task:body.task, prompt:body.prompt, imageRefs, inputUrls:thumbs, resolution:body.resolution, ratio:body.ratio, duration:body.duration, negativePrompt:body.negativePrompt, promptExtend:body.promptExtend, seed:body.seed };
-      const sizeLabel=resolution;
-      // 提交成功即清左侧回空态(防误点重复扣费);先于 renderCard/track,避免下游异常打断清理。
-      resetAfterSubmit();
-      renderCard({ id:r.id, status:'queued', progress:0, prompt:body.prompt, modelLabel:findLabel(body.model), task:body.task, ratio:body.ratio, duration:body.duration, sizeLabel, inputUrls:thumbs });
-      track(r.id, body.prompt, thumbs);
-      window.LJToast&&window.LJToast('✓ 已提交生成,可在右侧查看进度');
-    }catch(e){ window.LJToast&&window.LJToast('提交失败:'+e.message,'err'); }
-    finally{ btn.innerHTML=prev; refreshBtn(); }
-  });
+      btn.addEventListener('click', async () => {
+        if (btn.disabled) return;
+        btn.disabled = true; const prev = btn.innerHTML; btn.textContent = reuseActive() ? '提交中…' : '上传中…';
+        try {
+          const imageRefs = await uploadInputImages();
+          if (!imageRefs.length) throw new Error('请先上传图片');
+          btn.textContent = '提交中…';
+          const body = jobBody(imageRefs);
+          const r = await LJ.createJob(body);
+          const thumbs = reuseActive() ? (reuseUrls || []).slice()
+            : (task === 'reference' ? refFiles.map(x => x.url) : [firstFrame, lastFrame].filter(Boolean).map(x => x.url));
+          jobInputs[r.id] = { model: body.model, task: body.task, prompt: body.prompt, imageRefs, inputUrls: thumbs, resolution: body.resolution, ratio: body.ratio, duration: body.duration, negativePrompt: body.negativePrompt, promptExtend: body.promptExtend, seed: body.seed };
+          const sizeLabel = resolution;
+          // 提交成功即清左侧回空态(防误点重复扣费);先于 renderCard/track,避免下游异常打断清理。
+          resetAfterSubmit();
+          renderCard({ id: r.id, status: 'queued', progress: 0, prompt: body.prompt, modelLabel: findLabel(body.model), task: body.task, ratio: body.ratio, duration: body.duration, sizeLabel, inputUrls: thumbs });
+          track(r.id, body.prompt, thumbs);
+          window.LJToast && window.LJToast('✓ 已提交生成,可在右侧查看进度');
+        } catch (e) { window.LJToast && window.LJToast('提交失败:' + e.message, 'err'); }
+        finally { btn.innerHTML = prev; refreshBtn(); }
+      });
 
-  // 提交成功后清空左侧:输入图(当前 task 的槽位)+ 提示词 + 取消授权勾(同图再生成走记录卡「重新提示」免重传)。
-  // ⚠ 不 revoke blob URL(记录卡 inputUrls 还在用);仅丢数组/槽位引用。每步守卫防一步抛错挡住后续。
-  function resetAfterSubmit(){
-    firstFrame=null; lastFrame=null; refFiles=[]; clearReuse();
-    ta.value=''; cnt.textContent='0';
-    const c=document.getElementById('consentChk'); if(c) c.checked=false;
-    try{ renderImgArea(); scheduleEstimate(); refreshBtn(); }catch(e){}
-  }
+      // 提交成功后清空左侧:输入图(当前 task 的槽位)+ 提示词 + 取消授权勾(同图再生成走记录卡「重新提示」免重传)。
+      // ⚠ 不 revoke blob URL(记录卡 inputUrls 还在用);仅丢数组/槽位引用。每步守卫防一步抛错挡住后续。
+      function resetAfterSubmit() {
+        firstFrame = null; lastFrame = null; refFiles = []; clearReuse();
+        ta.value = ''; cnt.textContent = '0';
+        const c = document.getElementById('consentChk'); if (c) c.checked = false;
+        try { renderImgArea(); scheduleEstimate(); refreshBtn(); } catch (e) { }
+      }
 
-  // 探索页灵感库一键复用:?prompt=<原文>[&reuseImg=<key>]。
-  // reuseImg = 同款开始图(首帧)的存储 key,走 reuse 机制(免重传、绕 OSS 跨域)。
-  // 平台自产素材无第三方 consent 问题(站内生成内容),故可直接带入开始图。
-  const OSS_BASE='https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/';
-  function applyPromptFromQuery(){
-    const q=new URLSearchParams(location.search);
-    const p=q.get('prompt'); const reuseImg=q.get('reuseImg');
-    if(p){ ta.value=p.slice(0,2000); cnt.textContent=ta.value.length; }
-    if(reuseImg){
-      task='first_frame'; renderTaskTabs();
-      reuseRefs=[reuseImg]; reuseUrls=[OSS_BASE+reuseImg]; // key 当 ref 提交;公网 URL 显开始图预览
-      renderImgArea();
-    }
-    refreshBtn(); scheduleEstimate(); if(p) ta.focus();
-    if(p||reuseImg) window.LJToast&&window.LJToast(reuseImg?'✓ 已带入同款开始图与提示词,可改后生成':'✓ 已套用灵感库提示词,请上传同款开始图后生成');
-  }
-  LJ.me().then(async ()=>{ await loadModels(); loadHistory(); applyPromptFromQuery(); }).catch(()=>{});
-  renderTaskTabs(); renderImgArea(); refreshBtn();
-</script>
+      // 探索页灵感库一键复用:?prompt=<原文>[&reuseImg=<key>]。
+      // reuseImg = 同款开始图(首帧)的存储 key,走 reuse 机制(免重传、绕 OSS 跨域)。
+      // 平台自产素材无第三方 consent 问题(站内生成内容),故可直接带入开始图。
+      const OSS_BASE = 'https://lh-lingjing.oss-cn-hangzhou.aliyuncs.com/';
+      function applyPromptFromQuery() {
+        const q = new URLSearchParams(location.search);
+        const p = q.get('prompt'); const reuseImg = q.get('reuseImg');
+        if (p) { ta.value = p.slice(0, 2000); cnt.textContent = ta.value.length; }
+        if (reuseImg) {
+          task = 'first_frame'; renderTaskTabs();
+          reuseRefs = [reuseImg]; reuseUrls = [OSS_BASE + reuseImg]; // key 当 ref 提交;公网 URL 显开始图预览
+          renderImgArea();
+        }
+        refreshBtn(); scheduleEstimate(); if (p) ta.focus();
+        if (p || reuseImg) window.LJToast && window.LJToast(reuseImg ? '✓ 已带入同款开始图与提示词,可改后生成' : '✓ 已套用灵感库提示词,请上传同款开始图后生成');
+      }
+      LJ.me().then(async () => { await loadModels(); loadHistory(); applyPromptFromQuery(); }).catch(() => { });
+      renderTaskTabs(); renderImgArea(); refreshBtn();
+    </script>
 </body>
+
 </html>
