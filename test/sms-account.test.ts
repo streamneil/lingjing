@@ -87,9 +87,19 @@ describe('绑定 / 换绑手机(#9)', () => {
     await createUser(t.id, 'conflict_user', 'pw12345678', 'creator');
     const c = new Client(app);
     await pwLogin(c, 'conflict_user', 'pw12345678');
-    const r = await c.post('/api/me/phone/send', { phone: '13700000003' });
+    const tok = await captchaToken(c);
+    const r = await c.post('/api/me/phone/send', { phone: '13700000003', captchaToken: tok });
     expect(r.status).toBe(409);
     expect(r.body.error).toContain('已被其他账号绑定');
+  });
+
+  it('绑定发码无 captcha → 400(任何发短信入口都要行为验证)', async () => {
+    const t = createTenant('绑定无验证码');
+    await createUser(t.id, 'nocap_user', 'pw12345678', 'creator');
+    const c = new Client(app);
+    await pwLogin(c, 'nocap_user', 'pw12345678');
+    const r = await c.post('/api/me/phone/send', { phone: '13700000009' });
+    expect(r.status).toBe(400);
   });
 
   it('未登录不能绑定手机 → 401', async () => {

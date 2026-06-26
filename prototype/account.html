@@ -32,6 +32,16 @@
     .ac-pill{ padding:10px 20px; border-radius:999px; font-size:13.5px; font-weight:600; font-family:inherit; cursor:pointer; border:none; background:var(--t1); color:#0A0A0B; min-height:40px; }
     .ac-pill:disabled{ opacity:.5; cursor:not-allowed; }
     .ac-div{ border-top:1px solid var(--line); margin:22px 0; }
+    /* 按需安全验证弹窗(发短信前行为验证,防刷)*/
+    .cap-modal{ position:fixed; inset:0; z-index:1000; display:none; align-items:center; justify-content:center; padding:24px; }
+    .cap-modal.show{ display:flex; }
+    .cap-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.62); backdrop-filter:blur(4px); }
+    .cap-box{ position:relative; width:100%; max-width:344px; background:var(--card); border:1px solid var(--line); border-radius:18px; padding:22px; box-shadow:0 30px 80px -20px rgba(0,0,0,.92); }
+    .cap-head{ display:flex; justify-content:space-between; align-items:center; }
+    .cap-head b{ font-size:15px; font-weight:700; color:var(--t1); }
+    .cap-close{ background:none; border:none; color:var(--t3); font-size:18px; line-height:1; cursor:pointer; padding:4px 8px; border-radius:8px; }
+    .cap-close:hover{ color:var(--t1); }
+    .cap-sub{ font-size:12px; color:var(--t3); margin:6px 0 16px; }
     .ac-msg{ font-size:12.5px; min-height:16px; margin-top:8px; color:var(--red); }
     @media (max-width:720px){ .ac-grid{ grid-template-columns:1fr; } }
   </style>
@@ -144,12 +154,34 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     </div>
   </div>
 
+  <!-- 按需安全验证弹窗:发短信前弹滑块,过验后自动发码 -->
+  <div class="cap-modal" id="capModal" aria-hidden="true">
+    <div class="cap-backdrop" id="capBackdrop"></div>
+    <div class="cap-box">
+      <div class="cap-head"><b>安全验证</b><button type="button" class="cap-close" id="capClose" aria-label="关闭">×</button></div>
+      <div class="cap-sub">拖动滑块完成验证,通过后自动继续</div>
+      <div id="capSlot"></div>
+    </div>
+  </div>
+
   <script src="api.js"></script>
+  <script src="captcha.js"></script>
   <script>
     const ROLE_CN = { admin:['ac-rbdg-admin','管理员'], creator:['ac-rbdg-creator','创作者'] };
     let HAS_PW = true;
     const mask = (p) => (p && p.length === 11) ? p.slice(0,3) + '****' + p.slice(7) : p;
     const isPhone = (p) => /^1[3-9]\d{9}$/.test(p);
+
+    // ── 按需安全验证弹窗:发短信前弹滑块,过验后回调 token(防短信被刷)──
+    let capCb = null;
+    const cap = LJCaptcha.mount(document.getElementById('capSlot'), {
+      onPass: (token) => { closeCap(); const cb = capCb; capCb = null; if (cb) cb(token); },
+      onReset: () => {},
+    });
+    function requireCaptcha(cb){ capCb = cb; cap.reset(); document.getElementById('capModal').classList.add('show'); }
+    function closeCap(){ document.getElementById('capModal').classList.remove('show'); }
+    document.getElementById('capBackdrop').addEventListener('click', () => { capCb = null; closeCap(); });
+    document.getElementById('capClose').addEventListener('click', () => { capCb = null; closeCap(); });
 
     async function loadMe(){
       const u = await LJ.me();
@@ -193,12 +225,15 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       const phone = document.getElementById('acPhone').value.trim();
       const msg = document.getElementById('acPhoneMsg'); msg.style.color = 'var(--red)';
       if (!isPhone(phone)) { msg.textContent = '请输入有效的手机号'; return; }
-      const btn = document.getElementById('acPhoneSend'); btn.disabled = true; btn.textContent = '发送中…';
-      LJ.post('/me/phone/send', { phone }).then(() => {
-        msg.style.color = 'var(--green)'; msg.textContent = '验证码已发送至 ' + mask(phone);
-        document.getElementById('acPhoneCode').focus();
-        phoneCountdown = 60; phoneTick();
-      }).catch(e => { msg.textContent = e.message || '发送失败'; btn.disabled = false; btn.textContent = '获取验证码'; });
+      // 发短信前先行为验证(防刷)→ 过验后携 token 发码
+      requireCaptcha((token) => {
+        const btn = document.getElementById('acPhoneSend'); btn.disabled = true; btn.textContent = '发送中…';
+        LJ.post('/me/phone/send', { phone, captchaToken: token }).then(() => {
+          msg.style.color = 'var(--green)'; msg.textContent = '验证码已发送至 ' + mask(phone);
+          document.getElementById('acPhoneCode').focus();
+          phoneCountdown = 60; phoneTick();
+        }).catch(e => { msg.style.color = 'var(--red)'; msg.textContent = e.message || '发送失败'; btn.disabled = false; btn.textContent = '获取验证码'; });
+      });
     }
     async function savePhone(){
       const phone = document.getElementById('acPhone').value.trim(), code = document.getElementById('acPhoneCode').value.trim();

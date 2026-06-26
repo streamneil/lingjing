@@ -137,10 +137,11 @@ authRouter.post('/sms/forgot', async (req: Request, res: Response) => {
   return res.json({ ok: true });
 });
 
-// 绑定/换绑手机:发码(需登录,发往新号;rebind 不另要 captcha —— 登录态 + 限频已是闸)。
+// 绑定/换绑手机:发码(需登录,发往新号)。必携 captcha —— 任何发短信入口都要行为验证防刷。
 authRouter.post('/me/phone/send', requireAuth, async (req: Request, res: Response) => {
   let phone: string;
   try { phone = normalizePhone(req.body?.phone); } catch (e) { return res.status(400).json({ error: e instanceof Error ? e.message : '手机号无效' }); }
+  if (!consumeCaptchaToken(req.body?.captchaToken)) return res.status(400).json({ error: '请先完成滑块验证' });
   // 已被他人绑定 → 不发码(防向他人号码发骚扰短信 + 提前告知冲突)。
   const owner = phoneOwner(phone);
   if (owner && owner !== req.user!.id) return res.status(409).json({ error: '该手机号已被其他账号绑定' });
