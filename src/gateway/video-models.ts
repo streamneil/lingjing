@@ -203,7 +203,7 @@ export const VIDEO_MODELS: Record<string, VideoModelDef> = {
     resolutions: ['720P', '1080P'],
     ratios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
     durationRange: [4, 15], defaultDuration: 5,
-    maxPromptChars: 500,
+    maxPromptChars: 5000,
     // 火山价格示例(5秒720p)折每秒:720P 4.97/5≈1.0→⌈1.0×35⌉=35;1080P 12.39/5≈2.5→⌈2.5×35⌉=88(model_pricing 为准)。
     priceTier: 35, priceTier1080: 88,
     // 有声(generate_audio)价档(eng-review P1#1:reference task 开音频不能按无声计价 → 漏钱)。
@@ -220,7 +220,7 @@ export const VIDEO_MODELS: Record<string, VideoModelDef> = {
     resolutions: ['720P'], // Fast 不支持 1080P
     ratios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
     durationRange: [4, 15], defaultDuration: 5,
-    maxPromptChars: 500,
+    maxPromptChars: 5000,
     priceTier: 28, // 4.0/5 秒=0.8→⌈0.8×35⌉=28
     priceTierAudio: 34, // 有声占位(28×1.2);admin 录真实成本前需校准
     supportsAudio: true,
