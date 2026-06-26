@@ -22,6 +22,7 @@ import {
   phoneOwner,
 } from '../auth/index.js';
 import { sendSmsCode, normalizePhone, assertVerifyAllowed, RateLimitError, type SmsPurpose } from '../auth/sms.js';
+import { assertLoginAllowed, recordLoginFail, clearLoginFails } from '../auth/login-throttle.js';
 import { SmsSendError } from '../sms/sender.js';
 import {
   setSessionCookie,
@@ -43,17 +44,27 @@ authRouter.post('/login', async (req: Request, res: Response) => {
   if (!username || !password) {
     return res.status(400).json({ error: '缺少 username / password' });
   }
+  const ip = req.socket?.remoteAddress ?? null;
+  // 暴破真墙:每账号/每 IP 失败限频。先于消费 captcha,避免被限期间白耗一次滑块。
+  try {
+    assertLoginAllowed(ip, username);
+  } catch (e) {
+    if (e instanceof RateLimitError) return res.status(429).json({ error: e.message, code: e.code });
+    throw e;
+  }
   if (!consumeCaptchaToken(captchaToken)) {
     return res.status(400).json({ error: '请先完成滑块验证' });
   }
   try {
     const token = await login(username, password);
+    clearLoginFails(ip, username); // 登对即清该账号失败计数
     setSessionCookie(res, token);
     // 审计登录(此时 req.user 还没挂,用 resolveSession 拿 user id)
     const u = resolveSession(token);
-    if (u) writeAudit(u.tenantId, u.id, 'login', null, req.socket?.remoteAddress ?? null);
+    if (u) writeAudit(u.tenantId, u.id, 'login', null, ip);
     return res.json({ ok: true });
   } catch (e) {
+    recordLoginFail(ip, username); // 记失败,喂限频计数
     return res.status(401).json({ error: e instanceof Error ? e.message : '登录失败' });
   }
 });

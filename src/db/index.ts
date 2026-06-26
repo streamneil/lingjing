@@ -175,6 +175,17 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_sms_send_phone ON sms_send_log(phone, created_at);
   CREATE INDEX IF NOT EXISTS idx_sms_send_ip ON sms_send_log(ip, created_at);
+
+  -- login_fail_log:append-only 密码登录失败流水,做「每 IP / 每账号 窗口内失败」限频计数。
+  -- /login 原本只有 captcha 一道闸,自建滑块答案下发前端可被脚本绕 → 密码暴破无墙;此表是真墙。惰性清。
+  CREATE TABLE IF NOT EXISTS login_fail_log (
+    id          TEXT PRIMARY KEY,
+    ip          TEXT,
+    username    TEXT NOT NULL,
+    created_at  INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_login_fail_ip ON login_fail_log(ip, created_at);
+  CREATE INDEX IF NOT EXISTS idx_login_fail_user ON login_fail_log(username, created_at);
 `);
 
 // audit_log 加 actor_type 列(/plan-ceo-review D11):区分操作者是租户 user 还是平台超管。

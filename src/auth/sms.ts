@@ -20,7 +20,9 @@ const now = () => Date.now();
 export type SmsPurpose = 'login' | 'reset' | 'rebind';
 const VERIFY_FAIL = 'verify_fail'; // sms_send_log 中标记验证失败行(与发送行区分)
 
-export type RateLimitCode = 'RESEND_COOLDOWN' | 'PHONE_DAILY' | 'IP_DAILY' | 'IP_VERIFY_FAIL' | 'BAD_PHONE';
+export type RateLimitCode =
+  | 'RESEND_COOLDOWN' | 'PHONE_DAILY' | 'IP_DAILY' | 'IP_VERIFY_FAIL' | 'BAD_PHONE'
+  | 'LOGIN_FAIL_ACCOUNT' | 'LOGIN_FAIL_IP'; // 密码登录失败限频(login-throttle.ts 复用 RateLimitError)
 export class RateLimitError extends Error {
   constructor(message: string, public readonly code: RateLimitCode, public readonly retryAfterSec?: number) {
     super(message);

@@ -143,6 +143,14 @@ export const config = {
     sendLogRetentionMs: 30 * 24 * 60 * 60 * 1000, // sms_send_log 保留 30 天(>1 月清除)
   },
 
+  // ── 密码登录失败限频(/plan-eng-review:/login 原本只有 captcha,可被脚本绕 → 补真墙防暴破)──
+  login: {
+    failWindowMs: 15 * 60 * 1000, // 失败计数窗口 15 分钟
+    perAccountFailCap: Math.max(1, Number(optional('LOGIN_ACCOUNT_FAIL_CAP', '10')) || 10), // 每账号窗口内失败上限(主闸)
+    perIpFailCap: Math.max(1, Number(optional('LOGIN_IP_FAIL_CAP', '30')) || 30), // 每 IP 窗口内失败上限(软信号,NAT 放宽)
+    failLogRetentionMs: 24 * 60 * 60 * 1000, // login_fail_log 保留 1 天,惰性清
+  },
+
   // ── worker 并发（2026-06-16 并发改造）──
   worker: {
     // 同时在飞的 job 上限。job 是 I/O 密集（轮询远程厂商，~零 CPU），一个 Node 进程能扛数十个。
