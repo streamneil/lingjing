@@ -2,8 +2,8 @@
 //
 // 覆盖(全路径):
 //   - sanitizeOrgName:空/超长/XSS/品牌符(经 PUT 行为验证)
-//   - PUT /settings(name):admin 写 + 审计 diff;名称未变不写;空名 400
-//   - [回归 R1] orgName 不再返回 400 ORG_NAME_READONLY,且写生效
+//   - PUT /settings(orgName):admin 写 tenant.name + 审计 diff;名称未变不写;空名 400
+//   - PUT /settings(orgName):管理员可自改机构名(产品决策,不按 delivery 门控)
 //   - RBAC:creator/viewer 改名 → 403;租户隔离
 //   - DELETE /settings/logo:admin 清 + 审计;non-admin 403;删后 /org-logo 404
 //   - GET /api/public-brand/:slug:合法/未知 slug/匿名
@@ -64,7 +64,7 @@ function latestAuditDetail(id: string) {
   return row?.detail ? JSON.parse(row.detail) : null;
 }
 
-describe('系统名称可改、机构名称只读(T1)', () => {
+describe('系统名称 + 机构名称均可由管理员自改(T1)', () => {
   it('brandName 写 tenant_setting.brand_name + 审计 diff;机构名 tenant.name 不变', async () => {
     const c = await asUser('brandadmin');
     const before = tenantName(tenantId);
@@ -86,12 +86,46 @@ describe('系统名称可改、机构名称只读(T1)', () => {
     expect(s.orgName).toBe('未改名台');
   });
 
-  it('[回归] orgName 不再改写 tenant.name(机构身份租户侧不可改)', async () => {
+  it('orgName 写 tenant.name + 审计 diff(机构名称管理员可改)', async () => {
+    const c = await asUser('brandadmin');
+    const r = await c.put('/api/settings', { orgName: '杭州融媒集团' });
+    expect(r.status).toBe(200);
+    expect(tenantName(tenantId)).toBe('杭州融媒集团'); // tenant.name 已更新
+    const d = latestAuditDetail(tenantId).find((x: any) => x.field === 'org_name');
+    expect(d?.new).toBe('杭州融媒集团');
+  });
+
+  it('orgName 空 / 纯空白 → 400,名称不变', async () => {
     const c = await asUser('brandadmin');
     const before = tenantName(tenantId);
-    const r = await c.put('/api/settings', { orgName: '黑客改的名' });
-    expect(r.status).toBe(200); // 字段被忽略,非报错
-    expect(tenantName(tenantId)).toBe(before); // tenant.name 纹丝不动
+    const r = await c.put('/api/settings', { orgName: '   ' });
+    expect(r.status).toBe(400);
+    expect(tenantName(tenantId)).toBe(before);
+  });
+
+  it('orgName 超长 → 截断 ≤30;XSS → 剥 <>', async () => {
+    const c = await asUser('brandadmin');
+    await c.put('/api/settings', { orgName: '<script>x</script>' + '机'.repeat(50) });
+    const v = tenantName(tenantId);
+    expect(v.length).toBeLessThanOrEqual(30); // 超长截断
+    expect(v.length).toBeGreaterThan(0);
+    expect(v).not.toContain('<');
+    expect(v).not.toContain('>');
+    expect(v).toContain('机');
+  });
+
+  it('RBAC:creator 改机构名 → 403,名称不变', async () => {
+    const before = tenantName(tenantId);
+    const r = await (await asUser('brandcreator')).put('/api/settings', { orgName: '黑客改的名' });
+    expect(r.status).toBe(403);
+    expect(tenantName(tenantId)).toBe(before);
+  });
+
+  it('租户隔离:A 改机构名只动 A,不动 B', async () => {
+    const beforeB = tenantName(otherTenantId);
+    await (await asUser('brandadmin')).put('/api/settings', { orgName: 'A 机构' });
+    expect(tenantName(tenantId)).toBe('A 机构');
+    expect(tenantName(otherTenantId)).toBe(beforeB);
   });
 
   it('系统名留空 → 清 brand_name,回落机构名(不允许空品牌)', async () => {

@@ -44,24 +44,25 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
 
         <div class="set-card" style="animation-delay:.04s">
           <h3>机构品牌</h3>
-          <div class="h-desc">机构名称是平台开通时设定的官方身份（不可自改）；系统名称与 Logo 可由管理员自定义，用于侧边栏顶部与落地页展示。</div>
-          <!-- 机构名称:只读官方身份(任何人不可改) -->
+          <div class="h-desc">机构名称、系统名称与 Logo 均可由管理员自定义，用于侧边栏顶部、成员页与落地页展示。</div>
+          <!-- 机构名称:官方身份,管理员可改 -->
           <div class="set-row" style="border-top:none">
             <div class="info">
               <div class="k">机构名称</div>
-              <div class="v">机构官方身份，如需变更请联系您的平台对接人</div>
+              <div class="v">机构官方身份，展示在成员页与平台记录中。保存后刷新页面即生效</div>
             </div>
             <div class="ctl">
-              <div class="ro-name">
-                <span id="orgNameVal" class="ro-val">—</span>
-                <span class="ro-lock" aria-label="平台设定，不可修改"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="5" y="11" width="14" height="9" rx="2" />
-                    <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-                  </svg>平台设定</span>
+              <div style="display:flex;gap:8px;align-items:center">
+                <input id="orgNameInput" maxlength="30"
+                  style="padding:9px 13px;width:200px;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;color:var(--t1);font-size:14px;font-family:var(--f);outline:none"
+                  placeholder="机构名称">
+                <span id="orgNameCount" aria-live="polite"
+                  style="font-size:12px;color:var(--t4);min-width:38px">0/30</span>
+                <button class="btn btn-dark" id="orgNameSave" onclick="saveOrgName()">保存</button>
               </div>
             </div>
           </div>
+          <div id="orgNameMsg" style="font-size:12px;color:var(--amber);min-height:16px;margin:-6px 0 4px 0"></div>
           <!-- 系统名称:品牌显示名(管理员可改;保存后刷新即在侧边栏看到) -->
           <div class="set-row">
             <div class="info">
@@ -206,11 +207,31 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       try {
         const d = await put({ brandName: v });
         // 后端清洗 + 空值回落机构名 → 回填真值
-        const clean = (d && typeof d.brandName === 'string') ? d.brandName : (v || (document.getElementById('orgNameVal').textContent || '').trim());
+        const clean = (d && typeof d.brandName === 'string') ? d.brandName : (v || (document.getElementById('orgNameInput').value || '').trim());
         document.getElementById('brandNameInput').value = clean;
         onBrandInput();
         window.LJToast('✓ 系统名称已更新，刷新后侧边栏生效');
       } catch (e) { document.getElementById('brandNameMsg').style.color = 'var(--red)'; document.getElementById('brandNameMsg').textContent = e.message; }
+      finally { btn.disabled = false; }
+    }
+    // 机构名称:计数 + 保存(空值前端拦 + 后端 400;后端清洗 + 自租户作用域)。保存后刷新即在侧边栏/成员页看到。
+    function onOrgInput() {
+      const v = document.getElementById('orgNameInput').value;
+      document.getElementById('orgNameCount').textContent = v.length + '/30';
+      document.getElementById('orgNameCount').style.color = v.length >= 30 ? 'var(--amber)' : 'var(--t4)';
+      document.getElementById('orgNameMsg').textContent = '';
+    }
+    async function saveOrgName() {
+      if (!guard()) return;
+      const v = document.getElementById('orgNameInput').value.trim();
+      const msg = document.getElementById('orgNameMsg');
+      if (!v) { msg.style.color = 'var(--red)'; msg.textContent = '机构名称不能为空'; return; }
+      const btn = document.getElementById('orgNameSave'); btn.disabled = true;
+      try {
+        await put({ orgName: v });
+        window.LJToast('✓ 机构名称已更新，刷新后生效');
+        msg.textContent = '';
+      } catch (e) { msg.style.color = 'var(--red)'; msg.textContent = e.message; }
       finally { btn.disabled = false; }
     }
     async function uploadLogo() {
@@ -309,8 +330,11 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       try {
         const me = await LJ.me(); canEdit = me.role === 'admin';
         const s = await LJ.get('/settings');
-        // 机构名称(只读身份):纯展示值,无输入框,任何人不可改。
-        document.getElementById('orgNameVal').textContent = (s.orgName || '').trim() || '—';
+        // 机构名称(可编辑)+ 计数初始化(预填 orgName)
+        const orgInp = document.getElementById('orgNameInput');
+        orgInp.value = s.orgName || '';
+        orgInp.addEventListener('input', onOrgInput);
+        onOrgInput();
         // 系统名称(可编辑)+ 计数初始化(预填 brandName)
         const brandInp = document.getElementById('brandNameInput');
         brandInp.value = s.brandName || '';
@@ -327,7 +351,8 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         // 非 admin:所有设置控件置灰只读(品牌 + AI 标识 + 默认分辨率);仍能看,写被 guard() 挡。
         if (!canEdit) {
           brandInp.disabled = true;
-          ['brandNameSave', 'logoUploadBtn', 'logoResetBtn'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
+          orgInp.disabled = true;
+          ['orgNameSave', 'brandNameSave', 'logoUploadBtn', 'logoResetBtn'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
           document.getElementById('aiLabelText').disabled = true;
           const sw = document.getElementById('aiLabelSwitch'); if (sw) { sw.style.opacity = '.45'; sw.style.pointerEvents = 'none'; sw.setAttribute('aria-disabled', 'true'); }
           const seg = document.getElementById('resSeg'); if (seg) { seg.style.opacity = '.45'; seg.style.pointerEvents = 'none'; seg.setAttribute('aria-disabled', 'true'); }
