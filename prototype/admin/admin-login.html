@@ -39,6 +39,16 @@
   .submit:disabled{opacity:.5;cursor:not-allowed;transform:none}
   .err{color:var(--red);font-size:12px;margin-top:12px;min-height:16px;text-align:center}
   .hint{color:var(--t4);font-size:11px;margin-top:18px;text-align:center;border-top:1px solid var(--line-soft);padding-top:14px;line-height:1.6}
+  /* 按需安全验证弹窗(点登录后弹出,非一直显示)*/
+  .cap-modal{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;padding:24px}
+  .cap-modal.show{display:flex}
+  .cap-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.62);backdrop-filter:blur(4px)}
+  .cap-box{position:relative;width:100%;max-width:344px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:0 30px 80px -20px rgba(0,0,0,.92);animation:rise .28s var(--ease) both}
+  .cap-head{display:flex;justify-content:space-between;align-items:center}
+  .cap-head b{font-size:15px;font-weight:700}
+  .cap-close{background:none;border:none;color:var(--t3);font-size:18px;line-height:1;cursor:pointer;padding:4px 8px;border-radius:8px}
+  .cap-close:hover{color:var(--t1);background:var(--card-hi)}
+  .cap-sub{font-size:12px;color:var(--t3);margin:6px 0 16px}
 </style>
 </head>
 <body>
@@ -59,39 +69,55 @@
         <label>密码</label>
         <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" required>
       </div>
-      <div class="fld" style="margin-bottom:6px">
-        <label>安全验证</label>
-        <div id="lgCaptcha"></div>
-      </div>
-      <button class="submit" id="lgBtn" type="submit" disabled>登 录</button>
+      <button class="submit" id="lgBtn" type="submit">登 录</button>
       <div class="err" id="lgErr"></div>
       <div class="hint">仅限平台运营人员。租户用户请访问 <a href="/login.html" style="color:var(--t3)">机构登录</a></div>
     </form>
+  </div>
+
+  <!-- 按需安全验证弹窗:点登录后弹出滑块,过验后自动提交 -->
+  <div class="cap-modal" id="capModal" aria-hidden="true">
+    <div class="cap-backdrop" id="capBackdrop"></div>
+    <div class="cap-box">
+      <div class="cap-head"><b>安全验证</b><button type="button" class="cap-close" id="capClose" aria-label="关闭">×</button></div>
+      <div class="cap-sub">拖动滑块完成验证,通过后自动继续</div>
+      <div id="capSlot"></div>
+    </div>
   </div>
 <script src="/api.js"></script>
 <script src="/captcha.js"></script>
 <script>
   // 超管登录用独立端点 /admin/login(cookie lj_padmin / Path=/admin)。
+  // 安全验证按需弹出:点「登录」后才弹滑块(与机构登录 login.html 一致),非一直显示。
   const form=document.getElementById('lgForm'),btn=document.getElementById('lgBtn'),err=document.getElementById('lgErr');
-  let captchaToken=null;
-  const cap=LJCaptcha.mount(document.getElementById('lgCaptcha'),{
-    onPass:(t)=>{ captchaToken=t; btn.disabled=false; },
-    onReset:()=>{ captchaToken=null; btn.disabled=true; },
+  const $=(id)=>document.getElementById(id);
+  let capCb=null;
+  const cap=LJCaptcha.mount($('capSlot'),{
+    onPass:(token)=>{ closeCap(); const cb=capCb; capCb=null; if(cb) cb(token); },
+    onReset:()=>{},
   });
-  form.addEventListener('submit',async(e)=>{
+  function requireCaptcha(cb){ capCb=cb; cap.reset(); $('capModal').classList.add('show'); }
+  function closeCap(){ $('capModal').classList.remove('show'); }
+  $('capBackdrop').addEventListener('click',()=>{ capCb=null; closeCap(); });
+  $('capClose').addEventListener('click',()=>{ capCb=null; closeCap(); });
+
+  form.addEventListener('submit',(e)=>{
     e.preventDefault(); err.textContent='';
-    if(!captchaToken){ err.textContent='请先完成滑块验证'; return; }
-    btn.disabled=true; btn.textContent='登录中…';
-    try{
-      const res=await fetch('/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',
-        body:JSON.stringify({username:document.getElementById('username').value.trim(),password:document.getElementById('password').value,captchaToken})});
-      const data=await res.json().catch(()=>({}));
-      if(!res.ok) throw new Error(data.error||'登录失败');
-      location.href='/admin/';
-    }catch(ex){
-      err.textContent='✕ '+(ex.message||'登录失败'); btn.textContent='登 录';
-      captchaToken=null; cap.reset(); // token 一次性,失败重验
-    }
+    const u=$('username').value.trim(), p=$('password').value;
+    if(!u||!p){ err.textContent='请输入账号和密码'; return; }
+    // 点登录 → 弹安全验证 → 过验后提交
+    requireCaptcha(async(token)=>{
+      btn.disabled=true; btn.textContent='登录中…';
+      try{
+        const res=await fetch('/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',
+          body:JSON.stringify({username:u,password:p,captchaToken:token})});
+        const data=await res.json().catch(()=>({}));
+        if(!res.ok) throw new Error(data.error||'登录失败');
+        location.href='/admin/';
+      }catch(ex){
+        err.textContent='✕ '+(ex.message||'登录失败'); btn.disabled=false; btn.textContent='登 录';
+      }
+    });
   });
 </script>
 </body>

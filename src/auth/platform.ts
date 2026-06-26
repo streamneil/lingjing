@@ -13,7 +13,7 @@
 // 防暴破(D8/D9):仅滑块。captcha challenge 后端出题(目标 x 存服务端),
 // verify 位置比对发一次性 token,登录必携并消费(DELETE)。无 IP 锁定。
 
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomInt } from 'node:crypto';
 import type { Request, Response, NextFunction } from 'express';
 import {
   db,
@@ -44,12 +44,18 @@ export async function bootstrapSuperadmin(): Promise<void> {
   console.log(`[超管] 初始平台超管已创建:${username}(密码取自 SUPERADMIN_PASS)`);
 }
 
-// ── 滑块行为验证(拖到底式)──
-// 简单直觉:把滑块拖到最右端即过(无缺口对齐认知负担)。challenge 仍发一次性行,
-// 保留"一次性 token"安全语义;target_x 固定为轨道末端,verify 判断是否拖到末端附近。
+// ── 滑块行为验证(拼图缺口式)──
+// 服务端随机生成缺口位置 gapX(存 target_x);前端渲染背景图 + 在 gapX 挖缺口 + 可拖拼图块,
+// 用户把块拖到缺口(|x-gapX|≤容差)即过。challenge 一次性,verify 发一次性 token。
+// 注:gapX 下发前端(供画缺口)→ 本控件是约定/视觉/信任层,非强 bot 防护。密码暴破的真墙是
+// login-throttle(每账号/IP 失败限频),短信侧是每日上限;captcha 仅速度阱。pieceY 纯视觉,不入库不校验。
 const CAPTCHA_TTL_MS = 2 * 60 * 1000; // challenge / token 2 分钟过期
-const CAPTCHA_TRACK_W = 280; // 滑轨参考宽度(前端按实际轨宽换算后提交,服务端按此判末端)
-const CAPTCHA_END_THRESHOLD = 12; // 距末端 ≤ 此值(px,服务端坐标)算"拖到底"
+const CAPTCHA_TRACK_W = 280; // 轨道/背景参考宽度(前端按实际宽换算后提交服务端坐标)
+const CAPTCHA_PIECE_W = 44; // 拼图块宽度(参考坐标,与前端对齐)
+const CAPTCHA_GAP_MIN = 60; // 缺口最小 x:不压起点、不贴最左(否则"起手即过")
+const CAPTCHA_GAP_TOL = 8; // 落点容差(px,服务端坐标),|x-gapX|≤此值算对齐
+const CAPTCHA_PIECE_Y_MIN = 12; // 缺口竖直位置下界(纯视觉)
+const CAPTCHA_PIECE_Y_MAX = 92; // 缺口竖直位置上界(纯视觉)
 
 /** 惰性清理过期 challenge / token(每次出题/校验顺带,免定时 job)。 */
 function sweepCaptcha(): void {
@@ -58,21 +64,22 @@ function sweepCaptcha(): void {
   db.prepare(`DELETE FROM captcha_token WHERE expires_at < ?`).run(t);
 }
 
-/** 出题:发一次性 challenge 行(target_x 固定为轨道末端),返回 challenge_id + trackW。
- *  前端把滑块拖到最右端即过,无需知道缺口位置(拖到底式,直觉)。
- *  真挡的是不渲染滑块、直接 POST /login 的无头脚本(没 token 直接 400)。 */
-export function createCaptchaChallenge(): { challengeId: string; trackW: number } {
+/** 出题:随机缺口 gapX(存 target_x)+ 竖直位置 pieceY(纯视觉),返回供前端渲染拼图。
+ *  gapX ∈ [GAP_MIN, trackW-PIECE_W]:既不压起点也不贴最右(防"起手/拖到底即过")。
+ *  真挡密码暴破的是 login-throttle;此控件解决约定/视觉/信任。 */
+export function createCaptchaChallenge(): { challengeId: string; trackW: number; gapX: number; pieceY: number } {
   sweepCaptcha();
   const id = randomUUID();
   const t = now();
-  // target_x = 轨道末端(trackW);verify 判断提交 x 是否拖到末端附近。
+  const gapX = randomInt(CAPTCHA_GAP_MIN, CAPTCHA_TRACK_W - CAPTCHA_PIECE_W + 1); // 含右端点
+  const pieceY = randomInt(CAPTCHA_PIECE_Y_MIN, CAPTCHA_PIECE_Y_MAX + 1);
   db.prepare(
     `INSERT INTO captcha_challenge (id,target_x,created_at,expires_at) VALUES (?,?,?,?)`,
-  ).run(id, CAPTCHA_TRACK_W, t, t + CAPTCHA_TTL_MS);
-  return { challengeId: id, trackW: CAPTCHA_TRACK_W };
+  ).run(id, gapX, t, t + CAPTCHA_TTL_MS);
+  return { challengeId: id, trackW: CAPTCHA_TRACK_W, gapX, pieceY };
 }
 
-/** 校验:滑块拖到末端附近(距 target_x ≤ 阈值)→ 消费 challenge + 发一次性 token。失败/过期 → null。 */
+/** 校验:拼图块落点对齐缺口(|x-target_x|≤容差)→ 消费 challenge + 发一次性 token。失败/过期 → null。 */
 export function verifyCaptchaSlide(challengeId: string, x: number): string | null {
   sweepCaptcha();
   const row = db
@@ -81,8 +88,8 @@ export function verifyCaptchaSlide(challengeId: string, x: number): string | nul
   if (!row || row.expires_at < now()) return null;
   // challenge 一次性:无论成败都删(防同一 challenge 暴力试)
   db.prepare(`DELETE FROM captcha_challenge WHERE id=?`).run(challengeId);
-  // 拖到底:x 达到末端附近即过(x >= target_x - 阈值)。
-  if (!Number.isFinite(x) || x < row.target_x - CAPTCHA_END_THRESHOLD) return null;
+  // 对齐缺口:|x - gapX| ≤ 容差即过(不再是"拖到末端")。
+  if (!Number.isFinite(x) || Math.abs(x - row.target_x) > CAPTCHA_GAP_TOL) return null;
   const token = genToken();
   const t = now();
   db.prepare(

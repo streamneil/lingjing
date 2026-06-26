@@ -1,6 +1,7 @@
-// 灵镜 滑块行为验证测试 —— 出题、位置比对、token 一次性。
+// 灵镜 滑块行为验证测试 —— 拼图缺口出题、落点比对(|x-gapX|≤容差)、token 一次性。
 //
-// 决策来源:/plan-ceo-review D8/D9 —— 服务端发一次性 token,真挡无头脚本。
+// 决策来源:/plan-ceo-review D8/D9 + /plan-design-review + /plan-eng-review(2026-06-26):
+//   拼图缺口式(约定/视觉/信任);密码暴破真墙在 login-throttle,captcha 仅速度阱。
 
 import { describe, it, expect } from 'vitest';
 
@@ -12,48 +13,66 @@ const { Client } = await import('./helpers.js');
 
 const app = createApp();
 
-describe('滑块 challenge / verify(拖到底式)', () => {
-  it('出题返回 challengeId + trackW', async () => {
+describe('滑块 challenge / verify(拼图缺口式)', () => {
+  it('出题返回 challengeId + trackW + gapX + pieceY;gapX 不压起点/不贴最右', async () => {
     const c = new Client(app);
     const r = await c.get('/api/captcha/challenge');
     expect(r.status).toBe(200);
     expect(typeof r.body.challengeId).toBe('string');
     expect(typeof r.body.trackW).toBe('number');
+    expect(typeof r.body.gapX).toBe('number');
+    expect(typeof r.body.pieceY).toBe('number');
+    expect(r.body.gapX).toBeGreaterThanOrEqual(60); // 不压起点手柄
+    expect(r.body.gapX).toBeLessThanOrEqual(r.body.trackW - 44); // 不贴最右(否则退回"拖到底"老问题)
   });
 
-  it('拖到末端(x=trackW)→ 发 captchaToken', async () => {
+  it('对齐缺口(x=gapX)→ 发 captchaToken', async () => {
     const c = new Client(app);
     const ch = await c.get('/api/captcha/challenge');
-    const v = await c.post('/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.trackW });
+    const v = await c.post('/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.gapX });
     expect(v.status).toBe(200);
     expect(v.body.ok).toBe(true);
     expect(typeof v.body.captchaToken).toBe('string');
   });
 
-  it('没拖到底(x 远小于 trackW)→ 400', async () => {
+  it('容差内(gapX+6)仍过', async () => {
     const c = new Client(app);
     const ch = await c.get('/api/captcha/challenge');
-    const v = await c.post('/api/captcha/verify', { challengeId: ch.body.challengeId, x: Math.floor(ch.body.trackW / 2) });
+    const v = await c.post('/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.gapX + 6 });
+    expect(v.status).toBe(200);
+  });
+
+  it('偏差超容差(gapX+40)→ 400', async () => {
+    const c = new Client(app);
+    const ch = await c.get('/api/captcha/challenge');
+    const v = await c.post('/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.gapX + 40 });
+    expect(v.status).toBe(400);
+  });
+
+  it('[回归] 拖到末端(x=trackW)不再算过 → 400', async () => {
+    const c = new Client(app);
+    const ch = await c.get('/api/captcha/challenge');
+    // gapX 恒 ≤ trackW-44,故 trackW 必超容差 → 旧"拖到底即过"已废
+    const v = await c.post('/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.trackW });
     expect(v.status).toBe(400);
   });
 
   it('challenge 一次性:同 challengeId 再 verify → 400', async () => {
     const c = new Client(app);
     const ch = await c.get('/api/captcha/challenge');
-    await c.post('/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.trackW }); // 第一次成功（消费 challenge）
-    const again = await c.post('/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.trackW });
+    await c.post('/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.gapX }); // 第一次成功(消费 challenge)
+    const again = await c.post('/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.gapX });
     expect(again.status).toBe(400); // challenge 已删
   });
 });
 
-describe('captcha_token 一次性（登录场景）', () => {
-  it('同一 token 登录两次:第二次 400（token 用过即弃）', async () => {
+describe('captcha_token 一次性(登录场景)', () => {
+  it('同一 token 登录两次:第二次 400(token 用过即弃)', async () => {
     const tenantId = createTenant('滑块台').id;
     await createUser(tenantId, 'capuser', 'pw123456', 'creator');
-    // 手动走一遍:challenge → verify 拿 token → 用同一 token 登录两次
     const c = new Client(app);
     const ch = await c.get('/api/captcha/challenge');
-    const v = await c.post('/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.trackW });
+    const v = await c.post('/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.gapX });
     const token = v.body.captchaToken;
     const first = await c.post('/api/login', { username: 'capuser', password: 'pw123456', captchaToken: token });
     expect(first.status).toBe(200);

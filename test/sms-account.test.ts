@@ -21,7 +21,7 @@ const app = createApp();
 
 async function captchaToken(c: InstanceType<typeof Client>): Promise<string> {
   const ch = await c.get('/api/captcha/challenge');
-  const v = await c.post('/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.trackW });
+  const v = await c.post('/api/captcha/verify', { challengeId: ch.body.challengeId, x: ch.body.gapX });
   return v.body.captchaToken;
 }
 async function smsRegister(c: InstanceType<typeof Client>, phone: string) {
