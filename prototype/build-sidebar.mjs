@@ -44,7 +44,7 @@ function toolHref(t) {
   return t.enabled && t.page ? t.page : `tool.html?tool=${encodeURIComponent(t.key)}`;
 }
 function buildToolItems(tools, cur) {
-  return tools.map((t) => {
+  return tools.filter((t) => !t.hideInNav).map((t) => {
     let suffix = '';
     if (t.badge) suffix = `<span class="${t.badge.kind === 'nano' ? 'nano' : 'nbadge'}">${t.badge.text}</span>`;
     else if (!t.enabled) suffix = `<span class="soon">即将上线</span>`;

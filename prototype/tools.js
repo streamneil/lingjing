@@ -17,6 +17,8 @@
 //   page       已接工具的工作区页面(enabled=true 才用;未接走通用 tool.html 占位)。
 //   tier       /plan-ceo-review 分档:'live'(已上线)|'next'(接)|'later'(缓)|'parked'(划)。
 //              仅作路线图记录,不影响前端行为(行为只看 enabled)。
+//   hideInNav  true → 不在左侧菜单渲染此工具项(工具仍注册:页面/链接/getTool 照常可用,
+//              仅从侧栏隐藏)。改此值后须重跑 `node prototype/build-sidebar.mjs` 重新烘焙各页。
 //
 // ⚠️ 接后端前置硬约束(见计划「后端前置约束」表):worker.processJob 须按 job.type 分发、
 //    gateway 泛化、estimateCost 改 per-toolType。本表只管前端;enabled 翻 true 前那些必须先就位。
@@ -59,7 +61,8 @@
       icon: '<circle cx="12" cy="8" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/>',
       // 入口落形象库(浏览/选形象)→ 形象卡 CTA 带 ?avatar=id 进 create.html 配文案。
       // avatars.html 的 data-page 也设 'ai-avatar',保证两页都高亮此侧栏项。
-      enabled: true, outputKind: 'video', page: 'avatars.html', tier: 'live',
+      // 2026-07 暂从左侧菜单隐藏(hideInNav):功能/页面保留,仅不出现在侧栏。
+      enabled: true, outputKind: 'video', page: 'avatars.html', tier: 'live', hideInNav: true,
     },
     {
       key: 'ai-music', label: 'AI 音乐',

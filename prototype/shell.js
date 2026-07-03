@@ -52,7 +52,7 @@
   //    先渲占位容器 #sb-tools,挂载后由 fillTools() 轮询 LJTools 就绪再填(否则创作工具组为空)。
   function buildToolItems(){
     const tools = (window.LJTools ? LJTools.list : []);
-    return tools.map(t => {
+    return tools.filter(t => !t.hideInNav).map(t => {
       const on = t.key===cur ? ' active' : '';
       let suffix = '';
       if (t.badge) suffix = `<span class="${t.badge.kind==='nano'?'nano':'nbadge'}">${t.badge.text}</span>`;
