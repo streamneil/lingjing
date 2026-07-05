@@ -14,6 +14,7 @@
 
 import { db } from '../db/index.js';
 import { seedDefaultImageModels, DEFAULT_IMAGE_MODEL_SEED } from '../gateway/image-models.js';
+import { variantId } from '../credits/pricing.js';
 
 // 视频模型真实成本(元/秒;一模型多档=多行)。来源:火山/阿里文档价折算。
 const VIDEO_SEED: [string, string, number][] = [
@@ -38,8 +39,16 @@ const DOUBAO_SEED: [string, string, string, string, string | null, number][] = [
   ['doubao-seedance-2.0:720P', 'doubao-seedance-2.0', 'video', '秒', '720P', 1.0],
   ['doubao-seedance-2.0:1080P', 'doubao-seedance-2.0', 'video', '秒', '1080P', 2.5],
   ['doubao-seedance-2.0-fast:720P', 'doubao-seedance-2.0-fast', 'video', '秒', '720P', 0.8],
-  ['gemini-3.1-flash-image', 'gemini-3.1-flash-image', 'image', '张', null, 0.73], // Nano Banana 2
-  ['gemini-3-pro-image', 'gemini-3-pro-image', 'image', '张', null, 0.96],         // Nano Banana Pro
+];
+
+// Gemini 分档定价(2026-07 分辨率分档计价,eng-review D1-D9)—— gemini 的基础行 + 变体行唯一真源
+// (不再进 DOUBAO_SEED,防基础价两处字面量漂移让 D6 护栏误判)。
+// 官方价(美元×7.2):Flash 512/1K/2K/4K=$0.045/0.067/0.101/0.151;Pro 1K-2K/4K=$0.134/0.24。
+// '512' 档已真实 API 实测(2026-07-04,imageSize='512' HTTP 200 有图,D7)。
+//   [model_key, 基础行 doc 默认价(=2K 档,分档回落用;D6 护栏比对同一字面量), [档, 元/张][]]
+export const GEMINI_TIER_SEED: [string, number, [string, number][]][] = [
+  ['gemini-3.1-flash-image', 0.73, [['512', 0.32], ['1K', 0.48], ['2K', 0.73], ['4K', 1.09]]],
+  ['gemini-3-pro-image', 0.96, [['1K', 0.96], ['2K', 0.96], ['4K', 1.73]]],
 ];
 
 /** 灌平台默认数据(幂等)。返回各表新增行数。app 启动 + seed-demo 共用(单一真源)。 */
@@ -81,6 +90,22 @@ export function seedPlatformDefaults(): { image: number; video: number; pricing:
   if (insMp.run('tts', 'tts', 'tts', '万字', '每字', 0.00008, 1, 0, now).changes) pricing++;
   for (const [id, key, modality, unit, variant, cost] of DOUBAO_SEED) {
     if (insMp.run(id, key, modality, unit, variant, cost, 1, 0, now).changes) pricing++;
+  }
+
+  // 5. Gemini 基础行 + 分档变体行(id=variantId(key,档);计价时变体行优先于基础行,imagePriceTier)。
+  //    D6 护栏:基础行已被 admin 改价(≠doc 默认)→ 跳过该模型变体 —— 否则 doc 价变体
+  //    优先生效,升级会静默架空 admin 的调价。跳过时打日志(统一定价页 PUT 可直接建各档行补价)。
+  const readBase = db.prepare('SELECT real_cost_yuan FROM model_pricing WHERE id=?');
+  for (const [key, baseDoc, tiers] of GEMINI_TIER_SEED) {
+    if (insMp.run(key, key, 'image', '张', null, baseDoc, 1, 0, now).changes) pricing++; // 基础行(幂等)
+    const base = readBase.get(key) as { real_cost_yuan: number } | undefined;
+    if (base && Math.abs(base.real_cost_yuan - baseDoc) > 1e-9) {
+      console.warn(`[seed] ${key} 基础价已被后台改为 ${base.real_cost_yuan}(doc=${baseDoc}),跳过分档变体种子;请到统一定价页对 ${key}:{档} 逐档录价`);
+      continue;
+    }
+    for (const [tier, cost] of tiers) {
+      if (insMp.run(variantId(key, tier), key, 'image', '张', tier, cost, 1, 0, now).changes) pricing++;
+    }
   }
 
   return { image, video, pricing };

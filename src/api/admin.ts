@@ -27,7 +27,7 @@ import {
   setUserStatus,
 } from '../auth/index.js';
 import { grant, balance } from '../credits/index.js';
-import { sellPrice, assertProfitable, markupX35, floorX35, getConfig, setConfig } from '../credits/pricing.js';
+import { sellPrice, assertProfitable, markupX35, floorX35, getConfig, setConfig, lookupCost, variantId } from '../credits/pricing.js';
 import {
   listPlans,
   getPlan,
@@ -44,7 +44,8 @@ import {
 import type { LeadStatus } from '../db/index.js';
 import { countLeadsByStatus } from '../pricing/index.js';
 import { smsSendStats } from '../auth/sms.js';
-import { IMAGE_MODELS } from '../gateway/image-models.js';
+import { IMAGE_MODELS, getImageModel, isKnownModel } from '../gateway/image-models.js';
+import { GEMINI_TIER_SEED } from '../seed/platform-defaults.js';
 import type { ImageModelOverrideRow } from '../db/index.js';
 import { setProviderKey, ProviderKeyError } from '../gateway/provider-keys.js';
 import type { ProviderRow } from '../db/index.js';
@@ -731,8 +732,10 @@ adminRouter.get('/api/image-models', requirePlatformAdmin, (_req: Request, res: 
       // 生效值(DB 覆盖优先)
       label: ov?.label ?? tmpl?.label ?? key,
       modelId: ov?.model_id ?? tmpl?.modelId ?? '',
-      enabled: ov ? ov.enabled === 1 : true,
-      priceTier: ov?.price_tier ?? tmpl?.priceTier ?? 0,
+      // 生效值与运行时同一读路径(2026-07 D8 收尾,red-team):model_pricing 优先,否则旧列/代码回落。
+      // 此前 no-override 模型(Gemini)显示代码常量 + 恒 true,后台改价/启停后本页与实收价对不上。
+      enabled: (() => { const mp = lookupCost(key); return mp ? mp.enabled : ov ? ov.enabled === 1 : false; })(), // 无任何行=不启用,与 isEnabled 同义
+      priceTier: (() => { const mp = lookupCost(key); return mp ? sellPrice(mp.realCostYuan) : ov?.price_tier ?? tmpl?.priceTier ?? 0; })(),
       realCostYuan: ov?.real_cost_yuan ?? null, // 真实成本(元/张);表单回填,售价积分 = ceil(×35)
       costSource: ov?.cost_source ?? null, // 'doc' | 'estimate'
       maxImages: ov?.max_images ?? tmpl?.maxImages ?? 1,
@@ -852,7 +855,7 @@ adminRouter.post('/api/image-models', requirePlatformAdmin, (req: Request, res: 
       realCostYuan: v.v.realCostYuan, costSource: v.v.costSource ?? 'doc', enabled: v.v.enabled, sortOrder: v.v.sortOrder });
   }
   writePlatformAudit(req.padmin!.id, 'image_model_create', PLATFORM_TENANT, key, padminIp(req));
-  res.status(201).json({ ok: true });
+  res.status(201).json({ ok: true, ...variantNoteFor(key) }); // D3:有变体行则提醒(见 variantNoteFor)
 });
 
 /** 改模型(代码内置 → upsert override;DB 新增 → update)。技术契约不可改。 */
@@ -889,18 +892,37 @@ adminRouter.put('/api/image-models/:key', requirePlatformAdmin, (req: Request, r
       upsertModelPricing({ id: key, modelKey: key, modality: 'image', unit: '张', variant: null,
         realCostYuan: effCost, costSource: effSrc, enabled: v.v.enabled, sortOrder: v.v.sortOrder });
     }
+    // 变体行随基础行同 sort_order(red-team):否则改排序后统一定价页里档行与基础行分家,易误改错模型的档。
+    // 限定 modality='image':防 key 与视频 model_key 撞名时误动视频行(adversarial)。
+    db.prepare(`UPDATE model_pricing SET sort_order=? WHERE model_key=? AND variant IS NOT NULL AND modality='image'`).run(v.v.sortOrder, key);
   }
   writePlatformAudit(req.padmin!.id, 'image_model_update', PLATFORM_TENANT, key, padminIp(req));
-  res.json({ ok: true });
+  // D3(2026-07 分档计价):有变体行的模型,表单只写基础行 —— 各档实收价在变体行且优先生效,
+  // 不提醒的话管理员改完价以为全档生效,实收纹丝不动(排查时当 bug 查半天)。
+  res.json({ ok: true, ...variantNoteFor(key) });
 });
+
+/** 该模型存在分档变体行(model_pricing "{key}:{档}")时,生成表单保存提醒(D3)。无变体 → 空对象。 */
+function variantNoteFor(key: string): { variantNote?: string } {
+  const n = (db.prepare(`SELECT COUNT(*) AS c FROM model_pricing WHERE model_key=? AND variant IS NOT NULL`).get(key) as { c: number }).c;
+  return n > 0
+    ? { variantNote: `此模型按清晰度分档计价(${n} 档),此处成本仅作基础/回落价;各档实收价请到「统一定价」页逐行调整` }
+    : {};
+}
 
 /** 删除 override(代码内置 → 删 override 回落代码默认;DB 新增 → 整删)。 */
 adminRouter.delete('/api/image-models/:key', requirePlatformAdmin, (req: Request, res: Response) => {
   const key = req.params.key!;
   db.prepare('DELETE FROM image_model_override WHERE key=?').run(key);
-  db.prepare('DELETE FROM model_pricing WHERE id=?').run(key); // 收口:同删统一定价行(代码内置删后回落代码 priceTier)
+  // 收口:同删统一定价行。⚠ 必须限定 modality='image'(adversarial 2026-07-05):
+  // 图片模型 key 可与视频 model_key(如 doubao-seedance-2.0)或 'tts' 撞名,不限定会把
+  // 别的模态的定价行连坐删掉 → 视频价静默回落代码常量,全场变价无任何报错。
+  db.prepare(`DELETE FROM model_pricing WHERE id=? AND modality='image'`).run(key);
+  // 分档变体行一并删(red-team):否则成孤儿 —— 重建模型录新价后,旧 doc 档价仍优先生效且无端点可删。
+  const variants = db.prepare(`DELETE FROM model_pricing WHERE model_key=? AND variant IS NOT NULL AND modality='image'`).run(key).changes;
   writePlatformAudit(req.padmin!.id, 'image_model_delete', PLATFORM_TENANT, key, padminIp(req));
-  res.json({ ok: true, note: IMAGE_MODELS[key] ? '已回落代码默认' : '已删除' });
+  // 内置模型(代码/种子)下次启动会按官方价重建定价行 —— 删除≠永久下架,想停售用「停用」。
+  res.json({ ok: true, note: (IMAGE_MODELS[key] ? '已回落代码默认(内置模型定价将随下次启动种子恢复;停售请用停用)' : '已删除') + (variants ? `(含 ${variants} 行分档价)` : '') });
 });
 
 // ── 定价管理(全局倍率 + 视频/TTS 成本)──
@@ -1037,6 +1059,14 @@ adminRouter.get('/api/pricing/models', requirePlatformAdmin, (_req: Request, res
   const alerts: string[] = [];
   if (markup < floor) alerts.push(`全局倍率 ${markup / 10} < 地板 ${floor / 10},全场赔本!`);
   for (const m of models) if (!(m.realCostYuan > 0)) alerts.push(`${m.id} 成本未录`);
+  // 分档缺档预警(2026-07 D6 补救,red-team):预期分档模型缺变体行 = 该档按基础价出售(4K 亏毛利)。
+  // 直接对「{key}:{档}」保存录价即可补建(上方 PUT 支持创建)。
+  for (const [key, , tiers] of GEMINI_TIER_SEED) {
+    const base = rows.find((r) => r.id === key);
+    if (!base || base.enabled !== 1) continue;
+    const missing = tiers.map(([t]) => t).filter((t) => !rows.some((r) => r.id === variantId(key, t)));
+    if (missing.length) alerts.push(`${key} 缺 ${missing.join('/')} 档变体行(这些档正按基础价出售);对 ${key}:{档} 录价即可补建`);
+  }
   res.json({ markup: markup / 10, floor: floor / 10, models, alerts });
 });
 
@@ -1049,7 +1079,31 @@ adminRouter.put('/api/pricing/models/:id', requirePlatformAdmin, (req: Request, 
     id: string; model_key: string; modality: string; unit: string; variant: string | null;
     real_cost_yuan: number; cost_source: string; enabled: number; sort_order: number;
   } | undefined;
-  if (!row) return res.status(404).json({ error: '定价行不存在' });
+  if (!row) {
+    // 2026-07 分档(D6 补救路径,red-team):对「{已知图片模型key}:{其档集内的档}」允许直接建行。
+    // 种子被 D6 护栏跳过 / 行被误删后,统一定价页由此逐档录价 —— 否则日志里那句
+    // 「请手动建档」没有任何端点能做到,4K 永久按基础价出售。
+    const m = /^(.+):([^:]+)$/.exec(id);
+    const def = m && isKnownModel(m[1]!) ? getImageModel(m[1]!) : undefined;
+    // def.key === m[1] 必须校验(adversarial):getImageModel 对「幽灵模型」(override 行的
+    // shape_template 已亡,mergeDef 返回 undefined)会回落默认模型 —— 不校验会把变体行
+    // 挂到不相干模型的 model_key 上,污染 variantNote 计数/排序联动/删除连坐。
+    if (!def || def.key !== m![1]! || !def.resolutionTiers?.includes(m![2]!))
+      return res.status(404).json({ error: '定价行不存在' });
+    const cost = Number(b.realCostYuan);
+    if (!Number.isFinite(cost) || cost <= 0) return res.status(400).json({ error: '真实成本需为正数' });
+    const cs = typeof b.costSource === 'string' && b.costSource === 'estimate' ? 'estimate' : 'doc';
+    const en = b.enabled === false || b.enabled === 0 ? 0 : 1;
+    if (en === 1) {
+      try { assertProfitable(cost, cs); }
+      catch (e) { return res.status(400).json({ error: (e as Error).message }); }
+    }
+    // sort_order 继承基础行(adversarial):否则新建档行落 0,统一定价页与基础行分家。
+    const baseSort = (db.prepare('SELECT sort_order FROM model_pricing WHERE id=?').get(def.key) as { sort_order: number } | undefined)?.sort_order ?? 0;
+    upsertModelPricing({ id, modelKey: def.key, modality: 'image', unit: '张', variant: m![2]!, realCostYuan: cost, costSource: cs, enabled: en, sortOrder: baseSort });
+    writePlatformAudit(req.padmin!.id, 'pricing_model_create', PLATFORM_TENANT, id, padminIp(req));
+    return res.json({ ok: true, created: true, sell: creditsFromCost(cost) });
+  }
   const realCostYuan = b.realCostYuan !== undefined ? Number(b.realCostYuan) : row.real_cost_yuan;
   if (!Number.isFinite(realCostYuan) || realCostYuan <= 0) return res.status(400).json({ error: '真实成本需为正数' });
   const costSource = typeof b.costSource === 'string' && b.costSource === 'estimate' ? 'estimate' : 'doc';
