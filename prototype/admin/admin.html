@@ -1145,9 +1145,11 @@
       resolutions:collectResRows(),
       sortOrder:editingKey?(modelsCache.find(m=>m.key===editingKey)?.sortOrder??0):modelsCache.length };
     try{
-      if(editingKey){ await PA('PUT',`/api/image-models/${encodeURIComponent(editingKey)}`,body); }
-      else { await PA('POST','/api/image-models',{ ...body, key }); }
-      closeOv('modelOv'); toast('✓ 已保存'); await loadModels();
+      let r;
+      if(editingKey){ r=await PA('PUT',`/api/image-models/${encodeURIComponent(editingKey)}`,body); }
+      else { r=await PA('POST','/api/image-models',{ ...body, key }); }
+      // 分档模型提醒(D3):此处成本只写基础/回落价,各档实收价在「统一定价」页 —— 不显出来管理员会以为全档已生效
+      closeOv('modelOv'); toast(r&&r.variantNote?('✓ 已保存 · '+r.variantNote):'✓ 已保存'); await loadModels();
     }catch(e){ document.getElementById('mMsg').textContent=e.message||'保存失败'; }
   }
   window.submitModel=submitModel;
