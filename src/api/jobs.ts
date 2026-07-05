@@ -31,6 +31,7 @@ import {
   estimateAiMusicCost,
   estimateAiMusicSeconds,
   clampImageCount,
+  imagePriceTier,
   reserve,
   balance,
 } from '../credits/index.js';
@@ -40,7 +41,7 @@ import { isUsableVoice } from '../voices/index.js';
 import { getEmotion, EMOTIONS, getSpeed, SPEEDS, getLanguage, LANGUAGES } from '../gateway/tts-models.js';
 import { db } from '../db/index.js';
 import type { VideoGenInput, ImageGenInput, TtsGenInput, VideoGenT2VInput, AiMusicGenInput } from '../gateway/types.js';
-import { getImageModel, resolutionAllowed, isKnownModel, listEnabledModels, DEFAULT_IMAGE_MODEL, tierFromPixels } from '../gateway/image-models.js';
+import { getImageModel, resolutionAllowed, enabledTiers, tierDelisted, DEFAULT_KEYWORD_TIER, isKnownModel, listEnabledModels, DEFAULT_IMAGE_MODEL, tierFromPixels, type ImageModelDef } from '../gateway/image-models.js';
 import { getVideoModel, isKnownVideoModel, listVideoModels, klingModeToResolution, getI2VModel, listI2VModels, getEditModel, listEditModels, getR2VModel, listR2VModels, type VideoTask, type VideoModelDef } from '../gateway/video-models.js';
 import { probeVideoMeta, type VideoMeta } from '../pipeline/ai-label.js';
 import { readFile, unlink } from 'node:fs/promises';
@@ -170,10 +171,47 @@ export function validateBboxList(raw: unknown, refCount: number): { ok: true; bo
   return { ok: true, boxes: anyBox ? boxes : [] };
 }
 
+/** 解析(模型,清晰度,比例)→ 计价档 effRes + 尺寸快照。build 与 estimate 共用(D9:报价≡实扣逐字节)。
+ *  - resolutions 表模型:按 ratio 查表得官方 W×H,计价档从像素自动推(P1-a/c,钱不塌)
+ *  - 档集(resolutionTiers)模型:未传 resolution → 显式补默认档(含'2K'取'2K',与 sizeParams keyword
+ *    旧默认一致;否则首个在售档)后走 resolutionAllowed 校验 —— disabled 变体档=下架(D5),
+ *    校验/生成/计费三层吃同一个显式值(D2,eng-review 2026-07-04)
+ *  - 其余模型:旧「≤maxResolution」守卫,undefined 语义不变(不补默认) */
+function resolveImageRes(
+  def: ImageModelDef,
+  res?: string,
+  ratio?: string,
+): { ok: true; effRes?: string; sizeSnap: { width?: number; height?: number } } | { ok: false; error: string } {
+  if (def.resolutions?.length) {
+    const wantRatio = typeof ratio === 'string' ? ratio : (def.resolutions.find((r) => r.isDefault)?.ratio ?? def.resolutions[0]!.ratio);
+    const hit = def.resolutions.find((r) => r.ratio === wantRatio);
+    if (!hit) return { ok: false, error: `该模型不支持比例 ${wantRatio}` }; // P2-a:不信前端
+    const tier = tierFromPixels(hit.width, hit.height);
+    // 像素推档同样受 D5 下架约束(red-team):否则 admin 录了分辨率表的档集模型,
+    // 禁用 4K 变体后仍可经比例表买到 4K → imagePriceTier 回落基础价 = 亏本促销复活。
+    if (tierDelisted(def.key, tier)) return { ok: false, error: `该清晰度档(${tier})已下架` };
+    return { ok: true, effRes: tier, sizeSnap: { width: hit.width, height: hit.height } };
+  }
+  let effRes = res;
+  const tiers = enabledTiers(def); // 在售档集(disabled 变体档已剔除)
+  if (tiers) {
+    if (effRes === undefined && tiers.length && def.canSetSize !== false) {
+      effRes = tiers.includes(DEFAULT_KEYWORD_TIER) ? DEFAULT_KEYWORD_TIER : tiers[0];
+    }
+    // 档集成员校验用已算好的 tiers(不再经 resolutionAllowed 重算一遍,省一半变体行查询)。
+    if (!tiers.length || !tiers.includes(effRes ?? tiers[0]!))
+      return { ok: false, error: `该模型支持的清晰度:${tiers.join(' / ') || '(暂无在售档)'}` };
+  } else if (!resolutionAllowed(def, effRes)) {
+    return { ok: false, error: `该模型最高支持 ${def.maxResolution}` };
+  }
+  return { ok: true, effRes, sizeSnap: {} };
+}
+
 /** 校验并构建 ai_image job 入参 + 计价。多模型(registry)+ (model,mode) 校验。
  *
  * 顺序(eng 外部声音 P1-d,保 reserve==settle):
- *   resolve model(默认兜底)→ 校验 mode/4K/张数 → clamp(maxImages)→ 写 input.count+model → cost(读 priceTier)。
+ *   resolve model(默认兜底)→ 校验 mode/档位/张数 → clamp(maxImages)→ 写 input.count+model
+ *   → cost(imagePriceTier 按所选清晰度档取价,2026-07 分档计价)。
  */
 function buildImageJob(body: Record<string, unknown>): JobBuildResult {
   const { model, prompt, count, resolution, ratio, mode, imageRefs, seed } = body as Partial<ImageGenInput>;
@@ -203,31 +241,17 @@ function buildImageJob(body: Record<string, unknown>): JobBuildResult {
   if (!def.modes.includes(effMode))
     return { ok: false, status: 400, error: `该模型不支持${effMode === 'img2img' ? '图生图' : '文生图'}` };
 
-  // 3. 分辨率:有 resolutions 表 → 按所选 ratio 查表得 W×H + 自动推 tier(钱不塌,P1-a/c);
-  //    无表 → 回落旧逻辑(res + resolutionAllowed 4K 守卫,P1-b)。
-  let effRes = res; // 计价档(tier);有表则覆盖为自动推的
-  let sizeSnap: { width?: number; height?: number } = {};
-  if (def.resolutions?.length) {
-    const wantRatio = typeof ratio === 'string' ? ratio : (def.resolutions.find((r) => r.isDefault)?.ratio ?? def.resolutions[0]!.ratio);
-    const hit = def.resolutions.find((r) => r.ratio === wantRatio);
-    if (!hit) return { ok: false, status: 400, error: `该模型不支持比例 ${wantRatio}` }; // P2-a:不信前端
-    sizeSnap = { width: hit.width, height: hit.height };
-    effRes = tierFromPixels(hit.width, hit.height); // 计价档从像素自动推
-  } else {
-    // 无表:档守卫。seedream 用 resolutionTiers 精确档集(报支持的档);其余按 maxResolution(P1-b 保留)。
-    if (!resolutionAllowed(def, res))
-      return {
-        ok: false,
-        status: 400,
-        error: def.resolutionTiers?.length
-          ? `该模型支持的清晰度:${def.resolutionTiers.join(' / ')}`
-          : `该模型最高支持 ${def.maxResolution}`,
-      };
-  }
+  // 3. 分辨率:resolveImageRes 统一处理(resolutions 表推档 / 档集默认档补齐 + 下架校验 / 旧守卫)。
+  //    与 /jobs/estimate 共用同一函数 → 报价≡实扣(D9)。
+  const rr = resolveImageRes(def, res, typeof ratio === 'string' ? ratio : undefined);
+  if (!rr.ok) return { ok: false, status: 400, error: rr.error };
+  const effRes = rr.effRes; // 计价档(tier;档集模型已显式化,D2)
+  const sizeSnap = rr.sizeSnap;
 
-  // 提交时快照(P3 + P1-c):priceTier/maxImages + 所选分辨率 W×H,worker settle/生成读快照,
+  // 提交时快照(P3 + P1-c):档价 priceTier/maxImages + 所选分辨率 W×H,worker settle/生成读快照,
   // admin mid-flight 改价/改分辨率不破 reserve==settle、不改在飞 job 尺寸。
-  const snap = { priceTierSnapshot: def.priceTier, maxImagesSnapshot: def.maxImages, ...sizeSnap };
+  const tier = imagePriceTier(def, effRes); // 按(模型,清晰度档)取每张售价(2026-07 分档)
+  const snap = { priceTierSnapshot: tier, maxImagesSnapshot: def.maxImages, ...sizeSnap };
 
   if (effMode === 'img2img') {
     const isAsyncEdit = def.shape === 'A_EDIT'; // 万相2.7:异步、可 0 图、可 bbox、可多出图
@@ -261,7 +285,7 @@ function buildImageJob(body: Record<string, unknown>): JobBuildResult {
       ok: true,
       type: 'ai_image',
       input: input as unknown as Record<string, unknown>,
-      cost: estimateImageEditCost(effRes, def.priceTier, editCount),
+      cost: estimateImageEditCost(effRes, tier, editCount),
     };
   }
 
@@ -276,7 +300,7 @@ function buildImageJob(body: Record<string, unknown>): JobBuildResult {
     ok: true,
     type: 'ai_image',
     input: input as unknown as Record<string, unknown>,
-    cost: estimateImageCost(n, effRes, def.priceTier, def.maxImages),
+    cost: estimateImageCost(n, effRes, tier, def.maxImages),
   };
 }
 
@@ -930,23 +954,30 @@ jobsRouter.post('/jobs/estimate', requireAuth, async (req: Request, res: Respons
   const type = typeof body.type === 'string' && body.type ? body.type : 'video';
   if (type === 'ai_image') {
     const m = body.mode === 'img2img' ? 'img2img' : 'text2img';
+    // D9 报价≡实扣要求「拒绝路径」也一致(red-team):未知模型/模型不支持该模式,
+    // build 会 400,estimate 若静默回落默认模型出价 = 给买不到的东西报价。与 buildImageJob 同校验。
+    if (body.model !== undefined && (typeof body.model !== 'string' || !isKnownModel(body.model)))
+      return res.status(400).json({ error: '模型不可用' });
     const def = getImageModel(typeof body.model === 'string' ? body.model : undefined, m);
-    // 有 resolutions 表 → 按所选 ratio 查表自动推 tier(与 buildImageJob 一致,计价不塌 P1-a/P3-a);
-    // 无表 → 用 body.resolution。
-    let res2 = typeof body.resolution === 'string' ? body.resolution : undefined;
-    if (def.resolutions?.length) {
-      const wantRatio = typeof body.ratio === 'string' ? body.ratio : (def.resolutions.find((r) => r.isDefault)?.ratio ?? def.resolutions[0]!.ratio);
-      const hit = def.resolutions.find((r) => r.ratio === wantRatio);
-      if (hit) res2 = tierFromPixels(hit.width, hit.height);
-    }
+    if (!def.modes.includes(m))
+      return res.status(400).json({ error: `该模型不支持${m === 'img2img' ? '图生图' : '文生图'}` });
+    // 与 buildImageJob 共用 resolveImageRes(D9:报价≡实扣逐字节;非法/下架档同样 400,
+    // 不再对不存在的档出价 —— 否则传 '3K' 报出 2K 价而提交 400,报价≠实扣)。
+    const rr = resolveImageRes(
+      def,
+      typeof body.resolution === 'string' ? body.resolution : undefined,
+      typeof body.ratio === 'string' ? body.ratio : undefined,
+    );
+    if (!rr.ok) return res.status(400).json({ error: rr.error });
+    const tier = imagePriceTier(def, rr.effRes); // 按档取价(2026-07 分档)
     if (m === 'img2img') {
       // 编辑按 n 张计价(与 buildImageJob/costFor 一致):count clamp 到 maxImages
       // (qwen-image-edit maxImages=1 → 固定 1)。
       const editCount = clampImageCount(body.count, def.maxImages);
-      return res.json({ cost: estimateImageEditCost(res2, def.priceTier, editCount) });
+      return res.json({ cost: estimateImageEditCost(rr.effRes, tier, editCount) });
     }
     return res.json({
-      cost: estimateImageCost(clampImageCount(body.count, def.maxImages), res2, def.priceTier, def.maxImages),
+      cost: estimateImageCost(clampImageCount(body.count, def.maxImages), rr.effRes, tier, def.maxImages),
     });
   }
   if (type === 'video_t2v') {
@@ -1009,7 +1040,9 @@ jobsRouter.post('/jobs/estimate', requireAuth, async (req: Request, res: Respons
 // 吐 registry 的 UI 相关字段(不泄漏内部 modelId/priceTier 计费细节)。
 jobsRouter.get('/image-models', requireAuth, (_req: Request, res: Response) => {
   // 只列 enabled(DB override 优先);P2-default:default = 首个 enabled(禁用默认时前端不预选不在列表的)。
-  const enabled = listEnabledModels();
+  // 全档下架的档集模型不下发(D5 收尾):resolutionTiers:[] 会被前端当 falsy 回落 maxResolution 假档集,
+  // 模型看似可选但提交必 400 —— 没有在售档 = 模型本身不可售,直接从列表剔除。
+  const enabled = listEnabledModels().filter((d) => (enabledTiers(d)?.length ?? 1) > 0);
   const models = enabled.map((d) => ({
     key: d.key,
     label: d.label,
@@ -1017,7 +1050,7 @@ jobsRouter.get('/image-models', requireAuth, (_req: Request, res: Response) => {
     maxImages: d.maxImages,
     maxInputImages: d.maxInputImages,
     maxResolution: d.maxResolution,
-    resolutionTiers: d.resolutionTiers, // 该模型支持的精确清晰度档集(火山 seedream:4.0=1K/2K/4K、4.5=2K/4K、5.0-lite=2K/3K/4K);无→前端按 maxResolution 回落
+    resolutionTiers: enabledTiers(d), // 在售清晰度档集(disabled 变体档=下架已剔除,D5);无档集模型→前端按 maxResolution 回落
     canSetSize: d.canSetSize !== false, // 前端据此显隐清晰度控件(false=随输入图,如 qwen-image-edit)
     supportsBbox: !!d.supportsBbox, // 前端据此显示/隐藏局部重绘画笔(仅万相2.7)
     // 该模型支持的比例集(前端比例选项)。语义三态(renderRatios 据此分支):

@@ -2,6 +2,14 @@
 
 ## 高优先级 / 战略验证
 
+### T-DATA-DURABILITY:Litestream 流式备份到 OSS + 恢复 runbook + 宕机告警(数据安全,重点)
+- **What:** 把现在的「每天 03:30 本地 cron 备份(scripts/backup.sh)」升级为 **Litestream 把 SQLite 秒级流式复制到 OSS**。配套三件:① Litestream 配好并**真的演练一次从 OSS 恢复到新机器**;② 写恢复 runbook(机器挂 → 拉新机 → 从 OSS 恢复 → 切流量,目标 RTO ~30 分钟);③ 加宕机告警(机器/服务一停就通知)。
+- **Why:** 当前是「单机 SQLite + 本地 cron 备份」,有一个不该接受的洞——**磁盘/整台 VM 丢了,服务停 + 最多丢 24h 数据,而且本地备份跟机器一起没**。对 B 端运营平台,丢的是积分流水/对公订单/发票/生成记录这些财务与合规数据。Litestream 把 RPO 从 24h 降到 ~几秒,且备份落在异地(OSS,不同故障域)。**这是一扇单向门:数据丢了找不回,所以值得早做。**
+- **Pros:** 数据安全做满,过 B 端运营及格线;不动架构(仍单机 SQLite);成本极低(一个 sidecar 进程 + OSS 桶)。媒体已在 OSS,这步补齐元数据的异地持续备份。
+- **Cons:** Litestream 只保证「数据能恢复」,不解决「服务零停机」——发版/崩溃仍有短时停机(那是高可用问题,属另一条线,等签 SLA 再说)。需配 Docker sidecar + 一次恢复演练。
+- **Context:** 来自 2026-06-30 /plan-ceo-review 数据层讨论。结论:**单机 SQLite + Litestream 流式 OSS 对当前到成长期完全可运营,且最合适**;真 HA(多机 + 托管 Postgres,见 T-HA-POSTGRES 思路)等业务信号(书面 SLA / 停机开始掉单)再上,不是现在。现有 scripts/backup.sh 的 WAL 安全热备做法正确,Litestream 是它的「连续版」升级,非推倒重来。
+- **Effort:** M(human)→ S(CC)。**Priority:** P1(重点,有空即做;先于任何架构迁移)。
+
 ### T-FIDELITY:验证预置/照片形象保真度是否足以打动那家电视台
 - **What:** 用 C-code 出的预置/照片样片给目标电视台看,确认保真度是否足以推进签约。
 - **Why:** 电视台对主持人分身保真度要求极高。高精训练(C4)已推迟到签约后,但客户可能要先看到高保真才签——先有鸡还是先有蛋的死锁。这是切片顺序第一性假设的验证点。
@@ -163,14 +171,6 @@
 - **Effort:** 每项 M(human)→ S(CC)。**Priority:** P3(数据量触发)。
 - **Depends on / blocked by:** 租户/job 量增长;趋势图需先抽 bucketSeries helper + credit_ledger(created_at) 索引。
 
-## AI 图片:分辨率分档计价(后期)
-
-Nano Banana 价格随分辨率变(3.1 Flash 1K=$0.067/2K=$0.101/4K=$0.151;Pro 1–2K=$0.134/4K=$0.24),
-当前 `model_pricing` 图片表「一模型一行」,用 2K 档单一成本(3.1 Flash ¥0.73、Pro ¥0.96)。
-后期分档方案:复用视频已有的 `model_pricing.variant` 机制 —— 每模型种 `gemini-*:1K/2K/4K` 多行,
-`lookupCost` 图片路径透传 resolution,`buildImageJob` 价格快照按所选档取。改动穿透 mergeDef/buildImageJob/价格快照/admin。
-决策记录:docs/superpowers/specs/2026-06-18-nano-banana-image-design.md。
-
 ## AI 图片:Nano Banana 尺寸预览像素化(后期)
 
 走 `ratios?: string[]` 轻量机制后,Gemini 的 setPill 尺寸预览显档名(如「16:9 · 2K」),
@@ -206,3 +206,17 @@ docs/superpowers/specs/2026-06-18-nano-banana-resolutions-design.md 的 Flash 14
 - **What:** 30 天内记住设备,老用户登录免再拖滑块(发短信仍验证)。
 - **Why:** 老用户体验。本轮用户选不做(每次滑块,简单一致)。
 - **Effort:** M(human)→ S(CC)。**Priority:** P3。
+
+### T-SEEDREAM-TIER-PRICING:豆包 Seedream 分辨率分档成本核实 + 变体行
+- **What:** 核实火山 Seedream 4.0/4.5/5.0-lite 各清晰度档真实成本(官方按 token 计,4K 耗 token 远多于 1K),差异显著则用 imagePriceTier 通用变体机制种入 `doubao-seedream-*:{档}` 行。
+- **Why:** Gemini 分档计价 review(2026-07-04)外部声音指出同病未治:机制已通用化,但 3 个豆包多档模型仍全档扁价(¥0.20–0.25 占位,image-models.ts 自认「火山按 token 计」「价格未录」),4K 按 1K 价卖,毛利漏洞同款。
+- **Context:** 分档机制、种子护栏(基础行改价则跳过)、disabled=下架语义均已随 Gemini 轮落地,本条只剩「核价 + 种行」。火山 token→每张成本需实测或查计费文档。
+- **Effort:** S/M(human)→ S(CC)。**Priority:** P2(有真实流量后毛利面暴露)。
+- **Depends on / blocked by:** Gemini 分辨率分档计价落地(imagePriceTier 机制)。
+
+### T-PRICING-DEAD-ROWS:清理「模板已亡」的遗留模型行(gemini-2.5-flash-image)
+- **What:** 启动幂等迁移:image_model_override 行的 shape_template 指向已删除代码模板时(mergeDef 返回 undefined,用户端永不可见),自动把该行及同 key 的 model_pricing 行标 disabled(或删除)。
+- **Why:** 本地库实查 gemini-2.5-flash-image 两表行均 enabled(定价 ¥0.28),admin 统一定价页挂着一条看似在售的幽灵行,运营排查制造困惑。纯数据卫生,不影响计费。
+- **Context:** Gemini 分档计价 review(2026-07-04)顺手发现。需幂等迁移而非手工 SQL(每个部署库都有)。
+- **Effort:** S(human)→ S(CC)。**Priority:** P3。
+- **Depends on / blocked by:** 无。

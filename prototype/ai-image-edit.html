@@ -614,7 +614,9 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     clearTimeout(estTimer);
     estTimer=setTimeout(async()=>{
       if(!ta.value.trim()){ document.getElementById('estGem').textContent='—'; return; }
-      try{ const r=await LJ.post('/jobs/estimate',{type:'ai_image',model,mode:'img2img',resolution:effRes(),count}); document.getElementById('estGem').textContent=r.cost; }catch(e){}
+      // ratio 与提交体同发(分档后 resolutions 表模型按比例推计价档,漏发会报价≠实扣);
+      // 报价失败(档下架/模型切换竞态)显 '—',不留上一模型的陈旧价。
+      try{ const r=await LJ.post('/jobs/estimate',{type:'ai_image',model,mode:'img2img',resolution:effRes(),ratio:effRatio(),count}); document.getElementById('estGem').textContent=r.cost; }catch(e){ document.getElementById('estGem').textContent='—'; }
     },350);
   }
   function refreshBtn(){
