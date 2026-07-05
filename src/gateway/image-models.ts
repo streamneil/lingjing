@@ -10,10 +10,11 @@
 //    worker 必须按 (shape, mode) 子分发,不能只按 shape。
 //
 //        模型选择数据流
-//   前端 fetch GET /image-models ──► 下拉(label/badge/modes)
+//   前端 fetch GET /image-models ──► 下拉(label/badge/modes;resolutionTiers=在售档,disabled 变体档已剔除 D5)
 //          │ 用户选 modelKey
 //          ▼
-//   buildImageJob: getModel(key ?? 默认) ─► 校验 mode/张数/分辨率 ─► clamp(n,maxImages)
+//   buildImageJob: getModel(key ?? 默认) ─► resolveImageRes(补默认档 D2 + 下架/档位校验)
+//          ─► clamp(n,maxImages) ─► imagePriceTier(model_pricing 变体行 "{key}:{档}" → 基础价)─► 快照
 //          │
 //          ▼
 //   worker: (registry[key].shape, mode)
@@ -23,7 +24,11 @@
 
 import { imageSize } from './baichuan.js';
 import { db, type ImageModelOverrideRow } from '../db/index.js';
-import { lookupCost, sellPrice } from '../credits/pricing.js';
+import { lookupCost, sellPrice, variantId } from '../credits/pricing.js';
+
+/** keyword 档集模型未传清晰度时的默认档(D2,2026-07):校验/生成/计费三层吃同一值。
+ *  resolveImageRes(jobs.ts)与 sizeParams 共用此常量 —— 改默认档只动这里。 */
+export const DEFAULT_KEYWORD_TIER = '2K';
 
 export type ImageShape = 'S' | 'A1' | 'A2' | 'A_EDIT'; // S=同步多模态 A1=异步文生图 A2=异步图生成(缓) A_EDIT=异步含图编辑(万相2.7)
 export type SizeKind = 'wh' | 'keyword' | 'aspect_res'; // size 参数形状(aspect_res 本轮缓)
@@ -142,8 +147,8 @@ export const IMAGE_MODELS: Record<string, ImageModelDef> = {
   // ── 火山引擎 豆包 Seedream(PR-2a;provider='volc-ark',走 ark.ts SyncImageGateway)──
   // shape='S':同步生成(走 generateImageSync/editImage,与百炼 S 形状同 worker 路径)。
   // sizeKind='keyword':size 传 '2K'/'4K' 档(ark 适配器透传)。文生图 + 多图融合(img2img)。
-  // ⚠ 价格未录(火山按 token 计)→ priceTier 占位、admin 录真实成本前不启用。
-  // 火山真实固定价(元/张):4.0=0.2→⌈×35⌉=7;4.5=0.25→9;5.0-lite=0.22→8(model_pricing 为准)。
+  // 价:doc 估算价已由 seedPlatformDefaults 种入 model_pricing 并启用(全档扁价;火山实际按 token 计,
+  // 各档真实成本核实 + 分档变体行见 TODOS T-SEEDREAM-TIER-PRICING)。此处 priceTier = 无行回落。
   // resolutionTiers:火山文档精确档集(各型号不同);ark 适配器按 (型号,档,比例) 查像素表发精确 size。
   'doubao-seedream-4.0': {
     key: 'doubao-seedream-4.0', label: '豆包 Seedream 4.0', modelId: 'doubao-seedream-4-0-250828', provider: 'volc-ark',
@@ -162,10 +167,13 @@ export const IMAGE_MODELS: Record<string, ImageModelDef> = {
   },
 
   // ── Google AI Studio Gemini(Nano Banana,文档收口:只用这 2 个模型)──
-  // shape='S':同步生成(走 generateImageSync/editImage)。sizeKind='keyword':resolution→imageSize(1K/2K/4K)。
+  // shape='S':同步生成(走 generateImageSync/editImage)。sizeKind='keyword':resolution→imageSize(512/1K/2K/4K)。
   // 文生图(text2img,0 图)+ 图生图/图片编辑/多图融合(img2img,1 主图 + 0..N 参考图,均同一 API 形状)。
-  // 真实价(美元×7.2 汇率,2K 档单一计价;后期分辨率分档见 TODOS):
-  //   3.1 Flash 2K $0.101→0.73元→⌈×35⌉=26;3 Pro 1–2K $0.134→0.96元→34。
+  // 分辨率分档计价(2026-07,eng-review D1-D9):官方价随清晰度变,实收价 = model_pricing 变体行
+  //   "{key}:{档}"(imagePriceTier 按所选档取,platform-defaults 种官方档价):
+  //   Flash 512/1K/2K/4K = ¥0.32/0.48/0.73/1.09(积分 12/17/26/39);Pro 1K/2K/4K = ¥0.96/0.96/1.73(34/34/61)。
+  //   此处 priceTier 常量 = 基础(2K)档回落价,真源在 model_pricing(mergeDef 无行才用它)。
+  //   '512' 档已真实 API 实测(2026-07-04,imageSize='512' HTTP 200,D7)。
   'gemini-3.1-flash-image': {
     key: 'gemini-3.1-flash-image', label: 'Nano Banana 2 (Gemini 3.1 Flash)', modelId: 'gemini-3.1-flash-image', provider: 'google-ai-studio',
     shape: 'S', sizeKind: 'keyword', modes: ['text2img', 'img2img'],
@@ -219,7 +227,13 @@ function mergeDef(key: string): ImageModelDef | undefined {
     if (res) def.resolutions = res;
     return def;
   }
-  return IMAGE_MODELS[key];
+  // 无 override 行(model_pricing-only 模型,如 Gemini):售价同样以 model_pricing 为真源。
+  // 2026-07 修脱钩(eng-review D8):此前直接返回代码模板,priceTier=硬编码常量,
+  // admin 改价/改全局倍率对这类模型全部无效;现与 ov 分支同一算价路径(售价只在此处算)。
+  const tmpl = IMAGE_MODELS[key];
+  if (!tmpl) return undefined;
+  const mp = lookupCost(key);
+  return mp ? { ...tmpl, priceTier: sellPrice(mp.realCostYuan) } : tmpl;
 }
 
 // 解析 resolutions JSON(热路径:worker/credits/下拉都过 mergeDef → 坏 JSON 绝不抛,P2-c)。
@@ -293,10 +307,30 @@ export function listEnabledModels(): ImageModelDef[] {
 
 /** 分辨率档位排序,用于 maxResolution 上限校验。 */
 const RES_ORDER: Record<string, number> = { '1K': 1, '2K': 2, '3K': 3, '4K': 4 };
+
+/** 该模型当前在售的清晰度档集(D5,2026-07 分档计价)。
+ *  变体行(model_pricing id="{key}:{档}")被 admin 禁用 = 该档下架 —— 从档集剔除,
+ *  绝不回落基础价(否则「禁用 Pro:4K」变成按 2K 价卖 4K 图的亏本促销)。
+ *  无变体行的档视为在售(存量模型/豆包不受影响);无 resolutionTiers 的模型返回 undefined。 */
+export function enabledTiers(def: ImageModelDef): string[] | undefined {
+  if (!def.resolutionTiers?.length) return undefined;
+  return def.resolutionTiers.filter((t) => !tierDelisted(def.key, t));
+}
+
+/** 该(模型,档)是否被下架(变体行存在且 disabled,D5)。无变体行 = 在售(存量扁价模型不受影响)。
+ *  resolveImageRes 的 resolutions 表分支也必须查它 —— 像素推档绕过 enabledTiers 会复活
+ *  「禁用 4K 按 2K 价卖」的亏本促销(red-team 2026-07-05)。 */
+export function tierDelisted(key: string, tier: string): boolean {
+  const mp = lookupCost(variantId(key, tier));
+  return !!mp && !mp.enabled;
+}
+
 /** 该模型是否支持所选分辨率。
- *  有 resolutionTiers(火山 seedream)→ 精确档集成员校验(3K/跳档可表达);否则旧「≤maxResolution」逻辑。 */
+ *  有 resolutionTiers(火山 seedream / Gemini)→ 在售档集成员校验(disabled 变体档已剔除,D5);
+ *  否则旧「≤maxResolution」逻辑。全档下架 → 一律拒绝(不落回 maxResolution 旧逻辑)。 */
 export function resolutionAllowed(def: ImageModelDef, resolution?: string): boolean {
-  if (def.resolutionTiers?.length) return def.resolutionTiers.includes(resolution ?? def.resolutionTiers[0]!);
+  const tiers = enabledTiers(def);
+  if (tiers) return tiers.length > 0 && tiers.includes(resolution ?? tiers[0]!);
   const want = RES_ORDER[resolution ?? '1K'] ?? 1;
   return want <= (RES_ORDER[def.maxResolution] ?? 2);
 }
@@ -324,7 +358,7 @@ function whSize(def: ImageModelDef, ratio?: string, resolution?: string, snap?: 
 /**
  * 按 sizeKind 构建百炼 parameters 的 size 相关字段(P1-size)。
  *  - wh:      { size: "W*H" }(快照 → resolutions 表 → imageSize 回落)
- *  - keyword: { size: "1K"|"2K"|"4K" }(wan2.7 等;现无活模型)
+ *  - keyword: { size: "512"|"1K"|"2K"|"3K"|"4K" }(万相2.7 / 豆包 seedream;Gemini 走自家网关不经此)
  *  - aspect_res(本轮缓):{ aspect_ratio, resolution }(可灵)
  */
 export function sizeParams(
@@ -340,7 +374,7 @@ export function sizeParams(
     case 'wh':
       return { size: whSize(def, ratio, resolution, snap) };
     case 'keyword':
-      return { size: (resolution ?? '2K').toUpperCase() };
+      return { size: (resolution ?? DEFAULT_KEYWORD_TIER).toUpperCase() };
     case 'aspect_res':
       // 缓:可灵接入时落地(aspect_ratio + resolution 小写档)。
       return { aspect_ratio: ratio ?? '1:1', resolution: (resolution ?? '1k').toLowerCase() };

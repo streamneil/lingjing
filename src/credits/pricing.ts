@@ -59,7 +59,13 @@ export interface PricingLookup {
   costSource: string;
   enabled: boolean;
 }
-/** 读某模型档的统一定价行。id = "{model_key}" 或 "{model_key}:{variant}"。无行返回 undefined。
+/** 变体行 id 拼装唯一点:"{model_key}:{variant}"。图片分档(imagePriceTier/enabledTiers/种子/admin 建档)
+ *  全经此拼,改分隔符/大小写只动这里(2026-07 分档计价,DRY)。 */
+export function variantId(modelKey: string, variant: string): string {
+  return `${modelKey}:${variant}`;
+}
+
+/** 读某模型档的统一定价行。id = "{model_key}" 或 variantId(model_key, variant)。无行返回 undefined。
  *  惰性 prepare(绝不在模块顶 prepare,否则早于建表 no-such-table)。 */
 export function lookupCost(id: string): PricingLookup | undefined {
   _mpStmt ??= db.prepare('SELECT id, real_cost_yuan, cost_source, enabled FROM model_pricing WHERE id = ?');

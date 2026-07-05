@@ -13,7 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { db, type LedgerKind, type LedgerRow } from '../db/index.js';
 import { getImageModel } from '../gateway/image-models.js';
 import { getVideoModel, klingModeToResolution } from '../gateway/video-models.js';
-import { sellPrice, getConfig, markupX35, lookupCost } from './pricing.js';
+import { sellPrice, getConfig, markupX35, lookupCost, variantId } from './pricing.js';
 
 const now = () => Date.now();
 
@@ -41,12 +41,27 @@ export function estimateCost(scriptLength: number, resolution = '720P', speed = 
   return Math.max(MIN_COST, Math.ceil(seconds * perSecTier));
 }
 
-// ── AI 图片计价:图数 × 单价(图片费用与分辨率无关) ──
-// 价格对齐(2026-06):百炼官方明示「图像费用与输出分辨率、宽高比无关」(图像生成计费规则)。
-// ∴ IMG_RES_FACTOR 全取 1 —— 不再按 1K/2K/4K 上浮,否则 2K 图片凭空多收 1.5 倍。
-// price_tier 即每张售价积分(= ceil(真实单价元 × 35)),由 admin 真实成本表单算出落库。
+// ── AI 图片计价:图数 × 单价(分辨率价差已编码进 priceTier,系数恒 1) ──
+// 分档计价(2026-07,eng-review D1/D8):Gemini 等模型官方价随清晰度变
+// (Flash 512/1K/2K/4K=$0.045/0.067/0.101/0.151;Pro 1K-2K/4K=$0.134/0.24)。
+// 与视频侧同构:priceTier 已是「该(模型,清晰度档)组合的每张售价积分」,由 imagePriceTier
+// 按 model_pricing 变体行(id="{key}:{档}")选好,∴ IMG_RES_FACTOR 全取 1(不再二次上浮)。
+// 百炼系模型官方「费用与分辨率无关」→ 无变体行,自然回落基础价,行为不变。
 const PRICE_PER_IMAGE = 4; // 每张图 4 积分基价(无 model 时回落默认 ≈ z-image 关改写档)
 const IMG_RES_FACTOR: Record<string, number> = { '1K': 1, '2K': 1, '4K': 1 };
+
+/** 取(图片模型,清晰度档)每张售价积分(2026-07 分档计价,与 videoPriceTier 同构)。
+ *  两级链:① model_pricing 变体行 "{key}:{档}"(enabled)→ sellPrice(接全局倍率);
+ *         ② def.priceTier —— mergeDef 已保证 = 基础行售价(D8 修脱钩),无行才是代码常量。
+ *  resolution 为空 → 直接 ②(绝不拼 "key:undefined" 查库);disabled 变体档在
+ *  resolutionAllowed 层已拒(D5 下架语义),此处 enabled 判断只是双保险(老 job 回落时命中)。 */
+export function imagePriceTier(def: Pick<ReturnType<typeof getImageModel>, 'key' | 'priceTier'>, resolution?: string): number {
+  if (resolution) {
+    const mp = lookupCost(variantId(def.key, resolution));
+    if (mp && mp.enabled) return sellPrice(mp.realCostYuan);
+  }
+  return def.priceTier;
+}
 
 /** 把请求图数 clamp 到 [1, maxImages](默认 4)。model-aware(外部声音 P1):
  *  z-image 固定1、qwen-2.0 6;选超额张数会预扣多返少 → reserve≠settle 超扣。
@@ -204,8 +219,8 @@ export function costFor(toolType: string, input: Record<string, unknown>): numbe
       const resolution = typeof input.resolution === 'string' ? input.resolution : undefined;
       const mode = input.mode === 'img2img' ? 'img2img' : 'text2img';
       const def = getImageModel(typeof input.model === 'string' ? input.model : undefined, mode);
-      // P3:优先读提交时快照(admin 改价 mid-flight 不破 reserve==settle);无快照(老 job)回落实时。
-      const priceTier = typeof input.priceTierSnapshot === 'number' ? input.priceTierSnapshot : def.priceTier;
+      // P3:优先读提交时快照(admin 改价 mid-flight 不破 reserve==settle);无快照(老 job)按档实时回落。
+      const priceTier = typeof input.priceTierSnapshot === 'number' ? input.priceTierSnapshot : imagePriceTier(def, resolution);
       const maxImages = typeof input.maxImagesSnapshot === 'number' ? input.maxImagesSnapshot : def.maxImages;
       if (mode === 'img2img') {
         // 编辑按 n 张计价:count clamp 到 maxImages(万相2.7 异步 + 千问2.0 Pro 同步都支持多出;
