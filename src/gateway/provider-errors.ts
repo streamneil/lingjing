@@ -65,9 +65,10 @@ const RULES: ErrorRule[] = [
 
   // —— 跨厂商通用码 ——
   { pattern: /AuthenticationError|invalid api|api key|InvalidApiKey|PERMISSION_DENIED|AccessDenied|Unauthorized|AuthError/i, message: '生成通道鉴权异常(密钥失效或权限不足),请联系平台管理员。' },
-  { pattern: /RateLimit|TooManyRequests|Throttling|ServerOverloaded|RequestBurstTooFast|ModelServingError|ServiceUnavailable|UNAVAILABLE|429/i, message: '生成服务繁忙,请稍后重试。' },
+  // 数字码用 \b 锚定 + 要求 HTTP 前缀:避免把内部中文错误里的裸数字(如可配的超时值「超时(>500000ms)」)误判为 HTTP 状态。
+  { pattern: /RateLimit|TooManyRequests|Throttling|ServerOverloaded|RequestBurstTooFast|ModelServingError|ServiceUnavailable|UNAVAILABLE|HTTP\s*429\b/i, message: '生成服务繁忙,请稍后重试。' },
   { pattern: /InvalidParameter|MissingParameter|INVALID_ARGUMENT|BadRequest|不合法|not valid/i, message: '生成请求参数有误,请调整输入或稍后重试;若持续出现请联系客服。' },
-  { pattern: /InternalServiceError|InternalServerError|InternalError|INTERNAL|ModelServiceFailed|inference error|500/i, message: '生成服务暂时异常,请稍后重试。' },
+  { pattern: /InternalServiceError|InternalServerError|InternalError|INTERNAL|ModelServiceFailed|inference error|HTTP\s*500\b/i, message: '生成服务暂时异常,请稍后重试。' },
 ];
 
 // HTTP 状态兜底(未命中任何码时,按状态给一句得体的中文)。
@@ -109,9 +110,9 @@ export function translateProviderError(raw: string | null | undefined): { readab
   // 2) 原文已是干净中文 → 原样透出(本平台自抛的中文错误)
   if (isCleanChinese(text)) return { readable: text, detail };
 
-  // 3) HTTP 状态兜底
-  const httpMatch = text.match(/HTTP\s*(\d{3})|\b(\d{3})\b/);
-  const status = httpMatch?.[1] ?? httpMatch?.[2];
+  // 3) HTTP 状态兜底:只认「HTTP <三位码>」,不认裸三位数(否则厂商 JSON 里任意 3 位数字会被当状态码误判)。
+  const httpMatch = text.match(/HTTP\s*(\d{3})/i);
+  const status = httpMatch?.[1];
   if (status) {
     const hit = HTTP_FALLBACK.find((h) => h.code === status);
     if (hit) return { readable: hit.message, detail };

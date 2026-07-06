@@ -78,6 +78,19 @@ describe('translateProviderError — 厂商错误码 → 中文可读', () => {
     expect(translateProviderError('积分余额不足').readable).toBe('积分余额不足');
   });
 
+  // Finding 1(pre-landing review):内部中文错误里的裸数字(可配超时值)不得被当成 HTTP 状态码误判
+  it('中文错误中的裸数字(超时毫秒)不被误判为 HTTP 状态', () => {
+    for (const ms of ['600000', '500000', '429000']) {
+      const raw = `生成超时(>${ms}ms),已放弃`;
+      expect(translateProviderError(raw).readable).toBe(raw); // 原样透出,不翻成「繁忙/异常」
+    }
+  });
+
+  it('真实 Gemini HTTP 429(裸 code:429)仍翻译为繁忙', () => {
+    const raw = 'Gemini 生成失败 HTTP 429: {"code":429,"message":"You exceeded your current quota"}';
+    expect(translateProviderError(raw).readable).toContain('繁忙');
+  });
+
   it('空/空白 → 兜底中文', () => {
     expect(translateProviderError('').readable).toContain('失败');
     expect(translateProviderError(null).readable).toContain('失败');
