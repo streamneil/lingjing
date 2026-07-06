@@ -47,6 +47,25 @@ describe('translateProviderError — 厂商错误码 → 中文可读', () => {
     expect(readable).toContain('安全策略');
   });
 
+  // Regression: ISSUE-001 — 百炼音频格式错误(真库 5 例)曾落到「生成失败,请稍后重试」兜底,误导用户重试
+  // Found by /qa on 2026-07-06
+  it('音频/文件格式不支持 → 可操作的换格式提示(非通用兜底)', () => {
+    for (const raw of [
+      'File type is not supported. Allowed types are: .wav, .mp3.',
+      '百炼提交失败 HTTP 400: {"code":"BadRequest.UnsupportedFileFormat"}',
+      'unsupported audio format:opus',
+    ]) {
+      const { readable } = translateProviderError(raw);
+      expect(readable).toContain('格式');
+      expect(readable).not.toContain('稍后重试'); // 换格式才有用,不能叫用户重试
+    }
+  });
+
+  it('音频过短/静音 → 可操作提示', () => {
+    expect(translateProviderError('valid audio too short!').readable).toContain('音频');
+    expect(translateProviderError('{"code":"Audio.AudioSilentError"}').readable).toContain('音频');
+  });
+
   it('HTTP 状态兜底(未知码)→ 按状态给中文', () => {
     const { readable } = translateProviderError('某厂商失败 HTTP 500: {"foo":"bar baz qux"}');
     expect(readable).toContain('稍后重试');

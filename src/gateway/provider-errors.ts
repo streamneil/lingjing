@@ -53,6 +53,8 @@ const RULES: ErrorRule[] = [
   { pattern: /InvalidFile\.(FacePose|FullFace|FrontBody|BodyPose|BodyProportion|FullBody)/, message: '输入图片中的人物姿态/构图不符合要求(需正面、清晰、完整),请更换后重试。' },
   { pattern: /InvalidFile\.Resolution|InvalidImageResolution|image resolution is invalid|size of image is too/, message: '输入图片分辨率不符合要求,请更换尺寸合适的图片后重试。' },
   { pattern: /InvalidFile\.(Size|ImageSize|Duration|AspectRatio|Format|FPS)|file size must|file duration must|file ratio/, message: '输入文件的大小/时长/比例/格式不符合要求,请更换后重试。' },
+  { pattern: /File type is not supported|unsupported audio format|audio format is illegal|BadRequest\.UnsupportedFileFormat|Input files? format (is )?not supported|file format is not supported/i, message: '上传的音频/文件格式不支持,请更换为支持的格式(如 .wav / .mp3)后重试。' },
+  { pattern: /audio (too short|duration|length)|AudioShortError|AudioLengthError|silent audio|AudioSilentError/i, message: '上传的音频不符合要求(过短 / 静音 / 时长超限),请更换后重试。' },
   { pattern: /Arrearage|AccountOverdue|account has an overdue|good standing|ServiceOverdue|BillOverdue/, message: '平台生成账户余额不足或已欠费,请联系平台管理员处理。' },
 
   // —— Google Gemini ——
