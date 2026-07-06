@@ -8,6 +8,7 @@ import Database from 'better-sqlite3';
 import { randomBytes } from 'node:crypto';
 import { config } from '../config.js';
 import { encryptKey, masterKey, lastFour } from '../gateway/key-crypto.js'; // 叶子(纯 node:crypto,无 db/config 依赖,防环)
+import { translateProviderError } from '../gateway/provider-errors.js'; // 叶子(纯函数,无 db 依赖,防环)
 
 export const db = new Database(config.db.file);
 db.pragma('journal_mode = WAL'); // 并发读 + 单写,适合 worker 轮询拉任务
@@ -301,6 +302,33 @@ addColumnIfMissing('job', 'output_kind', `output_kind TEXT NOT NULL DEFAULT 'vid
 // 用量计费归属(谁消费):记录创建该任务的用户 id(可空)。老 job 为 NULL → 计费明细显「—」。
 // credit_ledger 不冗余存用户/工具,经 job_id JOIN job(取 created_by + type)还原"谁 + 什么工具"。
 addColumnIfMissing('job', 'created_by', `created_by TEXT`);
+
+// 失败可读化(用户反馈:前端不能出现英文 JSON;admin 需看到原始日志排障)。
+//   error 列语义收敛为「用户可读中文」;新增 error_detail 存「原始技术日志」(厂商 code/RequestId)。
+//   markFailed 现在是单一翻译点。首次加列时回填历史失败行:原始英文错误存入 error_detail,
+//   error 就地翻译为中文可读(译不出的原样保留,detail 永远是真相)。
+{
+  const jobCols = (db.prepare(`PRAGMA table_info(job)`).all() as { name: string }[]).map((c) => c.name);
+  const needBackfill = !jobCols.includes('error_detail');
+  addColumnIfMissing('job', 'error_detail', `error_detail TEXT`);
+  if (needBackfill) {
+    try {
+      const failed = db
+        .prepare(`SELECT id, error FROM job WHERE status='failed' AND error IS NOT NULL AND error != ''`)
+        .all() as { id: string; error: string }[];
+      const upd = db.prepare(`UPDATE job SET error=?, error_detail=? WHERE id=?`);
+      const tx = db.transaction((rows: { id: string; error: string }[]) => {
+        for (const r of rows) {
+          const { readable, detail } = translateProviderError(r.error);
+          upd.run(readable, detail, r.id);
+        }
+      });
+      tx(failed);
+    } catch {
+      /* 回填是尽力而为:失败不阻塞启动(新失败行仍会被 markFailed 正确翻译) */
+    }
+  }
+}
 
 // ── 账号级数据隔离(机构共享 → 账号私有)──
 // 形象/音色补 created_by(job 已有上面那列)。NULL = 部署前的老资产/无主,仅 admin 可见。
@@ -916,7 +944,8 @@ export interface JobRow {
   output_url: string | null; // 存储 key;多工具后为 JSON key 数组(旧视频行是裸 key 字符串)
   output_kind: string; // video | image | audio(右画廊渲染依据;旧行默认 video)
   ai_label: string | null;
-  error: string | null;
+  error: string | null; // 用户可读中文失败原因(markFailed 翻译;前端 + admin 概要展示)
+  error_detail: string | null; // 原始技术日志(厂商 code/RequestId;仅 admin 详情排障)
   attempts: number;
   created_at: number;
   updated_at: number;
