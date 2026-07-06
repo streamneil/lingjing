@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { db, scopeByActor, type JobRow, type JobStatus } from '../db/index.js';
 import { config } from '../config.js';
 import type { VideoGenInput } from '../gateway/types.js';
+import { translateProviderError } from '../gateway/provider-errors.js';
 
 const now = () => Date.now();
 
@@ -141,10 +142,16 @@ export function markDone(
   ).run(outputUrl, outputKind, aiLabel, now(), id);
 }
 
-/** 标记失败。关键:只动这一个 job,不触碰其它 → 失败隔离的基础。 */
+/** 标记失败。关键:只动这一个 job,不触碰其它 → 失败隔离的基础。
+ *  单一翻译点:所有失败(厂商原始错误 / 本平台中文错误)都经此落库,
+ *    error       列 = 用户可读中文(前端 + admin 概要展示,绝不含英文 JSON);
+ *    error_detail 列 = 原始技术日志(admin 消耗流水「详情」排障,含 code / RequestId)。
+ *  translateProviderError 幂等:已是干净中文的原样透出,detail 恒为原始输入。 */
 export function markFailed(id: string, error: string): void {
-  db.prepare(`UPDATE job SET status='failed', error=?, updated_at=? WHERE id=?`).run(
-    error,
+  const { readable, detail } = translateProviderError(error);
+  db.prepare(`UPDATE job SET status='failed', error=?, error_detail=?, updated_at=? WHERE id=?`).run(
+    readable,
+    detail,
     now(),
     id,
   );

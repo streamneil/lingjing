@@ -136,6 +136,13 @@
   .con-mod{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;background:var(--blue-bg);color:var(--blue)}
   .con-st{font-size:11px;font-weight:600} .con-st.done{color:var(--green)} .con-st.failed{color:var(--red)} .con-st.running{color:var(--blue)} .con-st.queued{color:var(--t3)}
   .con-cr{font-family:var(--f-mono);font-weight:700}
+  /* 失败原因:概要(可读中文)+ 详情(原始日志)展开 */
+  .con-err{margin-top:4px;font-size:11px;color:var(--red);line-height:1.5;max-width:340px}
+  .con-err-toggle{margin-top:3px;font-size:11px;color:var(--blue);cursor:pointer;user-select:none}
+  .con-err-toggle:hover{text-decoration:underline}
+  .con-detail>td{background:var(--field);padding:0 14px 12px}
+  .con-detail pre{margin:0;white-space:pre-wrap;word-break:break-all;font-family:var(--f-mono);font-size:11px;color:var(--t2);line-height:1.6;max-height:220px;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+  .con-detail .con-detail-lbl{font-size:11px;color:var(--t3);margin:10px 0 4px;font-weight:600}
   /* ── 运营数据 ── */
   #opsStats{grid-template-columns:repeat(4,1fr)}
   .ops-strip{display:flex;gap:24px;flex-wrap:wrap;background:var(--card-hi);border:1px solid var(--line-hi);border-radius:14px;padding:16px 20px;margin-bottom:16px}
@@ -394,7 +401,7 @@
     <!-- ── 积分消耗流水(对账)── -->
     <section class="sec" data-sec="consumption" id="sec-consumption">
     <div class="ph">
-      <div><h1>积分消耗流水</h1><p>按时间倒序列出每个任务的积分消耗,便于对账:某模型在某任务消耗多少积分。消耗口径 = 预扣净退款(失败已退不计)。</p></div>
+      <div><h1>积分消耗流水</h1><p>按时间倒序列出每个任务的积分消耗,便于对账:某模型在某任务消耗多少积分。消耗口径 = 预扣净退款(失败已退不计)。失败任务显示用户可读原因,可展开查看厂商原始日志(错误码 / RequestId)排障。</p></div>
       <select id="conTenant" class="con-filter"><option value="">全部租户</option></select>
     </div>
     <div class="tbl">
@@ -1730,16 +1737,39 @@
       const qs=`?page=${conPage}&pageSize=20`+(conTenantId?`&tenant=${encodeURIComponent(conTenantId)}`:'');
       const { rows, total, page, pageSize }=await PA('GET','/api/consumption'+qs);
       if(!rows.length){ tb.innerHTML='<tr><td colspan="8" class="empty">暂无消耗记录</td></tr>'; }
-      else tb.innerHTML=rows.map(r=>`<tr>
-        <td style="font-family:var(--f-mono);font-size:12px;color:var(--t3)">${fmtTime(r.submitAt)}</td>
-        <td>${esc(r.tenantName)}</td>
-        <td><span class="con-mod">${esc(CON_MOD[r.module]||r.module)}</span></td>
-        <td style="font-size:12px">${r.model?esc(r.model):'<span style="color:var(--t4)">系统音色</span>'}</td>
-        <td style="text-align:right;font-family:var(--f-mono);font-size:12px">${r.quantity!=null?fmtN(r.quantity)+' '+esc(r.unit||''):'<span style="color:var(--t4)">—</span>'}</td>
-        <td style="text-align:right" class="con-cr">${fmtN(r.credits)}</td>
-        <td><span class="con-st ${esc(r.status)}">${esc(CON_ST[r.status]||r.status)}</span></td>
-        <td style="text-align:right;font-family:var(--f-mono);font-size:12px;color:var(--t3)">${r.durationMs!=null?fmtDur(r.durationMs):'—'}</td>
-      </tr>`).join('');
+      else tb.innerHTML=rows.map((r,i)=>{
+        // 失败行:状态格追加「可读中文原因」;有原始日志则给「详情」展开(单独一行显原始技术日志)。
+        const failed=r.status==='failed';
+        const hasDetail=failed && r.errorDetail && r.errorDetail!==r.error;
+        const stCell=`<span class="con-st ${esc(r.status)}">${esc(CON_ST[r.status]||r.status)}</span>`
+          +(failed && r.error?`<div class="con-err">${esc(r.error)}</div>`:'')
+          +(hasDetail?`<div class="con-err-toggle" data-con-detail="${i}">查看原始日志 ▾</div>`:'');
+        const mainTr=`<tr>
+          <td style="font-family:var(--f-mono);font-size:12px;color:var(--t3);vertical-align:top">${fmtTime(r.submitAt)}</td>
+          <td style="vertical-align:top">${esc(r.tenantName)}</td>
+          <td style="vertical-align:top"><span class="con-mod">${esc(CON_MOD[r.module]||r.module)}</span></td>
+          <td style="font-size:12px;vertical-align:top">${r.model?esc(r.model):'<span style="color:var(--t4)">系统音色</span>'}</td>
+          <td style="text-align:right;font-family:var(--f-mono);font-size:12px;vertical-align:top">${r.quantity!=null?fmtN(r.quantity)+' '+esc(r.unit||''):'<span style="color:var(--t4)">—</span>'}</td>
+          <td style="text-align:right;vertical-align:top" class="con-cr">${fmtN(r.credits)}</td>
+          <td style="vertical-align:top">${stCell}</td>
+          <td style="text-align:right;font-family:var(--f-mono);font-size:12px;color:var(--t3);vertical-align:top">${r.durationMs!=null?fmtDur(r.durationMs):'—'}</td>
+        </tr>`;
+        const detailTr=hasDetail?`<tr class="con-detail" id="conDetail-${i}" hidden><td colspan="8">
+          <div class="con-detail-lbl">用户可读日志</div><pre>${esc(r.error||'—')}</pre>
+          <div class="con-detail-lbl">原始技术日志(厂商返回,含错误码 / RequestId)</div><pre>${esc(r.errorDetail)}</pre>
+        </td></tr>`:'';
+        return mainTr+detailTr;
+      }).join('');
+      // 展开/收起原始日志(事件委托,免逐行绑定)
+      tb.querySelectorAll('[data-con-detail]').forEach(el=>{
+        el.onclick=()=>{
+          const row=document.getElementById('conDetail-'+el.getAttribute('data-con-detail'));
+          if(!row)return;
+          const open=row.hasAttribute('hidden');
+          if(open){ row.removeAttribute('hidden'); el.textContent='收起原始日志 ▴'; }
+          else{ row.setAttribute('hidden',''); el.textContent='查看原始日志 ▾'; }
+        };
+      });
       // 分页
       const pages=Math.max(1,Math.ceil(total/pageSize));
       document.getElementById('conPager').innerHTML=

@@ -398,6 +398,8 @@ adminRouter.get('/api/consumption', requirePlatformAdmin, (req: Request, res: Re
               j.type AS module,
               json_extract(j.input_json, '$.model') AS model,
               j.status,
+              j.error AS error,            -- 用户可读中文失败原因(概要)
+              j.error_detail AS errorDetail, -- 原始技术日志(admin 详情排障:厂商 code/RequestId)
               j.created_at AS submitAt,
               (CASE WHEN j.started_at IS NOT NULL AND j.status='done'
                     THEN j.updated_at - j.started_at ELSE NULL END) AS durationMs,
