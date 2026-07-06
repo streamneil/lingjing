@@ -2,6 +2,16 @@
 
 灵镜平台的用户可见变更记录。版本号为四段式 `MAJOR.MINOR.PATCH.MICRO`(与 `VERSION` 文件一致)。
 
+## [0.3.0.0] - 2026-07-06
+
+### Added
+- 失败任务错误可读化:厂商原始错误(火山方舟 / 阿里百炼 / Google Gemini)自动翻译为用户可读中文,前端不再出现类似 `HTTP 400: {"code":"InputImageSensitiveContentDetected.PrivacyInformation",...}` 的英文 JSON —— 例如「输入的图片/视频可能包含真人肖像,请更换为非真人素材后重试」
+- 管理后台「消耗流水」失败行显示用户可读原因,并可展开查看厂商原始技术日志(含错误码 / RequestId),便于排障对账
+
+### Changed
+- 任务失败原因(`job.error`)口径收敛为「用户可读中文」;原始技术日志改存新增的 `error_detail` 列(仅平台管理员的消耗流水可见,租户/用户接口不暴露)
+- 首次升级自动回填历史失败任务:原始错误存入 `error_detail`,`error` 列就地翻译为中文
+
 ## [0.2.0.0] - 2026-07-05
 
 ### Added
