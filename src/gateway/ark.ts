@@ -22,6 +22,7 @@ import type {
   ImageGenInput,
   ImageJobResult,
   SyncImageGateway,
+  SyncImageResult,
   ImageEditInput,
   VideoGenT2VInput,
 } from './types.js';
@@ -214,10 +215,11 @@ export class ArkGateway implements CapabilityGateway, SyncImageGateway {
     return urls;
   }
 
-  async generateImageSync(input: ImageGenInput, signal: AbortSignal): Promise<string[]> {
+  async generateImageSync(input: ImageGenInput, signal: AbortSignal): Promise<SyncImageResult> {
     const def = getImageModel(input.model, 'text2img');
     // 档(resolution)+ 比例(ratio)→ 火山精确像素 size(seedreamSize 查表)。
-    return this.generate(def.modelId, input.prompt, [], { tier: input.resolution, ratio: input.ratio, count: input.count }, signal);
+    const urls = await this.generate(def.modelId, input.prompt, [], { tier: input.resolution, ratio: input.ratio, count: input.count }, signal);
+    return { urls }; // 火山不返 token usage(非 token 计价)
   }
 
   async editImage(input: ImageEditInput, signal: AbortSignal): Promise<string[]> {

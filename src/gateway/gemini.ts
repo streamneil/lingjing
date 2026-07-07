@@ -15,7 +15,7 @@ import { fetch as undiciFetch, ProxyAgent, type Dispatcher } from 'undici';
 import { getProviderKey, getProviderBaseUrl } from './provider-keys.js';
 import { storage } from '../storage/index.js';
 import { getMediaPublisher } from './media-publisher.js';
-import type { SyncImageGateway, ImageGenInput, ImageEditInput } from './types.js';
+import type { SyncImageGateway, SyncImageResult, ImageGenInput, ImageEditInput } from './types.js';
 
 const GEMINI_PROVIDER = 'google-ai-studio';
 const GEMINI_FALLBACK_BASE = 'https://generativelanguage.googleapis.com/v1beta'; // v1beta:image-gen config 字段(实测 v1 不认)
@@ -133,9 +133,10 @@ export class GeminiGateway implements SyncImageGateway {
     return urls;
   }
 
-  async generateImageSync(input: ImageGenInput, signal: AbortSignal): Promise<string[]> {
+  async generateImageSync(input: ImageGenInput, signal: AbortSignal): Promise<SyncImageResult> {
     const def = getImageModel(input.model, 'text2img');
-    return this.generate(def.modelId, input.prompt, [], { aspectRatio: input.ratio, imageSize: input.resolution }, signal);
+    const urls = await this.generate(def.modelId, input.prompt, [], { aspectRatio: input.ratio, imageSize: input.resolution }, signal);
+    return { urls }; // Gemini 不返 token usage(非 token 计价)
   }
 
   async editImage(input: ImageEditInput, signal: AbortSignal): Promise<string[]> {

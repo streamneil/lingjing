@@ -108,5 +108,12 @@ export function seedPlatformDefaults(): { image: number; video: number; pricing:
     }
   }
 
+  // 6. OpenAI gpt-image-2(token 计价,Design B):单行 model_pricing。unit='token',
+  //    real_cost_yuan = 每 output token 成本元 = $30/1M × 7.2 ≈ 0.000216(OpenAI 文档 output image token 价)。
+  //    enabled=0(eng-review #1:admin 录完 key 再手动启用,避免没 key 的死模型窗口)。
+  //    cost_source='doc'($30/1M 是官方文档价,非估算 → assertProfitable 放行)。
+  //    不进 DEFAULT_IMAGE_MODEL_SEED / image_model_override(那批是 per-image 价 + enabled=1;此为 token 价 + 默认停用,单独种)。
+  if (insMp.run('gpt-image-2', 'gpt-image-2', 'image', 'token', null, 0.000216, 0, 0, now).changes) pricing++;
+
   return { image, video, pricing };
 }

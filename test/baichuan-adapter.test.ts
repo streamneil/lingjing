@@ -102,7 +102,7 @@ describe('同步文生图 generateImageSync(S+text2img,eng 外部声音 P1-a/P3-
         ),
       );
     });
-    const urls = await gw.generateImageSync(
+    const { urls } = await gw.generateImageSync(
       { model: 'qwen-image-2.0-pro', prompt: '一只猫', ratio: '1:1', resolution: '2K' },
       new AbortController().signal,
     );

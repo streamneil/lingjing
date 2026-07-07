@@ -11,9 +11,10 @@
 
 import { randomUUID } from 'node:crypto';
 import { db, type LedgerKind, type LedgerRow } from '../db/index.js';
-import { getImageModel } from '../gateway/image-models.js';
+import { getImageModel, imagePixelWH } from '../gateway/image-models.js';
 import { getVideoModel, klingModeToResolution } from '../gateway/video-models.js';
 import { sellPrice, getConfig, markupX35, lookupCost, variantId } from './pricing.js';
+import type { ImageUsage } from '../gateway/types.js';
 
 const now = () => Date.now();
 
@@ -77,6 +78,39 @@ export function estimateImageCost(count: number, resolution = '1K', priceTier = 
   const n = clampImageCount(count, maxImages);
   const factor = IMG_RES_FACTOR[resolution] ?? 1;
   return Math.max(MIN_COST, Math.ceil(n * priceTier * factor));
+}
+
+// ── token 计价模型(gpt-image-2,Design B 真实用量结算)──
+// gpt-image-2 按 output image token 计费($30/1M);官方只在 1K 标准尺寸有确价,2K/4K/任意分辨率无公布单价,
+// 只能按响应 usage.output_tokens 实结。故 reserve 阶段用「像素×画质」上界估算(宁高勿低,可退),
+// settle 阶段用 worker 回写的真实 usage(封顶 reserved,只退不补)。
+//
+// 每档画质 output token / 百万像素(MP)上界系数:
+//   锚 = 官方 1024²(≈1.05MP)output token ≈ low 200 / medium 1767 / high 7033(每张美元价 ÷ $30×1M)。
+//   取 ~1.15× 安全上界:low 250 / medium 2050 / high 8100 tok/MP。首日按真实 usage 收敛。
+const IMG_TOKEN_PER_MP: Record<string, number> = { low: 250, medium: 2050, high: 8100 };
+
+/** gpt-image-2 reserve 估算:按(画质, 像素)取 output token 上界(宁高勿低,settle 按实退差)。 */
+export function estImageOutputTokens(quality: string | undefined, width: number, height: number): number {
+  const perMp = IMG_TOKEN_PER_MP[quality ?? 'high'] ?? IMG_TOKEN_PER_MP.high!;
+  const mp = (width * height) / 1_000_000;
+  return Math.max(1, Math.ceil(mp * perMp));
+}
+
+/** token 计价模型每 output token 的真实成本元:快照优先(reserve==settle)→ model_pricing(仅 token 单位)→ 代码回落。
+ *  ⚠ 只认 unit='token' 的行:admin 若经「每张」定价表误填 ¥/张(如 0.029)会被当 ¥/token 读,
+ *    134× 灌爆价(9:16 4K medium 17004 token × 0.029 × 35 = 17260 积分,QA 实测)。故辨识单位,
+ *    非 token 单位 → 回落代码常量 def.priceRate(= $30/1M×7.2),防误配赔穿/坑用户。 */
+export function imageTokenRate(def: { key: string; priceRate?: number }, snapshot?: number): number {
+  if (typeof snapshot === 'number' && snapshot > 0) return snapshot;
+  const mp = lookupCost(def.key);
+  if (mp && mp.unit === 'token' && mp.realCostYuan > 0) return mp.realCostYuan; // 仅 token 单位的行才是合法 token 费率
+  return def.priceRate ?? 0; // 无 token 行 / 误填 ¥/张 → 代码常量兜底
+}
+
+/** token 计价每次出图售价积分 = sellPrice(output_tokens × 每 token 成本元)。 */
+function imageTokenCredits(outputTokens: number, rate: number): number {
+  return sellPrice(outputTokens * rate); // rate/tokens ≤0 → sellPrice 抛错(misconfig,assertProfitable 应已拦)
 }
 
 // AI 图生图(编辑)计价:张数 × 编辑单价 × 分辨率系数。
@@ -219,6 +253,20 @@ export function costFor(toolType: string, input: Record<string, unknown>): numbe
       const resolution = typeof input.resolution === 'string' ? input.resolution : undefined;
       const mode = input.mode === 'img2img' ? 'img2img' : 'text2img';
       const def = getImageModel(typeof input.model === 'string' ? input.model : undefined, mode);
+      // token 计价模型(gpt-image-2,Design B):有 def.priceRate → 走真实用量结算,不用 priceTier。
+      //   有 usageSnapshot(worker 回写)→ 按实际 output token;无(reserve/estimate 阶段)→ 上界估算。
+      //   build/estimate/settle 三处同经此分支 → 报价≡预扣、settle 只退不补(worker Math.min 封顶 reserved)。
+      if (def.priceRate != null) {
+        const rate = imageTokenRate(def, typeof input.priceRateSnapshot === 'number' ? input.priceRateSnapshot : undefined);
+        const usage = input.usageSnapshot as ImageUsage | undefined;
+        if (usage && usage.outputTokens > 0) return imageTokenCredits(usage.outputTokens, rate); // 实结:usage 覆盖整请求全 N 张
+        const wh = imagePixelWH(def, typeof input.ratio === 'string' ? input.ratio : undefined, resolution);
+        const quality = typeof input.quality === 'string' ? input.quality : undefined;
+        // reserve 估算 × 张数:今 gpt-image-2 maxImages=1(n=1 无变化);未来若放开多出图,
+        //   OpenAI usage.output_tokens 覆盖全 N 张 → 估算也须 ×N,否则 reserve 偏低、settle 封顶后平台吃差(评审 LOW#1)。
+        const n = clampImageCount(input.count, def.maxImages);
+        return imageTokenCredits(estImageOutputTokens(quality, wh?.width ?? 1024, wh?.height ?? 1024) * n, rate);
+      }
       // P3:优先读提交时快照(admin 改价 mid-flight 不破 reserve==settle);无快照(老 job)按档实时回落。
       const priceTier = typeof input.priceTierSnapshot === 'number' ? input.priceTierSnapshot : imagePriceTier(def, resolution);
       const maxImages = typeof input.maxImagesSnapshot === 'number' ? input.maxImagesSnapshot : def.maxImages;

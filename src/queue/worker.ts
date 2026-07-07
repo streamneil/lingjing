@@ -463,7 +463,10 @@ async function finalizeImageJob(job: JobRow, input: ImageGenInput, imageUrls: st
     keys.push(key);
   }
   markDone(job.id, JSON.stringify(keys), 'none', 'image');
-  settle(job.tenant_id, job.id, costFor('ai_image', input as unknown as Record<string, unknown>));
+  // 结算封顶 reserved(只退不补):固定价模型 actual==reserved(min 为 no-op);
+  // token 计价模型(gpt-image-2)按回写的 usageSnapshot 实结,actual≤reserved → 退差额(同 AI 音乐)。
+  const actual = costFor('ai_image', input as unknown as Record<string, unknown>);
+  settle(job.tenant_id, job.id, Math.min(actual, reservedFor(job.id)));
 }
 
 /** 文生图(text2img,qwen-image,异步轮询)。从原 runImageJob 原样抽出(eng-review E1:先抽测试绿再加 mode 分发)。
@@ -542,17 +545,19 @@ async function runImageGenSyncJob(job: JobRow): Promise<void> {
   const gateway = getGateway(input.model) as unknown as import('../gateway/types.js').SyncImageGateway;
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), config.baichuan.jobTimeoutMs);
-  let resultUrls: string[];
+  let result: import('../gateway/types.js').SyncImageResult;
   try {
     updateProgress(job.id, 50);
-    resultUrls = await gateway.generateImageSync(input, ac.signal);
+    result = await gateway.generateImageSync(input, ac.signal);
   } catch (e) {
     if (ac.signal.aborted) throw new Error(`生成超时(>${config.baichuan.jobTimeoutMs}ms),已放弃`);
     throw e;
   } finally {
     clearTimeout(timer);
   }
-  await finalizeImageJob(job, input, resultUrls);
+  // token 计价模型(gpt-image-2)回写实际 usage → finalizeImageJob 的 costFor 据此实结(封顶 reserved)。
+  if (result.usage) input.usageSnapshot = result.usage;
+  await finalizeImageJob(job, input, result.urls);
 }
 
 /** 万相2.7 异步含图编辑(A_EDIT)。= 异步轮询模板(runImageGenJob)+ 编辑前导(送审/发布输入图)。

@@ -15,6 +15,7 @@ import { getVideoModel, isKnownVideoModel } from './video-models.js';
 import { getProviderKey } from './provider-keys.js'; // PR-1:key 从加密表取(回落 .env)
 import { ArkGateway } from './ark.js'; // PR-2a:火山(豆包)适配器
 import { GeminiGateway } from './gemini.js'; // PR-2a:Google AI Studio(Gemini / Nano Banana)适配器
+import { OpenAIImageGateway } from './openai.js'; // 第 4 个 provider:OpenAI GPT Image 2(文生图,token 计价)
 import type {
   CapabilityGateway,
   VideoSubmitUrls,
@@ -23,6 +24,7 @@ import type {
   ImageGenInput,
   ImageJobResult,
   SyncImageGateway,
+  SyncImageResult,
   ImageEditInput,
   VideoGenT2VInput,
 } from './types.js';
@@ -322,16 +324,17 @@ export class BaichuanGateway implements CapabilityGateway, SyncImageGateway {
 
   // 同步文生图(S 形状,纯文本 content,无输入图)。eng 外部声音 P1-a:
   // editImage 必填 imageUrls,S 模型 text2img 需独立方法;content=[{text}](非空,不触 P3-b 空 content 抛错)。
-  async generateImageSync(input: ImageGenInput, signal: AbortSignal): Promise<string[]> {
+  async generateImageSync(input: ImageGenInput, signal: AbortSignal): Promise<SyncImageResult> {
     const def = getImageModel(input.model);
     const content: Array<{ text: string }> = [{ text: input.prompt }];
     const n = Math.min(def.maxImages, Math.max(1, Math.floor(input.count ?? 1)));
-    return callMultimodalSync(
+    const urls = await callMultimodalSync(
       def.modelId,
       content,
       { n: String(n), ...sizeParams(def, input.ratio, input.resolution, { width: (input as ImageGenInput).width, height: (input as ImageGenInput).height }), ...seedParam(input.seed) },
       signal,
     );
+    return { urls }; // 百炼不返 token usage(非 token 计价);usage 留空
   }
 }
 
@@ -435,6 +438,7 @@ export function providerForModel(modelKey?: string): string {
 const _bailian = new BaichuanGateway();
 let _ark: ArkGateway | null = null;
 let _gemini: GeminiGateway | null = null;
+let _openai: OpenAIImageGateway | null = null;
 
 /**
  * 网关工厂 —— 按模型选 provider 适配器(PR-2a:多 provider 抽象)。
@@ -446,6 +450,8 @@ let _gemini: GeminiGateway | null = null;
 export function getGateway(modelKey?: string): CapabilityGateway {
   const provider = providerForModel(modelKey);
   if (provider === 'volc-ark') return (_ark ??= new ArkGateway());
+  // OpenAI(gpt-image-2)仅实现 SyncImageGateway(同步文生图,无视频/异步)。同 Gemini 口径 as 返回。
+  if (provider === 'openai') return (_openai ??= new OpenAIImageGateway()) as unknown as CapabilityGateway;
   // Gemini 仅实现 SyncImageGateway(图片同步,无视频/异步)。其模型 shape='S' → worker 只走同步图片路径
   //   (456/483 处已 as SyncImageGateway 转型);此处 as 同口径返回(异步方法被调即类型不存在=用不到)。
   if (provider === 'google-ai-studio') return (_gemini ??= new GeminiGateway()) as unknown as CapabilityGateway;

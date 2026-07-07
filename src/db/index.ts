@@ -642,6 +642,12 @@ db.exec(`CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEX
     `INSERT OR IGNORE INTO provider (id,name,adapter_key,base_url,key_version,enabled,updated_at)
      VALUES ('google-ai-studio','Google AI Studio','google-ai-studio','https://generativelanguage.googleapis.com/v1beta',1,1,?)`,
   ).run(Date.now());
+  // OpenAI(GPT Image 2,第 4 个 provider):同上幂等补行;key 用户在 admin 厂商页贴。
+  //   国内 ECS 直连 api.openai.com 被墙 → 网关走 OPENAI_PROXY(同 Gemini 的 GEMINI_PROXY)。
+  db.prepare(
+    `INSERT OR IGNORE INTO provider (id,name,adapter_key,base_url,key_version,enabled,updated_at)
+     VALUES ('openai','OpenAI','openai','https://api.openai.com/v1',1,1,?)`,
+  ).run(Date.now());
 }
 
 export interface ProviderRow {
