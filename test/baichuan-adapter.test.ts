@@ -55,7 +55,7 @@ describe('图生图 editImage 同步解析 + AbortController 超时(E2 命脉)',
         { status: 200 },
       ),
     );
-    const urls = await gw.editImage(
+    const { urls } = await gw.editImage(
       { imageUrls: ['https://in/1.png'], prompt: '换背景' },
       new AbortController().signal,
     );

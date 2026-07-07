@@ -54,6 +54,37 @@ describe('settle 按实 usage + 永不超扣', () => {
   });
 });
 
+describe('图片编辑(img2img)输入底图 token 精算(商业自负盈亏)', () => {
+  const IN_IMG = 8 / 30, IN_TXT = 5 / 30; // $8/$5 相对 output $30 的折算比
+
+  it('settle = output + 输入图×(8/30) + 输入文本×(5/30),输入底图成本全计入', () => {
+    const cost = costFor('ai_image', {
+      model: 'gpt-image-2', mode: 'img2img', quality: 'high', resolution: '1K', ratio: '1:1',
+      usageSnapshot: { inputTokens: 3100, outputTokens: 7033, totalTokens: 10133, inputImageTokens: 3000, inputTextTokens: 100 },
+    });
+    const billable = 7033 + 3000 * IN_IMG + 100 * IN_TXT;
+    expect(cost).toBe(sellPrice(billable * RATE));
+    expect(cost).toBeGreaterThan(sellPrice(7033 * RATE)); // 比只算 output 贵(不做慈善)
+  });
+
+  it('input 明细缺失 → 编辑按输入图兜底计价(recover 输入图成本,非慈善)', () => {
+    const cost = costFor('ai_image', {
+      model: 'gpt-image-2', mode: 'img2img', quality: 'high', resolution: '1K', ratio: '1:1',
+      usageSnapshot: { inputTokens: 3000, outputTokens: 7033, totalTokens: 10033 }, // 无 details
+    });
+    expect(cost).toBe(sellPrice((7033 + 3000 * IN_IMG) * RATE)); // 输入按图算($8)
+  });
+
+  it('reserve 含输入底图上界(每张高保真),≥ settle 且 > 无输入图', () => {
+    const base = { model: 'gpt-image-2', mode: 'img2img', quality: 'high', resolution: '1K', ratio: '1:1', imageRefs: ['a', 'b'] };
+    const reserve = costFor('ai_image', base); // 2 张输入图上界
+    const settle = costFor('ai_image', { ...base, usageSnapshot: { inputTokens: 2000, outputTokens: 7033, totalTokens: 9033, inputImageTokens: 2000, inputTextTokens: 0 } });
+    expect(reserve).toBeGreaterThanOrEqual(settle); // 只退不补
+    const noInput = costFor('ai_image', { model: 'gpt-image-2', mode: 'text2img', quality: 'high', resolution: '1K', ratio: '1:1' });
+    expect(reserve).toBeGreaterThan(noInput); // 输入底图成本进了 reserve
+  });
+});
+
 describe('priceRateSnapshot 优先(reserve==settle 护栏)', () => {
   it('快照 rate 生效,不受当前 model_pricing/代码常量影响', () => {
     const snapRate = RATE * 2; // 提交时快照的高 rate

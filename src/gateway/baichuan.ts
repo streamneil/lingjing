@@ -305,7 +305,7 @@ export class BaichuanGateway implements CapabilityGateway, SyncImageGateway {
   //   →  output.choices[0].message.content[].image(成品图 URL 数组,24h 过期)。
   // signal 做硬超时(外部声音 P2):同步调无 poll 循环,挂连接会冻 worker。
   // 参考:https://help.aliyun.com/zh/model-studio/qwen-image-edit-api
-  async editImage(input: ImageEditInput, signal: AbortSignal): Promise<string[]> {
+  async editImage(input: ImageEditInput, signal: AbortSignal): Promise<SyncImageResult> {
     // model 从 registry(P1-c:删 config.imageEditModel 读)。img2img 缺省走编辑默认。
     const def = getImageModel(input.model, 'img2img');
     const content: Array<{ image: string } | { text: string }> = input.imageUrls.map((u) => ({
@@ -314,12 +314,13 @@ export class BaichuanGateway implements CapabilityGateway, SyncImageGateway {
     content.push({ text: input.prompt });
     // 出图张数:按 model maxImages clamp(千问2.0 Pro=6 可多出;qwen-image-edit=1 固定 1)。
     const n = Math.min(def.maxImages, Math.max(1, Math.floor(input.count ?? 1)));
-    return callMultimodalSync(
+    const urls = await callMultimodalSync(
       def.modelId,
       content,
       { n: String(n), ...sizeParams(def, input.ratio, input.resolution, { width: (input as ImageGenInput).width, height: (input as ImageGenInput).height }), ...seedParam(input.seed) },
       signal,
     );
+    return { urls }; // 百炼不返 token usage
   }
 
   // 同步文生图(S 形状,纯文本 content,无输入图)。eng 外部声音 P1-a:

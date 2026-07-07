@@ -114,10 +114,43 @@ describe('OpenAIImageGateway 错误可读', () => {
     ).rejects.toThrow(/未返回图片/);
   });
 
-  it('editImage 抛错(gpt-image-2 官方 edit 端点不含此模型)', async () => {
+});
+
+describe('OpenAIImageGateway 图片编辑(/images/edits)', () => {
+  it('输入图 → data URL + POST /images/edits(JSON,size 仅标准尺寸)+ b64→URL + usage', async () => {
+    let editBody: any = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: any, init: any) => {
+      const u = String(url);
+      if (u.startsWith('https://in/')) return new Response(Buffer.from('inimg'), { status: 200, headers: { 'content-type': 'image/png' } });
+      editBody = JSON.parse(init.body);
+      return okImageResponse();
+    });
+    const { urls, usage } = await new OpenAIImageGateway().editImage(
+      { model: 'gpt-image-2', imageUrls: ['https://in/1.png', 'https://in/2.png'], prompt: '换成水彩风', quality: 'high', ratio: '3:2' },
+      new AbortController().signal,
+    );
+    expect(urls).toHaveLength(1);
+    expect(urls[0]).toContain('https://cdn/openai-tmp/');
+    expect(editBody.model).toBe('gpt-image-2-2026-04-21');
+    expect(editBody.prompt).toBe('换成水彩风');
+    expect(editBody.quality).toBe('high');
+    expect(editBody.size).toBe('1536x1024'); // 3:2 横向 → 标准横图(编辑不收任意 WxH)
+    expect(editBody.images).toHaveLength(2);
+    expect(editBody.images[0].image_url).toMatch(/^data:image\/png;base64,/); // 输入图内联 data URL,不发裸 OSS URL
+    expect(usage).toEqual({ inputTokens: 20, outputTokens: 7033, totalTokens: 7053 });
+  });
+
+  it('无输入图 → 清晰错误', async () => {
     await expect(
-      new OpenAIImageGateway().editImage({ imageUrls: ['https://x/a.png'], prompt: 'x' }, new AbortController().signal),
-    ).rejects.toThrow(/不支持图生图|编辑/);
+      new OpenAIImageGateway().editImage({ model: 'gpt-image-2', imageUrls: [], prompt: 'x' }, new AbortController().signal),
+    ).rejects.toThrow(/至少 1 张输入图/);
+  });
+
+  it('超过 maxInputImages(9)→ 清晰错误', async () => {
+    const many = Array.from({ length: 10 }, (_, i) => `https://in/${i}.png`);
+    await expect(
+      new OpenAIImageGateway().editImage({ model: 'gpt-image-2', imageUrls: many, prompt: 'x' }, new AbortController().signal),
+    ).rejects.toThrow(/最多 9 张/);
   });
 });
 
