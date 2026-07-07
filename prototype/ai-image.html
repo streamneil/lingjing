@@ -267,6 +267,10 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     const m=allModels.find(x=>x.key===model);
     const resSeg=document.getElementById('resSeg');
     const resLbl=resSeg.previousElementSibling;
+    // token 计价模型的图片编辑(gpt-image-2 图生图):OpenAI /images/edits 仅标准尺寸,输出恒 1K → 隐藏清晰度,画质决定成本。
+    if(mode==='img2img' && m && Array.isArray(m.qualities) && m.qualities.length){
+      res='1K'; resSeg.style.display='none'; if(resLbl&&resLbl.classList.contains('pop-label')) resLbl.style.display='none'; return;
+    }
     // 不可设分辨率的模型(canSetSize===false,如 qwen-image-edit:随输入图)→ 隐藏清晰度控件
     if((m && m.canSetSize===false) || (m && m.resolutions && m.resolutions.length)){
       // canSetSize=false:模型不接受 size;或录了分辨率表:尺寸由比例那条决定。两种都不显清晰度档
@@ -469,6 +473,8 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       at.ondrop=e=>{e.preventDefault();at.style.borderColor=''; addFiles(e.dataTransfer.files);}; }
   }
   window.removeImg=(i)=>{ imgFiles.splice(i,1); renderTiles(); refreshBtn(); scheduleEstimate(); };
+  // 输入底图张数(图生图报价含输入图 token 成本):复用态用复用数,否则本地上传数。
+  function i2iInputCount(){ if(reuseRefs && reuseRefs.length) return reuseRefs.length; return imgFiles.length; }
   function onI2iModelChange(){ if(imgFiles.length>i2iMaxInput()) imgFiles=imgFiles.slice(0,i2iMaxInput()); renderTiles(); }
 
   function useSample(p){ ta.value=p; cnt.textContent=p.length; refreshBtn(); scheduleEstimate(); ta.focus(); window.LJToast&&window.LJToast('✓ 已套用示范提示词,可改后生成'); }
@@ -484,7 +490,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       // ratio 与提交体同发(分档后 resolutions 表模型按比例推计价档,漏发会报价≠实扣);
       // 报价失败(档下架/切换竞态)显 '—',不留陈旧价。
       try{
-        const r=await LJ.post('/jobs/estimate',{type:'ai_image',model,mode,count,resolution:effResV(),ratio,quality:quality||undefined});
+        const r=await LJ.post('/jobs/estimate',{type:'ai_image',model,mode,count,resolution:effResV(),ratio,quality:quality||undefined,inputImageCount:mode==='img2img'?i2iInputCount():0});
         // token 计价模型(gpt-image-2)按实结算:报价是上限估算,多退少不补。
         const m=allModels.find(x=>x.key===model);
         document.getElementById('estLabel').textContent=(m&&m.qualities?'预估≤':'预估 ')+r.cost+' 点';
@@ -676,7 +682,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         btn.textContent='上传中…';
         const imageRefs=await uploadInputImages();
         // ratio 也发:千问2.0 Pro / 万相2.7 等图生图模型支持指定比例,卡片要据此显示比例并按比例渲染图
-        payload={ type:'ai_image', source:'ai-image', model, mode:'img2img', prompt, imageRefs, resolution:effResV(), ratio, count, seed:seed||undefined };
+        payload={ type:'ai_image', source:'ai-image', model, mode:'img2img', prompt, imageRefs, resolution:effResV(), ratio, count, seed:seed||undefined, quality:quality||undefined };
       } else {
         payload={ type:'ai_image', source:'ai-image', model, mode:'text2img', prompt, count, resolution:effResV(), ratio, seed:seed||undefined, quality:quality||undefined };
       }
