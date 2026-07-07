@@ -213,8 +213,10 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
           <div class="pop-label" id="ratioLabel" style="display:none">比例</div>
           <div class="ratio-row" id="ratioSeg" style="display:none"></div>
           <div class="pop-hint" id="setHint" style="display:none;color:var(--t4);font-size:12px;padding:4px 2px">该模型输出尺寸跟随输入图,无需设置。</div>
-          <div class="pop-label">清晰度</div>
+          <div class="pop-label" id="resLabel">清晰度</div>
           <div class="seg-row" id="resSeg"><div class="seg on" data-res="1K">1K</div><div class="seg" data-res="2K">2K</div></div>
+          <div class="pop-label" id="qualityLabel" style="display:none">画质</div>
+          <div class="seg-row" id="qualitySeg" style="display:none"></div>
           <div class="pop-label" id="countLabel" style="margin-top:12px;display:none">输出张数</div>
           <div class="seg-row" id="countSeg" style="display:none"></div>
         </div>
@@ -317,7 +319,8 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
 <script>
   const ta=document.getElementById('prompt'), cnt=document.getElementById('cnt'), btn=document.getElementById('createBtn');
   const feedList=document.querySelector('.feed-list');
-  let res='1K', count=1, model='', allModels=[], seed='', ratio='1:1';
+  let res='1K', count=1, model='', allModels=[], seed='', ratio='1:1', quality='';
+  const QUALITY_LABEL={low:'低',medium:'中',high:'高'};
   // 比例 glyph 形状(宽×高 px,按比例画小方框,与 AI 图片生成器一致)
   const RATIO_GLYPH={'auto':[18,18],'16:9':[20,11],'9:16':[11,20],'1:1':[18,18],'3:4':[14,18],'4:3':[18,14],'3:2':[19,13],'2:3':[13,19],'4:5':[16,20],'5:4':[20,16],'21:9':[20,9],'9:21':[9,20],'1:4':[7,28],'4:1':[28,7],'1:8':[4,32],'8:1':[32,4]};
   let reuseRefs=null, reuseUrls=null; // 重新提示复用原 job 输入图(免重传;OSS 跨域 fetch 不到 File)
@@ -495,6 +498,8 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   refFileInput.onchange=()=>{ addRefs(refFileInput.files); refFileInput.value=''; };
   function refChipHtml(r,i){ return `<div class="refchip"><img src="${r.dataUrl}"><div class="rmx" data-rm="${i}">×</div></div>`; }
   function removeRef(i){ refFiles.splice(i,1); renderRefs(); syncMkEditCard(); refreshBtn(); scheduleEstimate(); }
+  // 输入底图张数(报价含输入图 token 成本):复用态用复用数,否则主图+参考图。
+  function inputImgCount(){ if(reuseRefs && reuseRefs.length) return reuseRefs.length; return (mainFile?1:0) + refFiles.length; }
   function renderRefs(){
     const strip=document.getElementById('refStrip');
     strip.innerHTML=refFiles.map(refChipHtml).join('');
@@ -534,7 +539,18 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     // 复用态(重新提示带回的图存在 reuseRefs/reuseUrls,无本地 mainFile)→ 切模型时保留复用显示,
     // 否则 renderMain/renderRefs 只看 mainFile/refFiles 会把带回的图清空(问题2)。
     if(reuseRefs && reuseRefs.length){ renderReuse(); } else { renderMain(); renderRefs(); }
-    syncMkEditCard(); renderRatios(); renderEditRes(); renderCount(); syncPills(); refreshBtn(); scheduleEstimate();
+    syncMkEditCard(); renderRatios(); renderEditRes(); renderEditQuality(); renderCount(); syncPills(); refreshBtn(); scheduleEstimate();
+  }
+  // 画质(token 计价模型 gpt-image-2 编辑:low/medium/high;非该类模型隐藏)
+  function renderEditQuality(){
+    const m=curModel();
+    const seg=document.getElementById('qualitySeg'), lbl=document.getElementById('qualityLabel');
+    const qs=(m&&Array.isArray(m.qualities)&&m.qualities.length)?m.qualities:null;
+    if(!qs){ seg.style.display='none'; lbl.style.display='none'; quality=''; return; }
+    seg.style.display=''; lbl.style.display='';
+    if(!qs.includes(quality)) quality=qs.includes('medium')?'medium':qs[0];
+    seg.innerHTML=qs.map(q=>`<div class="seg${q===quality?' on':''}" data-q="${q}">${QUALITY_LABEL[q]||q}</div>`).join('');
+    seg.querySelectorAll('.seg').forEach(s=>s.onclick=()=>{ seg.querySelectorAll('.seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); quality=s.dataset.q; syncPills(); scheduleEstimate(); });
   }
   // 清晰度控件按模型 canSetSize 显隐:qwen-image-edit 不可设(随输入图)→ 隐藏;万相2.7 编辑可设 1K/2K。
   function canSetSize(){ const m=curModel(); return !m || m.canSetSize !== false; }
@@ -565,6 +581,8 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   function renderEditRes(){
     const seg=document.getElementById('resSeg'); const lbl=seg.previousElementSibling;
     const m=curModel(); const show=canSetSize();
+    // token 计价编辑(gpt-image-2):OpenAI /images/edits 仅 3 标准尺寸,输出恒 1K → 隐藏清晰度控件,画质决定成本。
+    if(m && Array.isArray(m.qualities) && m.qualities.length){ res='1K'; seg.style.display='none'; if(lbl&&lbl.classList.contains('pop-label')) lbl.style.display='none'; return; }
     seg.style.display=show?'':'none'; if(lbl&&lbl.classList.contains('pop-label')) lbl.style.display=show?'':'none';
     if(!show) return;
     // 清晰度档按模型动态:优先 resolutionTiers(火山 seedream 各型号不同档),无则按 ≤maxResolution。
@@ -616,7 +634,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       if(!ta.value.trim()){ document.getElementById('estGem').textContent='—'; return; }
       // ratio 与提交体同发(分档后 resolutions 表模型按比例推计价档,漏发会报价≠实扣);
       // 报价失败(档下架/模型切换竞态)显 '—',不留上一模型的陈旧价。
-      try{ const r=await LJ.post('/jobs/estimate',{type:'ai_image',model,mode:'img2img',resolution:effRes(),ratio:effRatio(),count}); document.getElementById('estGem').textContent=r.cost; }catch(e){ document.getElementById('estGem').textContent='—'; }
+      try{ const r=await LJ.post('/jobs/estimate',{type:'ai_image',model,mode:'img2img',resolution:effRes(),ratio:effRatio(),count,quality:quality||undefined,inputImageCount:inputImgCount()}); document.getElementById('estGem').textContent=r.cost; }catch(e){ document.getElementById('estGem').textContent='—'; }
     },350);
   }
   function refreshBtn(){
@@ -803,7 +821,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     try{
       const imageRefs=await uploadInputImages();
       btn.textContent='提交中…';
-      const payload={ type:'ai_image', source:'ai-image-edit', model, mode:'img2img', prompt, imageRefs, resolution:effRes(), ratio:effRatio(), count, seed:seed||undefined };
+      const payload={ type:'ai_image', source:'ai-image-edit', model, mode:'img2img', prompt, imageRefs, resolution:effRes(), ratio:effRatio(), count, seed:seed||undefined, quality:quality||undefined };
       const bb=buildBboxList(imageRefs.length); if(bb) payload.bboxList=bb;
       const res2=await LJ.createJob(payload);
       // 存 jobInputs(供卡片元信息 + 轮询重渲带比例/清晰度/张数 + 重新提示回填)
