@@ -60,10 +60,14 @@ export interface ImageGenInput {
 }
 
 // gpt-image-2 等 token 计价模型的用量(网关从响应 usage 解析,worker 回写 input.usageSnapshot 供结算)。
+// 三类 token 费率不同($/1M):output 图 $30、input 图 $8(编辑输入底图)、input 文本 $5。
+// 精算需按类分别计价 → 拆出 input 明细(usage.input_tokens_details);缺失时按 mode 兜底(见 credits.costFor)。
 export interface ImageUsage {
-  inputTokens: number; // 输入 token(prompt 文本;img2img 才有图 token,本轮无)
+  inputTokens: number; // 输入 token 合计(文本 + 图)
   outputTokens: number; // 输出图 token(计价主轴,$30/1M)
   totalTokens: number; // 合计
+  inputImageTokens?: number; // 输入图 token($8/1M;编辑输入底图,高保真处理)
+  inputTextTokens?: number; // 输入文本 token($5/1M;prompt)
 }
 
 // ── 图生图(image-to-image,qwen-image-edit)──
@@ -77,6 +81,8 @@ export interface ImageEditInput {
   ratio?: string;
   resolution?: string;
   seed?: number; // 随机种子;空 = 随机
+  quality?: string; // 画质 low|medium|high(token 计价模型 gpt-image-2 编辑用;OpenAI quality 参数 + 计价轴)
+  priceRateSnapshot?: number; // 提交快照:每 output token 成本元(token 计价编辑,reserve==settle)
 }
 
 // ── 文生视频(text2video:HappyHorse / 万相2.7 / 可灵)──
@@ -143,7 +149,7 @@ export interface AiMusicGenInput {
 export interface SyncImageGateway {
   /** 同步图生图(S 形状,含图 content)。直返成品图 URL 数组(百炼侧,24h 过期 → worker 须拉进存储)。
    *  传入 AbortSignal 做硬超时(外部声音 P2:同步调无 poll 循环检 deadline,挂连接会冻 worker)。 */
-  editImage(input: ImageEditInput, signal: AbortSignal): Promise<string[]>;
+  editImage(input: ImageEditInput, signal: AbortSignal): Promise<SyncImageResult>;
   /** 同步文生图(S 形状,纯文本 content,无输入图)。同 multimodal 端点直返,AbortController 硬超时。
    *  eng 外部声音 P1-a:S 模型 text2img 需独立方法(editImage 必填 imageUrls)。
    *  返回 { urls, usage? }:token 计价模型(gpt-image-2)带 usage 供实结算;其余 provider usage 置 undefined。 */

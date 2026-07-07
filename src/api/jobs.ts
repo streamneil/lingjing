@@ -284,9 +284,16 @@ function buildImageJob(body: Record<string, unknown>): JobBuildResult {
 
     const input: ImageGenInput = { model: def.key, mode: 'img2img', prompt, imageRefs: refs, ...snap };
     if (source) input.source = source;
-    if (effRes) input.resolution = effRes; // 计价档(自动推或用户传)
+    // token 计价编辑(gpt-image-2):OpenAI /images/edits 仅收 3 标准尺寸 → 输出档恒 1K(不随用户选的 2K/4K),
+    //   reserve 按 1K 估、editImage 也按 1K 标准尺寸发,保 reserve 与实际输出同档。
+    const editRes = def.priceRate != null ? '1K' : effRes;
+    if (editRes) input.resolution = editRes; // 计价档(自动推或用户传;token 编辑恒 1K)
     if (typeof ratio === 'string') input.ratio = ratio;
     if (seedVal !== undefined) input.seed = seedVal;
+    if (def.priceRate != null) {
+      if (qr.quality) input.quality = qr.quality;
+      input.priceRateSnapshot = imageTokenRate(def);
+    }
 
     // bbox_list 局部重绘:仅 supportsBbox 模型(万相2.7);校验对齐 + 框数 + 整数边界(不信前端,P2-a)。
     const rawBbox = (body as { bboxList?: unknown }).bboxList;
@@ -305,7 +312,10 @@ function buildImageJob(body: Record<string, unknown>): JobBuildResult {
       ok: true,
       type: 'ai_image',
       input: input as unknown as Record<string, unknown>,
-      cost: estimateImageEditCost(effRes, tier, editCount),
+      // token 计价编辑走 costFor(reserve 上限估算,与 settle 同分支);其余模型按 n 张档价。
+      cost: def.priceRate != null
+        ? costFor('ai_image', input as unknown as Record<string, unknown>)
+        : estimateImageEditCost(editRes, tier, editCount),
     };
   }
 
@@ -1005,7 +1015,21 @@ jobsRouter.post('/jobs/estimate', requireAuth, async (req: Request, res: Respons
     if (!qr.ok) return res.status(400).json({ error: qr.error });
     const tier = imagePriceTier(def, rr.effRes); // 按档取价(2026-07 分档)
     if (m === 'img2img') {
-      // 编辑按 n 张计价(与 buildImageJob/costFor 一致):count clamp 到 maxImages
+      // token 计价编辑(gpt-image-2):恒 1K 输出档,经 costFor 上界估算(与 buildImageJob 同源)。
+      if (def.priceRate != null) {
+        const estInput = {
+          model: def.key, mode: 'img2img',
+          ratio: typeof body.ratio === 'string' ? body.ratio : undefined,
+          resolution: '1K', // 编辑仅 3 标准尺寸,恒 1K 档
+          quality: qr.quality,
+          count: clampImageCount(body.count, def.maxImages),
+          // 输入底图张数(报价≡实扣:reserve 含输入图 token 成本)。前端传数量;buildImageJob 用真实 imageRefs。
+          inputImageCount: typeof body.inputImageCount === 'number' ? Math.max(0, Math.floor(body.inputImageCount)) : 0,
+          priceRateSnapshot: imageTokenRate(def),
+        };
+        return res.json({ cost: costFor('ai_image', estInput as unknown as Record<string, unknown>) });
+      }
+      // 其余编辑模型按 n 张计价(与 buildImageJob/costFor 一致):count clamp 到 maxImages
       // (qwen-image-edit maxImages=1 → 固定 1)。
       const editCount = clampImageCount(body.count, def.maxImages);
       return res.json({ cost: estimateImageEditCost(rr.effRes, tier, editCount) });

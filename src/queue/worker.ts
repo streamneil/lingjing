@@ -518,11 +518,11 @@ async function runImageEditJob(job: JobRow): Promise<void> {
   const gateway = getGateway(input.model) as unknown as import('../gateway/types.js').SyncImageGateway;
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), config.baichuan.jobTimeoutMs);
-  let resultUrls: string[];
+  let result: import('../gateway/types.js').SyncImageResult;
   try {
     updateProgress(job.id, 50);
-    resultUrls = await gateway.editImage(
-      { model: input.model, imageUrls, prompt: input.prompt, count: input.count, ratio: input.ratio, resolution: input.resolution, seed: input.seed },
+    result = await gateway.editImage(
+      { model: input.model, imageUrls, prompt: input.prompt, count: input.count, ratio: input.ratio, resolution: input.resolution, seed: input.seed, quality: input.quality, priceRateSnapshot: input.priceRateSnapshot },
       ac.signal,
     );
   } catch (e) {
@@ -531,7 +531,9 @@ async function runImageEditJob(job: JobRow): Promise<void> {
   } finally {
     clearTimeout(timer);
   }
-  await finalizeImageJob(job, input, resultUrls);
+  // token 计价编辑(gpt-image-2)回写实际 usage → finalizeImageJob 的 costFor 据此实结(封顶 reserved)。
+  if (result.usage) input.usageSnapshot = result.usage;
+  await finalizeImageJob(job, input, result.urls);
 }
 
 /** 同步文生图(S 形状 text2img,eng 外部声音 P1-a)。提示词送审 → generateImageSync(纯文本,

@@ -90,6 +90,27 @@ export function estimateImageCost(count: number, resolution = '1K', priceTier = 
 //   取 ~1.15× 安全上界:low 250 / medium 2050 / high 8100 tok/MP。首日按真实 usage 收敛。
 const IMG_TOKEN_PER_MP: Record<string, number> = { low: 250, medium: 2050, high: 8100 };
 
+// 三类 token 费率($/1M):output 图 $30、input 图 $8(编辑输入底图,高保真)、input 文本 $5(prompt)。
+// 按 output 费率折算(output-equivalent):input 图 token ×(8/30)、input 文本 token ×(5/30)。
+// 这样只存一个 output token 费率(priceRate),input 费率随之同比缩放(管理员改价三类同步)。
+const IN_IMG_RATIO = 8 / 30; // 输入图 token → output-equivalent
+const IN_TXT_RATIO = 5 / 30; // 输入文本 token → output-equivalent
+// reserve 估算:每张高保真输入底图 token 上界(宁高勿低,settle 按实 usage 退差)。gpt-image-2 输入恒高保真。
+const INPUT_IMAGE_TOKENS_UPPER = 4000;
+
+/** token 计价可计费量(output-equivalent):output + 输入图×(8/30) + 输入文本×(5/30)。
+ *  各类 token 按 OpenAI 费率折成 output 当量,再统一乘 output 费率结算,商业自负盈亏(不漏输入底图成本)。
+ *  input 明细(input_tokens_details)缺失时按 mode 兜底:编辑输入按图算(贵,recover),文生图按文本算。 */
+function usageBillableTokens(usage: ImageUsage, mode: string): number {
+  let imgTok = usage.inputImageTokens;
+  let txtTok = usage.inputTextTokens;
+  if (imgTok == null && txtTok == null) {
+    if (mode === 'img2img') { imgTok = usage.inputTokens; txtTok = 0; }
+    else { txtTok = usage.inputTokens; imgTok = 0; }
+  }
+  return usage.outputTokens + (imgTok ?? 0) * IN_IMG_RATIO + (txtTok ?? 0) * IN_TXT_RATIO;
+}
+
 /** gpt-image-2 reserve 估算:按(画质, 像素)取 output token 上界(宁高勿低,settle 按实退差)。 */
 export function estImageOutputTokens(quality: string | undefined, width: number, height: number): number {
   const perMp = IMG_TOKEN_PER_MP[quality ?? 'high'] ?? IMG_TOKEN_PER_MP.high!;
@@ -259,13 +280,20 @@ export function costFor(toolType: string, input: Record<string, unknown>): numbe
       if (def.priceRate != null) {
         const rate = imageTokenRate(def, typeof input.priceRateSnapshot === 'number' ? input.priceRateSnapshot : undefined);
         const usage = input.usageSnapshot as ImageUsage | undefined;
-        if (usage && usage.outputTokens > 0) return imageTokenCredits(usage.outputTokens, rate); // 实结:usage 覆盖整请求全 N 张
+        // 实结:usage 覆盖整请求全 N 张;output + 输入底图($8/1M)+ 输入文本($5/1M)全计入(商业自负盈亏)。
+        if (usage && usage.outputTokens > 0) return imageTokenCredits(usageBillableTokens(usage, mode), rate);
+        // reserve 上界估算:output×n + 编辑输入底图 token 上界(每张高保真,$8/1M 折 output-equivalent)。
+        //   ×n:未来放开多出图时 usage 覆盖全 N 张,估算须 ×N,否则 reserve 偏低、settle 封顶吃差(评审 LOW#1)。
         const wh = imagePixelWH(def, typeof input.ratio === 'string' ? input.ratio : undefined, resolution);
         const quality = typeof input.quality === 'string' ? input.quality : undefined;
-        // reserve 估算 × 张数:今 gpt-image-2 maxImages=1(n=1 无变化);未来若放开多出图,
-        //   OpenAI usage.output_tokens 覆盖全 N 张 → 估算也须 ×N,否则 reserve 偏低、settle 封顶后平台吃差(评审 LOW#1)。
         const n = clampImageCount(input.count, def.maxImages);
-        return imageTokenCredits(estImageOutputTokens(quality, wh?.width ?? 1024, wh?.height ?? 1024) * n, rate);
+        const numInputImages = mode === 'img2img'
+          ? (Array.isArray(input.imageRefs) ? input.imageRefs.length
+             : (typeof input.inputImageCount === 'number' ? input.inputImageCount : 0))
+          : 0;
+        const outEquiv = estImageOutputTokens(quality, wh?.width ?? 1024, wh?.height ?? 1024) * n
+          + numInputImages * INPUT_IMAGE_TOKENS_UPPER * IN_IMG_RATIO;
+        return imageTokenCredits(outEquiv, rate);
       }
       // P3:优先读提交时快照(admin 改价 mid-flight 不破 reserve==settle);无快照(老 job)按档实时回落。
       const priceTier = typeof input.priceTierSnapshot === 'number' ? input.priceTierSnapshot : imagePriceTier(def, resolution);

@@ -204,10 +204,12 @@ export const IMAGE_MODELS: Record<string, ImageModelDef> = {
   // 计价:priceRate(¥/output token)→ costFor 走真实 usage 结算(reserve 高估→settle 按实封顶 reserved);
   //   不用 priceTier(此处 4 仅无 DB 行时的无意义回落,token 分支不读它)。真源 = model_pricing 单行(unit=token)。
   //   priceRate = $30/1M × 7.2 ≈ 0.000216 ¥/output token(OpenAI 文档 output image token 价)。
+  // 文生图任意 WxH(1K/2K/4K);图片编辑走 /images/edits(仅 3 标准尺寸,openai adapter editSize 映射),
+  // 输入图最多 9 张(受 /image-uploads maxCount=9 约束;OpenAI 侧上限 16)。编辑同 token 计价(usage 结算)。
   'gpt-image-2': {
     key: 'gpt-image-2', label: 'GPT Image 2', modelId: 'gpt-image-2-2026-04-21', provider: 'openai',
-    shape: 'S', sizeKind: 'wh', modes: ['text2img'],
-    maxImages: 1, maxInputImages: 0, maxResolution: '4K', resolutionTiers: ['1K', '2K', '4K'], priceTier: 4,
+    shape: 'S', sizeKind: 'wh', modes: ['text2img', 'img2img'],
+    maxImages: 1, maxInputImages: 9, maxResolution: '4K', resolutionTiers: ['1K', '2K', '4K'], priceTier: 4,
     pixelMatrix: GPT_IMAGE2_PIXELS,
     qualities: ['low', 'medium', 'high'],
     priceRate: 0.000216,

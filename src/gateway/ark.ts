@@ -222,8 +222,9 @@ export class ArkGateway implements CapabilityGateway, SyncImageGateway {
     return { urls }; // 火山不返 token usage(非 token 计价)
   }
 
-  async editImage(input: ImageEditInput, signal: AbortSignal): Promise<string[]> {
+  async editImage(input: ImageEditInput, signal: AbortSignal): Promise<SyncImageResult> {
     const def = getImageModel(input.model, 'img2img');
-    return this.generate(def.modelId, input.prompt, input.imageUrls ?? [], { tier: input.resolution, ratio: input.ratio, count: input.count }, signal);
+    const urls = await this.generate(def.modelId, input.prompt, input.imageUrls ?? [], { tier: input.resolution, ratio: input.ratio, count: input.count }, signal);
+    return { urls }; // 火山不返 token usage
   }
 }
