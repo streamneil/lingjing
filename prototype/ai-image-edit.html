@@ -183,13 +183,13 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     <!-- 指令卡(主面板):参考图 + 编辑指令 -->
     <div class="instr-card">
       <div id="refStrip"></div>
-      <textarea id="prompt" maxlength="2000" placeholder="描述您的编辑(新增、移除、替换)。在主图上用画笔标记区域,或上传参考图来指定更改部分。"></textarea>
+      <textarea id="prompt" maxlength="5000" placeholder="描述您的编辑(新增、移除、替换)。在主图上用画笔标记区域,或上传参考图来指定更改部分。"></textarea>
       <div class="instr-foot">
         <div class="refbtn" id="refBtn" onclick="document.getElementById('refFile').click()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>
           <span id="refBtnLbl">参考图片 (0/4)</span>
         </div>
-        <div class="cc"><b id="cnt">0</b>/2000</div>
+        <div class="cc"><b id="cnt">0</b>/5000</div>
       </div>
     </div>
     <input type="file" id="mainFile" accept="image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif,.jpg,.jpeg,.png,.webp,.bmp,.tiff,.gif" hidden>
@@ -295,7 +295,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       <div class="mkeditcard">
         <div class="ttl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5 4 4"/><path d="m8 14 8-8"/><path d="m2 22 5.5-1.5L21.6 6.4a2.1 2.1 0 0 0 0-3L18.6.4a2.1 2.1 0 0 0-3 0L1.5 14.5Z"/></svg>编辑图片</div>
         <div id="mkRefStrip"></div>
-        <textarea id="mkPrompt" maxlength="2000" placeholder="描述您的编辑(新增、移除、替换)。"></textarea>
+        <textarea id="mkPrompt" maxlength="5000" placeholder="描述您的编辑(新增、移除、替换)。"></textarea>
         <div class="instr-foot">
           <div class="refbtn" onclick="document.getElementById('refFile').click()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>
@@ -845,7 +845,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     const q=new URLSearchParams(location.search);
     const p=q.get('prompt'); const reuseImg=q.get('reuseImg');
     const refKeys=(q.get('reuseRefImg')||'').split(',').map(s=>s.trim()).filter(Boolean); // 参考图 key(如换装的参考衣服图)
-    if(p){ ta.value=p.slice(0,2000); cnt.textContent=ta.value.length; if(typeof mkPromptEl!=='undefined' && mkPromptEl) mkPromptEl.value=ta.value; }
+    if(p){ ta.value=p.slice(0,5000); cnt.textContent=ta.value.length; if(typeof mkPromptEl!=='undefined' && mkPromptEl) mkPromptEl.value=ta.value; }
     if(reuseImg || refKeys.length){
       // refillImages([主图, 参考图...], [keys...]):urls[0]=被编辑主图,其余进「参考图」槽。
       // key → 公网 URL 显预览;ref 用 key 本身(提交沿用,后端 publish 重签喂厂商)。
