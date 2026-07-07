@@ -58,6 +58,9 @@ export interface ImageModelDef {
   supportsBbox?: boolean; // 支持 bbox_list 局部重绘(仅万相2.7;千问编辑不支持)
   canSetSize?: boolean; // 是否可指定分辨率(缺省 true);false=随输入图(qwen-image-edit),UI 隐藏清晰度控件 + 提交不发 size
   ratios?: string[]; // 该模型暴露的比例集(Gemini 等 keyword 模型用);缺省 → /image-models 派生回落(pixelMatrix 首档键 / keyword 空 / undefined)
+  // ── token 计价模型(gpt-image-2,Design B 真实用量结算)──
+  qualities?: string[]; // 画质档集(low/medium/high);有此字段 → 前端显画质选择器 + 提交带 quality
+  priceRate?: number; // 每 output token 的真实成本元(¥/token)。有此字段 = token 计价模型(costFor 走用量结算分支,不用 priceTier)
 }
 
 // 分辨率条目(admin 照百炼文档录 比例:宽*高;tier 计价档由像素自动推,不存)。
@@ -91,6 +94,14 @@ const ZIMAGE_PIXELS: Record<string, Record<string, string>> = {
 const QWEN20_PIXELS: Record<string, Record<string, string>> = {
   '1K': { '1:1': '1024*1024', '2:3': '768*1152', '3:2': '1152*768', '3:4': '960*1280', '4:3': '1280*960', '9:16': '720*1280', '16:9': '1280*720', '21:9': '1344*576' },
   '2K': { '1:1': '1536*1536', '2:3': '1024*1536', '3:2': '1536*1024', '3:4': '1080*1440', '4:3': '1440*1080', '9:16': '1080*1920', '16:9': '1920*1080', '21:9': '2048*872' },
+};
+
+// gpt-image-2 分辨率档 × 比例 → 精确像素(全部 ÷16、比例 ∈ [1:3,3:1]、≤3840×2160;OpenAI adapter 再转 `x` 分隔)。
+// 1K = 官方标准尺寸(1024²等);2K/4K 按比例放大到 ≤上限。计价按真实 token 用量(Design B),与像素无直接系数。
+const GPT_IMAGE2_PIXELS: Record<string, Record<string, string>> = {
+  '1K': { '1:1': '1024*1024', '16:9': '1280*720', '9:16': '720*1280', '4:3': '1152*864', '3:4': '864*1152', '3:2': '1536*1024', '2:3': '1024*1536' },
+  '2K': { '1:1': '2048*2048', '16:9': '2048*1152', '9:16': '1152*2048', '4:3': '2048*1536', '3:4': '1536*2048', '3:2': '2048*1360', '2:3': '1360*2048' },
+  '4K': { '1:1': '2160*2160', '16:9': '3840*2160', '9:16': '2160*3840', '4:3': '2880*2160', '3:4': '2160*2880', '3:2': '3264*2160', '2:3': '2160*3264' },
 };
 
 export const IMAGE_MODELS: Record<string, ImageModelDef> = {
@@ -185,6 +196,21 @@ export const IMAGE_MODELS: Record<string, ImageModelDef> = {
     shape: 'S', sizeKind: 'keyword', modes: ['text2img', 'img2img'],
     maxImages: 1, maxInputImages: 6, maxResolution: '4K', resolutionTiers: ['1K', '2K', '4K'], priceTier: 34,
     ratios: ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'],
+  },
+
+  // ── OpenAI GPT Image 2(第 4 个 provider,纯文生图,Design B token 计价)──
+  // shape='S':同步生成(走 generateImageSync,openai.ts adapter)。sizeKind='wh':从 pixelMatrix 派生 WxH。
+  // 三控:比例(ratios/pixelMatrix)+ 分辨率(resolutionTiers 1K/2K/4K)+ 画质(qualities)。
+  // 计价:priceRate(¥/output token)→ costFor 走真实 usage 结算(reserve 高估→settle 按实封顶 reserved);
+  //   不用 priceTier(此处 4 仅无 DB 行时的无意义回落,token 分支不读它)。真源 = model_pricing 单行(unit=token)。
+  //   priceRate = $30/1M × 7.2 ≈ 0.000216 ¥/output token(OpenAI 文档 output image token 价)。
+  'gpt-image-2': {
+    key: 'gpt-image-2', label: 'GPT Image 2', modelId: 'gpt-image-2-2026-04-21', provider: 'openai',
+    shape: 'S', sizeKind: 'wh', modes: ['text2img'],
+    maxImages: 1, maxInputImages: 0, maxResolution: '4K', resolutionTiers: ['1K', '2K', '4K'], priceTier: 4,
+    pixelMatrix: GPT_IMAGE2_PIXELS,
+    qualities: ['low', 'medium', 'high'],
+    priceRate: 0.000216,
   },
 };
 
@@ -333,6 +359,21 @@ export function resolutionAllowed(def: ImageModelDef, resolution?: string): bool
   if (tiers) return tiers.length > 0 && tiers.includes(resolution ?? tiers[0]!);
   const want = RES_ORDER[resolution ?? '1K'] ?? 1;
   return want <= (RES_ORDER[def.maxResolution] ?? 2);
+}
+
+/** 从 def.pixelMatrix 按 (ratio, resolution) 派生精确 {width,height}(快照无关;pixelMatrix 是代码常量,无 mid-flight 漂移)。
+ *  gpt-image-2 的 openai adapter 用它出 size(WxH,`x` 分隔);无 pixelMatrix / 解析失败 → undefined。
+ *  档/比例缺省:回落首档 + 1:1(与 whSize 的 pixelMatrix 分支同口径)。 */
+export function imagePixelWH(def: ImageModelDef, ratio?: string, resolution?: string): { width: number; height: number } | undefined {
+  if (!def.pixelMatrix) return undefined;
+  const tiers = Object.keys(def.pixelMatrix);
+  const tier = resolution && def.pixelMatrix[resolution] ? resolution : tiers[0]!;
+  const byRatio = def.pixelMatrix[tier]!;
+  const px = byRatio[ratio ?? '1:1'] ?? byRatio['1:1'] ?? Object.values(byRatio)[0];
+  if (!px) return undefined;
+  const [w, h] = px.split('*').map((s) => Number(s));
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w! <= 0 || h! <= 0) return undefined;
+  return { width: w!, height: h! };
 }
 
 /** wh 模型查 def.resolutions 得 "W*H"(不再 imageSize 猜);snap 是 buildImageJob 写的快照,优先。 */

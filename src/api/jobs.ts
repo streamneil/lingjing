@@ -32,6 +32,8 @@ import {
   estimateAiMusicSeconds,
   clampImageCount,
   imagePriceTier,
+  imageTokenRate,
+  costFor,
   reserve,
   balance,
 } from '../credits/index.js';
@@ -213,6 +215,21 @@ function resolveImageRes(
  *   resolve model(默认兜底)→ 校验 mode/档位/张数 → clamp(maxImages)→ 写 input.count+model
  *   → cost(imagePriceTier 按所选清晰度档取价,2026-07 分档计价)。
  */
+/** token 计价模型的画质校验(gpt-image-2):有 qualities → 校验 ∈ qualities,缺省默认 medium。
+ *  非 qualities 模型返回 {ok:true}(无 quality)。buildImageJob 与 /jobs/estimate 共用 → 报价≡实扣。 */
+function resolveImageQuality(
+  def: ImageModelDef,
+  body: Record<string, unknown>,
+): { ok: true; quality?: string } | { ok: false; error: string } {
+  if (!def.qualities) return { ok: true };
+  const q = (body as { quality?: unknown }).quality;
+  if (q === undefined || q === null || q === '')
+    return { ok: true, quality: def.qualities.includes('medium') ? 'medium' : def.qualities[0] };
+  if (typeof q !== 'string' || !def.qualities.includes(q))
+    return { ok: false, error: `画质需为 ${def.qualities.join('/')} 之一` };
+  return { ok: true, quality: q };
+}
+
 function buildImageJob(body: Record<string, unknown>): JobBuildResult {
   const { model, prompt, count, resolution, ratio, mode, imageRefs, seed } = body as Partial<ImageGenInput>;
   if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0)
@@ -240,6 +257,9 @@ function buildImageJob(body: Record<string, unknown>): JobBuildResult {
   // 2. model × mode 兼容
   if (!def.modes.includes(effMode))
     return { ok: false, status: 400, error: `该模型不支持${effMode === 'img2img' ? '图生图' : '文生图'}` };
+  // 2b. 画质(token 计价模型;非法 quality → 400,与 /jobs/estimate 同校验保报价≡实扣)
+  const qr = resolveImageQuality(def, body);
+  if (!qr.ok) return { ok: false, status: 400, error: qr.error };
 
   // 3. 分辨率:resolveImageRes 统一处理(resolutions 表推档 / 档集默认档补齐 + 下架校验 / 旧守卫)。
   //    与 /jobs/estimate 共用同一函数 → 报价≡实扣(D9)。
@@ -296,6 +316,17 @@ function buildImageJob(body: Record<string, unknown>): JobBuildResult {
   if (effRes) input.resolution = effRes;
   if (typeof ratio === 'string') input.ratio = ratio;
   if (seedVal !== undefined) input.seed = seedVal;
+  // token 计价模型(gpt-image-2):画质 + 每 token 成本快照(reserve==settle);cost 走 costFor 上界估算。
+  if (def.priceRate != null) {
+    if (qr.quality) input.quality = qr.quality;
+    input.priceRateSnapshot = imageTokenRate(def);
+    return {
+      ok: true,
+      type: 'ai_image',
+      input: input as unknown as Record<string, unknown>,
+      cost: costFor('ai_image', input as unknown as Record<string, unknown>), // reserve 上界估算(与 settle 同分支)
+    };
+  }
   return {
     ok: true,
     type: 'ai_image',
@@ -969,12 +1000,28 @@ jobsRouter.post('/jobs/estimate', requireAuth, async (req: Request, res: Respons
       typeof body.ratio === 'string' ? body.ratio : undefined,
     );
     if (!rr.ok) return res.status(400).json({ error: rr.error });
+    // 画质校验(token 计价模型;与 buildImageJob 同校验 → 报价≡实扣的拒绝路径也一致)
+    const qr = resolveImageQuality(def, body);
+    if (!qr.ok) return res.status(400).json({ error: qr.error });
     const tier = imagePriceTier(def, rr.effRes); // 按档取价(2026-07 分档)
     if (m === 'img2img') {
       // 编辑按 n 张计价(与 buildImageJob/costFor 一致):count clamp 到 maxImages
       // (qwen-image-edit maxImages=1 → 固定 1)。
       const editCount = clampImageCount(body.count, def.maxImages);
       return res.json({ cost: estimateImageEditCost(rr.effRes, tier, editCount) });
+    }
+    // token 计价模型(gpt-image-2):与 buildImageJob 同经 costFor 上界估算(报价≡预扣,同一函数)。
+    if (def.priceRate != null) {
+      const estInput = {
+        model: def.key,
+        mode: 'text2img',
+        ratio: typeof body.ratio === 'string' ? body.ratio : undefined,
+        resolution: rr.effRes,
+        quality: qr.quality,
+        count: clampImageCount(body.count, def.maxImages),
+        priceRateSnapshot: imageTokenRate(def),
+      };
+      return res.json({ cost: costFor('ai_image', estInput as unknown as Record<string, unknown>) });
     }
     return res.json({
       cost: estimateImageCost(clampImageCount(body.count, def.maxImages), rr.effRes, tier, def.maxImages),
@@ -1053,6 +1100,7 @@ jobsRouter.get('/image-models', requireAuth, (_req: Request, res: Response) => {
     resolutionTiers: enabledTiers(d), // 在售清晰度档集(disabled 变体档=下架已剔除,D5);无档集模型→前端按 maxResolution 回落
     canSetSize: d.canSetSize !== false, // 前端据此显隐清晰度控件(false=随输入图,如 qwen-image-edit)
     supportsBbox: !!d.supportsBbox, // 前端据此显示/隐藏局部重绘画笔(仅万相2.7)
+    qualities: d.qualities, // 画质档集(token 计价模型 gpt-image-2:low/medium/high);前端据此显隐画质选择器
     // 该模型支持的比例集(前端比例选项)。语义三态(renderRatios 据此分支):
     //   非空数组 → 只显这些比例(pixelMatrix 模型,如千问 2.0 系:取首档的 ratio 键)
     //   空数组 [] → 隐藏比例框(keyword 模型,如万相:输出比例随输入图,选了也被后端丢弃)

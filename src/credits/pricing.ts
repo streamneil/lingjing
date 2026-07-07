@@ -58,6 +58,7 @@ export interface PricingLookup {
   realCostYuan: number;
   costSource: string;
   enabled: boolean;
+  unit: string; // 计价单位('张'/'秒'/'万字'/'token' …);token 计价模型据此辨识合法费率(防 ¥/张 被误读成 ¥/token)
 }
 /** 变体行 id 拼装唯一点:"{model_key}:{variant}"。图片分档(imagePriceTier/enabledTiers/种子/admin 建档)
  *  全经此拼,改分隔符/大小写只动这里(2026-07 分档计价,DRY)。 */
@@ -68,10 +69,10 @@ export function variantId(modelKey: string, variant: string): string {
 /** 读某模型档的统一定价行。id = "{model_key}" 或 variantId(model_key, variant)。无行返回 undefined。
  *  惰性 prepare(绝不在模块顶 prepare,否则早于建表 no-such-table)。 */
 export function lookupCost(id: string): PricingLookup | undefined {
-  _mpStmt ??= db.prepare('SELECT id, real_cost_yuan, cost_source, enabled FROM model_pricing WHERE id = ?');
-  const row = _mpStmt.get(id) as { id: string; real_cost_yuan: number; cost_source: string; enabled: number } | undefined;
+  _mpStmt ??= db.prepare('SELECT id, real_cost_yuan, cost_source, enabled, unit FROM model_pricing WHERE id = ?');
+  const row = _mpStmt.get(id) as { id: string; real_cost_yuan: number; cost_source: string; enabled: number; unit: string } | undefined;
   if (!row) return undefined;
-  return { id: row.id, realCostYuan: row.real_cost_yuan, costSource: row.cost_source, enabled: row.enabled === 1 };
+  return { id: row.id, realCostYuan: row.real_cost_yuan, costSource: row.cost_source, enabled: row.enabled === 1, unit: row.unit };
 }
 
 /**

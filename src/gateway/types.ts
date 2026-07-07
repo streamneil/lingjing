@@ -53,6 +53,17 @@ export interface ImageGenInput {
   maxImagesSnapshot?: number; // 同上,张数上限快照
   width?: number; // 提交时从所选分辨率条快照的 W(P1-c:admin 改 resolutions mid-flight 不影响在飞 job)
   height?: number;
+  // ── gpt-image-2(token 计价模型,Design B 真实用量结算)──
+  quality?: string; // 画质 low|medium|high(仅 qualities 模型;OpenAI quality 参数 + 计价上界估算轴)
+  priceRateSnapshot?: number; // 提交快照:每 output token 的真实成本元(reserve/settle 同源)
+  usageSnapshot?: ImageUsage; // worker 回写的实际 usage(costFor 读它按实结算,同音乐 durationSnapshot)
+}
+
+// gpt-image-2 等 token 计价模型的用量(网关从响应 usage 解析,worker 回写 input.usageSnapshot 供结算)。
+export interface ImageUsage {
+  inputTokens: number; // 输入 token(prompt 文本;img2img 才有图 token,本轮无)
+  outputTokens: number; // 输出图 token(计价主轴,$30/1M)
+  totalTokens: number; // 合计
 }
 
 // ── 图生图(image-to-image,qwen-image-edit)──
@@ -134,8 +145,15 @@ export interface SyncImageGateway {
    *  传入 AbortSignal 做硬超时(外部声音 P2:同步调无 poll 循环检 deadline,挂连接会冻 worker)。 */
   editImage(input: ImageEditInput, signal: AbortSignal): Promise<string[]>;
   /** 同步文生图(S 形状,纯文本 content,无输入图)。同 multimodal 端点直返,AbortController 硬超时。
-   *  eng 外部声音 P1-a:S 模型 text2img 需独立方法(editImage 必填 imageUrls)。 */
-  generateImageSync(input: ImageGenInput, signal: AbortSignal): Promise<string[]>;
+   *  eng 外部声音 P1-a:S 模型 text2img 需独立方法(editImage 必填 imageUrls)。
+   *  返回 { urls, usage? }:token 计价模型(gpt-image-2)带 usage 供实结算;其余 provider usage 置 undefined。 */
+  generateImageSync(input: ImageGenInput, signal: AbortSignal): Promise<SyncImageResult>;
+}
+
+/** generateImageSync 结果:成品 URL 数组 + 可选 usage(仅 token 计价模型如 gpt-image-2)。 */
+export interface SyncImageResult {
+  urls: string[];
+  usage?: ImageUsage;
 }
 
 export interface ImageJobResult {

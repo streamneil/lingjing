@@ -220,3 +220,11 @@ docs/superpowers/specs/2026-06-18-nano-banana-resolutions-design.md 的 Flash 14
 - **Context:** Gemini 分档计价 review(2026-07-04)顺手发现。需幂等迁移而非手工 SQL(每个部署库都有)。
 - **Effort:** S(human)→ S(CC)。**Priority:** P3。
 - **Depends on / blocked by:** 无。
+
+### T-GPTIMG2-GEMINI-DRY:Gemini 网关改调共享 helper(消双副本漂移)
+- **What:** 把 GeminiGateway 里的「代理 dispatcher」+「base64 buffer → storage.putObject → media-publisher 转公网 URL 尾」两块,改调 gpt-image-2 本轮新建的 `src/gateway/sync-image-common.ts`(`proxyDispatcher(envVar)` + `b64ToPublicUrl(buf, tenant)`)。自带回归跑(现有 Gemini 测试全绿)。
+- **Why:** gpt-image-2 接入时抽了这两个真通用的 helper,OpenAI 首日即用。Gemini 目前仍是自己那份副本 —— 两份代理缓存 + 存储尾逻辑并存,后续改一处易忘另一处(漂移)。改调消除双副本。
+- **Pros:** DRY 收口;代理/存储尾逻辑单一真源。
+- **Cons:** 碰活着的 Gemini provider(有回归面),故本轮特意后置,不阻 gpt-image-2 上线。
+- **Context:** 来自 2026-07-07 /plan-eng-review + 外部声音 #8。外部声音提醒「别为 DRY 拿活 provider 降险」→ 决定:本轮只建 helper + OpenAI 用,Gemini 改调作独立后续 commit。注意:只搬「已提取的 buffer → url 尾」+ 代理;Gemini 的响应解析(inline_data snake/camel、thinking-part 跳过、safety-block)是 Gemini 专属,不进共享 helper。
+- **Depends on / blocked by:** 本轮 gpt-image-2 的 sync-image-common.ts 先落地。**Priority:** P3(清理,不阻功能)。

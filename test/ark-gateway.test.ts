@@ -131,7 +131,7 @@ describe('ArkGateway 图片:同步生成', () => {
       captured = { url: String(url), body: JSON.parse(init.body) };
       return new Response(JSON.stringify({ data: [{ url: 'https://img/gen1.jpg' }] }), { status: 200 });
     });
-    const urls = await new ArkGateway().generateImageSync(
+    const { urls } = await new ArkGateway().generateImageSync(
       { model: 'doubao-seedream-4.0', prompt: '一只猫', resolution: '2K' },
       new AbortController().signal,
     );

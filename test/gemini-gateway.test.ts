@@ -45,7 +45,7 @@ describe('GeminiGateway 请求/响应', () => {
         candidates: [{ content: { parts: [{ inline_data: { mime_type: 'image/png', data: Buffer.from('img').toString('base64') } }] } }],
       }), { status: 200 });
     });
-    const urls = await new GeminiGateway().generateImageSync(
+    const { urls } = await new GeminiGateway().generateImageSync(
       { model: 'gemini-3.1-flash-image', prompt: '一只猫', resolution: '2K', ratio: '16:9' },
       new AbortController().signal,
     );
@@ -90,7 +90,7 @@ describe('GeminiGateway 请求/响应', () => {
         { inline_data: { mime_type: 'image/png', data: Buffer.from('FINAL').toString('base64') }, thought_signature: 'sigB' }, // 成品
       ] } }],
     }), { status: 200 }) as any);
-    const urls = await new GeminiGateway().generateImageSync({ model: 'gemini-3-pro-image', prompt: 'x' }, new AbortController().signal);
+    const { urls } = await new GeminiGateway().generateImageSync({ model: 'gemini-3-pro-image', prompt: 'x' }, new AbortController().signal);
     expect(urls.length).toBe(1); // 只 1 张成品(2 张 thought 被跳过)
   });
 
@@ -130,7 +130,7 @@ describe('GeminiGateway 请求/响应', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: Buffer.from('z').toString('base64') } }] } }],
     }), { status: 200 }) as any);
-    const urls = await new GeminiGateway().generateImageSync({ model: 'gemini-3.1-flash-image', prompt: 'x' }, new AbortController().signal);
+    const { urls } = await new GeminiGateway().generateImageSync({ model: 'gemini-3.1-flash-image', prompt: 'x' }, new AbortController().signal);
     expect(urls.length).toBe(1);
   });
 
