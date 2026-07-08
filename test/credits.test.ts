@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 process.env.DB_FILE = ':memory:';
 
 const { db } = await import('../src/db/index.js');
-const { grant, reserve, settle, release, balance, estimateCost } = await import(
+const { grant, reserve, settle, release, balance, estimateCost, usageSummary } = await import(
   '../src/credits/index.js'
 );
 
@@ -100,5 +100,45 @@ describe('租户余额隔离', () => {
     grant('tenant-A', 100);
     expect(balance('tenant-A')).toBe(100);
     expect(balance('tenant-B')).toBe(0);
+  });
+});
+
+describe('usageSummary — 整租户用量统计', () => {
+  it('净消耗口径:成功=实扣、token 退差、失败退还=0;累计生成=结算数', () => {
+    grant(T, 1000);
+    // 成功任务(固定价):reserve 100 → settle actualCost 100(diff 0)→ 实扣 100
+    reserve(T, 'job1', 100); settle(T, 'job1', 100);
+    // token 任务:reserve 137(上限)→ settle actualCost 54(退差 83)→ 实扣 54
+    reserve(T, 'job2', 137); settle(T, 'job2', 54);
+    // 失败任务:reserve 200 → release(退还 200)→ 实扣 0
+    reserve(T, 'job3', 200); release(T, 'job3');
+
+    const s = usageSummary(T);
+    expect(s.balance).toBe(846); // 1000 - 100 - 54
+    expect(s.granted).toBe(1000);
+    expect(s.released).toBe(200); // 失败退还
+    expect(s.consumed).toBe(154); // 100 + 54(失败不计);= granted - balance
+    expect(s.genCount).toBe(2); // 两次结算(job3 失败无结算)
+    expect(s.todaySpend).toBe(154); // 全在今天
+    expect(s.todayGenCount).toBe(2);
+    expect(s.monthSpend).toBe(154);
+    expect(s.spend30).toBe(154);
+    expect(s.trend30).toHaveLength(30);
+    expect(s.trend30[29]).toBe(154); // 今天桶
+  });
+
+  it('无任何流水 → 全 0(不误报)', () => {
+    const s = usageSummary('tenant-empty');
+    expect(s.balance).toBe(0);
+    expect(s.consumed).toBe(0);
+    expect(s.genCount).toBe(0);
+    expect(s.spend30).toBe(0);
+  });
+
+  it('租户隔离:A 的消耗不进 B 的统计', () => {
+    grant('tA', 500); reserve('tA', 'j', 50); settle('tA', 'j', 50);
+    const b = usageSummary('tB');
+    expect(b.consumed).toBe(0);
+    expect(b.balance).toBe(0);
   });
 });

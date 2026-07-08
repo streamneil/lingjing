@@ -157,8 +157,9 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         </div>
       </div>
 
-      <!-- ── 四统计卡(真实 ledger 计算)── -->
+      <!-- ── 统计卡(整租户口径:/credits/summary)── -->
       <div class="stat-row">
+        <div class="stat" style="animation-delay:.02s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>今日消耗</div><div class="val" id="statToday">—</div><div class="sub">今日生成 <b id="statTodayGen">—</b> 次</div></div>
         <div class="stat" style="animation-delay:.04s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>累计生成</div><div class="val" id="statGen">—</div><div class="sub">消耗 <b id="statGenPts">—</b> 点</div></div>
         <div class="stat" style="animation-delay:.08s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 14 3-4 3 3 4-6"/></svg>本月消耗</div><div class="val" id="statMonth">—</div><div class="sub">本自然月净扣点</div></div>
         <div class="stat" style="animation-delay:.12s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/></svg>累计发放</div><div class="val" id="statGrant">—</div><div class="sub">后台 / 充值入账</div></div>
@@ -217,7 +218,8 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   const TOOL_CN = { video:'数字人视频', video_t2v:'文字转影片', video_i2v:'图片转影片', video_edit:'影片编辑', ai_image:'AI 图片', tts:'文字转语音', ai_music:'AI 音乐' };
   const toolLabel = t => t ? (TOOL_CN[t]||t) : '—';
   let LEDGER = [], curFilter = 'all', selUser = 'all', selTool = 'all', isAdmin = false;
-  let ledPage = 1, ledTotal = 0; const LED_PAGE_SIZE = 20; // 消费明细分页(当页数据驱动筛选/统计/图表)
+  let ledPage = 1, ledTotal = 0; const LED_PAGE_SIZE = 20; // 消费明细分页(仅驱动明细表/筛选)
+  let SUMMARY = null; // 整租户用量汇总(/credits/summary):余额卡/趋势图/统计卡全用它,不再从分页 ledger 现算
 
   const esc = s => (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const fmtTime = ts => { const d=new Date(ts),p=n=>String(n).padStart(2,'0'); return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
@@ -230,11 +232,9 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     const led = document.getElementById('balLed');
     if(warn && warn.low) led.classList.add('low');
 
-    // 近 30 天净消耗速度 → 可用天数
-    const cut = Date.now() - 30*DAY;
-    const spend30 = LEDGER.filter(l=>l.created_at>=cut && (l.kind==='reserve'||l.kind==='settle'))
-                          .reduce((s,l)=>s + Math.min(0,l.amount), 0); // 负数
-    const burnPerDay = Math.abs(spend30) / 30; // 点/天
+    // 近 30 天净消耗速度 → 可用天数(整租户口径:SUMMARY.spend30,不再从分页 ledger 现算)
+    const spend30 = (SUMMARY && SUMMARY.spend30) || 0;
+    const burnPerDay = spend30 / 30; // 点/天
     const rwEl = document.getElementById('runway'), rwTxt = document.getElementById('runwayTxt'), rate = document.getElementById('rateTxt');
 
     if(burnPerDay < 0.01){
@@ -254,15 +254,10 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     }
   }
 
-  // ── 30 天趋势脊线(按天聚合净消耗)──
+  // ── 30 天趋势脊线(整租户逐日净消耗,来自 SUMMARY.trend30)──
   function renderSpark(){
-    const days = 30, buckets = new Array(days).fill(0);
-    const today0 = (()=>{ const d=new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
-    LEDGER.forEach(l=>{
-      if(l.kind!=='reserve' && l.kind!=='settle') return;
-      const idx = days-1 - Math.floor((today0 - new Date(l.created_at).setHours(0,0,0,0))/DAY);
-      if(idx>=0 && idx<days) buckets[idx] += Math.abs(Math.min(0,l.amount));
-    });
+    const days = 30;
+    const buckets = (SUMMARY && Array.isArray(SUMMARY.trend30) && SUMMARY.trend30.length===days) ? SUMMARY.trend30 : new Array(days).fill(0);
     const total = buckets.reduce((a,b)=>a+b,0);
     document.getElementById('trendSum').textContent = fmtN(total) + ' 点';
     const max = Math.max(1, ...buckets);
@@ -277,23 +272,16 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     document.getElementById('sparkArea').setAttribute('d', `${line} L${W} ${H} L0 ${H} Z`);
   }
 
-  // ── 统计卡 ──
+  // ── 统计卡(整租户口径:SUMMARY)──
   function renderStats(){
-    const sum = k => LEDGER.filter(l=>l.kind===k).reduce((s,l)=>s+l.amount,0);
-    const settleCnt = LEDGER.filter(l=>l.kind==='settle').length;
-    const reserveCnt = LEDGER.filter(l=>l.kind==='reserve').length;
-    const genCnt = Math.max(settleCnt, reserveCnt); // 生成任务数
-    const netSpend = Math.abs(sum('reserve')) - sum('release');
-
-    const monStart = (()=>{ const d=new Date(); return new Date(d.getFullYear(),d.getMonth(),1).getTime(); })();
-    const monthSpend = LEDGER.filter(l=>l.created_at>=monStart && (l.kind==='reserve'))
-                             .reduce((s,l)=>s+Math.abs(l.amount),0);
-
-    document.getElementById('statGen').innerHTML = genCnt + ' <small>次</small>';
-    document.getElementById('statGenPts').textContent = fmtN(Math.max(0,netSpend));
-    document.getElementById('statMonth').innerHTML = fmtN(monthSpend) + ' <small>点</small>';
-    document.getElementById('statGrant').textContent = fmtN(sum('grant'));
-    document.getElementById('statRelease').innerHTML = fmtN(sum('release')) + ' <small>点</small>';
+    const s = SUMMARY || {};
+    document.getElementById('statToday').innerHTML = fmtN(s.todaySpend||0) + ' <small>点</small>';
+    const tg = document.getElementById('statTodayGen'); if(tg) tg.textContent = fmtN(s.todayGenCount||0);
+    document.getElementById('statGen').innerHTML = fmtN(s.genCount||0) + ' <small>次</small>';
+    document.getElementById('statGenPts').textContent = fmtN(Math.max(0,s.consumed||0));
+    document.getElementById('statMonth').innerHTML = fmtN(s.monthSpend||0) + ' <small>点</small>';
+    document.getElementById('statGrant').textContent = fmtN(s.granted||0);
+    document.getElementById('statRelease').innerHTML = fmtN(s.released||0) + ' <small>点</small>';
   }
 
   // ── 「作品」列:UUID 死信息 → 看得懂的文案摘要 + 可点预览 ──
@@ -398,12 +386,15 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         const r=document.getElementById('renewBtn'); if(r) r.style.display='none';
         document.getElementById('renewHint').textContent='点数不足时,请联系您的机构管理员申请扩容。';
       }
-      const [bal, warn] = await Promise.all([
+      const [bal, warn, summary] = await Promise.all([
         LJ.get('/credits/balance'),
         LJ.get('/credits/warning').catch(()=>null),
+        LJ.get('/credits/summary').catch(()=>null),
       ]);
+      SUMMARY = summary;
       renderDeck(bal.balance ?? 0, warn);
-      await loadLedgerPage(1);
+      renderSpark(); renderStats(); // 整租户口径(SUMMARY),不受明细分页影响
+      await loadLedgerPage(1); // 仅拉明细表当页
     }catch(e){ /* 401 已由 api.js 跳转 */ }
   }
 
@@ -415,7 +406,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       LEDGER = Array.isArray(res.rows) ? res.rows : [];
       ledTotal = res.total ?? LEDGER.length;
     }catch{ LEDGER=[]; ledTotal=0; }
-    renderSpark(); renderStats(); buildPops(); renderTable(); renderLedPager();
+    buildPops(); renderTable(); renderLedPager(); // 统计/图表用 SUMMARY(整租户),此处只更新明细表
   }
 
   // 明细表页码条。
