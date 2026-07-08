@@ -47,6 +47,21 @@ describe('translateProviderError — 厂商错误码 → 中文可读', () => {
     expect(readable).toContain('安全策略');
   });
 
+  // Regression: GPT Image 2 内容审核拦截(用户实测)曾落到「请稍后重试」兜底 → 误导用户重试
+  it('OpenAI 内容审核拦截 → 「修改提示词」而非「稍后重试」', () => {
+    const raw = '内容被 OpenAI 审核拦截。原始:{"message":"Your request was rejected by the safety system. safety_violations=[sexual].","type":"image_generation_user_error","code":"moderation_blocked","moderation_details":{"moderation_stage":"output","categories":["sexual"]}}';
+    const { readable } = translateProviderError(raw);
+    expect(readable).toContain('审核拦截');
+    expect(readable).toContain('修改'); // 提示改内容
+    expect(readable).not.toMatch(/稍后重试/); // 关键:不误导用户直接重试
+    expect(readable).not.toMatch(/HTTP|\{/); // 无英文 JSON
+  });
+
+  it('OpenAI 组织未验证 → 可操作的验证提示', () => {
+    const { readable } = translateProviderError('{"error":{"message":"Your organization must be verified","code":"verification_required"}}');
+    expect(readable).toContain('组织未验证');
+  });
+
   // Regression: ISSUE-001 — 百炼音频格式错误(真库 5 例)曾落到「生成失败,请稍后重试」兜底,误导用户重试
   // Found by /qa on 2026-07-06
   it('音频/文件格式不支持 → 可操作的换格式提示(非通用兜底)', () => {
