@@ -1246,6 +1246,7 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
         const inp = JSON.parse(j.input_json) as {
           script?: string; prompt?: string; text?: string;
           model?: string; mode?: string; source?: string; ratio?: string; resolution?: string; count?: number;
+          quality?: string; // gpt-image-2 画质档(低/中/高):记录卡显示用
           imageRefs?: string[]; seed?: number; width?: number; height?: number; bboxList?: number[][][];
           duration?: number; audio?: boolean; negativePrompt?: string; promptExtend?: boolean; task?: string;
           videoRef?: string; truncateDuration?: number; audioSetting?: string; inputDurationSnapshot?: number;
@@ -1261,7 +1262,7 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
           const inputUrls = await signInputUrls(inp.imageRefs);
           meta = {
             model: inp.model, modelLabel, mode: inp.mode, source: inp.source, // source:记录归属页
-            ratio: inp.ratio, resolution: inp.resolution, sizeLabel, count: inp.count,
+            ratio: inp.ratio, resolution: inp.resolution, quality: inp.quality, sizeLabel, count: inp.count,
             imageRefs: inp.imageRefs, inputUrls, seed: inp.seed, width: inp.width, height: inp.height, bboxList: inp.bboxList, // 重新生成回放用
           };
         } else if (j.type === 'video_t2v') {

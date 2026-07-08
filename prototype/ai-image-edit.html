@@ -619,7 +619,10 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     if(m && m.canSetSize===false){ document.getElementById('setPillV').textContent='跟随输入图'; return; }
     const parts=[];
     if(ratioSupported()) parts.push(ratio);   // 千问 2.0 系:显比例
-    parts.push(res);                          // 清晰度档
+    // gpt-image-2(有 qualities):编辑恒 1K,显画质代替清晰度档;其余模型显清晰度档。
+    const isQual=!!(m && Array.isArray(m.qualities) && m.qualities.length);
+    if(isQual){ if(quality) parts.push('画质'+(QUALITY_LABEL[quality]||quality)); }
+    else { parts.push(res); }
     if(m && m.maxImages>1) parts.push(count+' 张');
     document.getElementById('setPillV').textContent=parts.join(' · ');
   }
@@ -692,7 +695,9 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   function metaChips(job){
     const c=[]; if(job.modelLabel) c.push(job.modelLabel);
     if(job.ratio && job.ratio!=='auto') c.push(job.ratio);
-    if(job.resolution) c.push(job.resolution);
+    // gpt-image-2 编辑:清晰度恒 1K 无意义 → 不显,改显画质(有 job.quality 即 token 计价模型)。
+    if(job.resolution && !job.quality) c.push(job.resolution);
+    if(job.quality) c.push('画质·'+(QUALITY_LABEL[job.quality]||job.quality));
     return c.length?`<div class="card-meta">${c.map(x=>`<span class="chip">${esc(x)}</span>`).join('')}</div>`:'';
   }
   function cardActs(job,ok){
@@ -746,7 +751,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         imageRefs:inp.imageRefs, count:inp.count, resolution:inp.resolution, ratio:inp.ratio, seed:inp.seed };
       if(inp.bboxList) payload.bboxList=inp.bboxList;
       const res2=await LJ.createJob(payload);
-      renderCard({ id:res2.id, status:'queued', progress:0, prompt:inp.prompt, modelLabel:findLabel(inp.model), resolution:inp.resolution, count:inp.count });
+      renderCard({ id:res2.id, status:'queued', progress:0, prompt:inp.prompt, modelLabel:findLabel(inp.model), resolution:inp.resolution, quality:inp.quality, count:inp.count });
       track(res2.id, inp.prompt);
       window.LJToast&&window.LJToast('✓ 已重新提交生成');
     }catch(e){ window.LJToast&&window.LJToast('重新生成失败:'+e.message,'err'); }
@@ -801,7 +806,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     await window.LJDownloadAll(Array.from({length:n},(_,i)=>({url:`/api/jobs/${id}/download/${i}`, filename:`lingjing-${id}-${i+1}.png`})));
   };
 
-  async function track(id, prompt){ try{ await LJ.pollJob(id,(job)=>renderCard({...job, prompt, ...(jobInputs[id]?{modelLabel:findLabel(jobInputs[id].model),resolution:jobInputs[id].resolution,ratio:jobInputs[id].ratio,count:jobInputs[id].count}:{})})); }catch(e){} }
+  async function track(id, prompt){ try{ await LJ.pollJob(id,(job)=>renderCard({...job, prompt, ...(jobInputs[id]?{modelLabel:findLabel(jobInputs[id].model),resolution:jobInputs[id].resolution,ratio:jobInputs[id].ratio,quality:jobInputs[id].quality,count:jobInputs[id].count}:{})})); }catch(e){} }
   async function loadHistory(){
     let jobs=[]; try{ jobs=await LJ.listJobs(); }catch(e){ return; }
     // 按来源页分流:编辑器显 source==='ai-image-edit';老 job 无 source → 回落按 mode(img2img 归这里)。
@@ -809,7 +814,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     if(!mine.length) return;
     document.getElementById('feedEmpty').style.display='none';
     for(const j of [...mine].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))){
-      jobInputs[j.id]={ model:j.model, mode:j.mode, prompt:j.script, imageRefs:j.imageRefs, inputUrls:j.inputUrls, count:j.count, resolution:j.resolution, ratio:j.ratio, seed:j.seed, bboxList:j.bboxList };
+      jobInputs[j.id]={ model:j.model, mode:j.mode, prompt:j.script, imageRefs:j.imageRefs, inputUrls:j.inputUrls, count:j.count, resolution:j.resolution, ratio:j.ratio, quality:j.quality, seed:j.seed, bboxList:j.bboxList };
       renderCard({...j, prompt:j.script}); // 用后端 j.modelLabel(服务端 getImageModel 解析,含禁用/自定义模型),不用前端 findLabel(allModels 过滤后可能查不到→丢模型名)
       if(j.status==='queued'||j.status==='running') track(j.id, j.script);
     }
@@ -826,8 +831,8 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       const bb=buildBboxList(imageRefs.length); if(bb) payload.bboxList=bb;
       const res2=await LJ.createJob(payload);
       // 存 jobInputs(供卡片元信息 + 轮询重渲带比例/清晰度/张数 + 重新提示回填)
-      jobInputs[res2.id]={ model, mode:'img2img', prompt, imageRefs, count, resolution:effRes(), ratio:effRatio(), seed:seed||undefined, bboxList:payload.bboxList };
-      renderCard({ id:res2.id, status:'queued', progress:0, prompt, modelLabel:findLabel(model), resolution:effRes(), ratio:effRatio(), count });
+      jobInputs[res2.id]={ model, mode:'img2img', prompt, imageRefs, count, resolution:effRes(), ratio:effRatio(), quality:quality||undefined, seed:seed||undefined, bboxList:payload.bboxList };
+      renderCard({ id:res2.id, status:'queued', progress:0, prompt, modelLabel:findLabel(model), resolution:effRes(), ratio:effRatio(), quality:quality||undefined, count });
       track(res2.id, prompt);
       // 注:此处不调 refreshBtn —— btn.textContent='提交中…' 已把内部 #cbtnLabel span 清掉,
       // refreshBtn 会 getElementById('cbtnLabel')→null 报错;交给 finally 在 btn.innerHTML=prev 还原后再调。
