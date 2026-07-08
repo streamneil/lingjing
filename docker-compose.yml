@@ -53,6 +53,9 @@ services:
       # Gemini 出网代理(大陆 ECS 直连 Google 被墙时在 .env 填;仅 Gemini 走代理,百炼/火山直连)。
       # 容器内 127.0.0.1≠宿主机 → 用 host.docker.internal(见下方 extra_hosts);留空=直连。详见 README。
       GEMINI_PROXY: ${GEMINI_PROXY:-}
+      # OpenAI(GPT Image 2)出网代理:同 GEMINI_PROXY,大陆 ECS 直连 api.openai.com 被墙时在 .env 填。
+      # 缺这行 → .env 里的 OPENAI_PROXY 不会传进容器 → OpenAI 直连被墙 fetch failed。留空=直连。
+      OPENAI_PROXY: ${OPENAI_PROXY:-}
     # 让容器能解析宿主机(Gemini 走宿主机 clash 代理时:GEMINI_PROXY=http://host.docker.internal:7890)。
     # 无害:没配 GEMINI_PROXY 时没人解析它。需 Docker 20.10+。
     extra_hosts:
