@@ -6,7 +6,7 @@
 
 import { Router, type Request, type Response } from 'express';
 import { requireAuth } from '../auth/middleware.js';
-import { balance, ledger, countLedger } from '../credits/index.js';
+import { balance, ledger, countLedger, usageSummary } from '../credits/index.js';
 import { listAudit, countAudit } from '../audit/index.js';
 
 export const creditsRouter = Router();
@@ -21,6 +21,12 @@ function parsePage(req: Request, defaultSize = 20): { page: number; pageSize: nu
 // 余额(顶栏展示)
 creditsRouter.get('/credits/balance', requireAuth, (req: Request, res: Response) => {
   return res.json({ balance: balance(req.user!.tenantId) });
+});
+
+// 用量统计汇总(整租户,非个人):余额/累计发放/累计消耗/累计生成/本月/今日/近30天趋势。
+// 修「客户端从分页 ledger 现算」的欠计(累计生成只见一页、近30天误判暂无消耗)。任何登录用户看本机构口径。
+creditsRouter.get('/credits/summary', requireAuth, (req: Request, res: Response) => {
+  return res.json(usageSummary(req.user!.tenantId));
 });
 
 // 消费记录(分页:page/pageSize → {rows, total, page, pageSize})。

@@ -391,6 +391,72 @@ export function balance(tenantId: string): number {
   return row.bal;
 }
 
+export interface UsageSummary {
+  balance: number; // 当前余额
+  granted: number; // 累计发放(后台/充值入账)
+  released: number; // 失败任务退还(不计费)累计
+  consumed: number; // 累计净消耗(成功扣费,已扣掉失败退还)= granted - balance
+  genCount: number; // 累计完成生成次数(结算行数)
+  monthSpend: number; // 本自然月净消耗
+  todaySpend: number; // 今日净消耗
+  todayGenCount: number; // 今日完成生成次数
+  trend30: number[]; // 近 30 天逐日净消耗(含今天,共 30 桶)
+  spend30: number; // 近 30 天净消耗合计
+}
+
+/**
+ * 用量统计汇总(整租户,非个人)。修「客户端从分页 ledger 现算 → 只见一页」的欠计。
+ * 净消耗口径:每笔 reserve/settle/release 对余额的负向影响 = -amount。
+ *   成功任务 = 实扣;失败任务 reserve+release 相抵 = 0;token 模型 reserve 高估 + settle 退差 = 实扣。
+ *   即净消耗 = -SUM(amount) over kind in (reserve,settle,release)。累计发放/退还单列(便于对账)。
+ */
+export function usageSummary(tenantId: string): UsageSummary {
+  const DAY = 86_400_000;
+  const agg = db
+    .prepare(
+      `SELECT
+         COALESCE(SUM(amount),0) AS balance,
+         COALESCE(SUM(CASE WHEN kind='grant'   THEN amount ELSE 0 END),0) AS granted,
+         COALESCE(SUM(CASE WHEN kind='release' THEN amount ELSE 0 END),0) AS released,
+         COALESCE(SUM(CASE WHEN kind IN ('reserve','settle','release') THEN -amount ELSE 0 END),0) AS consumed,
+         COALESCE(SUM(CASE WHEN kind='settle'  THEN 1 ELSE 0 END),0) AS genCount
+       FROM credit_ledger WHERE tenant_id=?`,
+    )
+    .get(tenantId) as { balance: number; granted: number; released: number; consumed: number; genCount: number };
+
+  // 周期净消耗 + 完成次数(created_at 为 ms epoch)。
+  const periodStmt = db.prepare(
+    `SELECT
+       COALESCE(SUM(CASE WHEN kind IN ('reserve','settle','release') THEN -amount ELSE 0 END),0) AS spend,
+       COALESCE(SUM(CASE WHEN kind='settle' THEN 1 ELSE 0 END),0) AS genCount
+     FROM credit_ledger WHERE tenant_id=? AND created_at>=?`,
+  );
+  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+  const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+  const month = periodStmt.get(tenantId, monthStart.getTime()) as { spend: number; genCount: number };
+  const today = periodStmt.get(tenantId, dayStart.getTime()) as { spend: number; genCount: number };
+
+  // 近 30 天逐日净消耗(日历日分桶,含今天)。
+  const today0 = dayStart.getTime();
+  const cutoff = today0 - 29 * DAY;
+  const rows = db
+    .prepare(`SELECT kind, amount, created_at FROM credit_ledger WHERE tenant_id=? AND created_at>=? AND kind IN ('reserve','settle','release')`)
+    .all(tenantId, cutoff) as { kind: string; amount: number; created_at: number }[];
+  const trend30 = new Array<number>(30).fill(0);
+  for (const r of rows) {
+    const d = new Date(r.created_at); d.setHours(0, 0, 0, 0);
+    const idx = 29 - Math.round((today0 - d.getTime()) / DAY);
+    if (idx >= 0 && idx < 30) trend30[idx]! += -r.amount; // 净消耗贡献 = -amount
+  }
+  const spend30 = trend30.reduce((a, b) => a + b, 0);
+
+  return {
+    balance: agg.balance, granted: agg.granted, released: agg.released, consumed: agg.consumed,
+    genCount: agg.genCount, monthSpend: month.spend, todaySpend: today.spend, todayGenCount: today.genCount,
+    trend30, spend30,
+  };
+}
+
 /** 后台发放(admin)。orderId 关联充值订单(幂等部分唯一索引 + 审计);后台手动发放传 null。 */
 export function grant(tenantId: string, amount: number, note = '后台发放', orderId: string | null = null): void {
   if (amount <= 0) throw new Error('发放积分必须为正');
