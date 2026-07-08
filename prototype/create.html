@@ -596,7 +596,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       card.className = 'fitem';
       card.id = 'job-'+job.id;
       // 实时提交/轮询 → 置顶(prepend);历史分页加载 → 追加于底(append,续更旧)。
-      if(append) feedList.appendChild(card); else feedList.insertBefore(card, feedList.firstChild);
+      if(append){ const _lm=document.getElementById('loadMoreBtn'); if(_lm&&_lm.parentNode===feedList) feedList.insertBefore(card,_lm); else feedList.appendChild(card); } else feedList.insertBefore(card, feedList.firstChild);
     }
     // 生成中卡片已存在 → 轮询只更进度文字/进度条,不重建 innerHTML
     //(否则每次轮询都重铺 .mav 背景图,头像会闪一下,见用户反馈)。
