@@ -339,9 +339,14 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     // 有 resolutions 模型:显 比例 + 尺寸(如 16:9 · 2688×1536);无则显 比例 · 清晰度档。
     let sizePart=res;
     if(m && m.resolutions && m.resolutions.length){ const hit=m.resolutions.find(r=>r.ratio===ratio); sizePart=hit?`${hit.width}×${hit.height}`:''; }
+    // gpt-image-2(有 qualities):编辑态显画质代替清晰度(恒 1K 无意义);文生图态显清晰度 + 画质。
+    const isQual=!!(m && Array.isArray(m.qualities) && m.qualities.length);
+    const parts=[ratio==='auto'?'自动':ratio];
+    if(isQual){ if(mode!=='img2img' && sizePart) parts.push(sizePart); if(quality) parts.push('画质'+(QUALITY_LABEL[quality]||quality)); }
+    else if(sizePart){ parts.push(sizePart); }
     // 张数:模型支持多出图(maxImages>1)就显(图转图也显,如千问2.0 Pro / 万相2.7)。
-    const showCount = m && (m.maxImages||1) > 1;
-    document.getElementById('setPillV').textContent=`${ratio==='auto'?'自动':ratio}${sizePart?' · '+sizePart:''}${showCount?' · '+count+' 张':''}`;
+    if(m && (m.maxImages||1) > 1) parts.push(count+' 张');
+    document.getElementById('setPillV').textContent=parts.join(' · ');
   }
 
   // ── 比例选择 ──
@@ -536,10 +541,14 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   }
   window.toggleTx=function(el){ const tx=el.previousElementSibling; const c=tx.classList.toggle('clamp'); el.textContent=c?'展开':'收起'; };
   function fitBubble(card){ if(!card) return; const tx=card.querySelector('.tx.clamp'), tg=card.querySelector('.tx-toggle'); if(!tx||!tg) return; tg.classList.toggle('show', tx.scrollHeight - tx.clientHeight > 2); }
-  // 元信息 chips(模型·比例·清晰度,item4)
+  // 元信息 chips(模型·比例·清晰度/画质,item4)
   function metaChips(job){
     const c=[]; if(job.modelLabel) c.push(job.modelLabel);
-    if(job.ratio) c.push(job.ratio==='auto'?'自动比例':job.ratio); if(job.resolution) c.push(job.resolution);
+    if(job.ratio) c.push(job.ratio==='auto'?'自动比例':job.ratio);
+    // gpt-image-2 编辑:清晰度恒 1K 无意义 → 不显(有 quality 即 token 计价模型,img2img 即编辑)。
+    const qualEdit = job.mode==='img2img' && job.quality;
+    if(job.resolution && !qualEdit) c.push(job.resolution);
+    if(job.quality) c.push('画质·'+(QUALITY_LABEL[job.quality]||job.quality));
     return c.length?`<div class="card-meta">${c.map(x=>`<span class="chip">${esc(x)}</span>`).join('')}</div>`:'';
   }
   // 动作按钮:重新生成 / 重新提示 / 下载 / 删除(成功/失败都给重新生成+重新提示+删除)
@@ -594,7 +603,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     try{
       const res2=await LJ.createJob({ type:'ai_image', source:'ai-image', model:inp.model, mode:inp.mode||'text2img', prompt:inp.prompt,
         imageRefs:inp.imageRefs, count:inp.count, resolution:inp.resolution, ratio:inp.ratio, seed:inp.seed });
-      renderCard({ id:res2.id, status:'queued', progress:0, prompt:inp.prompt, modelLabel:findLabel(inp.model), ratio:inp.ratio, resolution:inp.resolution });
+      renderCard({ id:res2.id, status:'queued', progress:0, prompt:inp.prompt, modelLabel:findLabel(inp.model), mode:inp.mode, ratio:inp.ratio, resolution:inp.resolution, quality:inp.quality });
       track(res2.id, inp.prompt);
       window.LJToast&&window.LJToast('✓ 已重新提交生成');
     }catch(e){ window.LJToast&&window.LJToast('重新生成失败:'+e.message,'err'); }
@@ -644,7 +653,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     await window.LJDownloadAll(Array.from({length:n},(_,i)=>({url:`/api/jobs/${id}/download/${i}`, filename:`lingjing-${id}-${i+1}.png`})));
   };
 
-  async function track(id, prompt){ try{ await LJ.pollJob(id, (job)=>renderCard({...job, prompt, ...(jobInputs[id]?{modelLabel:findLabel(jobInputs[id].model),ratio:jobInputs[id].ratio,resolution:jobInputs[id].resolution,inputUrls:jobInputs[id].inputUrls,imageRefs:jobInputs[id].imageRefs}:{})})); }catch(e){} }
+  async function track(id, prompt){ try{ await LJ.pollJob(id, (job)=>renderCard({...job, prompt, ...(jobInputs[id]?{modelLabel:findLabel(jobInputs[id].model),mode:jobInputs[id].mode,ratio:jobInputs[id].ratio,resolution:jobInputs[id].resolution,quality:jobInputs[id].quality,inputUrls:jobInputs[id].inputUrls,imageRefs:jobInputs[id].imageRefs}:{})})); }catch(e){} }
 
   async function loadHistory(){
     let jobs=[]; try{ jobs=await LJ.listJobs(); }catch(e){ return; }
@@ -655,7 +664,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     document.getElementById('sampleGallery').style.display='none';
     // list 已带 model/ratio/resolution/imageRefs 等(免 N+1);存 input 供重新生成。
     for(const j of [...mine].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))){
-      jobInputs[j.id]={ model:j.model, mode:j.mode, prompt:j.script, imageRefs:j.imageRefs, inputUrls:j.inputUrls, count:j.count, resolution:j.resolution, ratio:j.ratio, seed:j.seed };
+      jobInputs[j.id]={ model:j.model, mode:j.mode, prompt:j.script, imageRefs:j.imageRefs, inputUrls:j.inputUrls, count:j.count, resolution:j.resolution, ratio:j.ratio, quality:j.quality, seed:j.seed };
       renderCard({...j, prompt:j.script});
       if(j.status==='queued'||j.status==='running') track(j.id, j.script);
     }
@@ -695,8 +704,8 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       const localUrls = imgFiles.map(f=>imgPreviewUrls.get(f)).filter(Boolean);
       const inputUrls = (reuseUrls&&reuseUrls.length) ? reuseUrls.slice() : (localUrls.length?localUrls:undefined);
       // 记录归本页(source='ai-image'),正常渲染到右侧记录流。
-      jobInputs[res2.id]={ model:payload.model, mode:payload.mode, source:'ai-image', prompt, imageRefs:payload.imageRefs, inputUrls, count:payload.count, resolution:payload.resolution, ratio:payload.ratio, seed:payload.seed };
-      renderCard({ id:res2.id, status:'queued', progress:0, prompt, modelLabel:findLabel(model), ratio, resolution:res, count, inputUrls });
+      jobInputs[res2.id]={ model:payload.model, mode:payload.mode, source:'ai-image', prompt, imageRefs:payload.imageRefs, inputUrls, count:payload.count, resolution:payload.resolution, ratio:payload.ratio, quality:payload.quality, seed:payload.seed };
+      renderCard({ id:res2.id, status:'queued', progress:0, prompt, modelLabel:findLabel(model), mode:payload.mode, ratio, resolution:res, quality:payload.quality, count, inputUrls });
       track(res2.id, prompt);
       ta.value=''; cnt.textContent='0';
       if(mode==='img2img'){ imgFiles=[]; clearReuse(); renderTiles(); document.getElementById('consentChk').checked=false; }
