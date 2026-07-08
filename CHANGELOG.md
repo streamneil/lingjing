@@ -2,6 +2,11 @@
 
 灵镜平台的用户可见变更记录。版本号为四段式 `MAJOR.MINOR.PATCH.MICRO`(与 `VERSION` 文件一致)。
 
+## [0.5.2.2] - 2026-07-08
+
+### Fixed
+- 部署:`docker-compose.yml` 的 app 服务未转发 `OPENAI_PROXY`(只有 `GEMINI_PROXY`)。导致 .env 里配了 `OPENAI_PROXY` 也进不了容器 → GPT Image 2 直连 `api.openai.com` 被墙 `fetch failed`。补 `OPENAI_PROXY: ${OPENAI_PROXY:-}`,与 Gemini 同机制
+
 ## [0.5.2.1] - 2026-07-08
 
 ### Fixed
