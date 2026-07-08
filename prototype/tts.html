@@ -560,7 +560,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     if(job.text!==undefined) ttsTexts[job.id]=job.text;
     const t=ttsTexts[job.id]||job.text||'';
     let card=document.getElementById('job-'+job.id); const existed=!!card;
-    if(!card){ card=document.createElement('div'); card.className='fitem'; card.id='job-'+job.id; if(append) feedList.appendChild(card); else feedList.insertBefore(card, feedList.firstChild); }
+    if(!card){ card=document.createElement('div'); card.className='fitem'; card.id='job-'+job.id; if(append){ const _lm=document.getElementById('loadMoreBtn'); if(_lm&&_lm.parentNode===feedList) feedList.insertBefore(card,_lm); else feedList.appendChild(card); } else feedList.insertBefore(card, feedList.firstChild); }
     // 只更进度(不重建,避免打断音频/展开态)
     if((job.status==='queued'||job.status==='running') && existed && card.dataset.st==='running'){
       const lbl=card.querySelector('.proc-in .lbl'); const bar=card.querySelector('.proc-bar i');
