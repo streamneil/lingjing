@@ -63,6 +63,13 @@ const RULES: ErrorRule[] = [
   { pattern: /(finishReason|BlockReason|blockReason)[^a-zA-Z]*(SAFETY|OTHER|PROHIBITED)|被安全策略拦|safety setting/, message: '生成内容被模型安全策略拦截,请更换提示词后重试。' },
   { pattern: /DEADLINE_EXCEEDED/, message: '生成超时,请稍后重试。' },
 
+  // —— OpenAI(GPT Image 2)——
+  // 内容安全拦截:moderation_blocked / safety system 拒绝。关键:不能说「请稍后重试」——
+  //   相同提示词/输入图会再次被同一安全策略拦截,必须让用户「改内容」而非「重试」。
+  { pattern: /moderation_blocked|safety_violations|rejected by the safety system|moderation_details/i, message: '内容被 OpenAI 安全审核拦截,请修改提示词/输入图后再试(直接重试相同内容仍会被拦截)。' },
+  // 组织未验证:valid key 但组织未通过 OpenAI 验证(gpt-image 系常见)。
+  { pattern: /organization must be verified|verification_required|must be verified to/i, message: 'OpenAI 组织未验证,请在 OpenAI 后台完成组织验证(Organization verification)后再使用 gpt-image-2。' },
+
   // —— 跨厂商通用码 ——
   { pattern: /AuthenticationError|invalid api|api key|InvalidApiKey|PERMISSION_DENIED|AccessDenied|Unauthorized|AuthError/i, message: '生成通道鉴权异常(密钥失效或权限不足),请联系平台管理员。' },
   // 数字码用 \b 锚定 + 要求 HTTP 前缀:避免把内部中文错误里的裸数字(如可配的超时值「超时(>500000ms)」)误判为 HTTP 状态。

@@ -217,6 +217,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
           <div class="seg-row" id="resSeg"><div class="seg on" data-res="1K">1K</div><div class="seg" data-res="2K">2K</div></div>
           <div class="pop-label" id="qualityLabel" style="display:none">画质</div>
           <div class="seg-row" id="qualitySeg" style="display:none"></div>
+          <div class="pop-hint" id="qualityHint" style="display:none;color:var(--t4);font-size:12px;padding:2px 2px 0;line-height:1.5">GPT Image 2 编辑输出标准尺寸,不分清晰度档;画质决定精细度与成本。</div>
           <div class="pop-label" id="countLabel" style="margin-top:12px;display:none">输出张数</div>
           <div class="seg-row" id="countSeg" style="display:none"></div>
         </div>
@@ -544,10 +545,10 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   // 画质(token 计价模型 gpt-image-2 编辑:low/medium/high;非该类模型隐藏)
   function renderEditQuality(){
     const m=curModel();
-    const seg=document.getElementById('qualitySeg'), lbl=document.getElementById('qualityLabel');
+    const seg=document.getElementById('qualitySeg'), lbl=document.getElementById('qualityLabel'), hint=document.getElementById('qualityHint');
     const qs=(m&&Array.isArray(m.qualities)&&m.qualities.length)?m.qualities:null;
-    if(!qs){ seg.style.display='none'; lbl.style.display='none'; quality=''; return; }
-    seg.style.display=''; lbl.style.display='';
+    if(!qs){ seg.style.display='none'; lbl.style.display='none'; if(hint)hint.style.display='none'; quality=''; return; }
+    seg.style.display=''; lbl.style.display=''; if(hint)hint.style.display=''; // 编辑无清晰度档,提示画质决定精细度
     if(!qs.includes(quality)) quality=qs.includes('medium')?'medium':qs[0];
     seg.innerHTML=qs.map(q=>`<div class="seg${q===quality?' on':''}" data-q="${q}">${QUALITY_LABEL[q]||q}</div>`).join('');
     seg.querySelectorAll('.seg').forEach(s=>s.onclick=()=>{ seg.querySelectorAll('.seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); quality=s.dataset.q; syncPills(); scheduleEstimate(); });

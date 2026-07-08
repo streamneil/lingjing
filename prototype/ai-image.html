@@ -179,6 +179,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
           <div class="seg-row" id="resSeg"></div>
           <div class="pop-label" id="qualityLbl" style="display:none">画质</div>
           <div class="seg-row" id="qualitySeg" style="display:none"></div>
+          <div id="qualityHint" style="display:none;color:var(--t4);font-size:12px;padding:2px 2px 0;line-height:1.5">GPT Image 2 编辑输出标准尺寸,不分清晰度档;画质决定精细度与成本。</div>
           <div class="pop-label">输出张数</div>
           <div class="seg-row" id="countSeg"></div>
         </div>
@@ -290,10 +291,11 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   // ── 画质(token 计价模型 gpt-image-2:low/medium/high;非该类模型隐藏)──
   function renderQuality(){
     const m=allModels.find(x=>x.key===model);
-    const seg=document.getElementById('qualitySeg'), lbl=document.getElementById('qualityLbl');
+    const seg=document.getElementById('qualitySeg'), lbl=document.getElementById('qualityLbl'), hint=document.getElementById('qualityHint');
     const qs=(m&&Array.isArray(m.qualities)&&m.qualities.length)?m.qualities:null;
-    if(!qs){ seg.style.display='none'; lbl.style.display='none'; quality=''; return; }
+    if(!qs){ seg.style.display='none'; lbl.style.display='none'; if(hint)hint.style.display='none'; quality=''; return; }
     seg.style.display=''; lbl.style.display='';
+    if(hint) hint.style.display=(mode==='img2img')?'':'none'; // 提示仅编辑态(文生图 gpt-image-2 有清晰度)
     if(!qs.includes(quality)) quality=qs.includes('medium')?'medium':qs[0]; // 缺省中档
     seg.innerHTML=qs.map(q=>`<div class="seg${q===quality?' on':''}" data-q="${q}">${QUALITY_LABEL[q]||q}</div>`).join('');
     seg.querySelectorAll('.seg').forEach(s=>s.onclick=()=>{ seg.querySelectorAll('.seg').forEach(x=>x.classList.remove('on')); s.classList.add('on'); quality=s.dataset.q; syncPills(); scheduleEstimate(); });
