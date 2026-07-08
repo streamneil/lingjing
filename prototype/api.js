@@ -55,7 +55,19 @@ window.LJ = (function () {
     createJob: (input) => call('POST', '/jobs', input),
     getJob: (id) => call('GET', '/jobs/' + id),
     retryJob: (id) => call('POST', '/jobs/' + id + '/retry'),
-    listJobs: () => call('GET', '/jobs'),
+    // 任务列表(服务端分页 + 按类型/来源/状态筛)。opts: {type|[types], source, status, page, pageSize}。
+    // 返回 {jobs, total, page, pageSize}。无 opts 即最新一页(默认 pageSize 50),向后兼容旧口径。
+    listJobs: (opts) => {
+      const o = opts || {};
+      const q = new URLSearchParams();
+      if (o.type) q.set('type', Array.isArray(o.type) ? o.type.join(',') : o.type);
+      if (o.source) q.set('source', o.source);
+      if (o.status) q.set('status', o.status);
+      if (o.page) q.set('page', String(o.page));
+      if (o.pageSize) q.set('pageSize', String(o.pageSize));
+      const qs = q.toString();
+      return call('GET', '/jobs' + (qs ? '?' + qs : ''));
+    },
 
     /**
      * 轮询任务直到终态(done/failed)。

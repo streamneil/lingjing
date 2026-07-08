@@ -7,6 +7,8 @@
 <link rel="stylesheet" href="app.css">
 <style>
   .work-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; }
+  .load-more { display:block; margin:16px auto 30px; padding:9px 22px; border-radius:9px; background:var(--field); color:var(--t2); border:1px solid var(--line); font-size:13px; cursor:pointer; transition:.15s; }
+  .load-more:hover { background:var(--card); color:var(--t1); }
   .work { border-radius:var(--r-lg); overflow:hidden; background:var(--card); border:1px solid var(--line-soft); box-shadow:var(--sh-card); cursor:pointer; transition:.2s var(--ease-out); animation:rise .6s var(--ease-out) both; }
   .work:hover { transform:translateY(-4px); border-color:var(--line-hi); }
   /* 缩略图:固定 4:3 取景框,内部视频/占位 object-fit:contain 按真实比例完整显示(竖屏不裁) */
@@ -98,6 +100,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
           <div class="work-b"><h4>未命名草稿·政务播报</h4><div class="m">编辑于 1 小时前</div></div>
         </div>
       </div>
+      <button id="loadMoreBtn" class="load-more" style="display:none" onclick="loadMoreWorks()">加载更多</button>
     </main>
   </div>
 </div>
@@ -217,20 +220,30 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     catch(e){ window.LJToast(e.message,'err'); }
   }
 
-  async function load(){
+  let _wPage = 0, _wTotal = 0; // 服务端分页游标(全类型)
+  async function load(more){
     try{
-      allJobs = await LJ.listJobs();
-      // 更新筛选 chip 计数
+      const page = more ? _wPage+1 : 1;
+      // 服务端分页(created_at DESC),避免一次性取全量;「加载更多」续拉更旧。
+      const res = await LJ.listJobs({ page, pageSize:50 });
+      _wPage = page; _wTotal = res.total||0;
+      const rows = Array.isArray(res.jobs) ? res.jobs : [];
+      if(page===1) allJobs = [];
+      allJobs = allJobs.concat(rows);
+      // chip 计数:全部=服务端总数(准确);状态数为已加载口径(加载更多后增长)。
       const chips = document.querySelectorAll('.chip');
-      if(chips[0]) chips[0].textContent = '全部 · '+allJobs.length;
+      if(chips[0]) chips[0].textContent = '全部 · '+_wTotal;
       if(chips[1]) chips[1].textContent = '生成中 · '+allJobs.filter(j=>j.status==='running'||j.status==='queued').length;
       if(chips[2]) chips[2].textContent = '已完成 · '+allJobs.filter(j=>j.status==='done').length;
       if(chips[3]) chips[3].textContent = '失败 · '+allJobs.filter(j=>j.status==='failed').length;
       const active = document.querySelector('.chip.active');
       render(active&&active.dataset.filter||'all');
-      schedulePoll();  // 有生成中任务则继续轮询,全终态则停
+      toggleWorksMore();
+      if(!more) schedulePoll();  // 有生成中任务则继续轮询,全终态则停(仅新载时重启轮询)
     }catch(e){ /* 401 已被 api.js 跳转 */ }
   }
+  function toggleWorksMore(){ const b=document.getElementById('loadMoreBtn'); if(b) b.style.display=(allJobs.length<_wTotal)?'':'none'; }
+  window.loadMoreWorks=()=>load(true);
 
   // 列表级自动轮询:仅当存在 queued/running 任务时启动;全部终态停轮;
   // 离页(visibilitychange 隐藏)暂停,回到页面立即拉一次。复用 load() 全量刷新。

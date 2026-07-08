@@ -69,6 +69,8 @@
 
   /* 空态 */
   .a-empty { text-align:center; color:var(--t4); padding:70px 0; }
+  .load-more { display:block; margin:14px auto 30px; padding:9px 22px; border-radius:9px; background:var(--field); color:var(--t2); border:1px solid var(--line); font-size:13px; cursor:pointer; transition:.15s; }
+  .load-more:hover { background:var(--card); color:var(--t1); }
   .a-empty svg { width:42px; height:42px; margin-bottom:14px; opacity:.6; }
   .a-empty .t { font-size:15px; color:var(--t2); margin-bottom:6px; }
   .a-empty .link-btn { color:var(--blue); }
@@ -121,6 +123,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
           </div>
         </div>
         <div id="mediaBody"><div class="a-loading">加载中…</div></div>
+        <button id="loadMoreBtn" class="load-more" style="display:none" onclick="loadMoreMedia()">加载更多</button>
       </section>
 
       <!-- 头像 tab -->
@@ -161,16 +164,25 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
 
   // ── 媒体:聚合 GET /jobs(全工具产物)──
   let allJobs = [], curKind = 'all', curFrom = 'all';
-  async function loadMedia(){
+  const MEDIA_TYPES = ['video','video_t2v','video_i2v','video_edit','ai_image','tts','ai_music'];
+  let _mPage = 0, _mTotal = 0; // 服务端分页游标(整租户按创建者隔离,与旧口径一致)
+  async function loadMedia(more){
     const body = document.getElementById('mediaBody');
+    const page = more ? _mPage+1 : 1;
     try{
-      const jobs = await LJ.listJobs();
-      // 只聚合有产物或在生成中的(失败也展示,让用户看到全量)
-      allJobs = (jobs||[]).filter(j=>['video','video_t2v','video_i2v','video_edit','ai_image','tts','ai_music'].includes(j.type));
+      // 服务端按类型集合过滤 + created_at DESC 分页,避免一次性取全量;「加载更多」续拉更旧。
+      const res = await LJ.listJobs({type:MEDIA_TYPES, page, pageSize:30});
+      _mPage = page; _mTotal = res.total||0;
+      const rows = Array.isArray(res.jobs) ? res.jobs : [];
+      if(page===1) allJobs = [];
+      allJobs = allJobs.concat(rows);
       buildFromPop();
-      renderMedia();
+      renderMedia(); // 内部按 createdAt DESC 全量重排 + 日期分组,追加后顺序仍正确
+      toggleMediaMore();
     }catch(e){ body.innerHTML = `<div class="a-empty"><div class="t">加载失败</div><div>${esc(e.message||'请稍后重试')}</div></div>`; }
   }
+  function toggleMediaMore(){ const b=document.getElementById('loadMoreBtn'); if(b) b.style.display=(allJobs.length<_mTotal)?'':'none'; }
+  window.loadMoreMedia=()=>loadMedia(true);
   function buildFromPop(){
     const types = [...new Set(allJobs.map(j=>j.type))];
     const items = [{v:'all',label:'全部'}].concat(types.map(t=>({v:t,label:TYPE_LABEL[t]||t})));
