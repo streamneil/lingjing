@@ -100,12 +100,69 @@ export function getJobForTenant(id: string, tenantId: string, actingUserId: stri
     | undefined;
 }
 
-// 列某租户的任务(作品库 / 列表用)。creator 仅自己的;admin 全机构(含 NULL 老数据)。
-export function listJobsForTenant(tenantId: string, actingUserId: string, isAdmin: boolean, limit = 50): JobRow[] {
+// 任务列表过滤(服务端分页):按类型 / 来源页 / 状态筛,避免「全局取 50 → 前端过滤」导致
+// 某模块被其他工具刷屏后记录为空、且看不到更旧记录。source/mode 存 input_json,用 json_extract 过滤。
+export interface JobListFilter {
+  types?: string[]; // type IN (...)(真实列)
+  source?: string; // input_json '$.source' 精确;含无 source 的老数据按 mode 回退(不漏历史)
+  sourceModeImg2img?: boolean; // 老数据回退:无 source 行按 mode 归属(编辑=true / 生成=false)
+  status?: JobStatus; // 状态列
+  limit?: number;
+  offset?: number;
+}
+
+// 组装 filter 的 WHERE 片段 + 参数(list 与 count 共用,保证口径一致)。
+function jobFilterWhere(filter: JobListFilter): { clause: string; params: unknown[] } {
+  const parts: string[] = [];
+  const params: unknown[] = [];
+  if (filter.types?.length) {
+    parts.push(`type IN (${filter.types.map(() => '?').join(',')})`);
+    params.push(...filter.types);
+  }
+  if (filter.source) {
+    // 无 source 的历史行按 mode 回退归属:编辑页取 mode='img2img',生成页取其余(含 NULL mode)。
+    const modeCond = filter.sourceModeImg2img ? `json_extract(input_json,'$.mode') IS 'img2img'` : `json_extract(input_json,'$.mode') IS NOT 'img2img'`;
+    parts.push(`(json_extract(input_json,'$.source')=? OR (json_extract(input_json,'$.source') IS NULL AND ${modeCond}))`);
+    params.push(filter.source);
+  }
+  if (filter.status) {
+    parts.push(`status=?`);
+    params.push(filter.status);
+  }
+  return { clause: parts.length ? ' AND ' + parts.join(' AND ') : '', params };
+}
+
+// 列某租户的任务(作品库 / 各模块生成记录)。creator 仅自己的;admin 全机构(含 NULL 老数据)。
+export function listJobsForTenant(
+  tenantId: string,
+  actingUserId: string,
+  isAdmin: boolean,
+  filter: JobListFilter = {},
+): JobRow[] {
   const scope = scopeByActor(actingUserId, isAdmin);
+  const f = jobFilterWhere(filter);
+  const limit = Math.min(100, Math.max(1, filter.limit ?? 50));
+  const offset = Math.max(0, filter.offset ?? 0);
   return db
-    .prepare(`SELECT * FROM job WHERE tenant_id=?${scope.clause} ORDER BY created_at DESC, rowid DESC LIMIT ?`)
-    .all(tenantId, ...scope.params, limit) as JobRow[];
+    .prepare(
+      `SELECT * FROM job WHERE tenant_id=?${scope.clause}${f.clause} ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?`,
+    )
+    .all(tenantId, ...scope.params, ...f.params, limit, offset) as JobRow[];
+}
+
+// 某租户任务总数(与 listJobsForTenant 同 filter/隔离口径,供分页 total)。
+export function countJobsForTenant(
+  tenantId: string,
+  actingUserId: string,
+  isAdmin: boolean,
+  filter: JobListFilter = {},
+): number {
+  const scope = scopeByActor(actingUserId, isAdmin);
+  const f = jobFilterWhere(filter);
+  const row = db
+    .prepare(`SELECT COUNT(*) AS n FROM job WHERE tenant_id=?${scope.clause}${f.clause}`)
+    .get(tenantId, ...scope.params, ...f.params) as { n: number };
+  return row.n;
 }
 
 export function setProviderTaskId(id: string, providerTaskId: string): void {
