@@ -8,6 +8,9 @@
   <link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
   <link rel="stylesheet" href="app.css">
   <style>
+    /* 服务端分页:加载更多历史记录按钮(复用页面 CSS 变量)*/
+    .load-more { display:block; margin:6px auto 20px; padding:9px 22px; border-radius:9px; background:var(--field); color:var(--t2); border:1px solid var(--line); font-size:13px; cursor:pointer; transition:.15s; }
+    .load-more:hover { background:var(--card); color:var(--t1); }
     /* 左栏紧凑(目标不超一屏),复用 TTS 设计语言 */
     #musicCfg {
       gap: 8px;
@@ -500,6 +503,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
               <div class="demo-box demo-lyrics" id="demoLyricsBox"></div>
               <button type="button" class="dbtn" id="demoApply">套用示范</button>
             </div>
+            <button id="loadMoreBtn" class="load-more" style="display:none" onclick="loadMoreHistory()">加载更多历史记录</button>
           </div>
         </div>
       </div>
@@ -634,13 +638,14 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         const del = `<button onclick="delJob('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除</button>`;
         return `<div class="card-acts">${dl}${del}</div>`;
       }
-      function renderCard(job) {
+      function renderCard(job, append) {
         document.getElementById('feedEmpty').style.display = 'none';
         // 示范卡常显(不随生成记录隐藏);留在记录列底部供随时参考。
         if (job.prompt !== undefined || job.lyrics !== undefined) musicMeta[job.id] = { prompt: job.prompt || '', lyrics: job.lyrics || '' };
         const meta = musicMeta[job.id] || {}; const pt = meta.prompt || job.prompt || ''; const lt = meta.lyrics || job.lyrics || '';
         let card = document.getElementById('job-' + job.id); const existed = !!card;
-        if (!card) { card = document.createElement('div'); card.className = 'fitem'; card.id = 'job-' + job.id; feedList.insertBefore(card, feedList.firstChild); }
+        // 新卡:实时提交/轮询 → 置顶(prepend);历史分页加载 → 追加于底(append,续更旧)。
+        if (!card) { card = document.createElement('div'); card.className = 'fitem'; card.id = 'job-' + job.id; if (append) feedList.appendChild(card); else feedList.insertBefore(card, feedList.firstChild); }
         if ((job.status === 'queued' || job.status === 'running') && existed && card.dataset.st === 'running') {
           const lbl = card.querySelector('.proc-in .lbl'); const bar = card.querySelector('.proc-bar i');
           if (lbl) lbl.textContent = job.progress ? ('进度 ' + job.progress + '%') : '已进入生成队列';
@@ -678,19 +683,28 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       window.delJob = async (id) => { if (!(await window.LJConfirm({ title: '删除作品', body: '确认删除这首音乐?删除后不可恢复。', confirmText: '删除', danger: true }))) return; try { await LJ.del('/jobs/' + id); const c = document.getElementById('job-' + id); if (c) c.remove(); window.LJToast && window.LJToast('已删除'); } catch (e) { window.LJToast && window.LJToast(e.message || '删除失败', 'err'); } };
 
       async function track(id, meta) { try { await LJ.pollJob(id, (job) => renderCard({ ...job, ...meta })); } catch (e) { } }
-      async function loadHistory() {
-        let jobs = []; try { jobs = await LJ.listJobs(); } catch (e) { return; }
-        const mine = jobs.filter(j => j.type === 'ai_music');
-        if (!mine.length) return;
+      let _histPage = 0, _histTotal = 0, _histLoaded = 0; // 服务端分页游标(本模块 = ai_music)
+      async function loadHistory(more) {
+        const page = more ? _histPage + 1 : 1;
+        // 服务端按 type 过滤 + created_at DESC 分页 → 本模块只拉自己的记录,不被其他工具刷屏截断。
+        let res; try { res = await LJ.listJobs({ type: 'ai_music', page, pageSize: 20 }); } catch (e) { return; }
+        _histPage = page; _histTotal = res.total || 0;
+        const mine = Array.isArray(res.jobs) ? res.jobs : [];
+        if (page === 1 && !mine.length) { toggleLoadMore(); return; }
         document.getElementById('feedEmpty').style.display = 'none';
-        for (const j of [...mine].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))) {
+        _histLoaded += mine.length;
+        // DESC 追加:page1 新→旧在顶,「加载更多」续更旧于底。歌词/lyricsResult 需详情(list 投影无音乐分支),故仍按 id 拉 input。
+        for (const j of mine) {
           try {
             const d = await LJ.getJob(j.id); const inp = d.input || {};
-            renderCard({ ...d, prompt: inp.prompt || '', lyrics: inp.lyrics || '', lyricsResult: inp.lyricsResult || '' });
+            renderCard({ ...d, prompt: inp.prompt || '', lyrics: inp.lyrics || '', lyricsResult: inp.lyricsResult || '' }, true);
             if (d.status === 'queued' || d.status === 'running') track(d.id, { prompt: inp.prompt || '', lyrics: inp.lyrics || '' });
           } catch (e) { }
         }
+        toggleLoadMore();
       }
+      function toggleLoadMore() { const b = document.getElementById('loadMoreBtn'); if (b) b.style.display = (_histLoaded < _histTotal) ? '' : 'none'; }
+      window.loadMoreHistory = () => loadHistory(true);
 
       // 官方非流式校验:prompt 1~2000;lyrics 中文 5~350 / 英文 5~2000;二选一,同传以歌词为准。
       // 含中文(CJK)按中文上限 350 计;纯英文按 2000。返回错误文案,空串=通过。

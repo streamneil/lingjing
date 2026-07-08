@@ -7,6 +7,8 @@
 <link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
 <link rel="stylesheet" href="app.css">
 <style>
+  .load-more { display:block; margin:6px auto 20px; padding:9px 22px; border-radius:9px; background:var(--field); color:var(--t2); border:1px solid var(--line); font-size:13px; cursor:pointer; transition:.15s; }
+  .load-more:hover { background:var(--card); color:var(--t1); }
   .voice-pick { display:flex; align-items:center; gap:13px; padding:14px 16px; border:1px solid var(--line); border-radius:var(--r); background:var(--card); cursor:pointer; transition:.15s; }
   .voice-pick:hover { border-color:var(--line-hi); }
   .voice-pick .vi { width:42px; height:42px; border-radius:11px; background:var(--field); border:1px solid var(--line); display:grid; place-items:center; flex-shrink:0; }
@@ -196,6 +198,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
           <div class="s">输入文字,选好音色,点「创建」就能生成第一条配音。</div>
         </div>
       </div>
+      <button id="loadMoreBtn" class="load-more" style="display:none" onclick="loadMoreHistory()">加载更多历史记录</button>
     </div>
   </div>
  </div>
@@ -552,12 +555,12 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     const del=`<button onclick="delJob('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除</button>`;
     return `<div class="card-acts">${rp}${dl}${del}</div>`;
   }
-  function renderCard(job){
+  function renderCard(job, append){
     document.getElementById('feedEmpty').style.display='none';
     if(job.text!==undefined) ttsTexts[job.id]=job.text;
     const t=ttsTexts[job.id]||job.text||'';
     let card=document.getElementById('job-'+job.id); const existed=!!card;
-    if(!card){ card=document.createElement('div'); card.className='fitem'; card.id='job-'+job.id; feedList.insertBefore(card, feedList.firstChild); }
+    if(!card){ card=document.createElement('div'); card.className='fitem'; card.id='job-'+job.id; if(append) feedList.appendChild(card); else feedList.insertBefore(card, feedList.firstChild); }
     // 只更进度(不重建,避免打断音频/展开态)
     if((job.status==='queued'||job.status==='running') && existed && card.dataset.st==='running'){
       const lbl=card.querySelector('.proc-in .lbl'); const bar=card.querySelector('.proc-bar i');
@@ -598,17 +601,26 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   window.delJob=async(id)=>{ if(!(await window.LJConfirm({title:'删除作品',body:'确认删除这条配音?删除后不可恢复。',confirmText:'删除',danger:true}))) return; try{ await LJ.del('/jobs/'+id); const c=document.getElementById('job-'+id); if(c) c.remove(); window.LJToast&&window.LJToast('已删除'); }catch(e){ window.LJToast&&window.LJToast(e.message||'删除失败','err'); } };
 
   async function track(id, text){ try{ await LJ.pollJob(id, (job)=>renderCard({...job, text})); }catch(e){} }
-  async function loadHistory(){
-    let jobs=[]; try{ jobs=await LJ.listJobs(); }catch(e){ return; }
-    const mine=jobs.filter(j=>j.type==='tts');
-    if(!mine.length) return;
+  let _histPage=0, _histTotal=0, _histLoaded=0; // 服务端分页游标(本模块 = type=tts)
+  async function loadHistory(more){
+    const page=more?_histPage+1:1;
+    // 服务端按 type 过滤 + created_at DESC 分页 → 本模块只拉自己的记录,不被其他工具刷屏截断。
+    let res; try{ res=await LJ.listJobs({type:'tts', page, pageSize:20}); }catch(e){ return; }
+    _histPage=page; _histTotal=res.total||0;
+    const mine=Array.isArray(res.jobs)?res.jobs:[];
+    if(page===1 && !mine.length){ toggleLoadMore(); return; }
     document.getElementById('feedEmpty').style.display='none';
-    for(const j of [...mine].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))){
-      try{ const d=await LJ.getJob(j.id); renderCard({...d, text:(d.input&&d.input.text)||''});
+    _histLoaded += mine.length;
+    // DESC 追加:page1 新→旧在顶,「加载更多」续更旧于底。逐条取 detail 拿原文(text)。
+    for(const j of mine){
+      try{ const d=await LJ.getJob(j.id); renderCard({...d, text:(d.input&&d.input.text)||''}, true);
         if(d.status==='queued'||d.status==='running') track(d.id,(d.input&&d.input.text)||'');
       }catch(e){}
     }
+    toggleLoadMore();
   }
+  function toggleLoadMore(){ const b=document.getElementById('loadMoreBtn'); if(b) b.style.display=(_histLoaded<_histTotal)?'':'none'; }
+  window.loadMoreHistory=()=>loadHistory(true);
 
   btn.addEventListener('click', async ()=>{
     if(btn.disabled) return;

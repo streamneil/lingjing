@@ -88,7 +88,9 @@ describe('RBAC 验收第8条', () => {
     const c = await loginAs(tenantA, 'viewer');
     const r = await c.get('/api/jobs');
     expect(r.status).toBe(200);
-    expect(Array.isArray(r.body)).toBe(true);
+    // 服务端分页:{jobs, total, page, pageSize}(此前为裸数组)
+    expect(Array.isArray(r.body.jobs)).toBe(true);
+    expect(typeof r.body.total).toBe('number');
   });
 });
 
@@ -114,7 +116,8 @@ describe('租户隔离', () => {
     const list = await cb.get('/api/jobs');
     expect(list.status).toBe(200);
     // B 没发起过生成任务(只在隔离测试里 A 发了),B 列表应为空
-    expect(list.body.length).toBe(0);
+    expect(list.body.jobs.length).toBe(0);
+    expect(list.body.total).toBe(0);
   });
 });
 

@@ -7,6 +7,9 @@
 <link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
 <link rel="stylesheet" href="app.css">
 <style>
+  /* 加载更多历史记录按钮 */
+  .load-more { display:block; margin:6px auto 20px; padding:9px 22px; border-radius:9px; background:var(--field); color:var(--t2); border:1px solid var(--line); font-size:13px; cursor:pointer; transition:.15s; }
+  .load-more:hover { background:var(--card); color:var(--t1); }
   /* 记录卡(复用文字转影片样式)*/
   .card-meta { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 2px; }
   .card-meta .chip { font-size:11px; color:var(--t3); background:var(--field); border:1px solid var(--line); border-radius:7px; padding:2px 8px; }
@@ -269,6 +272,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         <div class="ds" id="demoVidFallback" style="display:none;margin:0 0 12px;padding:14px;border:1px dashed var(--line);border-radius:10px;text-align:center">示范成片加载中…若长时间无画面,套用提示词后上传素材即可生成同款。</div>
         <button type="button" class="dbtn" id="demoApply">套用示范提示词</button>
       </div>
+      <button id="loadMoreBtn" class="load-more" style="display:none" onclick="loadMoreHistory()">加载更多历史记录</button>
     </div>
   </div>
  </div>
@@ -578,12 +582,13 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     const del=`<button onclick="delJob('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除</button>`;
     return `<div class="card-acts">${re}${dl}${del}</div>`;
   }
-  function renderCard(job){
+  function renderCard(job, append){
     document.getElementById('emptyHint').style.display='none';
     // 示范卡常显(不随生成记录隐藏);留在记录列底部供随时参考。
     if(job.input) jobInputs[job.id]=job.input;
     let card=document.getElementById('job-'+job.id); const existed=!!card;
-    if(!card){ card=document.createElement('div'); card.className='fitem'; card.id='job-'+job.id; feedList.insertBefore(card, feedList.firstChild); }
+    // 新卡:实时提交/轮询 → 置顶(prepend);历史分页加载 → 追加于底(append,续更旧)。
+    if(!card){ card=document.createElement('div'); card.className='fitem'; card.id='job-'+job.id; if(append) feedList.appendChild(card); else feedList.insertBefore(card, feedList.firstChild); }
     const head=(color,led,txt)=>`<div class="fmeta"><b>参考生影片</b><span class="ts">${(window.LJTimeAgo&&LJTimeAgo(job.createdAt))||'刚刚'}</span><span class="sp"></span><span class="st" style="color:${color}"><span class="led ${led}"></span>${txt}</span></div>`;
     if((job.status==='queued'||job.status==='running') && existed && card.dataset.st==='running'){
       const lbl=card.querySelector('.proc-in .lbl'); const bar=card.querySelector('.proc-bar i');
@@ -627,17 +632,26 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   };
   async function track(id, prompt, inputUrls, inputMedia){ try{ await LJ.pollJob(id,(job)=>renderCard({...job, prompt, inputUrls, inputMedia:job.inputMedia||inputMedia||(jobInputs[id]&&jobInputs[id].inputMedia), ...(jobInputs[id]?{modelLabel:findLabel(jobInputs[id].model),ratio:jobInputs[id].ratio,duration:jobInputs[id].duration,sizeLabel:jobInputs[id].resolution,audio:jobInputs[id].audio,outputUrls:job.outputUrls}:{})})); if(jobInputs[id]&&typeof window!=='undefined'){} }catch(e){} }
 
-  async function loadHistory(){
-    let jobs=[]; try{ jobs=await LJ.listJobs(); }catch(e){ return; }
-    const mine=jobs.filter(j=>j.type==='video_r2v');
-    if(!mine.length) return;
+  let _histPage=0, _histTotal=0, _histLoaded=0; // 服务端分页游标(本模块 = video_r2v)
+  async function loadHistory(more){
+    const page=more?_histPage+1:1;
+    // 服务端按 type 过滤 + created_at DESC 分页 → 本模块只拉自己的记录,不被其他工具刷屏截断。
+    let res; try{ res=await LJ.listJobs({type:'video_r2v', page, pageSize:20}); }catch(e){ return; }
+    _histPage=page; _histTotal=res.total||0;
+    const mine=Array.isArray(res.jobs)?res.jobs:[];
+    if(page===1 && !mine.length){ toggleLoadMore(); return; }
     document.getElementById('emptyHint').style.display='none';
-    for(const j of [...mine].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))){
+    _histLoaded += mine.length;
+    // DESC 追加:page1 新→旧在顶,「加载更多」续更旧于底。
+    for(const j of mine){
       jobInputs[j.id]={ model:j.model, prompt:j.script, imageRefs:j.imageRefs, videoRefs:j.videoRefs, audioRefs:j.audioRefs, inputUrls:j.inputUrls, inputMedia:j.inputMedia, resolution:j.resolution, ratio:j.ratio, duration:j.duration, audio:j.audio, seed:j.seed, outputUrls:j.outputUrls };
-      renderCard({...j, prompt:j.script, sizeLabel:j.resolution});
+      renderCard({...j, prompt:j.script, sizeLabel:j.resolution}, true);
       if(j.status==='queued'||j.status==='running') track(j.id, j.script, j.inputUrls, j.inputMedia);
     }
+    toggleLoadMore();
   }
+  function toggleLoadMore(){ const b=document.getElementById('loadMoreBtn'); if(b) b.style.display=(_histLoaded<_histTotal)?'':'none'; }
+  window.loadMoreHistory=()=>loadHistory(true);
 
   // ── 茶广告多模态示范(文档旗舰示例)──
   const DEMO_PROMPT='全程使用视频1的第一视角构图,全程使用音频1作为背景音乐。第一人称视角果茶宣传广告,seedance牌「苹苹安安」苹果果茶限定款;首帧为图片1,你的手摘下一颗带晨露的阿克苏红苹果;6-8 秒第一人称手持举杯,将图片2中的果茶举到镜头前,尾帧定格为图片2。背景声音统一为女生音色。';

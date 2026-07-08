@@ -22,6 +22,9 @@
   html { scrollbar-width:none; -ms-overflow-style:none; }
   html::-webkit-scrollbar, .cfg::-webkit-scrollbar, .feed::-webkit-scrollbar { width:0; height:0; display:none; }
   .cfg, .feed { scrollbar-width:none; -ms-overflow-style:none; }
+  /* 历史记录「加载更多」按钮(服务端分页) */
+  .load-more { display:block; margin:6px auto 20px; padding:9px 22px; border-radius:9px; background:var(--field); color:var(--t2); border:1px solid var(--line); font-size:13px; cursor:pointer; transition:.15s; }
+  .load-more:hover { background:var(--card); color:var(--t1); }
   /* 生成记录卡:与全站模块统一(图转影片/影片编辑)。成片视频收进缩略约束盒 + card-acts 动作。*/
   .fvid { display:block; width:auto; height:auto; max-width:min(320px,100%); max-height:280px; border-radius:12px; background:#000; border:1px solid var(--line); margin-top:8px; }
   .card-acts { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
@@ -157,6 +160,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         </div>
       </div>
 
+      <button id="loadMoreBtn" class="load-more" style="display:none" onclick="loadMoreHistory()">加载更多历史记录</button>
     </div>
   </div>
  </div>
@@ -511,31 +515,35 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   // 登录态守卫 + 加载选择器 + T5 回填 + 真实作品历史
   LJ.me().then(()=>{ loadPickers().then(prefillFromQuery); loadHistory(); }).catch(()=>{});
 
-  // ── 拉真实作品历史填充 feed(替代写死的演示卡)──
-  async function loadHistory(){
-    let jobs=[];
-    try{ jobs = await LJ.listJobs(); }catch(e){ return; }
-    // 只显本页(AI 虚拟人 s2v)的任务:/jobs 是全租户全类型,不过滤会把
-    // 文生视频/图转影片/图片等其他工具的记录混进来(与其余五页同口径)。
-    jobs = Array.isArray(jobs) ? jobs.filter(j=>j.type==='video') : [];
+  // ── 拉真实作品历史填充 feed(服务端分页 + 追加;替代写死的演示卡)──
+  let _histPage=0, _histTotal=0, _histLoaded=0; // 服务端分页游标(本模块 = type=video 数字人视频)
+  async function loadHistory(more){
+    const page=more?_histPage+1:1;
+    // 服务端按 type 过滤 + created_at DESC 分页 → 本页只拉数字人视频记录,不被其他工具刷屏截断。
+    let res; try{ res=await LJ.listJobs({type:'video', page, pageSize:20}); }catch(e){ return; }
+    _histPage=page; _histTotal=res.total||0;
+    const mine=Array.isArray(res.jobs)?res.jobs:[];
     const empty=document.getElementById('feedEmpty');
-    if(!jobs.length){ if(empty) empty.style.display=''; return; }
+    if(page===1 && !mine.length){ if(empty) empty.style.display=''; toggleLoadMore(); return; }
     if(empty) empty.style.display='none';
-    // 按创建时间正序渲染(renderCard 会把每张插到顶部 → 最终最新在最上)
-    const ordered=[...jobs].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
-    for(const j of ordered){
+    _histLoaded += mine.length;
+    // DESC 追加:page1 新→旧在顶,「加载更多」续更旧于底。逐条拉 detail 取口播文案/成片/形象缩略。
+    for(const j of mine){
       try{
         const detail=await LJ.getJob(j.id);
         const script=(detail.input&&detail.input.script)||'';
         renderCard({ id:detail.id, status:detail.status, progress:detail.progress,
           videoUrl:detail.videoUrl, aiLabel:detail.aiLabel, error:detail.error,
           avatarThumb:detail.avatarThumb||'', // 每条记录各自的形象缩略(修「全是同一人」)
-          createdAt:detail.createdAt||j.createdAt }, script);
+          createdAt:detail.createdAt||j.createdAt }, script, true);
         // 仍在进行中的任务,继续轮询到终态
         if(detail.status==='queued'||detail.status==='running') track(detail.id, script);
       }catch(e){}
     }
+    toggleLoadMore();
   }
+  function toggleLoadMore(){ const b=document.getElementById('loadMoreBtn'); if(b) b.style.display=(_histLoaded<_histTotal)?'':'none'; }
+  window.loadMoreHistory=()=>loadHistory(true);
 
   // ── T5:?from=jobId 回填 ──
   async function prefillFromQuery(){
@@ -580,14 +588,15 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   }
 
   // 渲染/更新一个 job 卡片(三态:running/done/failed),复用原型 class。
-  function renderCard(job, scriptText){
+  function renderCard(job, scriptText, append){
     const empty=document.getElementById('feedEmpty'); if(empty) empty.style.display='none';
     let card = document.getElementById('job-'+job.id); const existed=!!card;
     if(!card){
       card = document.createElement('div');
       card.className = 'fitem';
       card.id = 'job-'+job.id;
-      feedList.insertBefore(card, feedList.firstChild); // 新任务置顶
+      // 实时提交/轮询 → 置顶(prepend);历史分页加载 → 追加于底(append,续更旧)。
+      if(append) feedList.appendChild(card); else feedList.insertBefore(card, feedList.firstChild);
     }
     // 生成中卡片已存在 → 轮询只更进度文字/进度条,不重建 innerHTML
     //(否则每次轮询都重铺 .mav 背景图,头像会闪一下,见用户反馈)。

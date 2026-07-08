@@ -10,9 +10,11 @@ import {
   enqueueJob,
   getJobForTenant,
   listJobsForTenant,
+  countJobsForTenant,
   retryJob,
   deleteJobForTenant,
 } from '../queue/index.js';
+import type { JobStatus } from '../db/index.js';
 import {
   signOutputUrls,
   getSignedUrl,
@@ -1232,7 +1234,26 @@ jobsRouter.get('/edit-models', requireAuth, (_req: Request, res: Response) => {
 
 // 作品列表 — 任何登录角色(含 viewer)可读本租户作品
 jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
-  const rows = listJobsForTenant(req.user!.tenantId, req.user!.id, req.user!.role === 'admin');
+  // 服务端分页 + 按类型/来源/状态筛(各模块生成记录、我的资产共用)。
+  //   type: 逗号分隔多类型(资产页多选);source: 'ai-image' | 'ai-image-edit'(仅 ai_image 分流);
+  //   status: 状态筛(作品页 tab);page/pageSize(默认 1 / 50,上限 100)。
+  const typeParam = String((req.query.type as string) ?? '').trim();
+  const types = typeParam ? typeParam.split(',').map((s) => s.trim()).filter(Boolean) : undefined;
+  const source = (String((req.query.source as string) ?? '').trim() || undefined) as string | undefined;
+  const statusParam = String((req.query.status as string) ?? '').trim();
+  const status = (['queued', 'running', 'done', 'failed'].includes(statusParam) ? statusParam : undefined) as JobStatus | undefined;
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 50));
+  // ai_image 老数据(无 source)按 mode 回退:编辑页 img2img,生成页其余。
+  const sourceModeImg2img = source === 'ai-image-edit' ? true : source === 'ai-image' ? false : undefined;
+  const filter = { types, source, sourceModeImg2img, status };
+
+  const rows = listJobsForTenant(req.user!.tenantId, req.user!.id, req.user!.role === 'admin', {
+    ...filter,
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+  });
+  const total = countJobsForTenant(req.user!.tenantId, req.user!.id, req.user!.role === 'admin', filter);
   const jobs = await Promise.all(
     rows.map(async (j) => {
       // 成品签名 URL:支持多产物(图片多图)。向后兼容旧视频裸 key(signOutputUrls 内处理)。
@@ -1348,7 +1369,7 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
       };
     }),
   );
-  return res.json(jobs);
+  return res.json({ jobs, total, page, pageSize });
 });
 
 // 状态快照(前端轮询)— 任何登录角色可读,但只能读本租户的
