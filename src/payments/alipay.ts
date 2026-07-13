@@ -300,12 +300,22 @@ export class AlipayProvider implements PaymentProvider {
   }
 
   private static gbkDecoder(): (b: Buffer) => string {
+    // 先严格 UTF-8 探测(fatal:合法即用),失败才走 GBK。
+    // 支付宝账单实为 GBK(中文高字节几乎必非合法 UTF-8 → 正确路由);同时兼容 UTF-8 内容。
+    const utf8 = new TextDecoder('utf-8', { fatal: true });
+    let gbk: InstanceType<typeof TextDecoder> | null = null;
     try {
-      const d = new TextDecoder('gbk');
-      return (b) => d.decode(b);
+      gbk = new TextDecoder('gbk'); // 官方 Node 构建带 full-icu;缺失时兜底 utf8 宽松解码
     } catch {
-      return (b) => b.toString('utf8'); // 无 full-icu 的兜底(官方 Node 构建均带 gbk)
+      gbk = null;
     }
+    return (b) => {
+      try {
+        return utf8.decode(b);
+      } catch {
+        return gbk ? gbk.decode(b) : b.toString('utf8');
+      }
+    };
   }
 
   /** 业务明细 CSV:#号行为注释/汇总;按表头定位 交易号/商户订单号/业务类型/订单金额。 */
