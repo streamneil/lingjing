@@ -794,9 +794,81 @@ db.exec(
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_order_grant ON credit_ledger(order_id) WHERE kind='grant' AND order_id IS NOT NULL;`,
 );
 
-// recharge_order 加 payment_method:收银台付款方式(本轮仅对公;为未来支付宝/微信预留枚举)。
-// 老订单加列后默认 offline_bank(下单时唯一方式)。
+// recharge_order 加 payment_method:收银台付款方式(offline_bank | wechat | alipay)。
+// 老订单加列后默认 offline_bank;在线支付在 pending_payment 期可切换,支付成功/claimPaid 时锁定。
 addColumnIfMissing('recharge_order', 'payment_method', `payment_method TEXT NOT NULL DEFAULT 'offline_bank'`);
+
+// ── 在线支付(微信/支付宝):支付尝试 + 通道配置 + 对账差异 ──
+// 设计:docs/designs/online-payments.md(31 条定稿决策)。
+// payment_attempt:一次通道下单一行(决策1)。id 即 out_trade_no(去横杠 UUID,32 hex,
+// 微信 out_trade_no 上限 32 字符,决策12/18)。UNIQUE(order_id) WHERE pending = 每单恰一在途码(决策23)。
+db.exec(`
+  CREATE TABLE IF NOT EXISTS payment_attempt (
+    id           TEXT PRIMARY KEY,              -- 32 hex,即通道 out_trade_no
+    order_id     TEXT NOT NULL,
+    tenant_id    TEXT NOT NULL,
+    channel      TEXT NOT NULL,                 -- wechat | alipay
+    scene        TEXT NOT NULL,                 -- native | h5 | page | wap
+    amount_fen   INTEGER NOT NULL,              -- 下单时快照,整数分(元分换算唯一点护栏)
+    status       TEXT NOT NULL DEFAULT 'pending', -- pending|paid|closed|expired|refunding|refunded|refund_failed
+    code_url     TEXT,                          -- native 二维码内容 / h5|page|wap 跳转 url
+    txn_id       TEXT,                          -- 通道侧交易号(paid 时回填;幂等按它匹配,决策4)
+    paid_at      INTEGER,
+    refund_no    TEXT,                          -- 退款单号(发起退款时生成)
+    refund_at    INTEGER,
+    fail_reason  TEXT,                          -- refund_failed 原因(超管可见)
+    expires_at   INTEGER NOT NULL,              -- min(场景TTL, 订单剩余TTL)(决策24)
+    created_at   INTEGER NOT NULL,
+    updated_at   INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_attempt_order ON payment_attempt(order_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_attempt_one_pending ON payment_attempt(order_id) WHERE status='pending';
+  CREATE INDEX IF NOT EXISTS idx_attempt_expiry ON payment_attempt(expires_at) WHERE status='pending';
+
+  -- 通道配置(单例行/通道)。敏感包(微信 APIv3密钥+商户私钥 / 支付宝应用私钥)JSON 序列化后
+  -- 经 key-crypto AES-256-GCM 加密(AAD='payment:'+channel,复用 MASTER_KEY,决策3)。
+  CREATE TABLE IF NOT EXISTS payment_channel_setting (
+    channel            TEXT PRIMARY KEY,        -- wechat | alipay
+    enabled_scenes     TEXT NOT NULL DEFAULT '[]', -- JSON 数组;Native/H5 独立开关(决策7)
+    config_json        TEXT NOT NULL DEFAULT '{}', -- 非敏感:appid/mchid/公钥等
+    secret_cipher      BLOB,
+    secret_iv          BLOB,
+    secret_tag         BLOB,
+    secret_key_version INTEGER,
+    updated_at         INTEGER
+  );
+
+  -- 对账差异(零静默失败最后防线)。UNIQUE 防微信重试/对账重跑刷屏(决策25)。
+  CREATE TABLE IF NOT EXISTS recon_diff (
+    id           TEXT PRIMARY KEY,
+    bill_date    TEXT NOT NULL,                 -- yyyy-mm-dd('-' = 实时差异,非账单来源)
+    channel      TEXT NOT NULL,
+    kind         TEXT NOT NULL,                 -- missing_local|missing_channel|amount_mismatch|status_mismatch
+    out_trade_no TEXT,
+    txn_id       TEXT,
+    detail_json  TEXT NOT NULL,                 -- 双边快照(排查用)
+    resolved     INTEGER NOT NULL DEFAULT 0,    -- 超管处理后置 1
+    created_at   INTEGER NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_recon_diff_uniq
+    ON recon_diff(channel, COALESCE(out_trade_no,''), COALESCE(txn_id,''), kind);
+  CREATE INDEX IF NOT EXISTS idx_recon_diff_open ON recon_diff(resolved, created_at);
+
+  -- 对账执行记录(账单 T+1 未生成时顺延重试的幂等标记)。
+  CREATE TABLE IF NOT EXISTS recon_run (
+    bill_date TEXT NOT NULL,
+    channel   TEXT NOT NULL,
+    status    TEXT NOT NULL,                    -- ok | bill_not_ready | error
+    detail    TEXT,
+    ran_at    INTEGER NOT NULL,
+    PRIMARY KEY (bill_date, channel)
+  );
+`);
+
+// 退款追回幂等双保险(决策10):镜像 grant 的部分唯一索引 —— 同一订单第二次 refund 写入被 UNIQUE 拦。
+db.exec(
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_order_refund ON credit_ledger(order_id) WHERE kind='refund' AND order_id IS NOT NULL;`,
+);
 
 // ── invoice 一票多单迁移(外部声音 #3/#4)──
 // 老库 invoice 是「一票一单」(order_id TEXT NOT NULL)。SQLite 改不了列约束 → 表重建:
@@ -868,7 +940,68 @@ export type OrderStatus =
   | 'paid_claimed'
   | 'credited'
   | 'rejected'
-  | 'cancelled';
+  | 'cancelled'
+  | 'refunding' // 在线支付退款中(超管发起,通道确认前;失败回退 credited)
+  | 'refunded'; // 已退款终态(ledger 追回,余额可负)
+
+export type PaymentChannel = 'wechat' | 'alipay';
+export type PaymentScene = 'native' | 'h5' | 'page' | 'wap';
+export type PaymentAttemptStatus =
+  | 'pending'
+  | 'paid'
+  | 'closed'
+  | 'expired'
+  | 'refunding'
+  | 'refunded'
+  | 'refund_failed';
+
+export interface PaymentAttemptRow {
+  id: string; // 32 hex = 通道 out_trade_no
+  order_id: string;
+  tenant_id: string;
+  channel: PaymentChannel;
+  scene: PaymentScene;
+  amount_fen: number;
+  status: PaymentAttemptStatus;
+  code_url: string | null;
+  txn_id: string | null;
+  paid_at: number | null;
+  refund_no: string | null;
+  refund_at: number | null;
+  fail_reason: string | null;
+  expires_at: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface PaymentChannelSettingRow {
+  channel: PaymentChannel;
+  enabled_scenes: string; // JSON 数组
+  config_json: string;
+  secret_cipher: Buffer | null;
+  secret_iv: Buffer | null;
+  secret_tag: Buffer | null;
+  secret_key_version: number | null;
+  updated_at: number | null;
+}
+
+export type ReconDiffKind =
+  | 'missing_local'
+  | 'missing_channel'
+  | 'amount_mismatch'
+  | 'status_mismatch';
+
+export interface ReconDiffRow {
+  id: string;
+  bill_date: string;
+  channel: PaymentChannel;
+  kind: ReconDiffKind;
+  out_trade_no: string | null;
+  txn_id: string | null;
+  detail_json: string;
+  resolved: number;
+  created_at: number;
+}
 
 export interface RechargeOrderRow {
   id: string;
@@ -992,7 +1125,9 @@ export interface SessionRow {
   expires_at: number;
 }
 
-export type LedgerKind = 'grant' | 'reserve' | 'settle' | 'release';
+// refund:在线支付退款追回(负数);显式排除出消耗统计(usageSummary/consumed 只认
+// reserve/settle/release),只影响 balance 与 refunded 汇总。写入仅经 credits.refundClawback。
+export type LedgerKind = 'grant' | 'reserve' | 'settle' | 'release' | 'refund';
 
 export interface LedgerRow {
   id: string;
@@ -1011,7 +1146,8 @@ export interface LedgerRow {
   outputKind?: string | null; // 产物类型(job.output_kind:video/image/audio;决定前端预览渲染)
 }
 
-export type ActorType = 'user' | 'platform_admin';
+// system:无请求上下文的系统动作(支付回调入账/退款确认,决策30 —— 线上入账不从审计轨迹消失)。
+export type ActorType = 'user' | 'platform_admin' | 'system';
 
 export interface AuditRow {
   id: string;

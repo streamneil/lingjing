@@ -18,7 +18,7 @@ import {
   getOrderForActor,
   listOrdersForActor,
   claimPaid,
-  cancelOrder,
+  cancelOrderWithAttempt,
   requestInvoice,
   getInvoiceForActor,
   getInvoiceByOrder,
@@ -26,8 +26,12 @@ import {
   getInvoiceProfile,
   upsertInvoiceProfile,
   getPayee,
+  startPayment,
+  checkPaymentNow,
+  pendingAttemptForOrder,
   OrderError,
 } from '../orders/index.js';
+import { availableScenes, CHANNELS, type PaymentChannel, type PaymentScene } from '../payments/index.js';
 import { balance } from '../credits/index.js';
 import { randomUUID } from 'node:crypto';
 
@@ -62,6 +66,57 @@ ordersRouter.get('/payee-info', requireAuth, (_req: Request, res: Response) => {
   });
 });
 
+// 收银台可用支付方式(决策6/7:对公 + 每通道分场景开关;未配置的通道前端显「敬请期待」)。
+ordersRouter.get('/payment-methods', requireAuth, (_req: Request, res: Response) => {
+  const p = getPayee();
+  const channels: Record<string, string[]> = {};
+  for (const c of CHANNELS) channels[c] = availableScenes(c);
+  res.json({ offline: !!(p.payee_name && p.bank_account), channels });
+});
+
+// 发起在线支付(决策2A:pending 期可切换通道;服务层关旧码插新码)。
+ordersRouter.post('/orders/:id/pay', requireRole('admin', 'creator'), async (req: Request, res: Response) => {
+  const o = getOrderForActor(req.params.id!, req.user!.tenantId, req.user!.id, req.user!.role === 'admin');
+  if (!o) return res.status(404).json({ error: '订单不存在' });
+  const { channel, scene } = (req.body ?? {}) as { channel?: PaymentChannel; scene?: PaymentScene };
+  if (!channel || !scene) return res.status(400).json({ error: '缺少支付方式参数' });
+  try {
+    const r = await startPayment({
+      orderId: o.id,
+      tenantId: req.user!.tenantId,
+      channel,
+      scene,
+      clientIp: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || '127.0.0.1',
+    });
+    if ('alreadyPaid' in r && r.alreadyPaid) return res.json({ alreadyPaid: true });
+    audit(req, 'start_payment', `${o.order_no}|${channel}/${scene}`);
+    res.json(r);
+  } catch (e) {
+    if (e instanceof OrderError) return handleOrderError(e, res);
+    // 通道上游失败:订单无损,引导重试/换对公(Section 2 错误地图)。
+    console.error(`[支付] 下单失败 order=${o.order_no}:`, e instanceof Error ? e.message : e);
+    res.status(502).json({ error: '支付下单失败,请重试或改用对公转账' });
+  }
+});
+
+// 用户触发主动查单(决策8:「我已支付」点击 + H5 返回页)。限流:每单 3s 一次。
+const checkPaymentLast = new Map<string, number>();
+ordersRouter.post('/orders/:id/check-payment', requireAuth, async (req: Request, res: Response) => {
+  const o = getOrderForActor(req.params.id!, req.user!.tenantId, req.user!.id, req.user!.role === 'admin');
+  if (!o) return res.status(404).json({ error: '订单不存在' });
+  const last = checkPaymentLast.get(o.id) ?? 0;
+  if (Date.now() - last < 3000) return res.json({ status: o.status, throttled: true });
+  checkPaymentLast.set(o.id, Date.now());
+  if (checkPaymentLast.size > 5000) checkPaymentLast.clear(); // 粗粒度防泄漏(限流窗口仅 3s,清空无害)
+  try {
+    const status = await checkPaymentNow(o.id, req.user!.tenantId);
+    res.json({ status });
+  } catch (e) {
+    if (e instanceof OrderError) return handleOrderError(e, res);
+    res.json({ status: o.status, queryFailed: true }); // 通道查单失败:降级返回本地状态,前端继续轮询
+  }
+});
+
 // 下单(选套餐 → 生成订单)。建单守卫(面议/下架/不存在)在服务层。
 ordersRouter.post('/orders', requireRole('admin', 'creator'), (req: Request, res: Response) => {
   const { planId } = (req.body ?? {}) as { planId?: string };
@@ -85,7 +140,7 @@ ordersRouter.get('/orders', requireAuth, (req: Request, res: Response) => {
   res.json({ orders: rows.map(serializeOrder), balance: balance(req.user!.tenantId) });
 });
 
-// 订单详情(账号隔离;非本人非 admin → 404)。
+// 订单详情(账号隔离;非本人非 admin → 404)。含在途在线支付信息(收银台刷新恢复倒计时/码)。
 ordersRouter.get('/orders/:id', requireAuth, (req: Request, res: Response) => {
   const o = getOrderForActor(
     req.params.id!,
@@ -94,7 +149,20 @@ ordersRouter.get('/orders/:id', requireAuth, (req: Request, res: Response) => {
     req.user!.role === 'admin',
   );
   if (!o) return res.status(404).json({ error: '订单不存在' });
-  res.json({ order: serializeOrder(o) });
+  const attempt = o.status === 'pending_payment' ? pendingAttemptForOrder(o.id) : undefined;
+  res.json({
+    order: serializeOrder(o),
+    pendingAttempt: attempt
+      ? {
+          attemptId: attempt.id,
+          channel: attempt.channel,
+          scene: attempt.scene,
+          kind: attempt.scene === 'native' ? 'qr' : 'redirect',
+          payload: attempt.code_url,
+          expiresAt: attempt.expires_at,
+        }
+      : null,
+  });
 });
 
 // 我已完成打款(+可选回单截图)。pending|rejected → paid_claimed。
@@ -121,19 +189,33 @@ ordersRouter.post(
       await putObject(receiptKey, file.buffer, file.mimetype);
     }
 
-    const ok = claimPaid(o.id, req.user!.tenantId, receiptKey);
-    if (!ok) return res.status(409).json({ error: '订单状态不可提交打款' });
+    try {
+      const ok = claimPaid(o.id, req.user!.tenantId, receiptKey);
+      if (!ok) return res.status(409).json({ error: '订单状态不可提交打款' });
+    } catch (e) {
+      // ONLINE_IN_FLIGHT(决策22 互斥):有在途在线支付时拒绝对公申报。
+      if (e instanceof OrderError) return res.status(409).json({ error: e.message, code: e.code });
+      throw e;
+    }
     audit(req, 'claim_paid', o.order_no);
     res.json({ ok: true });
   },
 );
 
-// 取消订单(仅 pending|rejected;服务层守卫兑底)。
-ordersRouter.post('/orders/:id/cancel', requireRole('admin', 'creator'), (req: Request, res: Response) => {
+// 取消订单(仅 pending;服务层守卫兑底)。在线单先查单(已付→入账不可取消)再通道关单。
+ordersRouter.post('/orders/:id/cancel', requireRole('admin', 'creator'), async (req: Request, res: Response) => {
   const o = getOrderForActor(req.params.id!, req.user!.tenantId, req.user!.id, req.user!.role === 'admin');
   if (!o) return res.status(404).json({ error: '订单不存在' });
-  const ok = cancelOrder(o.id, req.user!.tenantId);
-  if (!ok) return res.status(409).json({ error: '该状态订单不可取消' });
+  try {
+    const r = await cancelOrderWithAttempt(o.id, req.user!.tenantId);
+    if (r.credited) return res.status(409).json({ error: '该订单已支付成功,积分已入账,无法取消', code: 'ALREADY_PAID' });
+    if (!r.cancelled) return res.status(409).json({ error: '该状态订单不可取消' });
+  } catch (e) {
+    if (e instanceof OrderError) return handleOrderError(e, res);
+    // 通道关单失败:不放行取消(旧码可能仍可支付,防「取消后又被扣款」),让用户稍后重试。
+    console.error(`[支付] 取消订单关单失败 order=${o.order_no}:`, e instanceof Error ? e.message : e);
+    return res.status(502).json({ error: '取消失败(支付通道暂不可达),请稍后重试' });
+  }
   audit(req, 'cancel_order', o.order_no);
   res.json({ ok: true });
 });
@@ -260,7 +342,7 @@ function serializeOrder(o: ReturnType<typeof getOrderForActor> & object) {
     credits: o!.credits,
     bonusCredits: o!.bonus_credits,
     status: o!.status,
-    paymentMethod: o!.payment_method, // 本轮恒 offline_bank;前端映射「对公账户转账」
+    paymentMethod: o!.payment_method, // offline_bank|wechat|alipay;pending 期可切换,支付成功/claimPaid 锁定
     actorName: o!.actorName ?? null, // 发起人(admin 看全机构时显谁下的单;creator 自己的单为自己)
     invoiceStatus: o!.invoiceStatus ?? null, // 开票状态(未开/requested/issued;派生)
     hasReceipt: !!o!.receipt_key,

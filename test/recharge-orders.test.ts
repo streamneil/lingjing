@@ -81,15 +81,18 @@ describe('建单 + 快照 + 守卫', () => {
     expect(pendings.length).toBe(1);
   });
 
-  it('payee 未配 → 拒下单(外部 #7,不生成付不了的孤儿单)', async () => {
+  it('无任何收款方式 → 拒下单(决策6:对公或在线至少一种;不生成付不了的孤儿单)', async () => {
     const t2 = createTenant('未配台').id;
     const u2 = (await createUser(t2, 'noConfig', 'pw123456', 'creator')).id;
     const p2 = createPlan({ name: '台2套餐', priceYuan: 100, credits: 1000 }).id;
-    // 注:payee 是单例全局配置,这里已被 beforeAll 配上 → 改成临时清空验证守卫逻辑
+    // 注:payee 是单例全局配置,这里已被 beforeAll 配上 → 临时清空验证守卫逻辑。
+    // try/finally 恢复:断言失败也不污染后续用例(2026-07 曾因未恢复级联 16 个失败)。
     setPayee({ payeeName: '', taxNo: '', bankName: '', bankAccount: '' });
-    expect(() => createOrder({ tenantId: t2, userId: u2, planId: p2 })).toThrow(/对公收款/);
-    // 恢复,不影响后续用例
-    setPayee({ payeeName: '测试公司', taxNo: 'TAX', bankName: '测试行', bankAccount: '6222000000' });
+    try {
+      expect(() => createOrder({ tenantId: t2, userId: u2, planId: p2 })).toThrow(/收款方式/);
+    } finally {
+      setPayee({ payeeName: '测试公司', taxNo: 'TAX', bankName: '测试行', bankAccount: '6222000000' });
+    }
   });
 
   it('面议套餐(price_yuan=null)→ 拒(外部 #5)', () => {

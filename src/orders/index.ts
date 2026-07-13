@@ -12,11 +12,20 @@
 //     返 changes===1),所有状态变走这一门,防漂移(镜 pricing validatePlan 单一来源)。
 //   - 账号隔离:list/get/下载经 scopeByActor —— 用户只看自己 created_by,超管看全机构。
 //
-// ┌─ 订单状态机 ─────────────────────────────────────────────────────────────┐
-// │  pending_payment ─claimPaid(+回单)→ paid_claimed ─confirm→ credited(grant)│
-// │                                          └─reject→ rejected ─resubmit→ paid_claimed
-// │  pending/rejected ─cancel→ cancelled        credited 终态(退款走手工 runbook)│
-// └──────────────────────────────────────────────────────────────────────────┘
+// ┌─ 订单状态机(2026-07 在线支付版;决策见 docs/designs/online-payments.md)────────────┐
+// │                                                                                        │
+// │  pending_payment ──claimPaid(对公,+回单)──▶ paid_claimed ──confirm──▶ credited(grant) │
+// │        │                                        │  └─reject─▶ rejected(终态)           │
+// │        │◀── 支付方式可切换(关旧 attempt)──┐    │                                       │
+// │        ├──在线支付成功(回调/查单,applyPaymentSuccess)──▶ credited(grant,恰一次)      │
+// │        │     (paid_claimed 也接受入账:钱到即入账,决策22)──▶ credited                  │
+// │        ├──cancel / 超时 sweep(在线单先查单:已付→credited,未付→关单)──▶ cancelled     │
+// │  credited ──超管退款(挂票拒退)──▶ refunding ──通道确认──▶ refunded(ledger 追回,终态)│
+// │                                       └──通道失败──▶ credited(回退,attempt 记原因)    │
+// │  幂等基石:transitionOrder 行级条件 UPDATE(WHERE status=from,changes===1)             │
+// │           + credit_ledger(order_id) 对 grant/refund 各一个部分唯一索引双保险            │
+// │  支付尝试(payment_attempt)状态机见 startPayment/applyPaymentSuccess 注释。            │
+// └────────────────────────────────────────────────────────────────────────────────────────┘
 
 import { randomUUID } from 'node:crypto';
 import {
@@ -28,9 +37,23 @@ import {
   type InvoiceStatus,
   type PayeeSettingRow,
   type TenantInvoiceProfileRow,
+  type PaymentAttemptRow,
+  type PaymentAttemptStatus,
+  type PaymentChannel,
+  type PaymentScene,
 } from '../db/index.js';
 import { getPlan } from '../pricing/index.js';
-import { grant } from '../credits/index.js';
+import { grant, refundClawback } from '../credits/index.js';
+import { writeAudit } from '../audit/index.js';
+import {
+  anyOnlineChannelAvailable,
+  availableScenes,
+  getProvider,
+  notifyUrl,
+  publicBaseUrl,
+  recordReconDiff,
+  yuanToFen,
+} from '../payments/index.js';
 
 const now = () => Date.now();
 
@@ -70,10 +93,12 @@ export const createOrder = db.transaction(
     if (plan.price_yuan == null)
       throw new OrderError('PLAN_NOT_PRICED', '面议套餐请联系商务,无法直接下单');
 
-    // ② payee 未配 → 拒(否则用户拿到付不了的单)。
+    // ② 至少一种可付方式已配置(决策6):对公 payee 或任一在线通道。
+    //    只配微信没配对公的部署形态也能建单;收银台按所选方式各自校验可用性。
     const payee = getPayee();
-    if (!payee.payee_name || !payee.bank_account)
-      throw new OrderError('PAYEE_NOT_READY', '平台尚未开通对公收款,请联系运营');
+    const offlineReady = !!(payee.payee_name && payee.bank_account);
+    if (!offlineReady && !anyOnlineChannelAvailable())
+      throw new OrderError('PAYEE_NOT_READY', '平台尚未开通任何收款方式,请联系运营');
 
     // ③ 复用同套餐的未付单(防孤儿堆积 + 双击重单)。
     const existing = db
@@ -237,6 +262,7 @@ export function adminOrderCounts(): {
 } {
   const byStatus: Record<OrderStatus, number> = {
     pending_payment: 0, paid_claimed: 0, credited: 0, rejected: 0, cancelled: 0,
+    refunding: 0, refunded: 0, // 在线支付退款态(决策5:新状态进所有枚举点)
   };
   for (const r of db.prepare(`SELECT status, COUNT(*) AS n FROM recharge_order GROUP BY status`).all() as {
     status: OrderStatus; n: number;
@@ -307,7 +333,10 @@ function transitionOrder(
   from: OrderStatus,
   to: OrderStatus,
   patch: Partial<
-    Pick<RechargeOrderRow, 'receipt_key' | 'admin_note' | 'confirmed_by' | 'confirmed_at'>
+    Pick<
+      RechargeOrderRow,
+      'receipt_key' | 'admin_note' | 'confirmed_by' | 'confirmed_at' | 'payment_method'
+    > // payment_method:在线支付成功时锁定(决策28,不许绕单一门裸 UPDATE)
   > = {},
   tenantId?: string,
 ): boolean {
@@ -332,12 +361,16 @@ function transitionOrder(
 // 用户「我已打款」:仅 pending_payment → paid_claimed(可选回单 key)。
 // 驳回(rejected)是**终态**:平台驳回即不可再提交,用户需重新下单(用户决策:驳回无需重新支付)。
 // 账号隔离:tenantId+本人 created_by 由 API 先 getOrderForActor 校验。
+// 在线互斥(决策22):有在途在线支付时拒绝对公申报(先取消在线支付)—— 但即使漏拦,
+// 钱到即入账兜底:applyPaymentSuccess 也接受 paid_claimed → credited。
 export function claimPaid(id: string, tenantId: string, receiptKey: string | null): boolean {
+  if (pendingAttemptForOrder(id))
+    throw new OrderError('ONLINE_IN_FLIGHT', '有进行中的在线支付,请先返回收银台取消或完成支付');
   return transitionOrder(
     id,
     'pending_payment',
     'paid_claimed',
-    { receipt_key: receiptKey },
+    { receipt_key: receiptKey, payment_method: 'offline_bank' },
     tenantId,
   );
 }
@@ -351,11 +384,17 @@ export function cancelOrder(id: string, tenantId: string): boolean {
 // 待支付超时自动取消。默认 2 小时 —— 兼顾对公转账的财务处理时间(15 分钟太短会误杀真实单),
 // 又不让废弃单长期堆在「待支付」。如需再调改这个常量即可(如 24h = 24*60*60*1000)。
 // 仅取消 pending_payment(尚未「我已打款」、未预扣积分,取消无副作用);paid_claimed 不动。
+// 在线单防误杀:仍有 pending attempt 的订单跳过 —— 先由 sweepExpiredAttempts 查单定生死
+// (attempt 过期锚点 = min(场景TTL, 订单剩余TTL) ≤ 订单 TTL,正常时序不会走到这条护栏)。
 export const PENDING_PAYMENT_TTL_MS = 2 * 60 * 60 * 1000;
 export function cancelStalePendingOrders(maxAgeMs: number = PENDING_PAYMENT_TTL_MS): number {
   const cutoff = now() - maxAgeMs;
   const rows = db
-    .prepare(`SELECT id, tenant_id FROM recharge_order WHERE status='pending_payment' AND created_at < ?`)
+    .prepare(
+      `SELECT id, tenant_id FROM recharge_order o
+        WHERE status='pending_payment' AND created_at < ?
+          AND NOT EXISTS (SELECT 1 FROM payment_attempt a WHERE a.order_id=o.id AND a.status='pending')`,
+    )
     .all(cutoff) as { id: string; tenant_id: string }[];
   let n = 0;
   for (const r of rows) {
@@ -637,4 +676,449 @@ export function setPayee(p: {
      ON CONFLICT(id) DO UPDATE SET payee_name=excluded.payee_name, tax_no=excluded.tax_no,
        bank_name=excluded.bank_name, bank_account=excluded.bank_account, updated_at=excluded.updated_at`,
   ).run(p.payeeName, p.taxNo, p.bankName, p.bankAccount, now());
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// 在线支付(微信/支付宝)—— 设计:docs/designs/online-payments.md(31 条定稿决策)
+//
+// ┌─ payment_attempt 状态机 ────────────────────────────────────────────────┐
+// │ pending ──支付成功(回调/查单)──▶ paid ──退款──▶ refunding ──▶ refunded │
+// │    │                                              └─失败─▶ refund_failed │
+// │    ├──切换通道/用户取消──▶ closed(通道侧已关单)                          │
+// │    └──超时 sweep(先查单!已付→paid,未付→关单)──▶ expired                │
+// │ 不变量:UNIQUE(order_id) WHERE pending —— 每单恰一在途码(决策23)         │
+// │        id = out_trade_no(32 hex,决策12/18);金额=整数分快照              │
+// └──────────────────────────────────────────────────────────────────────────┘
+// ════════════════════════════════════════════════════════════════════════════
+
+/** 场景码有效期:h5_url 官方 5 分钟;native code_url/支付宝 page 给 2h(与订单 TTL 同级);wap 15 分钟。 */
+const SCENE_TTL_MS: Record<PaymentScene, number> = {
+  native: 2 * 60 * 60 * 1000,
+  h5: 5 * 60 * 1000,
+  page: 2 * 60 * 60 * 1000,
+  wap: 15 * 60 * 1000,
+};
+
+export function getAttempt(id: string): PaymentAttemptRow | undefined {
+  return db.prepare(`SELECT * FROM payment_attempt WHERE id=?`).get(id) as
+    | PaymentAttemptRow
+    | undefined;
+}
+
+export function pendingAttemptForOrder(orderId: string): PaymentAttemptRow | undefined {
+  return db
+    .prepare(`SELECT * FROM payment_attempt WHERE order_id=? AND status='pending' LIMIT 1`)
+    .get(orderId) as PaymentAttemptRow | undefined;
+}
+
+/** 最近一笔已收款的尝试(退款对象,决策11)。refund_failed 可重试,refunding 在途。 */
+export function paidAttemptForOrder(orderId: string): PaymentAttemptRow | undefined {
+  return db
+    .prepare(
+      `SELECT * FROM payment_attempt WHERE order_id=? AND status IN ('paid','refunding','refund_failed')
+       ORDER BY paid_at DESC, rowid DESC LIMIT 1`,
+    )
+    .get(orderId) as PaymentAttemptRow | undefined;
+}
+
+/** attempt 状态迁移(镜 transitionOrder:行级条件 UPDATE,changes===1;from 允许多态)。 */
+function transitionAttempt(
+  id: string,
+  from: PaymentAttemptStatus[],
+  to: PaymentAttemptStatus,
+  patch: Partial<Pick<PaymentAttemptRow, 'txn_id' | 'paid_at' | 'refund_no' | 'refund_at' | 'fail_reason' | 'code_url'>> = {},
+): boolean {
+  const sets: string[] = ['status=?', 'updated_at=?'];
+  const vals: unknown[] = [to, now()];
+  for (const [k, v] of Object.entries(patch)) {
+    sets.push(`${k}=?`);
+    vals.push(v);
+  }
+  vals.push(id, ...from);
+  const res = db
+    .prepare(
+      `UPDATE payment_attempt SET ${sets.join(', ')} WHERE id=? AND status IN (${from.map(() => '?').join(',')})`,
+    )
+    .run(...vals);
+  return res.changes === 1;
+}
+
+const channelName = (c: PaymentChannel) => (c === 'wechat' ? '微信支付' : '支付宝');
+
+export type StartPaymentResult =
+  | { alreadyPaid: true }
+  | {
+      alreadyPaid?: false;
+      attemptId: string;
+      kind: 'qr' | 'redirect';
+      payload: string;
+      expiresAt: number;
+      channel: PaymentChannel;
+      scene: PaymentScene;
+    };
+
+/**
+ * 发起在线支付(收银台「去支付」/切换通道/码过期刷新共用)。
+ * - 复用未过期同通道同场景在途码(双击防抖);
+ * - 切换/刷新:先查旧码(已付→入账终止),再通道关单 + 本地 closed,同守卫下插新(决策2A/23);
+ * - expires_at = min(场景TTL, 订单剩余TTL) 且传给通道 time_expire(决策24)。
+ */
+export async function startPayment(params: {
+  orderId: string;
+  tenantId: string;
+  channel: PaymentChannel;
+  scene: PaymentScene;
+  clientIp: string;
+}): Promise<StartPaymentResult> {
+  const order = getOrder(params.orderId);
+  if (!order || order.tenant_id !== params.tenantId)
+    throw new OrderError('ORDER_NOT_FOUND', '订单不存在');
+  if (order.status !== 'pending_payment')
+    throw new OrderError('ORDER_NOT_PAYABLE', '订单当前状态不可在线支付');
+  if (!availableScenes(params.channel).includes(params.scene))
+    throw new OrderError('CHANNEL_UNAVAILABLE', `${channelName(params.channel)}暂未开通,请选择其他付款方式`);
+  const provider = getProvider(params.channel);
+  if (!provider) throw new OrderError('CHANNEL_UNAVAILABLE', `${channelName(params.channel)}暂未开通`);
+
+  const amountFen = yuanToFen(order.price_yuan);
+  const orderDeadline = order.created_at + PENDING_PAYMENT_TTL_MS;
+  const expiresAt = Math.min(now() + SCENE_TTL_MS[params.scene], orderDeadline);
+  if (expiresAt - now() < 30_000)
+    throw new OrderError('ORDER_EXPIRING', '订单即将超时,请取消后重新下单');
+
+  // 在途码处理:复用 or 查单→关单→作废。
+  const existing = pendingAttemptForOrder(order.id);
+  if (existing) {
+    const sameTarget =
+      existing.channel === params.channel && existing.scene === params.scene && !!existing.code_url;
+    if (sameTarget && existing.expires_at - now() > 60_000) {
+      return {
+        attemptId: existing.id,
+        kind: existing.scene === 'native' ? 'qr' : 'redirect',
+        payload: existing.code_url!,
+        expiresAt: existing.expires_at,
+        channel: existing.channel,
+        scene: existing.scene,
+      };
+    }
+    const oldProvider = getProvider(existing.channel);
+    if (oldProvider) {
+      const q = await oldProvider.queryPayment(existing.id); // 先查单:扫码已付时切换 → 入账而非关单
+      if (q.status === 'paid') {
+        applyPaymentSuccess(existing.channel, existing.id, q.txnId ?? '', q.paidAmountFen ?? existing.amount_fen);
+        return { alreadyPaid: true };
+      }
+      await oldProvider.closePayment(existing.id); // 失败即抛:不能在旧码可能仍活时发新码(双收款防线)
+    }
+    transitionAttempt(existing.id, ['pending'], 'closed');
+  }
+
+  const attemptId = randomUUID().replace(/-/g, ''); // 32 hex(微信 out_trade_no ≤32 字符,决策18)
+  try {
+    db.prepare(
+      `INSERT INTO payment_attempt (id, order_id, tenant_id, channel, scene, amount_fen, status, expires_at, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,'pending',?,?,?)`,
+    ).run(attemptId, order.id, order.tenant_id, params.channel, params.scene, amountFen, expiresAt, now(), now());
+  } catch {
+    // UNIQUE(order_id) WHERE pending:并发 startPayment 后来者(决策23)
+    throw new OrderError('CONCURRENT_PAYMENT', '支付发起中,请勿重复操作');
+  }
+
+  const base = publicBaseUrl()!; // availableScenes 非空已保证
+  let created;
+  try {
+    created = await provider.createPayment({
+      attemptId,
+      amountFen,
+      description: `灵镜积分充值-${order.plan_name}`.slice(0, 120),
+      clientIp: params.clientIp,
+      scene: params.scene,
+      notifyUrl: notifyUrl(params.channel),
+      returnUrl: `${base}/pay.html?order=${encodeURIComponent(order.id)}`,
+      expiresAt,
+    });
+  } catch (e) {
+    // 下单失败:attempt 作废,订单无损;用户看「下单失败,请重试或改用对公转账」。
+    transitionAttempt(attemptId, ['pending'], 'closed', {
+      fail_reason: e instanceof Error ? e.message.slice(0, 300) : String(e),
+    });
+    throw e;
+  }
+  db.prepare(`UPDATE payment_attempt SET code_url=?, updated_at=? WHERE id=?`).run(created.payload, now(), attemptId);
+  // payment_method 切换记录(pending 期可变,支付成功时最终锁定,决策2A)。
+  db.prepare(`UPDATE recharge_order SET payment_method=?, updated_at=? WHERE id=? AND status='pending_payment'`)
+    .run(params.channel, now(), order.id);
+
+  return { attemptId, kind: created.kind, payload: created.payload, expiresAt, channel: params.channel, scene: params.scene };
+}
+
+export type ApplyPaymentOutcome = 'credited' | 'duplicate' | 'recorded_diff';
+
+/**
+ * ★钱路核心★ 在线支付成功入账(回调 / 主动查单 / sweep 查单 / 切换前查单 四路共用)。
+ * 幂等矩阵(决策4/22/25):
+ *   同 out_trade_no + 同 txn 重复投递      → 'duplicate'(通道 ACK,静默)
+ *   金额 ≠ attempt 快照                     → 差异表 amount_mismatch,不入账(ACK,已记录)
+ *   订单 pending_payment / paid_claimed     → credited + grant(行级条件 UPDATE 恰一次)
+ *   订单 已取消/已入账(他码)/退款中        → 差异表 status_mismatch,不入账(超管退款闭环处理)
+ *   未知 out_trade_no                        → 差异表 missing_local
+ * 整体 db.transaction:attempt 迁移、订单迁移、grant、差异记录原子一致。
+ */
+export const applyPaymentSuccess = db.transaction(
+  (channel: PaymentChannel, attemptId: string, txnId: string, paidAmountFen: number): ApplyPaymentOutcome => {
+    const attempt = getAttempt(attemptId);
+    if (!attempt || attempt.channel !== channel) {
+      recordReconDiff({
+        channel,
+        kind: 'missing_local',
+        outTradeNo: attemptId,
+        txnId,
+        detail: { paidAmountFen, reason: attempt ? 'channel_mismatch' : 'unknown_out_trade_no' },
+      });
+      return 'recorded_diff';
+    }
+    if (paidAmountFen !== attempt.amount_fen) {
+      recordReconDiff({
+        channel,
+        kind: 'amount_mismatch',
+        outTradeNo: attemptId,
+        txnId,
+        detail: { expectedFen: attempt.amount_fen, paidFen: paidAmountFen, orderId: attempt.order_id },
+      });
+      return 'recorded_diff';
+    }
+    // 收款是通道侧事实:pending/expired/closed 的码收到钱都先记 paid(迟到支付,决策「钱只进不丢」)。
+    const moved = transitionAttempt(attemptId, ['pending', 'expired', 'closed'], 'paid', {
+      txn_id: txnId,
+      paid_at: now(),
+    });
+    if (!moved) {
+      const fresh = getAttempt(attemptId)!;
+      if (fresh.txn_id === txnId) return 'duplicate'; // 通道正常重试投递
+      recordReconDiff({
+        channel,
+        kind: 'status_mismatch',
+        outTradeNo: attemptId,
+        txnId,
+        detail: { reason: 'double_collection_same_attempt', existingTxn: fresh.txn_id, attemptStatus: fresh.status },
+      });
+      return 'recorded_diff';
+    }
+    const order = getOrder(attempt.order_id)!;
+    const lockPatch = { confirmed_at: now(), payment_method: attempt.channel } as const;
+    const credited =
+      transitionOrder(order.id, 'pending_payment', 'credited', lockPatch) ||
+      transitionOrder(order.id, 'paid_claimed', 'credited', lockPatch); // 决策22:钱到即入账
+    if (credited) {
+      grant(
+        order.tenant_id,
+        order.credits + order.bonus_credits,
+        `充值到账 #${order.order_no}(${channelName(attempt.channel)})`,
+        order.id,
+      );
+      // 系统 actor 审计(决策30):回调无请求上下文,线上入账不从审计轨迹消失。
+      writeAudit(order.tenant_id, null, 'online_payment_credited', `${order.order_no}|${channel}|${txnId}`, null, 'system');
+      return 'credited';
+    }
+    // 订单不可入账(已取消/他码已入账/退款中):钱已收,落差异表由超管原路退款(决策25)。
+    recordReconDiff({
+      channel,
+      kind: 'status_mismatch',
+      outTradeNo: attemptId,
+      txnId,
+      detail: { reason: `paid_on_${order.status}`, orderNo: order.order_no, orderId: order.id },
+    });
+    return 'recorded_diff';
+  },
+);
+
+/** 用户触发主动查单(「我已支付」点击 + H5 返回页,决策8;限流在 API 层)。 */
+export async function checkPaymentNow(orderId: string, tenantId: string): Promise<OrderStatus> {
+  const order = getOrder(orderId);
+  if (!order || order.tenant_id !== tenantId) throw new OrderError('ORDER_NOT_FOUND', '订单不存在');
+  const attempt = pendingAttemptForOrder(orderId);
+  if (attempt) {
+    const provider = getProvider(attempt.channel);
+    if (provider) {
+      const q = await provider.queryPayment(attempt.id);
+      if (q.status === 'paid')
+        applyPaymentSuccess(attempt.channel, attempt.id, q.txnId ?? '', q.paidAmountFen ?? attempt.amount_fen);
+    }
+  }
+  return getOrder(orderId)!.status;
+}
+
+/** 用户取消订单(在线版):在途码先查单(已付→入账,不可取消)再通道关单,最后取消订单。 */
+export async function cancelOrderWithAttempt(
+  id: string,
+  tenantId: string,
+): Promise<{ cancelled: boolean; credited?: boolean }> {
+  const attempt = pendingAttemptForOrder(id);
+  if (attempt) {
+    const provider = getProvider(attempt.channel);
+    if (provider) {
+      const q = await provider.queryPayment(attempt.id);
+      if (q.status === 'paid') {
+        applyPaymentSuccess(attempt.channel, attempt.id, q.txnId ?? '', q.paidAmountFen ?? attempt.amount_fen);
+        return { cancelled: false, credited: true };
+      }
+      await provider.closePayment(attempt.id);
+    }
+    transitionAttempt(attempt.id, ['pending'], 'closed');
+  }
+  return { cancelled: cancelOrder(id, tenantId) };
+}
+
+// ── 退款闭环(决策5/10/11/16/21/28)──
+
+export type StartRefundOutcome = 'refunded' | 'refunding' | 'failed';
+
+/**
+ * 超管发起整单退款。时序钉死(决策21,堵 TOCTOU):
+ *   同事务「挂票检查 + credited→refunding + attempt→refunding」 **先于** 通道调用;
+ *   通道同步成功(支付宝)→ 立即确认;受理中(微信)→ 等退款异步通知;
+ *   通道失败 → refunding→credited 回退 + attempt→refund_failed(订单不卡死)。
+ */
+export async function startRefund(orderId: string, adminId: string, reason: string): Promise<StartRefundOutcome> {
+  const order = getOrder(orderId);
+  if (!order) throw new OrderError('ORDER_NOT_FOUND', '订单不存在');
+  const attempt = paidAttemptForOrder(orderId);
+  if (!attempt || !attempt.txn_id)
+    throw new OrderError('NO_ONLINE_PAYMENT', '该订单无在线支付流水,不能原路退款(对公单请线下处理)');
+  if (attempt.status === 'refunding') throw new OrderError('REFUND_IN_FLIGHT', '退款处理中,请稍候');
+
+  const refundNo = attempt.refund_no ?? `RF${attempt.id.slice(0, 30)}`; // 重试复用同号,通道侧幂等
+  db.transaction(() => {
+    // 挂票拒退(决策5):在途/已开发票都拦,提示先驳回发票(避免票账不平/永远开不出的发票)。
+    const occupied = db.prepare(`SELECT 1 FROM invoice_order WHERE order_id=?`).get(orderId);
+    if (occupied) throw new OrderError('INVOICE_ATTACHED', '该订单已关联发票,请先驳回对应发票再退款');
+    const orderMoved = transitionOrder(orderId, 'credited', 'refunding', {
+      admin_note: `退款:${reason}`.slice(0, 200),
+      confirmed_by: adminId,
+    });
+    if (!orderMoved) throw new OrderError('ORDER_NOT_REFUNDABLE', '仅已到账订单可退款(或已有退款在途)');
+    const attemptMoved = transitionAttempt(attempt.id, ['paid', 'refund_failed'], 'refunding', {
+      refund_no: refundNo,
+    });
+    if (!attemptMoved) throw new OrderError('REFUND_IN_FLIGHT', '退款处理中,请稍候');
+  })();
+
+  return executeChannelRefund(attempt.id, refundNo, reason);
+}
+
+/** 对「已收款但订单不可入账」的尝试退款(差异表处理入口;无 ledger 追回,决策11)。 */
+export async function startRefundForAttempt(attemptId: string, reason: string): Promise<StartRefundOutcome> {
+  const attempt = getAttempt(attemptId);
+  if (!attempt || !attempt.txn_id) throw new OrderError('ATTEMPT_NOT_FOUND', '支付流水不存在或未收款');
+  const refundNo = attempt.refund_no ?? `RF${attempt.id.slice(0, 30)}`;
+  const moved = transitionAttempt(attemptId, ['paid', 'refund_failed'], 'refunding', { refund_no: refundNo });
+  if (!moved) throw new OrderError('REFUND_IN_FLIGHT', '退款处理中或已退款');
+  return executeChannelRefund(attemptId, refundNo, reason);
+}
+
+async function executeChannelRefund(attemptId: string, refundNo: string, reason: string): Promise<StartRefundOutcome> {
+  const attempt = getAttempt(attemptId)!;
+  const provider = getProvider(attempt.channel);
+  if (!provider) {
+    applyRefundResult(attemptId, false, '通道未配置,无法发起退款');
+    return 'failed';
+  }
+  let result;
+  try {
+    result = await provider.refund({
+      attemptId,
+      txnId: attempt.txn_id!,
+      refundNo,
+      amountFen: attempt.amount_fen,
+      reason,
+      notifyUrl: notifyUrl(attempt.channel),
+    });
+  } catch (e) {
+    applyRefundResult(attemptId, false, e instanceof Error ? e.message.slice(0, 300) : String(e));
+    return 'failed';
+  }
+  if (result.status === 'succeeded') {
+    applyRefundResult(attemptId, true);
+    return 'refunded';
+  }
+  if (result.status === 'processing') return 'refunding'; // 微信:等退款异步通知驱动 applyRefundResult
+  applyRefundResult(attemptId, false, result.reason);
+  return 'failed';
+}
+
+/**
+ * 退款结果落账(支付宝同步 / 微信退款通知 共用;sync 事务)。
+ * 成功:attempt→refunded;订单曾 credited(refunding 态)→ refunded + ledger 追回(唯一索引双保险);
+ *       订单非 refunding(差异单 attempt-only 退款)→ 只记 attempt,不动订单不追 ledger(决策11)。
+ * 失败:attempt→refund_failed(存原因);订单 refunding→credited 回退(不卡死,决策21)。
+ */
+export const applyRefundResult = db.transaction(
+  (attemptId: string, ok: boolean, failReason?: string): 'refunded' | 'failed' | 'duplicate' => {
+    const attempt = getAttempt(attemptId);
+    if (!attempt) return 'duplicate';
+    if (ok) {
+      const moved = transitionAttempt(attemptId, ['refunding'], 'refunded', { refund_at: now() });
+      if (!moved) return 'duplicate'; // 重复通知
+      const order = getOrder(attempt.order_id)!;
+      const orderMoved = transitionOrder(order.id, 'refunding', 'refunded', {});
+      if (orderMoved) {
+        refundClawback(
+          order.tenant_id,
+          order.credits + order.bonus_credits,
+          `退款追回 #${order.order_no}(${channelName(attempt.channel)})`,
+          order.id,
+        );
+      }
+      writeAudit(attempt.tenant_id, null, 'online_payment_refunded', `${attempt.order_id}|${attempt.refund_no ?? ''}`, null, 'system');
+      return 'refunded';
+    }
+    transitionAttempt(attemptId, ['refunding'], 'refund_failed', { fail_reason: failReason?.slice(0, 300) ?? '通道退款失败' });
+    transitionOrder(attempt.order_id, 'refunding', 'credited', {}); // 回退,订单不卡死
+    return 'failed';
+  },
+);
+
+// ── 在线单超时 sweep(决策13/24/27):先查单(已付→入账),未付→通道关单→expired ──
+
+let sweepInFlight = false; // 重入守卫:通道慢于 tick 时跳过本轮(决策27)
+
+export async function sweepExpiredAttempts(): Promise<void> {
+  const rows = db
+    .prepare(`SELECT id FROM payment_attempt WHERE status='pending' AND expires_at < ?`)
+    .all(now()) as { id: string }[];
+  for (const r of rows) {
+    try {
+      const attempt = getAttempt(r.id);
+      if (!attempt || attempt.status !== 'pending') continue;
+      const provider = getProvider(attempt.channel);
+      if (!provider) {
+        // 通道已下线:本地过期;若真付了款,对账兜底(missing_local 现形)。
+        transitionAttempt(r.id, ['pending'], 'expired');
+        continue;
+      }
+      const q = await provider.queryPayment(r.id);
+      if (q.status === 'paid') {
+        // sweep 查单路径完整具备入账能力(决策13:私有化内网收不到回调,这是唯一入账路径)。
+        applyPaymentSuccess(attempt.channel, r.id, q.txnId ?? '', q.paidAmountFen ?? attempt.amount_fen);
+        continue;
+      }
+      await provider.closePayment(r.id);
+      transitionAttempt(r.id, ['pending'], 'expired');
+    } catch (e) {
+      // 单单隔离:一单通道异常不拖垮整批,下一 tick 重试(决策27)。
+      console.warn(`[支付] sweep 处理尝试 ${r.id} 失败(下轮重试):`, e instanceof Error ? e.message : e);
+    }
+  }
+}
+
+/** 订单/支付统一 sweep(server 60s tick 调用;in-flight 守卫防重入)。 */
+export async function sweepOrders(): Promise<number> {
+  if (sweepInFlight) return 0;
+  sweepInFlight = true;
+  try {
+    await sweepExpiredAttempts();
+    return cancelStalePendingOrders();
+  } finally {
+    sweepInFlight = false;
+  }
 }
