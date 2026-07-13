@@ -702,14 +702,16 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_leads_status ON sales_leads(status);
 `);
 
-// ── 对公充值闭环:订单 + 发票 ──
+// ── 充值闭环:订单 + 发票 + 在线支付(微信/支付宝)──
 // ┌─ 订单状态机(transitionOrder 单一原子迁移,WHERE status=from + changes===1 守卫)──┐
-// │  pending_payment ──「我已打款」(+可选回单)──▶ paid_claimed                          │
-// │  paid_claimed    ── 超管确认到账 ──▶ credited(同事务 grant credits+bonus 一次)      │
-// │  paid_claimed    ── 超管驳回 ──▶ rejected(带 admin_note)                            │
-// │  rejected        ── 用户重新提交打款 ──▶ paid_claimed                                │
-// │  pending/rejected ── 用户取消 ──▶ cancelled(≥paid_claimed 前端隐藏取消,守卫兑底)   │
-// │  credited 为终态。退款追回本轮无 UI(手工 runbook,见计划)。                          │
+// │  pending_payment ──「我已打款」(对公,+可选回单)──▶ paid_claimed                    │
+// │  pending_payment ── 在线支付成功(回调/查单)──▶ credited(同事务 grant 恰一次)      │
+// │  paid_claimed    ── 超管确认到账 / 在线迟到回调(钱到即入账)──▶ credited             │
+// │  paid_claimed    ── 超管驳回 ──▶ rejected(终态,带 admin_note)                      │
+// │  pending         ── 用户取消 / 超时 sweep(在线单先查单再关单)──▶ cancelled          │
+// │  credited        ── 超管退款(挂票拒退)──▶ refunding ──通道确认──▶ refunded(终态)  │
+// │                                              └──通道失败──▶ credited(回退)          │
+// │  支付尝试状态机见 payment_attempt 建表注释与 orders/index.ts。                        │
 // └────────────────────────────────────────────────────────────────────────────────────┘
 // 金额/积分以 order 行**全快照**为准(套餐改/删不影响已下单);order_no 事务内日计数 + UNIQUE 兜底。
 db.exec(`
