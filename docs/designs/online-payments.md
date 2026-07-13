@@ -105,3 +105,111 @@ license)都走同一通道层。收银台从充值专用变成全平台交易入
 12. **out_trade_no = attempt id**,永不用 order_no(微信禁止复用已关单号)。
 13. **sweep 查单路径完整具备入账能力**(同 transition+grant),私有化内网(无回调)下
     是唯一入账路径。
+
+## 工程蓝图(/plan-eng-review 2026-07-13 定稿)
+
+### 新增决策
+14. **验签凭证 v1 仅公钥模式**(微信支付公钥 + 支付宝普通公钥);平台证书/公钥证书
+    模式 NOT in scope,配置页注明要求(1A)。
+15. **实现同 commit 更新 stale 注释**:orders/index.ts:15 状态机图(补在线支付分支
+    + refunding/refunded)、api/orders.ts:263「恒 offline_bank」注释(2A)。
+16. **退款不绕 grant() 护栏**:credits 模块新增导出 `refundClawback()`,内部写
+    kind='refund' 负数行;grant() 拒负数语义不变。
+17. **MASTER_KEY 缺失降级**:getProvider 解密失败 catch → 返 null → 通道占位 +
+    error 日志,不崩进程。
+
+### 表结构
+```sql
+CREATE TABLE payment_attempt (
+  id TEXT PRIMARY KEY,            -- uuid = out_trade_no(决策12)
+  order_id TEXT NOT NULL, tenant_id TEXT NOT NULL,
+  channel TEXT NOT NULL,          -- wechat|alipay
+  scene TEXT NOT NULL,            -- native|h5|page|wap
+  amount_fen INTEGER NOT NULL,    -- 整数分快照(护栏)
+  status TEXT NOT NULL,           -- pending|paid|closed|expired|refunding|refunded|refund_failed
+  code_url TEXT, txn_id TEXT, paid_at INTEGER,
+  refund_no TEXT, refund_at INTEGER,
+  expires_at INTEGER NOT NULL,    -- native/page 2h、h5 5min、wap 15min
+  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+);
+CREATE INDEX idx_attempt_order ON payment_attempt(order_id);
+CREATE INDEX idx_attempt_pending ON payment_attempt(status) WHERE status='pending';
+
+CREATE TABLE payment_channel_setting (
+  channel TEXT PRIMARY KEY,
+  enabled_scenes TEXT NOT NULL DEFAULT '[]',   -- JSON,Native/H5 独立开关(决策7)
+  config_json TEXT NOT NULL,                   -- 非敏感:appid/mchid 等
+  secret_cipher BLOB, secret_iv BLOB, secret_tag BLOB, secret_key_version INTEGER,
+  updated_at INTEGER                           -- 敏感包经 key-crypto AES-256-GCM,AAD='payment:'+channel
+);
+
+CREATE TABLE recon_diff (
+  id TEXT PRIMARY KEY, bill_date TEXT NOT NULL, channel TEXT NOT NULL,
+  kind TEXT NOT NULL,             -- missing_local|missing_channel|amount_mismatch|status_mismatch
+  out_trade_no TEXT, txn_id TEXT, detail_json TEXT NOT NULL,
+  resolved INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL
+);
+
+-- 存量增量:recharge_order.status + refunding|refunded(全枚举点同步,决策5)
+-- credit_ledger:LedgerKind + 'refund';UNIQUE(order_id) WHERE kind='refund'(决策10)
+```
+
+### 接口签名(src/payments/)
+```ts
+type Channel = 'wechat'|'alipay'; type Scene = 'native'|'h5'|'page'|'wap';
+interface PaymentProvider {
+  channel: Channel;
+  createPayment(i: {attemptId; amountFen; description; clientIp; scene; notifyUrl}): Promise<{redirect: string}>;
+  queryPayment(attemptId): Promise<{status: 'not_found'|'pending'|'paid'|'closed'; txnId?; paidAmountFen?; paidAt?}>;
+  verifyNotify(rawBody: Buffer, headers): Promise<{ok; outTradeNo?; txnId?; paidAmountFen?;
+    event: 'payment'|'refund'; ack: {status; body; contentType}}>;   // ACK 进接口(决策9)
+  closePayment(attemptId): Promise<void>;                            // 幂等
+  refund(p: {attemptId; txnId; refundNo; amountFen; reason}): Promise<{status: 'processing'|'succeeded'|'failed'; reason?}>;
+}
+// index.ts:getProvider(channel)|null、enabledScenes、setProviderForTest(测试注入,镜 image-models 注册表)
+// yuanToFen/fenToYuan 唯一换算点,非整数分抛错
+// orders/index.ts:startPayment(2A 切换)、applyPaymentSuccess(决策4 幂等矩阵,镜 confirmAndCredit 事务)、
+//   checkPaymentNow(决策8 限流)、startRefund/applyRefundResult(决策5/10/11)
+// server.ts:/api/payments/notify 挂 express.raw 先于 json;sweep 扩展现有 60s 定时器;recon 每日 09:00
+```
+
+### 测试清单(34 项,含 5 条回归铁律)
+单测:元分换算护栏、微信/支付宝官方向量验签(伪签/改body/过期时间戳/解密失败)、
+getProvider 降级。钱路集成(fake provider):并发双回调同txn恰一次 grant、credited+异txn→
+差异表、已取消单回调→差异表、金额±1分→差异表、处理中抛错→5XX重试后恰一次、退款幂等/
+挂票拒退/未曾credited不追ledger、sweep 时钟注入(过期已付→入账/未付→关单)、recon
+四类差异。回归(必做):对公全流程 byte-identical、createOrder 守卫改后对公部署行为不变、
+adminOrderCounts 全枚举、usageSummary 不含 refund、rbac-tenancy 断言同步。
+E2E×2:收银台全链(选微信→出码→回调→变绿)、退款闭环(驳票→退款→平账)。
+QA 测试计划已落 ~/.gstack/projects/streamneil-lingjing/*-eng-review-test-plan-*.md
+
+### Eng Review Outside Voice 增补(2026-07-13,14 条全采纳)
+18. **out_trade_no = 去横杠 UUID(32 hex)**——微信 out_trade_no 上限 32 字符,原生 UUID 36 字符必被拒。
+19. **PaymentProvider 加 `downloadBill(billDate): Promise<BillRow[]>`**(归一行:outTradeNo/txnId/amountFen/status),对账在通道抽象层后实现。
+20. **verifyNotify 返回补 `refundNo?/refundStatus?('succeeded'|'failed')/refundAmountFen?`**——微信退款结果是异步通知,applyRefundResult 由回调驱动。
+21. **退款时序钉死**:同事务「挂票检查 + transitionOrder(credited→refunding)」先于通道调用(堵 TOCTOU:空窗内 requestInvoice);通道失败 → refunding→credited 回退 + attempt→refund_failed,订单不卡死。
+22. **对公×在线互斥(3A)**:applyPaymentSuccess 接受 from ∈ {pending_payment, paid_claimed}(钱到即入账,与超管 confirm 由行级条件 UPDATE 保恰一次);有在途 attempt 时 claim-paid 拒,paid_claimed 后 startPayment 拒。
+23. **每单恰一在途码**:`CREATE UNIQUE INDEX ON payment_attempt(order_id) WHERE status='pending'`;startPayment 同事务关旧插新(通道 closeOrder 在 commit 后)。
+24. **过期锚点对齐**:`expires_at = min(场景 TTL, order.created_at + PENDING_PAYMENT_TTL_MS)`,并作为 time_expire 传通道——堵「复用旧单出的码比订单多活 2h」。
+25. **recon_diff 幂等**:`UNIQUE(channel, out_trade_no, txn_id, kind)` + upsert;拒绝入账但差异已记录的回调 → **ACK SUCCESS**(否则微信重试数天刷屏差异表)。
+26. **新增 ENV `PUBLIC_BASE_URL`**(notify/return URL 基址):进 .env.example + docker-compose 转发;未配置 → 在线通道占位(同 MASTER_KEY 降级)。
+27. **sweep 异步化防重入**:in-flight 守卫(上轮未完跳过本 tick)+ 单单 try/catch。
+28. **transitionOrder patch Pick 扩宽**:+ payment_method(付款锁定)等,不许绕单一门裸 UPDATE。
+29. **createPayment 补 `returnUrl`**(H5 返回/支付宝 quit_url);返回 `{kind: 'qr'|'redirect', payload}` 区分二维码内容与浏览器跳转。
+30. **回调入账写系统 actor 审计**:applyPaymentSuccess/applyRefundResult 记 audit(actor=system:payment),线上入账不从审计轨迹消失。
+31. **测试清单 +6**:checkPaymentNow×回调并发、并发 startPayment 恰一 pending、recon 重跑幂等、微信退款通知验签向量、claimPaid 后回调入账、旧单复用×过期锚点。partial index 改为 `(expires_at) WHERE status='pending'`(sweep 按过期时间扫)。
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | CLEAR | 5 proposals, 4 accepted, 1 deferred |
+| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR (PLAN) | 17 issues, 0 critical gaps |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | 建议实现后跑(收银台钱路门面) |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+
+**CROSS-MODEL:** 两轮 outside voice(Claude subagent,Codex auth 失效)共 25 条发现全部采纳;其中 4 条修正了主评审自身结论(幂等按交易号、复用 MASTER_KEY、主动查单端点、paid_claimed 双态入账)。
+**VERDICT:** CEO + ENG CLEARED — ready to implement.
+
+NO UNRESOLVED DECISIONS
