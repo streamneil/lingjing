@@ -361,7 +361,7 @@
     </div>
     <div class="tbl">
       <table>
-        <thead><tr><th>时间</th><th>用户</th><th>类型 / 套餐</th><th>金额·积分</th><th>诉求/备注</th><th>状态</th><th style="text-align:right">操作</th></tr></thead>
+        <thead><tr><th>时间</th><th>租户 / 发起人</th><th>类型 / 套餐</th><th>金额·积分</th><th>诉求/备注</th><th>状态</th><th style="text-align:right">操作</th></tr></thead>
         <tbody id="leadRows"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
@@ -1669,7 +1669,7 @@
         const amt=l.plan_price_yuan!=null?`¥${fmtN(l.plan_price_yuan)} · ${fmtN(l.plan_credits)}积分`:'—';
         return `<tr>
           <td style="color:var(--t3);font-family:var(--f-mono);font-size:12px">${fmtDate(l.created_at)}</td>
-          <td style="font-family:var(--f-mono);font-size:11px;color:var(--t3)">${esc(l.user_id.slice(0,8))}</td>
+          <td><div class="tn">${esc(l.tenantName||'(已删租户)')}</div><div style="font-size:11px;color:var(--t4)">${esc(l.userName||l.user_id.slice(0,8))}</div></td>
           <td><span class="bdg bdg-host" style="margin-right:6px">${LEAD_KIND[l.kind]||l.kind}</span>${esc(target)}</td>
           <td style="font-family:var(--f-mono);font-size:12px">${amt}</td>
           <td style="max-width:200px;font-size:12px;color:var(--t2)">${esc(l.note||'—')}</td>

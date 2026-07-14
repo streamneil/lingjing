@@ -133,6 +133,38 @@ describe('删套餐后线索快照保留', () => {
   });
 });
 
+describe('扩容申请可追溯(租户名 + 发起人,billing 页「申请扩容」诉求)', () => {
+  it('topup 线索记录 tenant_id/user_id;listLeads JOIN 出租户名与发起人名', async () => {
+    const c = await tenantLogin();
+    const r = await c.post('/api/sales-leads', { kind: 'topup', note: '用量计费页申请扩容(当前余额 1,234 点)' });
+    expect(r.status).toBe(201);
+    const rows = pricing.listLeads({});
+    expect(rows).toHaveLength(1);
+    const lead = rows[0]!;
+    expect(lead.tenant_id).toBe(tenantId);
+    expect(lead.tenantName).toBe('线索测试台'); // 超管列表直接可读机构名
+    expect(lead.userName).toBe('lead-user'); // 发起人名(display_name 优先,回退 username)
+    expect(lead.note).toContain('申请扩容');
+    // admin API 返回同样带名称(意向线索页渲染用)
+    const pa = await padminLogin();
+    const list = await pa.get('/admin/api/sales-leads');
+    expect(list.status).toBe(200);
+    expect(list.body.leads[0].tenantName).toBe('线索测试台');
+    expect(list.body.leads[0].userName).toBe('lead-user');
+  });
+  it('租户被删后线索保留,名称回退不崩(运营台账不丢)', async () => {
+    const c = await tenantLogin();
+    await c.post('/api/sales-leads', { kind: 'topup', note: '扩容' });
+    // 模拟极端:直接删租户行(无级联)
+    const t2 = createTenant('临时台').id;
+    db.prepare(`UPDATE sales_leads SET tenant_id=? WHERE 1=1`).run('ghost-tenant');
+    const rows = pricing.listLeads({});
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.tenantName).toBe(null); // LEFT JOIN 空,前端显「(已删租户)」
+    void t2;
+  });
+});
+
 describe('admin 线索列表 + 改状态', () => {
   it('未登录/租户打 admin 线索 → 401', async () => {
     const c = new Client(app);

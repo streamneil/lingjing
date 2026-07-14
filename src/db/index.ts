@@ -935,6 +935,8 @@ export interface SalesLeadRow {
   note: string | null;
   status: LeadStatus;
   created_at: number;
+  tenantName?: string | null; // 租户名(listLeads JOIN tenant 派生;运营跟进要知道是谁的机构)
+  userName?: string | null; // 发起人名(JOIN user 派生;display_name 优先)
 }
 
 export type OrderStatus =

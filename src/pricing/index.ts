@@ -239,16 +239,19 @@ export function createLead(input: LeadInput): SalesLeadRow {
 
 export function listLeads(opts: { status?: LeadStatus; limit?: number } = {}): SalesLeadRow[] {
   const limit = Math.min(500, Math.max(1, opts.limit ?? 100));
+  // LEFT JOIN 解析租户名/发起人名(运营要知道「谁的机构、哪个人」在申请扩容,
+  // 裸 user_id 对人不可读);租户/用户被删时回退显 ID,线索不丢。
+  const base = `
+    SELECT l.*, t.name AS tenantName, COALESCE(u.display_name, u.username) AS userName
+      FROM sales_leads l
+      LEFT JOIN tenant t ON t.id = l.tenant_id
+      LEFT JOIN user u ON u.id = l.user_id`;
   return (
     opts.status
       ? db
-          .prepare(
-            `SELECT * FROM sales_leads WHERE status=? ORDER BY created_at DESC, rowid DESC LIMIT ?`,
-          )
+          .prepare(`${base} WHERE l.status=? ORDER BY l.created_at DESC, l.rowid DESC LIMIT ?`)
           .all(opts.status, limit)
-      : db
-          .prepare(`SELECT * FROM sales_leads ORDER BY created_at DESC, rowid DESC LIMIT ?`)
-          .all(limit)
+      : db.prepare(`${base} ORDER BY l.created_at DESC, l.rowid DESC LIMIT ?`).all(limit)
   ) as SalesLeadRow[];
 }
 
