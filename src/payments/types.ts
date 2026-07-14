@@ -33,7 +33,9 @@ export interface CreatePaymentResult {
   payload: string;
 }
 
-export type ChannelOrderStatus = 'not_found' | 'pending' | 'paid' | 'closed';
+// refunded:通道侧已退款(含运营在商户后台手工退的)。绝不能当 paid 入账 —— 否则
+// 「钱已退回买家、积分照发」。查单路径必须把它与 paid 区分开。
+export type ChannelOrderStatus = 'not_found' | 'pending' | 'paid' | 'closed' | 'refunded';
 
 export interface QueryResult {
   status: ChannelOrderStatus;

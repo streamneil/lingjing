@@ -97,6 +97,16 @@ export async function reconcileChannel(billDate: string, channel: PaymentChannel
       diffs++;
       continue;
     }
+    // 账单显示已退款、本地却还是「已收款/已入账」→ 多为运营在商户后台手工退款(钱退了积分没扣)。
+    // 这是对账的必查项:不查则永远无人发现(评审 MEDIUM-HIGH)。
+    if (row.status === 'refunded' && (local.status === 'paid' || local.status === 'refund_failed')) {
+      recordReconDiff({
+        channel, kind: 'status_mismatch', outTradeNo: row.outTradeNo, txnId: row.txnId, billDate,
+        detail: { billStatus: 'refunded', localStatus: local.status, reason: 'channel_refunded_local_not_clawed_back' },
+      });
+      diffs++;
+      continue;
+    }
     if (row.status === 'paid') {
       if (!PAID_LIKE.has(local.status)) {
         recordReconDiff({
@@ -142,10 +152,14 @@ export async function runReconFor(billDate: string): Promise<void> {
   }
 }
 
-/** server 每小时 tick:对「昨日」(北京时间)补对账;bill_not_ready/error 自动重试。 */
+/** 回溯窗口:宕机/持续报错跨过北京时间午夜时,只对「昨日」会永久漏掉那一天的账单(零静默失败的洞)。
+ *  每 tick 补扫最近 7 天里所有没有 ok 记录的账单日(runDone 幂等,已对平的日子零成本跳过)。 */
+const RECON_LOOKBACK_DAYS = 7;
+
 export async function reconTick(nowMs: number = Date.now()): Promise<void> {
-  const yesterday = cstDateString(nowMs - 86_400_000);
-  await runReconFor(yesterday);
+  for (let d = 1; d <= RECON_LOOKBACK_DAYS; d++) {
+    await runReconFor(cstDateString(nowMs - d * 86_400_000));
+  }
 }
 
 /** 超管差异面板数据。 */

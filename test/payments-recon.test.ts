@@ -100,6 +100,24 @@ describe('对账四类差异', () => {
   });
 });
 
+describe('★对抗评审★ 通道侧退款 + 回溯窗口', () => {
+  it('账单显示已退款、本地仍是已收款 → status_mismatch(手工退款不再无人发现)', async () => {
+    const a = await paidAttempt();
+    bill = [{ outTradeNo: a, txnId: 'txn_r', amountFen: 10000, status: 'refunded' }];
+    expect(await reconcileChannel(billDateOf(a), 'wechat')).toBe(1);
+    const d = listReconDiffs({})[0] as any;
+    expect(d.kind).toBe('status_mismatch');
+    expect(JSON.parse(d.detail_json).reason).toBe('channel_refunded_local_not_clawed_back');
+  });
+  it('reconTick 回溯 7 天:宕机跨午夜漏掉的账单日会被补对(不再永久留洞)', async () => {
+    const { reconTick } = await import('../src/payments/recon.js');
+    bill = [];
+    await reconTick(Date.now());
+    const runs = db.prepare(`SELECT bill_date FROM recon_run WHERE channel='wechat'`).all() as any[];
+    expect(runs.length).toBe(7); // 昨日 + 前 6 天全部对过
+  });
+});
+
 describe('对账幂等与顺延', () => {
   it('重跑不刷屏:同差异 INSERT OR IGNORE(决策25)', async () => {
     bill = [{ outTradeNo: 'eeeeeeee'.repeat(4), txnId: 'txn_dup', amountFen: 100, status: 'paid' }];

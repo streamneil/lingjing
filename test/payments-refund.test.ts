@@ -31,10 +31,11 @@ beforeAll(async () => {
   saveChannelSetting('wechat', { enabledScenes: ['native'], config: {} });
 });
 
+let wxProvider: any;
 beforeEach(() => {
   refundBehavior = { status: 'succeeded' };
   refundCalls.length = 0;
-  setProviderForTest('wechat', {
+  wxProvider = {
     channel: 'wechat',
     async createPayment(i: any) { return { kind: 'qr', payload: `pay://${i.attemptId}` }; },
     async queryPayment() { return { status: 'pending' }; },
@@ -42,7 +43,8 @@ beforeEach(() => {
     async closePayment() {},
     async refund(i: any) { refundCalls.push(i); return refundBehavior; },
     async downloadBill() { return []; },
-  } as never);
+  };
+  setProviderForTest('wechat', wxProvider as never);
 });
 
 let seq = 0;
@@ -148,6 +150,68 @@ describe('attempt-only 退款(迟到收款差异单,决策11)', () => {
     expect(getAttempt(attemptId)!.status).toBe('refunded');
     expect(getOrder(o.id)!.status).toBe('cancelled'); // 订单不动
     expect(balance(tId)).toBe(before); // 不追 ledger(决策11)
+  });
+});
+
+describe('★对抗评审★ 退款结果未知 / 退错笔 / 迟到成功通知', () => {
+  it('通道超时(结果未知)→ 保持 refunding 不回滚;随后真正的成功通知能落账+追回', async () => {
+    const { orderId, attemptId } = await creditedOnlineOrder();
+    const before = balance(tId);
+    // 微信已受理退款但响应超时 → provider 抛 UPSTREAM
+    wxProvider.refund = async () => { throw new (await import('../src/payments/types.js')).PaymentError('UPSTREAM', '微信退款结果未知(504)'); };
+    const outcome = await startRefund(orderId, padmin, '客户申请');
+    expect(outcome).toBe('refunding');
+    expect(getOrder(orderId)!.status).toBe('refunding'); // ★不回滚成 credited★(否则成功通知会被吞)
+    expect(getAttempt(attemptId)!.status).toBe('refunding');
+    expect(balance(tId)).toBe(before); // 尚未追回
+    // 真正的退款成功通知到达 → 落账 + 追回
+    expect(applyRefundResult(attemptId, true)).toBe('refunded');
+    expect(getOrder(orderId)!.status).toBe('refunded');
+    expect(balance(tId)).toBe(before - 1100);
+  });
+  it('已判失败回滚后,迟到的退款成功通知仍能补追 ledger(不再静默吞掉)', async () => {
+    const { orderId, attemptId } = await creditedOnlineOrder();
+    refundBehavior = { status: 'failed', reason: '通道拒绝' };
+    expect(await startRefund(orderId, padmin, 'x')).toBe('failed');
+    expect(getOrder(orderId)!.status).toBe('credited'); // 已回滚
+    expect(getAttempt(attemptId)!.status).toBe('refund_failed');
+    const before = balance(tId);
+    // 通道其实退成功了,通知迟到 → credited→refunded + 追回(唯一索引保恰一次)
+    expect(applyRefundResult(attemptId, true)).toBe('refunded');
+    expect(getOrder(orderId)!.status).toBe('refunded');
+    expect(balance(tId)).toBe(before - 1100);
+  });
+  it('一单两笔已收款:退款退的是「入账那一笔」,不是最近一笔', async () => {
+    const planId = createPlan({ name: `双收款版#${++seq}`, priceYuan: 100, credits: 1000, bonusCredits: 100 }).id;
+    const o = createOrder({ tenantId: tId, userId: admin, planId });
+    // A:出码 → 用户没扫 → 过期关闭
+    const rA = await startPayment({ orderId: o.id, tenantId: tId, channel: 'wechat', scene: 'native', clientIp: '' });
+    const aA = (rA as any).attemptId as string;
+    db.prepare(`UPDATE payment_attempt SET status='expired' WHERE id=?`).run(aA);
+    // B:新码 → 支付成功 → 入账
+    const rB = await startPayment({ orderId: o.id, tenantId: tId, channel: 'wechat', scene: 'native', clientIp: '' });
+    const aB = (rB as any).attemptId as string;
+    expect(applyPaymentSuccess('wechat', aB, 'txn_B', 10000)).toBe('credited');
+    // A 迟到支付(用户翻出旧码付了)→ 差异表,不入账;paid_at 更新(比 B 晚)
+    expect(applyPaymentSuccess('wechat', aA, 'txn_A_late', 10000)).toBe('recorded_diff');
+    expect(getAttempt(aA)!.status).toBe('paid');
+    // 订单退款:必须退 B(入账那一笔),而非最近收款的 A
+    refundCalls.length = 0;
+    expect(await startRefund(o.id, padmin, '客户申请')).toBe('refunded');
+    expect((refundCalls[0] as any).attemptId).toBe(aB);
+    expect(getAttempt(aB)!.status).toBe('refunded');
+    // A 是纯多收的钱,可从差异面板原路退回(守卫只挡「入账那一笔」)
+    expect(await startRefundForAttempt(aA, '重复支付退回')).toBe('refunded');
+  });
+  it('金额不符的收款:attempt 迁出 pending(不再永久占坑饿死 sweep),可原路退回', async () => {
+    const planId = createPlan({ name: `错额版#${++seq}`, priceYuan: 100, credits: 1000 }).id;
+    const o = createOrder({ tenantId: tId, userId: admin, planId });
+    const r = await startPayment({ orderId: o.id, tenantId: tId, channel: 'wechat', scene: 'native', clientIp: '' });
+    const a = (r as any).attemptId as string;
+    expect(applyPaymentSuccess('wechat', a, 'txn_bad', 9999)).toBe('recorded_diff'); // 少 1 分
+    expect(getAttempt(a)!.status).toBe('paid'); // ★不再是 pending★
+    expect(getOrder(o.id)!.status).toBe('pending_payment'); // 未入账
+    expect(await startRefundForAttempt(a, '金额不符退回')).toBe('refunded');
   });
 });
 

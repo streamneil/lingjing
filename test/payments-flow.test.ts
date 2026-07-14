@@ -258,6 +258,36 @@ describe('0.01 元套餐全链(1 分钱真实联调路径)', () => {
   });
 });
 
+describe('★对抗评审★ 通道侧已退款的单绝不入账', () => {
+  it('查单返回 refunded(运营在商户后台手工退了)→ 落差异,不发积分', async () => {
+    const o = newOrder();
+    const r = await startPayment({ orderId: o.id, tenantId: tId, channel: 'wechat', scene: 'native', clientIp: '' });
+    const before = balance(tId);
+    wx.queryResult = { status: 'refunded', txnId: 'wx_refunded', paidAmountFen: 35000 };
+    await pollActivePendingAttempts0(); // 时钟:让码「够老」可被主动查单
+    expect(getOrder(o.id)!.status).toBe('pending_payment'); // ★未入账★
+    expect(balance(tId)).toBe(before);
+    const diffs = db.prepare(`SELECT * FROM recon_diff WHERE out_trade_no=?`).all((r as any).attemptId) as any[];
+    expect(diffs).toHaveLength(1);
+    expect(JSON.parse(diffs[0].detail_json).reason).toBe('channel_refunded_not_credited');
+
+    async function pollActivePendingAttempts0() {
+      db.prepare(`UPDATE payment_attempt SET created_at=? WHERE id=?`).run(Date.now() - 60_000, (r as any).attemptId);
+      await pollActivePendingAttempts();
+    }
+  });
+  it('通道查单缺金额 → 按 -1 走比对(fail-closed),落差异不入账', async () => {
+    const o = newOrder();
+    const r = await startPayment({ orderId: o.id, tenantId: tId, channel: 'wechat', scene: 'native', clientIp: '' });
+    const before = balance(tId);
+    wx.queryResult = { status: 'paid', txnId: 'wx_noamt' }; // 通道没给金额
+    db.prepare(`UPDATE payment_attempt SET created_at=? WHERE id=?`).run(Date.now() - 60_000, (r as any).attemptId);
+    await pollActivePendingAttempts();
+    expect(getOrder(o.id)!.status).toBe('pending_payment'); // 不按订单金额假定通过
+    expect(balance(tId)).toBe(before);
+  });
+});
+
 describe('对公 × 在线互斥(决策22)', () => {
   it('有在途在线码时 claimPaid 拒(ONLINE_IN_FLIGHT)', async () => {
     const o = newOrder();

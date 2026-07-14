@@ -148,13 +148,18 @@ export class WechatProvider implements PaymentProvider {
       amount?: { total?: number };
       success_time?: string;
     };
-    if (d.trade_state === 'SUCCESS' || d.trade_state === 'REFUND') {
+    if (d.trade_state === 'SUCCESS') {
       return {
         status: 'paid',
         txnId: d.transaction_id,
         paidAmountFen: d.amount?.total,
         paidAt: d.success_time ? Date.parse(d.success_time) : undefined,
       };
+    }
+    // REFUND:钱已(部分/全额)退回买家。当 paid 入账 = 白送积分(运营在商户后台手工退款后
+    // 下一轮 sweep 就会踩到)。归一为独立状态,调用方落差异不入账。
+    if (d.trade_state === 'REFUND') {
+      return { status: 'refunded', txnId: d.transaction_id, paidAmountFen: d.amount?.total };
     }
     if (d.trade_state === 'CLOSED' || d.trade_state === 'REVOKED' || d.trade_state === 'PAYERROR')
       return { status: 'closed' };
@@ -189,7 +194,12 @@ export class WechatProvider implements PaymentProvider {
       return { status: 'failed', reason: `微信退款状态异常: ${d.status ?? '未知'}` };
     }
     const e = WechatProvider.errOf(text);
-    return { status: 'failed', reason: `微信退款被拒(${status} ${e.code ?? ''}): ${e.message ?? ''}` };
+    // 「被拒」与「结果未知」必须分开(评审 HIGH):5xx / 无业务码 = 微信可能已受理退款,
+    // 判成 failed 会把订单回滚成 credited,随后真正的退款成功通知又匹配不上 → 钱退了、积分没扣。
+    // 结果未知 → 抛 UPSTREAM,调用方保持 refunding(停滞 10 分钟后可安全重驱,同 refund_no 幂等)。
+    if (status >= 500 || !e.code)
+      throw new PaymentError('UPSTREAM', `微信退款结果未知(${status} ${e.message ?? ''})`);
+    return { status: 'failed', reason: `微信退款被拒(${status} ${e.code}): ${e.message ?? ''}` };
   }
 
   // ── 回调:验签(微信支付公钥)→ AES-256-GCM 解密 → 归一 NotifyResult ──

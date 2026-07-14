@@ -799,6 +799,9 @@ db.exec(
 // recharge_order 加 payment_method:收银台付款方式(offline_bank | wechat | alipay)。
 // 老订单加列后默认 offline_bank;在线支付在 pending_payment 期可切换,支付成功/claimPaid 时锁定。
 addColumnIfMissing('recharge_order', 'payment_method', `payment_method TEXT NOT NULL DEFAULT 'offline_bank'`);
+// 入账流水 id:给该订单发放积分的那一笔 payment_attempt。退款必须原路退「这一笔」——
+// 一单可能有多笔已收款流水(旧码迟到支付),退错笔 = 扣了 A 的积分却退了 B 的钱。
+addColumnIfMissing('recharge_order', 'credited_attempt_id', `credited_attempt_id TEXT`);
 
 // ── 在线支付(微信/支付宝):支付尝试 + 通道配置 + 对账差异 ──
 // 设计:docs/designs/online-payments.md(31 条定稿决策)。
@@ -1019,7 +1022,8 @@ export interface RechargeOrderRow {
   bonus_credits: number;
   validity_months: number;
   status: OrderStatus;
-  payment_method: string; // offline_bank(本轮唯一;为未来 alipay/wechat 预留)
+  payment_method: string; // offline_bank | wechat | alipay
+  credited_attempt_id: string | null; // 入账流水 id(在线支付入账时写;退款按它原路退)
   receipt_key: string | null;
   admin_note: string | null;
   confirmed_by: string | null;
