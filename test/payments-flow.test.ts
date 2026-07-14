@@ -21,7 +21,8 @@ const { balance } = await import('../src/credits/index.js');
 const {
   createOrder, getOrder, claimPaid, confirmAndCredit, setPayee,
   startPayment, applyPaymentSuccess, checkPaymentNow, cancelOrderWithAttempt,
-  pendingAttemptForOrder, getAttempt, sweepExpiredAttempts, pollActivePendingAttempts, OrderError,
+  pendingAttemptForOrder, getAttempt, sweepExpiredAttempts, pollActivePendingAttempts,
+  cancelStalePendingOrders, PENDING_PAYMENT_TTL_MS, startRefund, OrderError,
 } = await import('../src/orders/index.js');
 const { setProviderForTest, saveChannelSetting } = await import('../src/payments/index.js');
 const type_mod = await import('../src/payments/types.js');
@@ -404,5 +405,98 @@ describe('HTTP 端点:回调 / 主动查单 / 支付方式', () => {
     expect(r.status).toBe(409);
     expect(r.body.code).toBe('ALREADY_PAID');
     expect(getOrder(oid)!.status).toBe('credited');
+  });
+
+  it('取消订单:通道关单失败 → 502 不放行取消(旧码可能仍活,防「取消后又被扣款」)', async () => {
+    const c = await loggedIn();
+    const created = await c.post('/api/orders', { planId: createPlan({ name: 'HTTP关单败版', priceYuan: 350, credits: 3500 }).id });
+    const oid = created.body.order.id;
+    await c.post(`/api/orders/${oid}/pay`, { channel: 'wechat', scene: 'native' });
+    wx.provider.closePayment = async () => { throw new Error('通道不可达'); };
+    const r = await c.post(`/api/orders/${oid}/cancel`);
+    expect(r.status).toBe(502);
+    expect(getOrder(oid)!.status).toBe('pending_payment'); // 订单未被取消
+    expect(pendingAttemptForOrder(oid)!.status).toBe('pending'); // 码仍在途,稍后重试
+  });
+
+  it('回调端点边界:未知通道→404;通道未配置(迟到通知)→503 让通道重试', async () => {
+    const c = new Client(app);
+    const bad = await c.post('/api/payments/notify/paypal', { sig: 'valid' });
+    expect(bad.status).toBe(404);
+    setProviderForTest('wechat', null); // 移除注入 → 走真实构建:配置行无密钥 → provider null
+    const late = await c.post('/api/payments/notify/wechat', { sig: 'valid', event: 'payment', outTradeNo: 'x'.repeat(32) });
+    expect(late.status).toBe(503);
+  });
+
+  it('混沌:回调处理中抛异常 → 微信 500 JSON / 支付宝 200 failure(通道重试自愈)', async () => {
+    const c = new Client(app);
+    wx.provider.verifyNotify = async () => { throw new Error('db down'); };
+    const rw = await c.post('/api/payments/notify/wechat', { sig: 'valid' });
+    expect(rw.status).toBe(500);
+    expect(rw.body.code).toBe('FAIL');
+    ali.provider.verifyNotify = async () => { throw new Error('db down'); };
+    const ra = await c.post('/api/payments/notify/alipay', { sig: 'valid' });
+    expect(ra.status).toBe(200);
+    expect(ra.body).toBe('failure'); // 支付宝按响应体字面量判重试(决策9/25)
+  });
+
+  it('微信退款异步通知(HTTP):refund_no 不符→忽略仍 ACK;相符→refunded+ledger 追回', async () => {
+    const o = newOrder();
+    const r = await startPayment({ orderId: o.id, tenantId: tId, channel: 'wechat', scene: 'native', clientIp: '' });
+    const attemptId = (r as any).attemptId as string;
+    applyPaymentSuccess('wechat', attemptId, 'wx_rn', 35000);
+    wx.provider.refund = async () => ({ status: 'processing' as const }); // 微信形态:受理后等异步通知
+    expect(await startRefund(o.id, 'padmin-http', '客户申请')).toBe('refunding');
+    const refundNo = getAttempt(attemptId)!.refund_no!;
+    const c = new Client(app);
+    const mismatch = await c.post('/api/payments/notify/wechat', {
+      sig: 'valid', event: 'refund', outTradeNo: attemptId, refundNo: 'RF_WRONG', refundStatus: 'succeeded',
+    });
+    expect(mismatch.status).toBe(200); // ACK 防重试风暴,但不落账
+    expect(getAttempt(attemptId)!.status).toBe('refunding');
+    const before = balance(tId);
+    const ok = await c.post('/api/payments/notify/wechat', {
+      sig: 'valid', event: 'refund', outTradeNo: attemptId, refundNo, refundStatus: 'succeeded',
+    });
+    expect(ok.status).toBe(200);
+    expect(getAttempt(attemptId)!.status).toBe('refunded');
+    expect(getOrder(o.id)!.status).toBe('refunded');
+    expect(balance(tId)).toBe(before - 3850); // credits+bonus 全额追回
+  });
+});
+
+describe('sweep 护栏 + 建单/出码守卫(决策6/13/24)', () => {
+  it('超时 sweep 防误杀:仍有 pending 在线码的订单跳过;码 expired 后才取消', async () => {
+    const o = newOrder();
+    const r = await startPayment({ orderId: o.id, tenantId: tId, channel: 'wechat', scene: 'native', clientIp: '' });
+    const attemptId = (r as any).attemptId as string;
+    db.prepare(`UPDATE recharge_order SET created_at=? WHERE id=?`).run(Date.now() - PENDING_PAYMENT_TTL_MS - 60_000, o.id);
+    cancelStalePendingOrders();
+    expect(getOrder(o.id)!.status).toBe('pending_payment'); // 在途码保护,不被误杀
+    db.prepare(`UPDATE payment_attempt SET expires_at=? WHERE id=?`).run(Date.now() - 1000, attemptId);
+    await sweepExpiredAttempts(); // 先查单定生死(默认 pending → 关单 expired)
+    expect(getAttempt(attemptId)!.status).toBe('expired');
+    cancelStalePendingOrders();
+    expect(getOrder(o.id)!.status).toBe('cancelled');
+  });
+
+  it('订单临近超时(<30s)不再出码 → ORDER_EXPIRING(码 TTL 锚点 ≤ 订单 TTL,决策24)', async () => {
+    const o = newOrder();
+    db.prepare(`UPDATE recharge_order SET created_at=? WHERE id=?`).run(Date.now() - PENDING_PAYMENT_TTL_MS + 20_000, o.id);
+    await expect(startPayment({ orderId: o.id, tenantId: tId, channel: 'wechat', scene: 'native', clientIp: '' }))
+      .rejects.toMatchObject({ code: 'ORDER_EXPIRING' });
+  });
+
+  it('决策6:只配在线未配对公的部署形态也能建单(payee 空 + 在线通道可用)', () => {
+    setPayee({ payeeName: '', taxNo: '', bankName: '', bankAccount: '' });
+    try {
+      const o = createOrder({
+        tenantId: tId, userId: admin,
+        planId: createPlan({ name: `纯在线#${++planSeq}`, priceYuan: 100, credits: 1000 }).id,
+      });
+      expect(o.status).toBe('pending_payment');
+    } finally {
+      setPayee({ payeeName: '测试公司', taxNo: 'T', bankName: '测试行', bankAccount: '622' });
+    }
   });
 });

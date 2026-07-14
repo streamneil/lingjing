@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import {
   generateKeyPairSync,
   createSign,
+  createVerify,
   createCipheriv,
   randomBytes,
 } from 'node:crypto';
@@ -238,6 +239,55 @@ describe('支付宝 RSA2 验签(普通公钥模式)', () => {
     expect(r.ok).toBe(true);
     expect(r.event).toBe('ignored');
     expect(r.ack.body).toBe('success');
+  });
+});
+
+describe('支付宝下单 URL(离线构造,零外呼)', () => {
+  const alipay = () =>
+    new AlipayProvider({
+      appId: '2021000000000001',
+      alipayPublicKeyPem: platform.pub,
+      gateway: 'https://openapi.alipay.com/gateway.do',
+      privateKeyPem: merchant.priv,
+    });
+
+  it('page/wap:签名 GET URL 含单号/元字符串金额/product_code/time_expire;RSA2 签名可验', async () => {
+    const attemptId = 'a'.repeat(32);
+    const expiresAt = Date.parse('2026-07-14T12:00:00+08:00');
+    const page = await alipay().createPayment({
+      attemptId, amountFen: 35000, description: '灵镜积分充值-在线版', clientIp: '1.2.3.4',
+      scene: 'page', notifyUrl: 'https://x.example.com/api/payments/notify/alipay',
+      returnUrl: 'https://x.example.com/pay.html?order=o1', expiresAt,
+    });
+    expect(page.kind).toBe('redirect');
+    const u = new URL(page.payload);
+    expect(`${u.origin}${u.pathname}`).toBe('https://openapi.alipay.com/gateway.do');
+    const q = u.searchParams;
+    expect(q.get('method')).toBe('alipay.trade.page.pay');
+    expect(q.get('notify_url')).toBe('https://x.example.com/api/payments/notify/alipay');
+    expect(q.get('return_url')).toBe('https://x.example.com/pay.html?order=o1');
+    const biz = JSON.parse(q.get('biz_content')!) as Record<string, unknown>;
+    expect(biz.out_trade_no).toBe(attemptId);
+    expect(biz.total_amount).toBe('350.00'); // 元字符串两位小数(money.ts 唯一点)
+    expect(biz.product_code).toBe('FAST_INSTANT_TRADE_PAY');
+    expect(biz.time_expire).toBe('2026-07-14 12:00:00'); // GMT+8,通道侧与本地 attempt 对齐(决策24)
+    // 签名可用应用公钥验证(去 sign,字典序 k=v& 原文拼串)
+    const params: Record<string, string> = {};
+    for (const [k, v] of q) params[k] = v;
+    const sign = params.sign!;
+    delete params.sign;
+    const content = Object.keys(params).filter((k) => params[k] !== '').sort().map((k) => `${k}=${params[k]}`).join('&');
+    expect(createVerify('RSA-SHA256').update(content, 'utf8').verify(merchant.pub, sign, 'base64')).toBe(true);
+    // wap 形态:QUICK_WAP_WAY + quit_url(中断返回页)
+    const wap = await alipay().createPayment({
+      attemptId, amountFen: 1, description: '一分钱', clientIp: '',
+      scene: 'wap', notifyUrl: 'https://x.example.com/n', returnUrl: 'https://x.example.com/r', expiresAt,
+    });
+    const wapBiz = JSON.parse(new URL(wap.payload).searchParams.get('biz_content')!) as Record<string, unknown>;
+    expect(new URL(wap.payload).searchParams.get('method')).toBe('alipay.trade.wap.pay');
+    expect(wapBiz.product_code).toBe('QUICK_WAP_WAY');
+    expect(wapBiz.quit_url).toBe('https://x.example.com/r');
+    expect(wapBiz.total_amount).toBe('0.01');
   });
 });
 
