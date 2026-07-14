@@ -61,8 +61,8 @@
 ### T-SEAT-BILLING:席位与计费/订单后端打通
 - **What:** 把 tenant.max_creator_seats 接入真实计费——"升级套餐买更多席位"的支付流程。
 - **Why:** 本轮席位已真实强制(默认 10,超限拦截),但上限值现在靠后台/SQL 手设;商业化需让客户自助升级。
-- **Context:** 来自 /plan-design-review 成员模块 D7。当前无计费后端,max_creator_seats 是 tenant 字段。
-- **Depends on:** 计费/订单后端(尚不存在)。
+- **Context:** 来自 /plan-design-review 成员模块 D7。max_creator_seats 是 tenant 字段,上限值目前靠后台/SQL 手设。
+- **Depends on:** ~~计费/订单后端(尚不存在)~~ → **已解锁**(v0.6.0.0 在线支付上线:`src/payments/` 通道层 + 订单/发票闭环已就绪,席位升级可复用同一条收款链路,只需加「席位」商品类型)。
 - **Priority:** P2
 
 ## CEO 审计补充(2026-06-04,HOLD SCOPE — 项目收尾)
