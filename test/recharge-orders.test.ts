@@ -212,6 +212,22 @@ describe('账号隔离 + IDOR', () => {
   });
 });
 
+describe('分粒度套餐 × 发票(浮点漂移防线)', () => {
+  it('3 × ¥0.01 合开一票:Σ按分整数相加 = ¥0.03,开具重校通过', async () => {
+    const p = createPlan({ name: '一分钱票版', priceYuan: 0.01, credits: 1 }).id;
+    const mk = () => { // 每单独立下单(同套餐未付单会被复用 → 逐单走完闭环)
+      const o = createOrder({ tenantId: tId, userId: admin, planId: p });
+      claimPaid(o.id, tId, null);
+      confirmAndCredit(o.id, admin);
+      return o.id;
+    };
+    const ids = [mk(), mk(), mk()];
+    const inv = requestInvoice({ orderIds: ids, tenantId: tId, userId: admin, title: '分粒度公司', taxNo: 'TAXF' });
+    expect(inv.amount_yuan).toBe(0.03); // 干净的 0.03,不是 0.030000000000000002
+    expect(issueInvoice(inv.id, 'INV-FEN-1', null)).toBe(true); // 开具时重校(分口径)通过
+  });
+});
+
 describe('发票一票多单', () => {
   // 造一个 credited 订单返回(planId=5000/55000)。
   function creditedOrder(userId: string): string {

@@ -242,6 +242,17 @@ describe('applyPaymentSuccess 幂等矩阵(决策4/22/25)', () => {
   });
 });
 
+describe('0.01 元套餐全链(1 分钱真实联调路径)', () => {
+  it('0.01 元下单 → 1 分 → 回调入账;金额差 0 分才通过', async () => {
+    const planId = createPlan({ name: `一分钱#${++planSeq}`, priceYuan: 0.01, credits: 1 }).id;
+    const o = createOrder({ tenantId: tId, userId: admin, planId });
+    const r = await startPayment({ orderId: o.id, tenantId: tId, channel: 'wechat', scene: 'native', clientIp: '' });
+    expect((wx.calls.create[0] as any).amountFen).toBe(1); // ¥0.01 = 1 分,元分换算唯一点
+    expect(applyPaymentSuccess('wechat', (r as any).attemptId, 'wx_fen', 1)).toBe('credited');
+    expect(getOrder(o.id)!.status).toBe('credited');
+  });
+});
+
 describe('对公 × 在线互斥(决策22)', () => {
   it('有在途在线码时 claimPaid 拒(ONLINE_IN_FLIGHT)', async () => {
     const o = newOrder();

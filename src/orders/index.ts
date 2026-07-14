@@ -469,16 +469,18 @@ export function getInvoice(id: string): InvoiceRow | undefined {
 
 // 单一钱路校验(申请时 + 开具时共用):所含订单都存在 + 属本租户 + credited + Σ金额=发票金额 + 非空。
 // 不符抛 OrderError(API 层透传 400)。
+// 金额合计按「分」整数相加再比对:套餐已放开到 0.01 元,浮点元直加会出
+// 0.01+0.01+0.01 = 0.030000000000000002 这类票账不平假差异(加法顺序还不可控)。
 function validateInvoiceOrders(orderIds: string[], tenantId: string, expectedAmount: number): void {
   if (orderIds.length === 0) throw new OrderError('NO_ORDERS', '请至少选择一个订单');
-  let sum = 0;
+  let sumFen = 0;
   for (const oid of orderIds) {
     const o = getOrder(oid);
     if (!o || o.tenant_id !== tenantId) throw new OrderError('ORDER_NOT_FOUND', '订单不存在');
     if (o.status !== 'credited') throw new OrderError('ORDER_NOT_CREDITED', '仅已到账订单可开票');
-    sum += o.price_yuan;
+    sumFen += Math.round(o.price_yuan * 100);
   }
-  if (sum !== expectedAmount)
+  if (sumFen !== Math.round(expectedAmount * 100))
     throw new OrderError('AMOUNT_MISMATCH', '发票金额与所含订单金额之和不符');
 }
 
@@ -557,13 +559,14 @@ export const requestInvoice = db.transaction(
       if (occupied) throw new OrderError('INVOICE_EXISTS', '所选订单中有已申请/已开票的');
     }
 
-    // ② 金额 = Σ订单金额;校验所含订单都 credited + 属本租户 + 非空。
-    let amount = 0;
+    // ② 金额 = Σ订单金额(分整数相加防浮点漂移,存回干净的元值);校验所含订单都 credited + 属本租户 + 非空。
+    let amountFen = 0;
     for (const oid of params.orderIds) {
       const o = getOrder(oid);
       if (!o || o.tenant_id !== params.tenantId) throw new OrderError('ORDER_NOT_FOUND', '订单不存在');
-      amount += o.price_yuan;
+      amountFen += Math.round(o.price_yuan * 100);
     }
+    const amount = amountFen / 100;
     validateInvoiceOrders(params.orderIds, params.tenantId, amount);
 
     // ③ 插 invoice + N 条关联。UNIQUE(order_id) 冲突(并发)→ 抛 → 整体回滚。

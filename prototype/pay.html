@@ -69,6 +69,13 @@
     .qr-actions .act.primary{ background:var(--blue); border-color:var(--blue); color:#fff; }
     .pm-opt{ cursor:pointer; }
     .pm-opt.dis{ cursor:not-allowed; }
+    /* 等待支付状态(在线支付无需任何点击,回调自动入账) */
+    .qr-status{ display:flex; align-items:center; justify-content:center; gap:8px; margin-top:14px; font-size:13px; color:var(--t2); }
+    .qr-status .dot{ width:8px; height:8px; border-radius:50%; background:var(--green); animation:qrpulse 1.2s ease-in-out infinite; }
+    @keyframes qrpulse{ 0%,100%{opacity:.35;transform:scale(.85)} 50%{opacity:1;transform:scale(1)} }
+    .qr-help{ margin-top:8px; font-size:12px; }
+    .qr-help a{ color:var(--t4); text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
+    .qr-help a:hover{ color:var(--t2); }
     /* 支付成功(体验包②:即时变绿 + 积分跳动) */
     .pay-success{ background:linear-gradient(180deg, rgba(52,199,89,.12), transparent); border:1px solid rgba(52,199,89,.35); border-radius:16px; padding:40px 24px; text-align:center; }
     .pay-success .ic{ font-size:40px; }
@@ -256,7 +263,6 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
           <div class="pay-foot">
             <span class="total">应付<b>¥${fmtN(ORDER.priceYuan)}</b></span>
             <a class="ghost" href="recharge.html">返回</a>
-            <button class="btn" id="paidCheck" style="display:none">我已支付</button>
           </div>`;
         document.getElementById('goPay').onclick = ()=>startPay(PM, scene);
       }
@@ -275,14 +281,24 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       }finally{ payInFlight=false; }
     }
 
+    // 在线支付无需用户确认:回调/查单自动入账,页面自动变绿。
+    // 这里只展示「等待支付」状态 + 小字兜底查询(丢回调时用户自助,决策8),
+    // 绝不显示对公流程那种「我已支付」主按钮(会误导用户以为必须点击)。
+    function waitingHtml(){
+      return `<div class="qr-status"><span class="dot"></span>等待支付中 · 支付成功后积分自动到账,无需操作</div>
+        <div class="qr-help">已支付但页面未更新?<a id="qrCheckLink">点此查询</a></div>`;
+    }
+    function bindCheckLink(){
+      const link = document.getElementById('qrCheckLink');
+      if(link) link.onclick = async ()=>{ link.textContent='查询中…'; await checkNow(false); link.textContent='点此查询'; };
+    }
     function showAttempt(a){
       const slot = document.getElementById('qrslot'); if(!slot) return;
-      const checkBtn = document.getElementById('paidCheck');
-      if(checkBtn){ checkBtn.style.display=''; checkBtn.onclick = ()=>checkNow(false); }
       if(a.kind==='qr'){
         const qr = qrcode(0,'M'); qr.addData(a.payload); qr.make();
         slot.innerHTML = `<div class="qrwrap"><img alt="支付二维码" src="${qr.createDataURL(6,8)}"><div class="qr-mask" id="qrMask" style="display:none"><div class="m-t">二维码已过期</div><button id="qrRefresh">重新获取</button></div></div>
-          <div class="qr-count" id="qrCount"></div>`;
+          <div class="qr-count" id="qrCount"></div>${waitingHtml()}`;
+        bindCheckLink();
         document.getElementById('qrTip').innerHTML = IS_WECHAT
           ? '长按二维码 → 识别图中二维码即可支付;或用系统浏览器打开本页。'
           : (a.channel==='wechat'?'请使用微信「扫一扫」扫码支付':'请使用支付宝「扫一扫」扫码支付');
@@ -292,7 +308,8 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         document.getElementById('qrTip').textContent = '已打开支付页面,完成支付后本页自动更新。';
         if(IS_MOBILE){ location.href = a.payload; }
         else{
-          slot.innerHTML = `<button class="act primary" id="reopenPay" style="background:var(--blue);border:none;color:#fff;border-radius:999px;padding:12px 30px;font-size:14px;font-weight:700;cursor:pointer;min-height:44px;font-family:inherit">重新打开支付页</button>`;
+          slot.innerHTML = `<button class="act primary" id="reopenPay" style="background:var(--blue);border:none;color:#fff;border-radius:999px;padding:12px 30px;font-size:14px;font-weight:700;cursor:pointer;min-height:44px;font-family:inherit">重新打开支付页</button>${waitingHtml()}`;
+          bindCheckLink();
           document.getElementById('reopenPay').onclick=()=>window.open(a.payload,'_blank');
           window.open(a.payload,'_blank');
         }
@@ -313,7 +330,9 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
           c.textContent='二维码已过期,请重新获取';
           return;
         }
-        c.innerHTML = `二维码有效期 <b>${String(Math.floor(left/60)).padStart(2,'0')}:${String(left%60).padStart(2,'0')}</b>`;
+        const h=Math.floor(left/3600), m=Math.floor((left%3600)/60), sec=left%60;
+        const txt = h>0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+        c.innerHTML = `二维码有效期 <b>${txt}</b>`;
       };
       tick(); countTimer=setInterval(tick,1000);
     }

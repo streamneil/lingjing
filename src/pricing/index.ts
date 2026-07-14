@@ -51,10 +51,14 @@ export interface PlanInput {
 /** 校验单一来源:create / update 都走这里。坏值抛 PricingError(API 层 400)。 */
 function validatePlan(input: PlanInput): void {
   if (!input.name || !input.name.trim()) throw new PricingError('NAME_REQUIRED', '套餐名不能为空');
-  // price_yuan:null=面议(合法)或正整数。
+  // price_yuan:null=面议(合法)或正数、精确到分(最小 0.01,最多两位小数)。
+  // 分粒度护栏与 payments/money.ts yuanToFen 同口径:0.011 这类无法精确表示为分的值当场拒,
+  // 绝不静默取整(134× 事故家族)。放开小数是为了 1 分钱真实支付联调 + 低价体验套餐。
   if (input.priceYuan !== null) {
-    if (!Number.isInteger(input.priceYuan) || input.priceYuan <= 0)
-      throw new PricingError('BAD_PRICE', '价格需为正整数,或留空表示面议');
+    const p = input.priceYuan;
+    const fen = Math.round(p * 100);
+    if (!Number.isFinite(p) || p <= 0 || Math.abs(p * 100 - fen) > 1e-6 || !Number.isSafeInteger(fen))
+      throw new PricingError('BAD_PRICE', '价格需为正数(最小 0.01,最多两位小数),或留空表示面议');
   }
   if (!Number.isInteger(input.credits) || input.credits <= 0)
     throw new PricingError('BAD_CREDITS', '积分数需为正整数');

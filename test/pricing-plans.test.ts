@@ -66,6 +66,16 @@ describe('数据层:校验', () => {
     const p = pricing.createPlan({ name: '面议套餐', priceYuan: null, credits: 99999 });
     expect(p.price_yuan).toBeNull();
   });
+  it('price_yuan 支持分粒度:0.01 合法(1 分钱联调套餐)', () => {
+    const p = pricing.createPlan({ name: '一分钱测试', priceYuan: 0.01, credits: 1 });
+    expect(p.price_yuan).toBe(0.01);
+    const p2 = pricing.createPlan({ name: '体验价', priceYuan: 9.9, credits: 99 });
+    expect(p2.price_yuan).toBe(9.9);
+  });
+  it('price_yuan 超过两位小数(0.011)→ 抛(无法精确到分,拒绝静默取整)', () => {
+    expect(() => pricing.createPlan({ name: 'X', priceYuan: 0.011, credits: 1 })).toThrow(/两位小数|正数/);
+    expect(() => pricing.createPlan({ name: 'X', priceYuan: 0.001, credits: 1 })).toThrow();
+  });
   it('price_yuan 负数 → 抛', () => {
     expect(() => pricing.createPlan({ name: 'X', priceYuan: -1, credits: 50000 })).toThrow();
   });
