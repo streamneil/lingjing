@@ -41,6 +41,9 @@ chmod 600 .env        # 限制权限,别提交 git(.gitignore 已排)
 # COOKIE_SECURE=true(生产 HTTPS,保持默认)
 # 厂商 key(百炼/火山/Google)部署后在 /admin「厂商 / Key」配,不进 .env。
 # 可选:WORKER_POOL_SIZE=16(并发池;4c8g 压不住可调小到 8)
+# 可选:PUBLIC_BASE_URL=https://your-domain.com(要开微信/支付宝在线支付才填,是支付回调
+#   notify_url 的地址来源;商户号/密钥部署后在 /admin「在线支付」配,不进 .env。
+#   不填则收银台在线通道显示「敬请期待」,对公转账不受影响)
 
 # 3. 一键部署(推荐):校验 .env → build → up → 等健康 → 打印状态
 ./scripts/deploy.sh
@@ -70,6 +73,9 @@ OSS AccessKey 可复用 DashScope 同账号的 RAM 用户(授权 AliyunOSSFullAc
 2. 用 `admin` / `<SUPERADMIN_PASS>` 登录
 3. 「新建租户」建一个机构 → 「开户」给机构建管理员账号
 4. 机构用户用 `https://your-domain.com/login.html` 登录创作台
+5. (可选)开通在线支付:`/admin →「在线支付」`填微信/支付宝商户号与密钥(加密入库,
+   微信/支付宝、扫码/H5 场景可分别启停)。前提是 `.env` 已配 `PUBLIC_BASE_URL`。
+   回调收不到/对账差异/退款排障见 `docs/PAYMENTS-RUNBOOK.md`。
 
 ## 数据备份(SQLite)
 

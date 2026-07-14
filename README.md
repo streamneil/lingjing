@@ -4,7 +4,7 @@
 影片、图片、音频三大模态，多个 AI 创作工具，一套积分通用、云端生成、合规可控、支持私有化部署。
 
 > 运行见 `RUNNING.md`；部署见 `DEPLOY.md` / `DEPLOY-ALIYUN.md`（阿里云）/ `DEPLOY-PRIVATE.md`（私有化）；
-> 产品规格见 `功能清单-PRD.md`。
+> 产品规格见 `功能清单-PRD.md`；在线支付运维排障见 `docs/PAYMENTS-RUNBOOK.md`。
 
 ---
 
@@ -18,6 +18,7 @@
 
 - **多租户**：平台超管（/admin）开机构 → 机构管理员开账号；租户间数据隔离。
 - **积分计费**：reserve（提交预扣）→ settle（成功结算）→ release（失败退还），按真实秒/字/张计价。
+- **在线收款**：充值支持微信支付 / 支付宝（秒级自动到账、原路退款、每日自动对账）与对公转账；商户号/密钥在 `/admin →「在线支付」`加密配置。
 - **合规**：AI 生成标识、内容送审、本人授权存证。
 
 ## 技术形态
@@ -104,6 +105,7 @@ cp .env.example .env && chmod 600 .env
 |---|---|
 | **`.env`(部署前)** | 超管密码 `SUPERADMIN_PASS`、主密钥 `MASTER_KEY`(`openssl rand -base64 32`)、OSS 四项、域名 |
 | **`/admin`(部署后)** | 厂商 API Key:**百炼 / 火山方舟 / Google AI Studio**,在「厂商 / Key」页粘贴(加密入库) |
+| **在线支付(可选)** | `.env` 填 `PUBLIC_BASE_URL`(支付回调基址,通常 `https://你的域名`)→ `/admin →「在线支付」`填微信/支付宝商户号与密钥(加密入库,保存后不回显)。不配则收银台在线通道显示「敬请期待」,对公转账不受影响。排障见 `docs/PAYMENTS-RUNBOOK.md` |
 
 `MASTER_KEY` 是解密库内厂商 key 的总钥匙,只能走 `.env`;没它后台贴 key 会失败。
 厂商 key 一律在 `/admin` 配,`.env` 里不写任何厂商 key。
