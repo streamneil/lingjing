@@ -119,6 +119,16 @@
 - **Context:** 来自 2026-07-13 /plan-ceo-review 在线支付轮外部声音 #2。当前拦截规则在 refund 入口检查 invoice_order 关联。
 - **Effort:** M(human)→ S(CC)。**Priority:** P3。**Depends on:** 本轮退款闭环落地。
 
+## 工程质量(2026-07-14 发现)
+
+### T-TEST-ORDER-DEPENDENCE:测试用例间存在执行顺序依赖(打乱即挂)
+- **What:** `npx vitest run --sequence.shuffle` 会挂 4-13 个用例(默认顺序全绿)。根因:同文件内多个 describe 共享 beforeAll 造的数据,后面的用例会改掉前面用例依赖的状态。典型:`order-management.test.ts` 的 `cancelStalePendingOrders(-1)`(全库取消所有待支付单)一旦先于 `adminOrderCounts 计数正确` 执行,后者的 pending 基线就没了;`ai-music` / `img2video` 等文件也有同类问题。
+- **Why:** 顺序依赖 = 隐性耦合。今天靠"声明顺序恰好正确"活着;将来任何人插一个 describe、或 vitest 改并发策略,就会随机红,且极难定位(2026-07-14 合并 v0.6.0.0 时就出现过一次 4 例偶发失败)。
+- **Pros:** 修完后测试可任意并行/打乱,CI 更可信;flake 归零。
+- **Cons:** 要逐文件把「跨 describe 共享可变状态」改成各自造数据(或用 beforeEach 重置),涉及多个存量测试文件。
+- **Context:** **不是本轮引入**——在 v0.6.0.0 前的 base(6aeac96)上打乱跑挂 12-13 例,本轮后反而只挂 4-8 例。默认顺序在 base 与 main 上都全绿(822 / 931)。修复策略:自破坏性用例(如 sweep、全局取消)独立文件或自造数据;计数类断言用增量基线(order-management 已用此范式,只是被后续用例破坏)。
+- **Effort:** M(human)→ S(CC)。**Priority:** P2(不影响当前 CI,但属定时炸弹)。
+
 ## ✅ 已完成(归档,保留可追溯)
 
 ### T-TTS-QUALITY-MODEL:品质模型选择 + 按 tier 计价 — ✅ 2026-06-11
