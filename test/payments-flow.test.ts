@@ -21,7 +21,7 @@ const { balance } = await import('../src/credits/index.js');
 const {
   createOrder, getOrder, claimPaid, confirmAndCredit, setPayee,
   startPayment, applyPaymentSuccess, checkPaymentNow, cancelOrderWithAttempt,
-  pendingAttemptForOrder, getAttempt, sweepExpiredAttempts, OrderError,
+  pendingAttemptForOrder, getAttempt, sweepExpiredAttempts, pollActivePendingAttempts, OrderError,
 } = await import('../src/orders/index.js');
 const { setProviderForTest, saveChannelSetting } = await import('../src/payments/index.js');
 const type_mod = await import('../src/payments/types.js');
@@ -285,6 +285,27 @@ describe('sweep:过期码先查单再关单(决策13/24/27)', () => {
     await sweepExpiredAttempts();
     expect(getOrder(o.id)!.status).toBe('credited');
     expect(wx.calls.close).not.toContain((r as any).attemptId);
+  });
+  it('丢回调兜底(2026-07-14 事故回归):未过期在途码被主动查单 → 已付自动入账', async () => {
+    const o = newOrder();
+    const r = await startPayment({ orderId: o.id, tenantId: tId, channel: 'wechat', scene: 'native', clientIp: '' });
+    // 码创建 <30s 时跳过(回调大概率先到,不浪费通道调用)
+    wx.queryResult = { status: 'paid', txnId: 'wx_lost_cb', paidAmountFen: 35000 };
+    await pollActivePendingAttempts();
+    expect(getOrder(o.id)!.status).toBe('pending_payment');
+    // 时钟注入:码已创建 >30s(回调仍未到)→ 本轮查单入账,用户无需任何点击
+    db.prepare(`UPDATE payment_attempt SET created_at=? WHERE id=?`).run(Date.now() - 60_000, (r as any).attemptId);
+    await pollActivePendingAttempts();
+    expect(getOrder(o.id)!.status).toBe('credited');
+    expect(getAttempt((r as any).attemptId)!.txn_id).toBe('wx_lost_cb');
+  });
+  it('在途码未支付:主动查单不动它(不误关未过期码)', async () => {
+    const o = newOrder();
+    const r = await startPayment({ orderId: o.id, tenantId: tId, channel: 'wechat', scene: 'native', clientIp: '' });
+    db.prepare(`UPDATE payment_attempt SET created_at=? WHERE id=?`).run(Date.now() - 60_000, (r as any).attemptId);
+    await pollActivePendingAttempts(); // queryResult 默认 pending
+    expect(getAttempt((r as any).attemptId)!.status).toBe('pending');
+    expect(wx.calls.close).toHaveLength(0);
   });
   it('单单隔离:一单查单抛错不拖垮同批其他单', async () => {
     const oA = newOrder();

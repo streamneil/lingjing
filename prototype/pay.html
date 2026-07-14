@@ -338,14 +338,24 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     }
 
     // ── 轮询(3s 本地状态)+ 主动查单(决策8)──
+    // 轮询升级(2026-07-14 丢回调事故复盘):纯轮本地状态时,回调不可达 → 页面永远不动。
+    // 现在每 3 次本地轮询(≈9s)插一次 /check-payment(服务端实时向通道查单,3s 限流内),
+    // 即使回调全丢,页面最迟 ~12s 自动变绿;服务端 60s sweep 再兜「用户关页」的情况。
+    let pollTick=0;
     function startPolling(){
-      clearInterval(pollTimer);
+      clearInterval(pollTimer); pollTick=0;
       if(ORDER.status!=='pending_payment') return;
       pollTimer=setInterval(async ()=>{
         if(document.hidden) return;                        // 隐藏页降频:交给 visibilitychange
         try{
-          const d = await LJ.get('/orders/'+ORDER_ID);
-          if(d.order.status!=='pending_payment'){ ORDER=d.order; ATTEMPT=null; render(); }
+          pollTick++;
+          if(ATTEMPT && pollTick%3===0){                   // 有在途在线支付:定期主动查通道
+            const r = await LJ.post('/orders/'+ORDER_ID+'/check-payment', {});
+            if(r.status && r.status!=='pending_payment'){ await refreshOrder(); return; }
+          }else{
+            const d = await LJ.get('/orders/'+ORDER_ID);
+            if(d.order.status!=='pending_payment'){ ORDER=d.order; ATTEMPT=null; render(); }
+          }
         }catch(_e){/* 网络抖动:下轮再试 */}
       },3000);
     }

@@ -1114,12 +1114,43 @@ export async function sweepExpiredAttempts(): Promise<void> {
   }
 }
 
+/**
+ * 在途未过期码的主动查单兜底(决策13 的完整实现)。
+ * 回调可能整体不可达(验签配置错、防火墙挡微信来源、私有化内网)——此前只有「过期时」
+ * 才查单,回调一丢用户就干等到码过期(2026-07-14 真实事故:支付成功页面长期不动)。
+ * 现在每个 sweep tick(60s)对所有在途码查一次:已付 → 立即入账,前端 3s 本地轮询跟进变绿。
+ * 跳过创建 <30s 的码(用户可能还没扫完,回调大概率会先到,省无谓通道调用)。
+ */
+export async function pollActivePendingAttempts(): Promise<void> {
+  const t = now();
+  const rows = db
+    .prepare(
+      `SELECT id FROM payment_attempt WHERE status='pending' AND expires_at >= ? AND created_at < ?`,
+    )
+    .all(t, t - 30_000) as { id: string }[];
+  for (const r of rows) {
+    try {
+      const attempt = getAttempt(r.id);
+      if (!attempt || attempt.status !== 'pending') continue;
+      const provider = getProvider(attempt.channel);
+      if (!provider) continue;
+      const q = await provider.queryPayment(r.id);
+      if (q.status === 'paid')
+        applyPaymentSuccess(attempt.channel, r.id, q.txnId ?? '', q.paidAmountFen ?? attempt.amount_fen);
+      // pending/not_found:继续等回调或下轮;closed:留给过期 sweep 统一收尾。
+    } catch (e) {
+      console.warn(`[支付] 在途码查单失败 ${r.id}(下轮重试):`, e instanceof Error ? e.message : e);
+    }
+  }
+}
+
 /** 订单/支付统一 sweep(server 60s tick 调用;in-flight 守卫防重入)。 */
 export async function sweepOrders(): Promise<number> {
   if (sweepInFlight) return 0;
   sweepInFlight = true;
   try {
     await sweepExpiredAttempts();
+    await pollActivePendingAttempts();
     return cancelStalePendingOrders();
   } finally {
     sweepInFlight = false;
