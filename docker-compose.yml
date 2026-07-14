@@ -56,6 +56,11 @@ services:
       # OpenAI(GPT Image 2)出网代理:同 GEMINI_PROXY,大陆 ECS 直连 api.openai.com 被墙时在 .env 填。
       # 缺这行 → .env 里的 OPENAI_PROXY 不会传进容器 → OpenAI 直连被墙 fetch failed。留空=直连。
       OPENAI_PROXY: ${OPENAI_PROXY:-}
+      # 在线支付(微信/支付宝):公网基址 = 支付回调/返回页地址来源;不填则在线通道占位(对公不受影响)。
+      # 缺这三行 → .env 配了也进不了容器(OPENAI_PROXY 漏转发同款事故,勿删)。
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+      WECHAT_PROXY: ${WECHAT_PROXY:-}
+      ALIPAY_PROXY: ${ALIPAY_PROXY:-}
     # 让容器能解析宿主机(Gemini 走宿主机 clash 代理时:GEMINI_PROXY=http://host.docker.internal:7890)。
     # 无害:没配 GEMINI_PROXY 时没人解析它。需 Docker 20.10+。
     extra_hosts:

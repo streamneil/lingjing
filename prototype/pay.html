@@ -53,6 +53,39 @@
     .pay-state .st-t{ font-size:16px; font-weight:700; }
     .pay-state .st-d{ font-size:13px; color:var(--t3); margin:8px 0 18px; }
     .pay-state .st-b{ display:inline-block; background:var(--blue); color:#fff; border-radius:999px; padding:11px 24px; font-size:14px; font-weight:700; text-decoration:none; min-height:44px; }
+    /* 在线支付出码区(微信 Native / 支付宝跳转) */
+    .qrbox{ background:var(--card-hi); border:1px solid var(--line); border-radius:14px; padding:22px; margin-bottom:20px; text-align:center; }
+    .qrbox h3{ font-size:14px; font-weight:700; margin-bottom:12px; }
+    .qrwrap{ position:relative; display:inline-block; background:#fff; border-radius:12px; padding:12px; }
+    .qrwrap img{ display:block; width:196px; height:196px; image-rendering:pixelated; }
+    .qr-mask{ position:absolute; inset:0; border-radius:12px; background:rgba(10,10,12,.88); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; }
+    .qr-mask .m-t{ font-size:13px; color:var(--t1); font-weight:700; }
+    .qr-mask button{ background:var(--blue); color:#fff; border:none; border-radius:999px; padding:11px 20px; font-size:13px; cursor:pointer; min-height:44px; font-family:inherit; }
+    .qr-tip{ font-size:12px; color:var(--t3); margin-top:12px; line-height:1.7; }
+    .qr-count{ font-size:12px; margin-top:8px; color:var(--t3); }
+    .qr-count b{ color:var(--gold); font-family:var(--f-mono,monospace); }
+    .qr-actions{ margin-top:14px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+    .qr-actions .act{ background:none; border:1px solid var(--line); color:var(--t2); border-radius:999px; padding:11px 20px; font-size:13px; cursor:pointer; min-height:44px; font-family:inherit; }
+    .qr-actions .act.primary{ background:var(--blue); border-color:var(--blue); color:#fff; }
+    .pm-opt{ cursor:pointer; }
+    .pm-opt.dis{ cursor:not-allowed; }
+    /* 等待支付状态(在线支付无需任何点击,回调自动入账) */
+    .qr-status{ display:flex; align-items:center; justify-content:center; gap:8px; margin-top:14px; font-size:13px; color:var(--t2); }
+    .qr-status .dot{ width:8px; height:8px; border-radius:50%; background:var(--green); animation:qrpulse 1.2s ease-in-out infinite; }
+    @keyframes qrpulse{ 0%,100%{opacity:.35;transform:scale(.85)} 50%{opacity:1;transform:scale(1)} }
+    .qr-help{ margin-top:8px; font-size:12px; }
+    .qr-help button{ background:none; border:none; color:var(--t4); font-family:inherit; font-size:12px; text-decoration:underline; text-underline-offset:3px; cursor:pointer; padding:6px 4px; min-height:32px; }
+    .qr-help button:hover{ color:var(--t2); }
+    .qr-help button:focus-visible{ outline:2px solid var(--blue); outline-offset:2px; border-radius:4px; }
+    .pm-opt:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; }
+    /* 支付成功(体验包②:即时变绿 + 积分跳动) */
+    .pay-success{ background:linear-gradient(180deg, rgba(52,199,89,.12), transparent); border:1px solid rgba(52,199,89,.35); border-radius:16px; padding:40px 24px; text-align:center; }
+    .pay-success .ic{ font-size:40px; }
+    .pay-success .t{ font-size:17px; font-weight:800; color:var(--green); margin-top:10px; }
+    .pay-success .d{ font-size:13px; color:var(--t2); margin:10px 0 4px; }
+    .pay-success .cr{ font-size:26px; font-weight:800; color:var(--green); font-family:var(--f-en,'Manrope',sans-serif); animation:crpop .5s ease; }
+    @keyframes crpop{ 0%{transform:scale(.6);opacity:0} 60%{transform:scale(1.15)} 100%{transform:scale(1)} }
+    .pay-success .st-b{ display:inline-block; margin-top:16px; background:var(--green); color:#fff; border-radius:999px; padding:11px 24px; font-size:14px; font-weight:700; text-decoration:none; min-height:44px; }
     @media (max-width:760px){
       .pay-foot{ position:fixed; left:0; right:0; bottom:0; background:var(--card-hi); border-top:1px solid var(--line); padding:12px 16px env(safe-area-inset-bottom,12px); z-index:30; }
       .pay-foot .ghost{ display:none; }
@@ -88,7 +121,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
 <div class="main-col">
       <main class="page">
         <div class="ph">
-          <div><h1 class="t-h1">确认支付</h1><p class="desc">订单已生成,完成对公转账后点「我已完成支付」,平台核对到账积分自动入账。</p></div>
+          <div><h1 class="t-h1">确认支付</h1><p class="desc">微信/支付宝在线支付秒级到账;对公转账完成后点「我已完成支付」,平台核对到账后积分入账。</p></div>
         </div>
         <div class="pay-wrap" id="payRoot"><div class="pay-state"><div class="st-d">加载中…</div></div></div>
       </main>
@@ -98,73 +131,267 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   <input type="file" id="receiptInput" accept="image/png,image/jpeg" style="display:none">
 
   <script src="api.js"></script>
+  <script src="vendor-qrcode.js"></script>
   <script>
+    // ── 收银台(在线支付版)——设计:docs/designs/online-payments.md ──
+    // 状态:PM=选中方式;ATTEMPT=在途在线支付;轮询 3s(页面隐藏降频由 visibilitychange 兜)。
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
     function fmtN(n){ return (n||0).toLocaleString('zh-CN'); }
     const ORDER_ID = new URLSearchParams(location.search).get('order');
+    const UA = navigator.userAgent;
+    const IS_WECHAT = /MicroMessenger/i.test(UA);           // 微信内置浏览器(决策7:出码+长按识别)
+    const IS_MOBILE = /Android|iPhone|iPad|Mobile/i.test(UA);
 
-    let ORDER = null, PAYEE = null;
+    let ORDER=null, PAYEE=null, METHODS=null, ATTEMPT=null;
+    let PM = localStorage.getItem('ljPayMethod') || '';      // 体验包④:支付方式记忆
+    let pollTimer=null, countTimer=null;
 
     async function load(){
       const root = document.getElementById('payRoot');
       if(!ORDER_ID){ root.innerHTML = stateCard('🤔','缺少订单','请从充值或定价页发起。','recharge.html','去充值'); return; }
       try{
-        const [{ order }, payee] = await Promise.all([ LJ.get('/orders/'+ORDER_ID), LJ.get('/payee-info') ]);
-        ORDER = order; PAYEE = payee;
+        const [detail, payee, methods] = await Promise.all([
+          LJ.get('/orders/'+ORDER_ID), LJ.get('/payee-info'), LJ.get('/payment-methods'),
+        ]);
+        ORDER = detail.order; ATTEMPT = detail.pendingAttempt; PAYEE = payee; METHODS = methods;
+        if(!isAvailable(PM)) PM = defaultMethod();
         render();
+        // 体验包⑤:H5/页面支付返回本页 → 有在途尝试即主动查单一次。
+        if(ORDER.status==='pending_payment' && ATTEMPT) checkNow(true);
       }catch(e){
         if(e.status===404) root.innerHTML = stateCard('🚫','订单不存在','该订单不存在或无权访问。','orders.html','返回订单');
         else root.innerHTML = stateCard('⚠️','加载失败',e.message||'请刷新重试。','orders.html','返回订单');
       }
     }
 
+    function isAvailable(m){
+      if(m==='offline_bank') return !!(METHODS&&METHODS.offline);
+      if(m==='wechat'||m==='alipay') return !!(METHODS&&METHODS.channels[m]&&METHODS.channels[m].length);
+      return false;
+    }
+    function defaultMethod(){
+      for(const m of ['wechat','alipay','offline_bank']) if(isAvailable(m)) return m;
+      return 'offline_bank';
+    }
+    // 场景选择(决策7:按场景独立开关;微信内=出 native 码长按识别;H5 未开回退 native)。
+    function sceneFor(ch){
+      const sc = METHODS.channels[ch]||[];
+      if(ch==='wechat'){
+        if(IS_WECHAT) return sc.includes('native')?'native':null;
+        if(IS_MOBILE && sc.includes('h5')) return 'h5';
+        return sc.includes('native')?'native':(sc.includes('h5')?'h5':null);
+      }
+      if(IS_MOBILE && sc.includes('wap')) return 'wap';
+      return sc.includes('page')?'page':(sc.includes('wap')?'wap':null);
+    }
+
     function stateCard(ic,t,d,href,btn){
       return `<div class="pay-state"><div class="st-ic">${ic}</div><div class="st-t">${esc(t)}</div><div class="st-d">${esc(d)}</div><a class="st-b" href="${href}">${esc(btn)}</a></div>`;
     }
+    function successCard(){
+      const total = ORDER.credits + ORDER.bonusCredits;
+      return `<div class="pay-success"><div class="ic">✅</div><div class="t">支付成功,积分已入账</div>
+        <div class="d">订单 ${esc(ORDER.orderNo)} · ${esc(pmName(ORDER.paymentMethod))}</div>
+        <div class="cr">+${fmtN(total)} 积分</div>
+        <a class="st-b" href="orders.html?new=${encodeURIComponent(ORDER.id)}">查看订单台账</a></div>`;
+    }
+    function pmName(m){ return m==='wechat'?'微信支付':(m==='alipay'?'支付宝':'对公转账'); }
 
     function render(){
       const root = document.getElementById('payRoot');
       const o = ORDER;
-      // 状态分支:仅 pending_payment/rejected 可付;其余显状态 + 跳订单(外部 #6)
+      stopTimers();
+      if(o.status==='credited'){ root.innerHTML = successCard(); return; }
       if(o.status==='paid_claimed'){ root.innerHTML = stateCard('⏳','待平台核对','已提交打款申请,平台核对到账后积分自动入账。','orders.html','查看订单'); return; }
-      if(o.status==='credited'){ root.innerHTML = stateCard('✅','已到账',`订单 ${esc(o.orderNo)} 积分已入账。`,'orders.html','查看订单'); return; }
       if(o.status==='cancelled'){ root.innerHTML = stateCard('🚫','订单已取消','该订单已取消,如需充值请重新下单。','recharge.html','重新充值'); return; }
+      if(o.status==='refunding'){ root.innerHTML = stateCard('↩️','退款处理中','该订单退款处理中,完成后积分将扣回。','orders.html','查看订单'); return; }
+      if(o.status==='refunded'){ root.innerHTML = stateCard('↩️','已退款','该订单已退款,对应积分已扣回。','orders.html','查看订单'); return; }
+      // rejected 是终态(服务端 claim-paid / startPayment 都会拒):不再渲染支付 UI,否则每个按钮都是死路。
+      if(o.status==='rejected'){
+        root.innerHTML = stateCard('🚫','打款已驳回', (o.adminNote? '原因:'+o.adminNote+'。':'') + '该订单不可继续支付,请重新下单。','recharge.html','重新充值');
+        return;
+      }
 
       const totalCredits = o.credits + o.bonusCredits;
-      const rejected = o.status==='rejected';
-      const payeeReady = PAYEE && PAYEE.configured;
       root.innerHTML = `
         <div class="pay-sum">
           <div>
             <div class="pn">${esc(o.planName)}</div>
             <div class="pc">到账 <span class="cr">${fmtN(o.credits)}${o.bonusCredits>0?(' + '+fmtN(o.bonusCredits)+' 赠'):''} = ${fmtN(totalCredits)} 积分</span></div>
-            <div class="ono">订单号 ${esc(o.orderNo)} · ${rejected?'已驳回,可重新支付':'待支付'}</div>
+            <div class="ono">订单号 ${esc(o.orderNo)} · 待支付</div>
           </div>
           <div class="amt"><div class="lbl">应付金额</div><div class="big">¥${fmtN(o.priceYuan)}</div></div>
         </div>
-        ${rejected && o.adminNote ? `<div class="tip" style="background:rgba(255,107,107,.08);border-color:rgba(255,107,107,.25);color:#FF9B9B;margin-bottom:20px">驳回原因:${esc(o.adminNote)},请核对后重新提交。</div>` : ''}
 
         <div class="pay-sec">付款方式</div>
-        <div class="pm">
-          <div class="pm-opt on">
-            <div class="pm-radio"></div>
-            <div class="pm-ic" style="background:rgba(52,199,89,.15);color:var(--green)">公</div>
-            <div><div class="pm-name">对公账户转账</div><div class="pm-sub">线下银行转账,平台核对到账后积分自动入账</div></div>
-          </div>
-          <div class="pm-opt dis">
-            <div class="pm-radio"></div>
-            <div class="pm-ic" style="background:rgba(77,141,255,.12);color:#5B9DF9">支</div>
-            <div><div class="pm-name">支付宝</div><div class="pm-sub">即时到账</div></div>
-            <span class="pm-tag">敬请期待</span>
-          </div>
-          <div class="pm-opt dis">
-            <div class="pm-radio"></div>
-            <div class="pm-ic" style="background:rgba(52,199,89,.12);color:var(--green)">微</div>
-            <div><div class="pm-name">微信支付</div><div class="pm-sub">即时到账</div></div>
-            <span class="pm-tag">敬请期待</span>
-          </div>
+        <div class="pm" id="pmList">
+          ${pmOpt('wechat','微','rgba(52,199,89,.12)','var(--green)','微信支付','扫码/手机支付,秒级到账')}
+          ${pmOpt('alipay','支','rgba(77,141,255,.12)','#5B9DF9','支付宝','扫码/手机支付,秒级到账')}
+          ${pmOpt('offline_bank','公','rgba(52,199,89,.15)','var(--green)','对公账户转账','线下银行转账,平台核对到账后积分自动入账')}
         </div>
+        <div id="payArea"></div>
+      `;
+      const pick = (el)=>{ if(el.classList.contains('dis')) return; PM = el.dataset.pm; localStorage.setItem('ljPayMethod', PM); render(); };
+      document.querySelectorAll('.pm-opt[data-pm]').forEach(el=>{
+        el.onclick = ()=>pick(el);
+        // 键盘可达(付款方式是本页主操作,不能只给鼠标):Enter/空格选中。
+        el.onkeydown = (e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); pick(el); } };
+      });
+      const pmList = document.getElementById('pmList'); if(pmList) pmList.setAttribute('role','radiogroup');
+      renderPayArea();
+      // 恢复在途在线支付(刷新/H5 返回):同通道直接续显码与倒计时。
+      if(ATTEMPT && PM===ATTEMPT.channel) showAttempt(ATTEMPT);
+      startPolling();
+    }
 
+    function pmOpt(m, icTxt, icBg, icColor, name, sub){
+      const avail = isAvailable(m);
+      const on = avail && PM===m;
+      return `<div class="pm-opt ${on?'on':''} ${avail?'':'dis'}" data-pm="${m}"
+        role="radio" aria-checked="${on?'true':'false'}" aria-disabled="${avail?'false':'true'}" tabindex="${avail?'0':'-1'}">
+        <div class="pm-radio"></div>
+        <div class="pm-ic" style="background:${icBg};color:${icColor}">${icTxt}</div>
+        <div><div class="pm-name">${name}</div><div class="pm-sub">${sub}</div></div>
+        ${avail?'':'<span class="pm-tag">敬请期待</span>'}
+      </div>`;
+    }
+
+    // ── 支付操作区(按选中方式渲染)──
+    function renderPayArea(){
+      const area = document.getElementById('payArea');
+      if(!area) return;
+      if(PM==='offline_bank'){ area.innerHTML = offlineHtml(); bindOffline(); return; }
+      if(PM==='wechat'||PM==='alipay'){
+        const scene = sceneFor(PM);
+        if(!scene){ area.innerHTML = `<div class="tip" style="margin-bottom:20px">该支付方式暂不可用,请选择其他付款方式。</div>`; return; }
+        area.innerHTML = `
+          <div class="qrbox" id="qrbox">
+            <h3>${pmName(PM)}</h3>
+            <div id="qrslot"><button class="act primary" id="goPay" style="background:var(--blue);border:none;color:#fff;border-radius:999px;padding:12px 30px;font-size:14px;font-weight:700;cursor:pointer;min-height:44px;font-family:inherit">去支付 ¥${fmtN(ORDER.priceYuan)}</button></div>
+            <div class="qr-tip" id="qrTip"></div>
+          </div>
+          <div class="pay-foot">
+            <span class="total">应付<b>¥${fmtN(ORDER.priceYuan)}</b></span>
+            <a class="ghost" href="recharge.html">返回</a>
+          </div>`;
+        document.getElementById('goPay').onclick = ()=>startPay(PM, scene);
+      }
+    }
+
+    let payInFlight=false;
+    async function startPay(channel, scene){
+      if(payInFlight) return; payInFlight=true;   // 双击防抖(服务端 UNIQUE pending 兜底)
+      try{
+        const r = await LJ.post('/orders/'+ORDER_ID+'/pay', { channel, scene });
+        if(r.alreadyPaid){ await refreshOrder(); return; }
+        ATTEMPT = { attemptId:r.attemptId, channel:r.channel, scene:r.scene, kind:r.kind, payload:r.payload, expiresAt:r.expiresAt };
+        showAttempt(ATTEMPT);
+      }catch(e){
+        window.LJToast(e.message||'支付下单失败,请重试或改用对公转账','err');
+      }finally{ payInFlight=false; }
+    }
+
+    // 在线支付无需用户确认:回调/查单自动入账,页面自动变绿。
+    // 这里只展示「等待支付」状态 + 小字兜底查询(丢回调时用户自助,决策8),
+    // 绝不显示对公流程那种「我已支付」主按钮(会误导用户以为必须点击)。
+    function waitingHtml(){
+      return `<div class="qr-status"><span class="dot"></span>等待支付中 · 支付成功后积分自动到账,无需操作</div>
+        <div class="qr-help">已支付但页面未更新?<button type="button" id="qrCheckLink">点此查询</button></div>`;
+    }
+    function bindCheckLink(){
+      const link = document.getElementById('qrCheckLink');
+      if(link) link.onclick = async ()=>{ link.textContent='查询中…'; await checkNow(false); link.textContent='点此查询'; };
+    }
+    function showAttempt(a){
+      const slot = document.getElementById('qrslot'); if(!slot) return;
+      if(a.kind==='qr'){
+        const qr = qrcode(0,'M'); qr.addData(a.payload); qr.make();
+        slot.innerHTML = `<div class="qrwrap"><img alt="支付二维码" src="${qr.createDataURL(6,8)}"><div class="qr-mask" id="qrMask" style="display:none"><div class="m-t">二维码已过期</div><button id="qrRefresh">重新获取</button></div></div>
+          <div class="qr-count" id="qrCount"></div>${waitingHtml()}`;
+        bindCheckLink();
+        document.getElementById('qrTip').innerHTML = IS_WECHAT
+          ? '长按二维码 → 识别图中二维码即可支付;或用系统浏览器打开本页。'
+          : (a.channel==='wechat'?'请使用微信「扫一扫」扫码支付':'请使用支付宝「扫一扫」扫码支付');
+        startCountdown(a);
+      }else{
+        // redirect(微信 H5 / 支付宝 page|wap):移动端直接跳转;PC 新窗口打开保留收银台轮询。
+        document.getElementById('qrTip').textContent = IS_MOBILE
+          ? '正在跳转支付页面,完成支付后返回本页自动更新。'
+          : '点击按钮打开支付页面,完成支付后本页自动更新。';
+        if(IS_MOBILE){ location.href = a.payload; }
+        else{
+          // 不自动 window.open:异步回调外的 open 会被弹窗拦截器挡掉,用户只看到「已打开支付页」却什么都没发生。
+          // 用显式按钮(用户手势内 open,必定成功)。
+          slot.innerHTML = `<button class="act primary" id="reopenPay" style="background:var(--blue);border:none;color:#fff;border-radius:999px;padding:12px 30px;font-size:14px;font-weight:700;cursor:pointer;min-height:44px;font-family:inherit">打开支付页面</button>${waitingHtml()}`;
+          bindCheckLink();
+          document.getElementById('reopenPay').onclick=()=>window.open(a.payload,'_blank');
+        }
+      }
+    }
+
+    // 体验包①:倒计时 + 过期蒙层一键刷新(重新 /pay,服务端关旧插新)。
+    function startCountdown(a){
+      clearInterval(countTimer);
+      const el=()=>document.getElementById('qrCount');
+      const tick=()=>{
+        const left = Math.max(0, Math.floor((a.expiresAt-Date.now())/1000));
+        const c = el(); if(!c){ clearInterval(countTimer); return; }
+        if(left<=0){
+          clearInterval(countTimer);
+          const mask=document.getElementById('qrMask');
+          if(mask){ mask.style.display='flex'; document.getElementById('qrRefresh').onclick=()=>startPay(a.channel,a.scene); }
+          c.textContent='二维码已过期,请重新获取';
+          return;
+        }
+        const h=Math.floor(left/3600), m=Math.floor((left%3600)/60), sec=left%60;
+        const txt = h>0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+        c.innerHTML = `二维码有效期 <b>${txt}</b>`;
+      };
+      tick(); countTimer=setInterval(tick,1000);
+    }
+
+    // ── 轮询(3s 本地状态)+ 主动查单(决策8)──
+    // 轮询升级(2026-07-14 丢回调事故复盘):纯轮本地状态时,回调不可达 → 页面永远不动。
+    // 现在每 3 次本地轮询(≈9s)插一次 /check-payment(服务端实时向通道查单,3s 限流内),
+    // 即使回调全丢,页面最迟 ~12s 自动变绿;服务端 60s sweep 再兜「用户关页」的情况。
+    let pollTick=0;
+    function startPolling(){
+      clearInterval(pollTimer); pollTick=0;
+      if(ORDER.status!=='pending_payment') return;
+      pollTimer=setInterval(async ()=>{
+        if(document.hidden) return;                        // 隐藏页降频:交给 visibilitychange
+        try{
+          pollTick++;
+          if(ATTEMPT && pollTick%3===0){                   // 有在途在线支付:定期主动查通道
+            const r = await LJ.post('/orders/'+ORDER_ID+'/check-payment', {});
+            if(r.status && r.status!=='pending_payment'){ await refreshOrder(); return; }
+          }else{
+            const d = await LJ.get('/orders/'+ORDER_ID);
+            if(d.order.status!=='pending_payment'){ ORDER=d.order; ATTEMPT=null; render(); }
+          }
+        }catch(_e){/* 网络抖动:下轮再试 */}
+      },3000);
+    }
+    document.addEventListener('visibilitychange', ()=>{
+      if(!document.hidden && ORDER && ORDER.status==='pending_payment' && ATTEMPT) checkNow(true);
+    });
+    async function checkNow(silent){
+      try{
+        const r = await LJ.post('/orders/'+ORDER_ID+'/check-payment', {});
+        if(r.status && r.status!=='pending_payment'){ await refreshOrder(); return; }
+        if(!silent) window.LJToast('暂未查到支付结果,请确认已完成支付');
+      }catch(_e){ if(!silent) window.LJToast('查询失败,请稍后重试','err'); }
+    }
+    async function refreshOrder(){
+      const d = await LJ.get('/orders/'+ORDER_ID);
+      ORDER=d.order; ATTEMPT=d.pendingAttempt||null; render();
+    }
+    function stopTimers(){ clearInterval(pollTimer); clearInterval(countTimer); }
+
+    // ── 对公转账(存量流程)──
+    function offlineHtml(){
+      const payeeReady = PAYEE && PAYEE.configured;
+      return `
         ${payeeReady ? `
         <div class="bank">
           <h3>对公转账信息</h3>
@@ -172,30 +399,27 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
           ${PAYEE.taxNo?`<div class="brow"><span class="k">税号</span><span class="v mono">${esc(PAYEE.taxNo)}</span></div>`:''}
           <div class="brow"><span class="k">开户银行</span><span class="v">${esc(PAYEE.bankName)}</span></div>
           <div class="brow"><span class="k">银行账号</span><span class="v mono">${esc(PAYEE.bankAccount)}<button class="copy" id="payCopy" aria-label="复制银行账号">复制</button></span></div>
-          <div class="tip">⚠ 请使用<b>对公账户</b>转账,转账时备注订单号 ${esc(o.orderNo)}。到账后点「我已完成支付」,平台核对后积分自动入账(1 个工作日内)。</div>
-        </div>` : `<div class="tip" style="margin-bottom:20px">平台对公收款信息加载异常,请联系运营或稍后重试。</div>`}
-
+          <div class="tip">⚠ 请使用<b>对公账户</b>转账,转账时备注订单号 ${esc(ORDER.orderNo)}。到账后点「我已完成支付」,平台核对后积分自动入账(1 个工作日内)。</div>
+        </div>` : `<div class="tip" style="margin-bottom:20px">平台对公收款信息未配置,请选择其他付款方式或联系运营。</div>`}
         <div class="pay-foot">
-          <span class="total">应付<b>¥${fmtN(o.priceYuan)}</b></span>
+          <span class="total">应付<b>¥${fmtN(ORDER.priceYuan)}</b></span>
           <a class="ghost" href="recharge.html">返回</a>
           <button class="btn" id="payDone" ${payeeReady?'':'disabled'}>我已完成支付</button>
-        </div>
-      `;
+        </div>`;
+    }
+    function bindOffline(){
       const copy = document.getElementById('payCopy');
       if(copy) copy.onclick = async () => { try{ await navigator.clipboard.writeText(PAYEE.bankAccount); window.LJToast('✓ 账号已复制'); }catch{ window.LJToast('复制失败,请手动选择','err'); } };
       const done = document.getElementById('payDone');
       if(done) done.onclick = onPayDone;
     }
 
-    // 我已完成支付 → 询问是否传回单 → claim-paid → 跳 orders 高亮
     const fileInput = document.getElementById('receiptInput');
     fileInput.onchange = () => { if(fileInput.files[0]) submit(fileInput.files[0]); fileInput.value=''; };
-
     async function onPayDone(){
       const up = await window.LJConfirm({ title:'确认已完成支付', body:'确认已完成对公转账?可选上传银行回单截图加快核对(PNG/JPEG,≤5MB)。', confirmText:'上传回单', cancelText:'直接提交' });
       if(up) fileInput.click(); else submit(null);
     }
-
     async function submit(file){
       try{
         const fd = new FormData();

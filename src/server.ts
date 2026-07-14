@@ -19,6 +19,7 @@ import { pricingRouter } from './api/pricing.js';
 import { seedDefaultPlans } from './pricing/index.js';
 import { seedPlatformDefaults } from './seed/platform-defaults.js';
 import { ordersRouter } from './api/orders.js';
+import { paymentsNotifyRouter } from './api/payments.js';
 import { adminRouter } from './api/admin.js';
 import { captchaRouter } from './api/captcha.js';
 import { showcaseRouter } from './api/showcase.js';
@@ -35,6 +36,9 @@ export function createApp() {
   // 信任前面一层反代(生产 Caddy 终结 TLS 后到 app 是明文 HTTP)。
   // 让 req.protocol / X-Forwarded-Proto 反映原始 HTTPS。仅信一层,防伪造。
   app.set('trust proxy', 1);
+  // 支付回调必须挂在 express.json 之前(决策9):微信 v3 验签要原始 body 字节,
+  // json parser 一碰就废;支付宝是 form-urlencoded。路由内部用 express.raw 收 Buffer。
+  app.use('/api/payments/notify', paymentsNotifyRouter);
   app.use(express.json({ limit: '1mb' }));
 
   app.get('/healthz', (_req, res) => res.json({ ok: true }));
@@ -128,12 +132,26 @@ if (isMain) {
 
   const app = createApp();
   startWorker();
-  // 待支付订单超时自动取消(默认 2 小时,见 cancelStalePendingOrders)。每分钟扫一次,启动先扫一次。
+  // 订单/在线支付统一 sweep(每分钟):过期在线码先查单(已付→入账,私有化内网无回调时
+  // 这是唯一入账路径)再关单;对公超时单自动取消。sweepOrders 自带重入守卫(决策13/27)。
   void (async () => {
-    const { cancelStalePendingOrders } = await import('./orders/index.js');
-    const sweep = () => { try { const n = cancelStalePendingOrders(); if (n) console.log(`[订单] 待支付超时自动取消 ${n} 单`); } catch { /* 不阻断 */ } };
+    const { sweepOrders } = await import('./orders/index.js');
+    const sweep = () => {
+      void sweepOrders()
+        .then((n) => { if (n) console.log(`[订单] 待支付超时自动取消 ${n} 单`); })
+        .catch((e) => console.warn('[订单] sweep 异常(下轮重试):', e instanceof Error ? e.message : e));
+    };
     sweep();
     setInterval(sweep, 60_000).unref?.();
+  })();
+  // 每日对账(决策 D4.3):每小时检查昨日账单是否已对平,未对/账单未生成则重试(recon_run 幂等)。
+  void (async () => {
+    const { reconTick } = await import('./payments/recon.js');
+    const tick = () => {
+      void reconTick().catch((e) => console.warn('[对账] tick 异常(下轮重试):', e instanceof Error ? e.message : e));
+    };
+    setTimeout(tick, 30_000).unref?.(); // 启动 30s 后首查(避开启动高峰)
+    setInterval(tick, 60 * 60_000).unref?.();
   })();
   app.listen(config.port, () => {
     console.log(`灵镜启动: http://localhost:${config.port}`);

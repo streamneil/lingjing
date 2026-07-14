@@ -75,6 +75,11 @@
   /* 超管管理表单:复用 modal 深色输入风格(非 modal 内,需单独声明,否则浏览器默认白底)*/
   #sec-superadmins .sa-form input{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--t1);font-size:14px;font-family:var(--f);outline:none}
   #sec-superadmins .sa-form input:focus{border-color:var(--amber)}
+  #sec-payments .mform label{display:block;font-size:11.5px;color:var(--t3);margin:11px 0 5px;font-weight:600}
+  #sec-payments .mform input,#sec-payments .mform textarea{width:100%;box-sizing:border-box;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--t1);font-size:13px;font-family:var(--f-mono);outline:none;resize:vertical}
+  #sec-payments .mform input:focus,#sec-payments .mform textarea:focus{border-color:var(--amber)}
+  #sec-payments .mform input::placeholder,#sec-payments .mform textarea::placeholder{color:var(--t4)}
+  #sec-payments .mbtns .ok{background:var(--amber);color:#241a02;border:none;border-radius:999px;padding:10px 22px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--f)}
   #sec-superadmins .sa-form input::placeholder{color:var(--t4)}
   .qa{display:flex;gap:7px;margin:10px 0 2px}
   .qa button{flex:1;background:var(--field);border:1px solid var(--line);color:var(--t2);font-family:var(--f-mono);font-size:11.5px;padding:8px;border-radius:9px;cursor:pointer;transition:.15s}
@@ -181,6 +186,7 @@
     <button class="nav-item" data-nav="plans"><span class="nav-dot"></span>积分套餐</button>
     <button class="nav-item" data-nav="leads"><span class="nav-dot"></span>意向线索<span class="nav-badge" id="navLeadBadge"></span></button>
     <button class="nav-item" data-nav="ordermgmt"><span class="nav-dot"></span>订单管理</button>
+    <button class="nav-item" data-nav="payments"><span class="nav-dot"></span>在线支付<span class="nav-badge" id="navReconBadge"></span></button>
     <button class="nav-item" data-nav="consumption"><span class="nav-dot"></span>消耗流水</button>
     <button class="nav-item" data-nav="audit"><span class="nav-dot"></span>平台审计</button>
     <button class="nav-item" data-nav="sms"><span class="nav-dot"></span>短信监控</button>
@@ -355,7 +361,7 @@
     </div>
     <div class="tbl">
       <table>
-        <thead><tr><th>时间</th><th>用户</th><th>类型 / 套餐</th><th>金额·积分</th><th>诉求/备注</th><th>状态</th><th style="text-align:right">操作</th></tr></thead>
+        <thead><tr><th>时间</th><th>租户 / 发起人</th><th>类型 / 套餐</th><th>金额·积分</th><th>诉求/备注</th><th>状态</th><th style="text-align:right">操作</th></tr></thead>
         <tbody id="leadRows"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
@@ -375,6 +381,7 @@
       <button class="act" data-v="credited">已完成<span class="om-ct" data-ct="credited"></span></button>
       <button class="act" data-v="rejected">已驳回<span class="om-ct" data-ct="rejected"></span></button>
       <button class="act" data-v="cancelled">已取消<span class="om-ct" data-ct="cancelled"></span></button>
+      <button class="act" data-v="refunded">已退款<span class="om-ct" data-ct="refunded"></span></button>
     </div>
     <div id="omInvFilter" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:14px;font-size:12px;color:var(--t3)">
       发票:
@@ -399,6 +406,21 @@
 
     <!-- ── 平台审计日志 ── -->
     <!-- ── 积分消耗流水(对账)── -->
+    <!-- ── 在线支付(通道配置 + 对账差异)── -->
+    <section class="sec" data-sec="payments" id="sec-payments">
+    <div class="ph">
+      <div><h1>在线支付</h1><p>微信支付 / 支付宝商户配置(密钥经 MASTER_KEY 加密落库,保存后不回显)与每日对账差异处理。未配置的通道在收银台显示「敬请期待」。</p></div>
+    </div>
+    <div id="payEnvTip" style="display:none;margin-bottom:14px" class="card"></div>
+    <div id="payChannels" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:14px;margin-bottom:24px"><div class="empty">加载中…</div></div>
+    <div class="ph" style="margin-top:8px"><div><h2 style="font-size:16px;font-weight:700">对账差异<span id="reconCt" style="margin-left:8px;font-size:12px;color:var(--red)"></span></h2>
+      <p style="font-size:12px;color:var(--t3)">回调金额不符 / 已取消单收款 / 账单单边账都会落在这里。处理路径:核实 → 原路退款或人工补账 → 标记已处理。</p></div></div>
+    <div class="card" style="padding:0;overflow-x:auto">
+      <table class="tbl"><thead><tr><th>时间</th><th>通道</th><th>类型</th><th>商户单号</th><th>通道交易号</th><th>详情</th><th>操作</th></tr></thead>
+      <tbody id="reconBody"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody></table>
+    </div>
+    </section>
+
     <section class="sec" data-sec="consumption" id="sec-consumption">
     <div class="ph">
       <div><h1>积分消耗流水</h1><p>按时间倒序列出每个任务的积分消耗,便于对账:某模型在某任务消耗多少积分。消耗口径 = 预扣净退款(失败已退不计)。失败任务显示用户可读原因,可展开查看厂商原始日志(错误码 / RequestId)排障。</p></div>
@@ -519,7 +541,7 @@
       <label>套餐名</label>
       <input id="plName" placeholder="如 标准">
       <label>价格(元,留空=面议)</label>
-      <input id="plPrice" type="number" min="1" placeholder="如 1000(留空面议)">
+      <input id="plPrice" type="number" min="0.01" step="0.01" placeholder="如 1000;最小 0.01(留空面议)">
       <div class="mrow2">
         <div><label>基础积分</label><input id="plCredits" type="number" min="1" placeholder="如 100000"></div>
         <div><label>赠送积分</label><input id="plBonus" type="number" min="0" value="0"></div>
@@ -763,9 +785,9 @@
     return ` <span style="font-size:11px;color:var(--t4)">· ${txt}</span>`;
   }
   // 状态色系:琥珀=运营要动手(待确认/开票中);绿=钱到位;蓝=单据出;红=异常;灰=不用管。
-  const OM_ST={pending_payment:['待支付','--t3'],paid_claimed:['待确认','--amber'],credited:['已完成','--green'],rejected:['已驳回','--red'],cancelled:['已取消','--t4']};
+  const OM_ST={pending_payment:['待支付','--t3'],paid_claimed:['待确认','--amber'],credited:['已完成','--green'],rejected:['已驳回','--red'],cancelled:['已取消','--t4'],refunding:['退款中','--amber'],refunded:['已退款','--t4']};
   const OM_PM={offline_bank:'对公转账',wechat:'微信支付',alipay:'支付宝'};
-  const OM_EMPTY={todo:'✓ 没有待处理的订单',all:'暂无订单',pending_payment:'暂无待支付订单',paid_claimed:'暂无待确认订单',credited:'暂无已完成订单',rejected:'暂无被驳回的订单',cancelled:'暂无已取消订单'};
+  const OM_EMPTY={todo:'✓ 没有待处理的订单',all:'暂无订单',pending_payment:'暂无待支付订单',paid_claimed:'暂无待确认订单',credited:'暂无已完成订单',rejected:'暂无被驳回的订单',cancelled:'暂无已取消订单',refunded:'暂无已退款订单'};
   function omChip(label,v){ return `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:var(${v})"><span style="width:7px;height:7px;border-radius:50%;background:var(${v})"></span>${label}</span>`; }
   function omStatusChip(s){ const m=OM_ST[s]||[s,'--t3']; return omChip(m[0],m[1]); }
   function omInvCell(o){
@@ -787,6 +809,7 @@
     const dot=' <span style="color:var(--t4)">·</span> ';
     if(o.status==='paid_claimed') return A('确认到账','--amber',`confirmOrder(${J(o.id)},${J(o.orderNo)})`)+dot+A('驳回','--t3',`rejectOrder(${J(o.id)})`);
     if(o.status==='credited'&&o.invoiceStatus==='requested') return A('开具发票','--blue',`openIssue(${J(o.invoiceId)},${J(o.tenantName||"")})`)+dot+A('驳回开票','--t3',`rejectInvoice(${J(o.invoiceId)})`);
+    if(o.status==='credited'&&!o.invoiceStatus&&(o.paymentMethod==='wechat'||o.paymentMethod==='alipay')) return A('原路退款','--red',`refundOrder(${J(o.id)},${J(o.orderNo)})`);
     return '<span style="color:var(--t4);font-size:12px">明细 ›</span>';
   }
   function omSetCounts(c){
@@ -876,6 +899,8 @@
       if(o.status==='credited') tl+=step('已到账','--green',o.confirmedAt,`经办:${esc(o.confirmedByName||'—')} · 入账 ${fmtN(o.credits+o.bonusCredits)} 积分`);
       if(o.status==='rejected') tl+=step('已驳回','--red',o.confirmedAt,`经办:${esc(o.confirmedByName||'—')}${o.adminNote?' · 原因:'+esc(o.adminNote):''}`);
       if(o.status==='cancelled') tl+=step('已取消','--t4',null,'用户取消');
+      if(o.status==='refunding') tl+=step('退款中','--amber',null,'已发起原路退款,等待支付通道确认');
+      if(o.status==='refunded') tl+=step('已退款','--t4',null,`积分已扣回 ${fmtN(o.credits+o.bonusCredits)}(余额可为负)`);
       if(iv){
         const merged=iv.orderCount>1?`<div style="font-size:12px;color:var(--amber);margin-top:4px">此发票含 ${iv.orderCount} 单(${sib.map(s=>esc(s.orderNo)).join('、')}),开具将一并置为已开票</div>`:'';
         if(iv.status==='requested') tl+=step('开票中','--amber',iv.createdAt,`抬头「${esc(iv.title)}」税号 ${esc(iv.taxNo)} · ¥${fmtN(iv.amountYuan)}${merged}`);
@@ -886,6 +911,7 @@
       let actions='';
       if(o.status==='paid_claimed') actions=`<button class="ok" onclick='confirmOrder(${J(o.id)},${J(o.orderNo)})'>确认到账</button><button class="cancel" onclick='rejectOrder(${J(o.id)})'>驳回</button>`;
       else if(o.status==='credited'&&o.invoiceStatus==='requested') actions=`<button class="ok" onclick='openIssue(${J(o.invoiceId)},${J(o.tenantName||"")})'>开具发票</button><button class="cancel" onclick='rejectInvoice(${J(o.invoiceId)})'>驳回开票</button>`;
+      else if(o.status==='credited'&&!o.invoiceStatus&&(o.paymentMethod==='wechat'||o.paymentMethod==='alipay')) actions=`<button class="cancel" style="color:var(--red);border-color:rgba(255,107,107,.4)" onclick='refundOrder(${J(o.id)},${J(o.orderNo)})'>原路退款</button>`;
       body.innerHTML=`
         <h3>订单 ${esc(o.orderNo)}</h3>
         <p class="mdesc">${esc(o.tenantName||'—')} · ${esc(o.planName)} · ¥${fmtN(o.priceYuan)} / ${fmtN(o.credits+o.bonusCredits)} 积分 · ${OM_PM[o.paymentMethod]||o.paymentMethod||'—'}</p>
@@ -1643,7 +1669,7 @@
         const amt=l.plan_price_yuan!=null?`¥${fmtN(l.plan_price_yuan)} · ${fmtN(l.plan_credits)}积分`:'—';
         return `<tr>
           <td style="color:var(--t3);font-family:var(--f-mono);font-size:12px">${fmtDate(l.created_at)}</td>
-          <td style="font-family:var(--f-mono);font-size:11px;color:var(--t3)">${esc(l.user_id.slice(0,8))}</td>
+          <td><div class="tn">${esc(l.tenantName||'(已删租户)')}</div><div style="font-size:11px;color:var(--t4)">${esc(l.userName||l.user_id.slice(0,8))}</div></td>
           <td><span class="bdg bdg-host" style="margin-right:6px">${LEAD_KIND[l.kind]||l.kind}</span>${esc(target)}</td>
           <td style="font-family:var(--f-mono);font-size:12px">${amt}</td>
           <td style="max-width:200px;font-size:12px;color:var(--t2)">${esc(l.note||'—')}</td>
@@ -1694,7 +1720,7 @@
   window.loadProviders=loadProviders;
 
   // ── 左侧菜单 SPA 路由(hash 决定当前 section,刷新保持,懒加载各 section)──
-  const SECTIONS=['monitor','tenants','image-models','providers','pricing','plans','leads','ordermgmt','consumption','audit','sms','superadmins'];
+  const SECTIONS=['monitor','tenants','image-models','providers','pricing','plans','leads','ordermgmt','payments','consumption','audit','sms','superadmins'];
 
   // ── 短信监控(E5):近 30 天发送量/验证失败,按天/IP/手机号脱敏 ──
   async function loadSmsStats(){
@@ -1782,6 +1808,113 @@
     }catch(e){ tb.innerHTML='<tr><td colspan="8" class="empty">加载失败</td></tr>'; }
   }
 
+  // ── 在线支付:通道配置 + 对账差异(设计 docs/designs/online-payments.md)──
+  const PAY_SCENE_NAME={native:'PC 扫码(Native)',h5:'手机浏览器(H5,需单独审批)',page:'电脑网站支付',wap:'手机网站支付'};
+  const RECON_KIND={missing_local:['账单有本地无','--red'],missing_channel:['单边账(本地有账单无)','--red'],amount_mismatch:['金额不符','--red'],status_mismatch:['状态不符/迟到收款','--amber']};
+  let PAY_DATA=null;
+
+  async function loadPayments(){
+    try{
+      PAY_DATA=await PA('GET','/api/payment-channels');
+      renderPayChannels(); await loadReconDiffs();
+    }catch(e){ document.getElementById('payChannels').innerHTML='<div class="empty">加载失败:'+esc(e.message||'')+'</div>'; }
+  }
+
+  function renderPayChannels(){
+    const d=PAY_DATA; const box=document.getElementById('payChannels');
+    const tip=document.getElementById('payEnvTip');
+    const missing=[];
+    if(!d.publicBaseUrl) missing.push('<b>PUBLIC_BASE_URL</b> 未配置(.env,支付回调地址来源)');
+    if(!d.masterKeyReady) missing.push('<b>MASTER_KEY</b> 未配置(.env,密钥加密必需)');
+    if(missing.length){ tip.style.display='block'; tip.innerHTML='<div style="padding:12px 16px;color:var(--amber);font-size:13px">⚠ '+missing.join(';')+' —— 配好并重启后,在线通道才会真正生效(当前仅保存配置)。</div>'; }
+    else tip.style.display='none';
+    box.innerHTML=d.channels.map(c=>{
+      const isWx=c.channel==='wechat';
+      const name=isWx?'微信支付':'支付宝';
+      const live=c.liveScenes.length?`<span style="color:var(--green);font-size:12px">已生效:${c.liveScenes.map(x=>PAY_SCENE_NAME[x]||x).join('、')}</span>`:'<span style="color:var(--t4);font-size:12px">未生效(收银台显「敬请期待」)</span>';
+      const scenes=c.allScenes.map(sc=>`<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--t2)"><input type="checkbox" data-scene="${sc}" ${c.enabledScenes.includes(sc)?'checked':''}> ${PAY_SCENE_NAME[sc]||sc}</label>`).join('');
+      const cfg=isWx?`
+        <label>AppID</label><input data-cfg="appid" value="${esc(c.config.appid||'')}" placeholder="wx1234567890abcdef">
+        <label>商户号 mchid</label><input data-cfg="mchid" value="${esc(c.config.mchid||'')}" placeholder="1900000000">
+        <label>商户 API 证书序列号</label><input data-cfg="merchantSerial" value="${esc(c.config.merchantSerial||'')}" placeholder="请求签名用(商户平台-API安全)">
+        <label>微信支付公钥 ID</label><input data-cfg="publicKeyId" value="${esc(c.config.publicKeyId||'')}" placeholder="PUB_KEY_ID_...(仅支持公钥模式)">
+        <label>微信支付公钥(PEM)</label><textarea data-cfg="publicKeyPem" rows="3" placeholder="-----BEGIN PUBLIC KEY-----">${esc(c.config.publicKeyPem||'')}</textarea>
+        <label>APIv3 密钥 ${c.secretsConfigured?'<span style="color:var(--green)">(已配置,留空=不变)</span>':''}</label><input data-sec="apiV3Key" placeholder="32 位,回调解密用" autocomplete="off">
+        <label>商户私钥(PEM)${c.secretsConfigured?'<span style="color:var(--green)">(已配置,留空=不变)</span>':''}</label><textarea data-sec="privateKeyPem" rows="3" placeholder="-----BEGIN PRIVATE KEY-----(apiclient_key.pem 内容)"></textarea>`
+      :`
+        <label>AppID</label><input data-cfg="appId" value="${esc(c.config.appId||'')}" placeholder="2021001234567890">
+        <label>支付宝公钥(PEM)</label><textarea data-cfg="alipayPublicKeyPem" rows="3" placeholder="-----BEGIN PUBLIC KEY-----(开放平台-普通公钥模式)">${esc(c.config.alipayPublicKeyPem||'')}</textarea>
+        <label>网关(可选)</label><input data-cfg="gateway" value="${esc(c.config.gateway||'')}" placeholder="默认 https://openapi.alipay.com/gateway.do">
+        <label>应用私钥(PEM)${c.secretsConfigured?'<span style="color:var(--green)">(已配置,留空=不变)</span>':''}</label><textarea data-sec="privateKeyPem" rows="3" placeholder="-----BEGIN PRIVATE KEY-----"></textarea>`;
+      return `<div class="card" data-channel="${c.channel}" style="padding:16px 18px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><h3 style="font-size:15px;font-weight:700">${name}</h3>${live}</div>
+        <div style="display:flex;gap:14px;margin:8px 0 4px;flex-wrap:wrap">${scenes}</div>
+        <div class="mform" style="margin-top:6px">${cfg}</div>
+        <div class="mbtns" style="margin-top:10px"><button class="ok" onclick="savePaymentChannel('${c.channel}')">保存${name}配置</button></div>
+      </div>`;
+    }).join('');
+  }
+
+  async function savePaymentChannel(channel){
+    const card=document.querySelector(`#payChannels .card[data-channel="${channel}"]`);
+    const enabledScenes=[...card.querySelectorAll('input[data-scene]:checked')].map(i=>i.dataset.scene);
+    const config={}; card.querySelectorAll('[data-cfg]').forEach(i=>{ config[i.dataset.cfg]=i.value.trim(); });
+    const secrets={}; card.querySelectorAll('[data-sec]').forEach(i=>{ if(i.value.trim()) secrets[i.dataset.sec]=i.value.trim(); });
+    try{
+      await PA('PUT',`/api/payment-channels/${channel}`,{enabledScenes,config,secrets});
+      toast('✓ 已保存(密钥已加密落库)'); await loadPayments();
+    }catch(e){ toast(e.message||'保存失败'); }
+  }
+
+  async function loadReconDiffs(){
+    try{
+      const { diffs, openCount }=await PA('GET','/api/recon-diffs?resolved=0');
+      document.getElementById('reconCt').textContent=openCount?`${openCount} 条未处理`:'';
+      const badge=document.getElementById('navReconBadge'); if(badge) badge.textContent=openCount||'';
+      const body=document.getElementById('reconBody');
+      if(!diffs.length){ body.innerHTML='<tr><td colspan="7" class="empty">✓ 暂无未处理差异</td></tr>'; return; }
+      body.innerHTML=diffs.map(d=>{
+        const [kn,kc]=RECON_KIND[d.kind]||[d.kind,'--t3'];
+        let detail={}; try{ detail=JSON.parse(d.detail_json); }catch(_e){}
+        const canRefund=d.kind==='status_mismatch'&&d.out_trade_no; // 迟到收款:可直接原路退回
+        return `<tr>
+          <td style="font-family:var(--f-mono);font-size:11px">${fmtTime(d.created_at)}<div style="color:var(--t4)">${esc(d.bill_date)}</div></td>
+          <td>${d.channel==='wechat'?'微信':'支付宝'}</td>
+          <td style="color:var(${kc})">${kn}</td>
+          <td style="font-family:var(--f-mono);font-size:11px">${esc(d.out_trade_no||'—')}</td>
+          <td style="font-family:var(--f-mono);font-size:11px">${esc(d.txn_id||'—')}</td>
+          <td style="font-size:11px;color:var(--t3);max-width:260px;word-break:break-all">${esc(JSON.stringify(detail))}</td>
+          <td style="white-space:nowrap">
+            ${canRefund?`<a href="javascript:;" style="color:var(--red);margin-right:8px" onclick='refundAttempt(${J(d.out_trade_no)})'>原路退回</a>`:''}
+            <a href="javascript:;" style="color:var(--t3)" onclick='resolveDiff(${J(d.id)})'>标记已处理</a>
+          </td></tr>`;
+      }).join('');
+    }catch(e){ document.getElementById('reconBody').innerHTML='<tr><td colspan="7" class="empty">加载失败</td></tr>'; }
+  }
+
+  async function resolveDiff(id){
+    if(!await askConfirm({title:'标记已处理',msg:'确认该差异已核实并处理完毕?',okText:'已处理'})) return;
+    try{ await PA('POST',`/api/recon-diffs/${id}/resolve`); toast('✓ 已标记'); await loadReconDiffs(); }
+    catch(e){ toast(e.message||'操作失败'); }
+  }
+
+  async function refundAttempt(attemptId){
+    const reason=await askPrompt({title:'差异单原路退回',msg:'该笔收款对应订单不可入账(已取消/重复支付),将原路全额退回买家。退款原因:',placeholder:'如:订单已取消,重复支付退回',okText:'确认退款',danger:true});
+    if(reason==null) return;
+    try{ const r=await PA('POST',`/api/payment-attempts/${attemptId}/refund`,{reason}); toast(r.outcome==='refunding'?'✓ 已受理,等待通道确认':'✓ 已退款'); await loadReconDiffs(); }
+    catch(e){ toast(e.message||'退款失败'); }
+  }
+
+  async function refundOrder(id,no){
+    const reason=await askPrompt({title:'原路退款',msg:`将订单 ${no} 整单全额原路退回,并扣回对应积分(余额可为负)。已开票订单需先驳回发票。退款原因:`,placeholder:'如:客户申请退款',okText:'确认退款',danger:true});
+    if(reason==null) return;
+    try{
+      const r=await PA('POST',`/api/recharge-orders/${id}/refund`,{reason});
+      toast(r.outcome==='refunding'?'✓ 退款已受理,等待微信确认(异步)':'✓ 已退款,积分已扣回');
+      await omReload(); await loadTenants().catch(()=>{});
+    }catch(e){ toast(e.message||'退款失败'); }
+  }
+
   const SEC_LOADERS={
     monitor:pollMonitor,        // 监控由轮询接管,这里也兜底首拉一次(loadMonitor + loadOps)
     tenants:loadTenants,
@@ -1791,6 +1924,7 @@
     plans:loadPlans,
     leads:loadLeads,
     ordermgmt:loadOrderMgmt,
+    payments:loadPayments,
     consumption:loadConsumption,
     audit:loadPlatformAudit,
     sms:loadSmsStats,

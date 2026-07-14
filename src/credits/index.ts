@@ -464,6 +464,18 @@ export function grant(tenantId: string, amount: number, note = '后台发放', o
 }
 
 /**
+ * 在线支付退款追回(kind='refund',负数行)。grant() 拒负数的护栏语义不变——退款是
+ * 唯一合法的负向发放,只经这一个入口(决策10/16,docs/designs/online-payments.md)。
+ * - 余额可负:负余额下 reserve 自然失败(积分不足)→ 服务停用直至再充值,无需封禁逻辑。
+ * - 幂等双保险:idx_ledger_order_refund 部分唯一索引 —— 同一订单第二次追回被 UNIQUE 拦。
+ * - 显式排除出消耗统计:usageSummary/consumed 只认 reserve/settle/release,refund 只动 balance。
+ */
+export function refundClawback(tenantId: string, amount: number, note: string, orderId: string): void {
+  if (amount <= 0) throw new Error('退款追回积分必须为正');
+  insert(tenantId, 'refund', -amount, null, note, orderId);
+}
+
+/**
  * 提交生成时预扣。原子事务:校验余额够 → 写 reserve。余额不足抛错(避免负余额)。
  * 决策:reserve 让余额立即下降,两个并发提交不会都通过(验收"用量预警"基础)。
  */

@@ -51,10 +51,14 @@ export interface PlanInput {
 /** 校验单一来源:create / update 都走这里。坏值抛 PricingError(API 层 400)。 */
 function validatePlan(input: PlanInput): void {
   if (!input.name || !input.name.trim()) throw new PricingError('NAME_REQUIRED', '套餐名不能为空');
-  // price_yuan:null=面议(合法)或正整数。
+  // price_yuan:null=面议(合法)或正数、精确到分(最小 0.01,最多两位小数)。
+  // 分粒度护栏与 payments/money.ts yuanToFen 同口径:0.011 这类无法精确表示为分的值当场拒,
+  // 绝不静默取整(134× 事故家族)。放开小数是为了 1 分钱真实支付联调 + 低价体验套餐。
   if (input.priceYuan !== null) {
-    if (!Number.isInteger(input.priceYuan) || input.priceYuan <= 0)
-      throw new PricingError('BAD_PRICE', '价格需为正整数,或留空表示面议');
+    const p = input.priceYuan;
+    const fen = Math.round(p * 100);
+    if (!Number.isFinite(p) || p <= 0 || Math.abs(p * 100 - fen) > 1e-6 || !Number.isSafeInteger(fen))
+      throw new PricingError('BAD_PRICE', '价格需为正数(最小 0.01,最多两位小数),或留空表示面议');
   }
   if (!Number.isInteger(input.credits) || input.credits <= 0)
     throw new PricingError('BAD_CREDITS', '积分数需为正整数');
@@ -239,16 +243,19 @@ export function createLead(input: LeadInput): SalesLeadRow {
 
 export function listLeads(opts: { status?: LeadStatus; limit?: number } = {}): SalesLeadRow[] {
   const limit = Math.min(500, Math.max(1, opts.limit ?? 100));
+  // LEFT JOIN 解析租户名/发起人名(运营要知道「谁的机构、哪个人」在申请扩容,
+  // 裸 user_id 对人不可读);租户/用户被删时回退显 ID,线索不丢。
+  const base = `
+    SELECT l.*, t.name AS tenantName, COALESCE(u.display_name, u.username) AS userName
+      FROM sales_leads l
+      LEFT JOIN tenant t ON t.id = l.tenant_id
+      LEFT JOIN user u ON u.id = l.user_id`;
   return (
     opts.status
       ? db
-          .prepare(
-            `SELECT * FROM sales_leads WHERE status=? ORDER BY created_at DESC, rowid DESC LIMIT ?`,
-          )
+          .prepare(`${base} WHERE l.status=? ORDER BY l.created_at DESC, l.rowid DESC LIMIT ?`)
           .all(opts.status, limit)
-      : db
-          .prepare(`SELECT * FROM sales_leads ORDER BY created_at DESC, rowid DESC LIMIT ?`)
-          .all(limit)
+      : db.prepare(`${base} ORDER BY l.created_at DESC, l.rowid DESC LIMIT ?`).all(limit)
   ) as SalesLeadRow[];
 }
 

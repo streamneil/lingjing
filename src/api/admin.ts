@@ -82,7 +82,23 @@ import {
   rejectInvoice,
   getPayee,
   setPayee,
+  startRefund,
+  startRefundForAttempt,
+  paidAttemptForOrder,
+  OrderError,
 } from '../orders/index.js';
+import {
+  CHANNELS,
+  CHANNEL_SCENES,
+  channelSettingForAdmin,
+  saveChannelSetting,
+  availableScenes,
+  publicBaseUrl,
+  type PaymentChannel,
+  type PaymentScene,
+} from '../payments/index.js';
+import { listReconDiffs, resolveReconDiff, openReconDiffCount } from '../payments/recon.js';
+import { masterKey } from '../gateway/key-crypto.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const adminPagesDir = resolve(__dirname, '..', '..', 'prototype', 'admin');
@@ -1277,7 +1293,8 @@ function serializeAdminOrder(o: ReturnType<typeof getOrder> & object, tenantName
 // 合并了旧「对公收款」+「发票开具」两块的读取;订单为主体,发票作子状态。
 adminRouter.get('/api/recharge-orders', requirePlatformAdmin, (req: Request, res: Response) => {
   const view = (req.query.view as string) || (req.query.status as string) || 'todo';
-  const validView = ['todo', 'all', 'pending_payment', 'paid_claimed', 'credited', 'rejected', 'cancelled'];
+  // 新状态必须同步进这里(否则 admin 新 tab 一点就 400):refunding/refunded 属在线支付退款态。
+  const validView = ['todo', 'all', 'pending_payment', 'paid_claimed', 'credited', 'rejected', 'cancelled', 'refunding', 'refunded'];
   if (!validView.includes(view)) return res.status(400).json({ error: '无效视图' });
   const invoice = (req.query.invoice as string) || 'any';
   const validInv = ['any', 'none', 'requested', 'issued'];
@@ -1457,6 +1474,90 @@ adminRouter.post('/api/payee', requirePlatformAdmin, (req: Request, res: Respons
     bankAccount: bankAccount.trim(),
   });
   writePlatformAudit(req.padmin!.id, 'payee_update', PLATFORM_TENANT, payeeName.trim(), padminIp(req));
+  res.json({ ok: true });
+});
+
+// ── 在线支付:通道配置 + 退款 + 对账差异(设计 docs/designs/online-payments.md)──
+
+// 通道配置回显(密钥永不回读明文,只报 secretsConfigured;镜 provider key last4 范式)。
+adminRouter.get('/api/payment-channels', requirePlatformAdmin, (_req: Request, res: Response) => {
+  res.json({
+    publicBaseUrl: publicBaseUrl(), // null = 未配 PUBLIC_BASE_URL,在线通道整体占位(决策26)
+    masterKeyReady: !!masterKey(),
+    channels: CHANNELS.map((c) => ({
+      ...channelSettingForAdmin(c),
+      allScenes: CHANNEL_SCENES[c],
+      liveScenes: availableScenes(c), // 实际生效(含 provider 可构建/基址已配 的综合判定)
+    })),
+  });
+});
+
+// 保存通道配置。secrets 省略 = 保留原密钥(编辑表单不回传);保存时即校验私钥 PEM(蓝图定稿)。
+adminRouter.put('/api/payment-channels/:channel', requirePlatformAdmin, (req: Request, res: Response) => {
+  const channel = req.params.channel as PaymentChannel;
+  if (!CHANNELS.includes(channel)) return res.status(404).json({ error: '未知通道' });
+  const { enabledScenes, config, secrets } = (req.body ?? {}) as {
+    enabledScenes?: PaymentScene[];
+    config?: Record<string, string>;
+    secrets?: Record<string, string>;
+  };
+  try {
+    saveChannelSetting(channel, {
+      enabledScenes: Array.isArray(enabledScenes) ? enabledScenes : [],
+      config: config ?? {},
+      secrets: secrets && Object.keys(secrets).length ? secrets : undefined,
+    });
+  } catch (e) {
+    return res.status(400).json({ error: e instanceof Error ? e.message : '配置保存失败' });
+  }
+  writePlatformAudit(req.padmin!.id, 'payment_channel_update', PLATFORM_TENANT, channel, padminIp(req));
+  res.json({ ok: true, channel: channelSettingForAdmin(channel) });
+});
+
+// 整单原路退款(决策5/21:挂票拒退;同事务 refunding 先于通道调用;失败自动回退)。
+adminRouter.post('/api/recharge-orders/:id/refund', requirePlatformAdmin, async (req: Request, res: Response) => {
+  const { reason } = (req.body ?? {}) as { reason?: string };
+  if (!reason?.trim()) return res.status(400).json({ error: '请填写退款原因' });
+  const o = getOrder(req.params.id!);
+  if (!o) return res.status(404).json({ error: '订单不存在' });
+  try {
+    const outcome = await startRefund(o.id, req.padmin!.id, reason.trim());
+    writePlatformAudit(req.padmin!.id, 'order_refund', o.tenant_id, `${o.order_no}/${outcome}`, padminIp(req));
+    if (outcome === 'failed') {
+      const attempt = paidAttemptForOrder(o.id);
+      return res.status(502).json({ error: `通道退款失败:${attempt?.fail_reason ?? '未知原因'}(订单已回退为已到账,可重试)` });
+    }
+    res.json({ ok: true, outcome }); // refunded=已完成 / refunding=微信受理中(异步通知确认)
+  } catch (e) {
+    if (e instanceof OrderError) return res.status(409).json({ error: e.message, code: e.code });
+    console.error(`[支付] 退款异常 order=${o.order_no}:`, e instanceof Error ? e.message : e);
+    res.status(500).json({ error: '退款处理异常' });
+  }
+});
+
+// 差异单退款(决策11:已收款但订单不可入账的迟到支付,原路退回,不动 ledger)。
+adminRouter.post('/api/payment-attempts/:id/refund', requirePlatformAdmin, async (req: Request, res: Response) => {
+  const { reason } = (req.body ?? {}) as { reason?: string };
+  try {
+    const outcome = await startRefundForAttempt(req.params.id!, (reason ?? '差异单原路退回').trim());
+    writePlatformAudit(req.padmin!.id, 'attempt_refund', PLATFORM_TENANT, `${req.params.id}/${outcome}`, padminIp(req));
+    if (outcome === 'failed') return res.status(502).json({ error: '通道退款失败,可重试' });
+    res.json({ ok: true, outcome });
+  } catch (e) {
+    if (e instanceof OrderError) return res.status(409).json({ error: e.message, code: e.code });
+    res.status(500).json({ error: '退款处理异常' });
+  }
+});
+
+// 对账差异面板(v1 告警面:此面板 + error 日志,设计定稿的显式取舍)。
+adminRouter.get('/api/recon-diffs', requirePlatformAdmin, (req: Request, res: Response) => {
+  const resolved = req.query.resolved === '1';
+  res.json({ diffs: listReconDiffs({ resolved }), openCount: openReconDiffCount() });
+});
+
+adminRouter.post('/api/recon-diffs/:id/resolve', requirePlatformAdmin, (req: Request, res: Response) => {
+  if (!resolveReconDiff(req.params.id!)) return res.status(409).json({ error: '差异不存在或已处理' });
+  writePlatformAudit(req.padmin!.id, 'recon_diff_resolve', PLATFORM_TENANT, req.params.id!, padminIp(req));
   res.json({ ok: true });
 });
 

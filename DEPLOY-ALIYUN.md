@@ -73,6 +73,7 @@ OSS_ACCESS_KEY_SECRET=<RAM AccessKeySecret>
 WORKER_POOL_SIZE=16                         # 4c8g 压不住可调 8
 COOKIE_SECURE=true                          # 生产保持 true
 TZ=Asia/Shanghai
+PUBLIC_BASE_URL=https://your-domain.com     # 要开微信/支付宝在线支付才填(支付回调基址);商户号/密钥部署后在 /admin「在线支付」配
 ```
 
 > **厂商 API Key 在哪配**:百炼 / 火山方舟 / Google AI Studio 三家 key,部署后在
@@ -111,6 +112,8 @@ DB 里只差「厂商 key + 租户账号」,运营走:
 2. **「厂商 / Key」配 API Key**:百炼(必备)、火山方舟 / Google(按需)。粘贴即加密入库。
 3. 「新建租户」建机构 →「开户」建机构管理员 → 机构用户用 `/login.html` 登录创作台。
 4. **冒烟测试**:建一条数字人视频,确认能成片(验证百炼 + OSS 全链路通)。
+5. (可选)**开通在线支付**:「在线支付」页填微信/支付宝商户号与密钥(加密入库)。
+   前提:`.env` 已配 `PUBLIC_BASE_URL`。排障见 `docs/PAYMENTS-RUNBOOK.md`。
 
 > 预置音色试听小样随 git 自带,部署后**直接出声**(走 `/api/showcase-asset`),无需配百炼/跑脚本。
 > `deploy.sh` 的示范素材灌桶步骤幂等;即使灌桶失败,端点也会回退伺服镜像内文件,站点照常显示。

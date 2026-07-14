@@ -61,8 +61,8 @@
 ### T-SEAT-BILLING:席位与计费/订单后端打通
 - **What:** 把 tenant.max_creator_seats 接入真实计费——"升级套餐买更多席位"的支付流程。
 - **Why:** 本轮席位已真实强制(默认 10,超限拦截),但上限值现在靠后台/SQL 手设;商业化需让客户自助升级。
-- **Context:** 来自 /plan-design-review 成员模块 D7。当前无计费后端,max_creator_seats 是 tenant 字段。
-- **Depends on:** 计费/订单后端(尚不存在)。
+- **Context:** 来自 /plan-design-review 成员模块 D7。max_creator_seats 是 tenant 字段,上限值目前靠后台/SQL 手设。
+- **Depends on:** ~~计费/订单后端(尚不存在)~~ → **已解锁**(v0.6.0.0 在线支付上线:`src/payments/` 通道层 + 订单/发票闭环已就绪,席位升级可复用同一条收款链路,只需加「席位」商品类型)。
 - **Priority:** P2
 
 ## CEO 审计补充(2026-06-04,HOLD SCOPE — 项目收尾)
@@ -92,6 +92,32 @@
 - **Why:** 融媒体编辑常从截图/素材库复制图,省去「存文件→选文件」两步。三页共享一个 paste 监听实现。
 - **Context:** 来自 /plan-design-review img2video UI parity 轮。需处理焦点上下文(粘在提示词框里的文字 vs 图)+ 三页各自槽位路由(img2video 还分首帧/尾帧/参考)。全站级体验缺口而非 img2video 个体差距,故不入 parity 轮。
 - **Priority:** P3  **Depends on:** 无
+
+## CEO 审计补充(2026-07-13,SELECTIVE EXPANSION — 收银台在线支付)
+
+### T-NOTIFY:到账主动通知(对公单)
+- **What:** 超管确认对公打款到账时,站内信/邮件主动告知用户;对账差异告警同通道推送。
+- **Why:** 用户旅程已知缺口:对公打款后用户反复刷台账看「钱到了吗」。微信/支付宝单秒到账已免疫;对公单(大额主力)仍靠人工确认后用户无感知。
+- **Pros:** 对公单体验闭环;对账差异从「超管登录才见」升级为主动推送。
+- **Cons:** 平台无站内信/邮件基础设施,需从零建通知通道,超出支付范畴。
+- **Context:** 来自 2026-07-13 /plan-ceo-review 在线支付轮 D4.4。在线支付上线后对公单占比可能下降,优先级随之浮动。
+- **Effort:** L(human)→ M(CC)。**Priority:** P2。**Depends on:** 无(通知基建独立一条线)。
+
+### T-JSAPI:微信内 JSAPI 支付
+- **What:** 公众号 openid 体系 + JSAPI 下单,微信内浏览器原生拉起支付。
+- **Why:** 收银台链接在微信聊天里传播是国内 B 端常态;v1 兜底是「Native 码+长按识别」,JSAPI 才是该场景正解体验。
+- **Pros:** 微信内支付从长按识别变一键拉起。
+- **Cons:** 要公众号资质 + 网页授权 openid 流,独立一条线。
+- **Context:** 来自 2026-07-13 /plan-ceo-review 在线支付轮(微信内浏览器场景决策)。通道层已预留:JSAPI 只是 wechat provider 的第三个场景实现。
+- **Effort:** L(human)→ M(CC)。**Priority:** P3。**Depends on:** 公众号资质;本轮通道层。
+
+### T-PARTIAL-REFUND:部分退款 + 发票红冲
+- **What:** 按金额部分退款;已开票订单退款的红冲/重开票流程。
+- **Why:** v1 规则是整单全额退款 + 挂票订单拒退(先驳回发票);客户量起来后「退一半」「票已寄出要红冲」会出现。
+- **Pros:** 退款能力闭环到财务真实全谱。
+- **Cons:** 部分退款的积分折算口径(退钱退多少积分)需产品决策;红冲涉税务流程。
+- **Context:** 来自 2026-07-13 /plan-ceo-review 在线支付轮外部声音 #2。当前拦截规则在 refund 入口检查 invoice_order 关联。
+- **Effort:** M(human)→ S(CC)。**Priority:** P3。**Depends on:** 本轮退款闭环落地。
 
 ## ✅ 已完成(归档,保留可追溯)
 

@@ -38,6 +38,10 @@ cp .env.example .env && chmod 600 .env
 #   MASTER_KEY=<openssl rand -base64 32>   # 厂商 key 加密入库
 #   OSS_*=<客户的对象存储四项>             # 见 §3 存储方案
 # 厂商 key(百炼/火山/Google,用客户自有账号)部署后在 /admin「厂商 / Key」配,不进 .env。
+# 在线支付(可选):PUBLIC_BASE_URL=<平台对外基址>;商户号/密钥在 /admin「在线支付」配。
+#   内网收不到微信/支付宝公网回调属预期形态 —— 服务端每 60s 主动查单入账(到账延迟约 1–2 分钟,
+#   用户停在收银台时前端主动查单仍秒级);
+#   出网需代理时配 WECHAT_PROXY / ALIPAY_PROXY(compose 已转发)。见 docs/PAYMENTS-RUNBOOK.md §7。
 
 # 3. 一键起(校验 → build → up → 等健康)
 ./scripts/deploy.sh

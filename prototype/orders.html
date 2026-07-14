@@ -87,8 +87,9 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     const NEW_ID = new URLSearchParams(location.search).get('new');
 
     const BADGE = {
-      pending_payment:['待打款','b-pending'], paid_claimed:['待确认','b-claimed'],
+      pending_payment:['待支付','b-pending'], paid_claimed:['待确认','b-claimed'],
       credited:['已到账','b-credited'], rejected:['已驳回','b-rejected'], cancelled:['已取消','b-cancelled'],
+      refunding:['退款中','b-claimed'], refunded:['已退款','b-cancelled'],
     };
 
     async function refreshBalance(){
@@ -122,7 +123,10 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         const [label, cls] = BADGE[o.status] || ['未知','b-pending'];
         const hl = o.id === NEW_ID ? ' hl' : '';
         const note = o.status==='rejected' && o.adminNote ? `<div class="od-note">驳回原因:${esc(o.adminNote)}</div>` : '';
-        const pm = o.paymentMethod === 'offline_bank' ? '对公转账' : (o.paymentMethod || '—');
+        const PM_NAME = { offline_bank:'对公转账', wechat:'微信支付', alipay:'支付宝' };
+        // 体验包③:在线支付单显「秒到账」徽章(与对公人工核对形成对比)。
+        const pm = (PM_NAME[o.paymentMethod] || o.paymentMethod || '—')
+          + ((o.paymentMethod==='wechat'||o.paymentMethod==='alipay') && (o.status==='credited') ? ' · 秒到账' : '');
         const who = o.actorName ? ` · 发起人 ${esc(o.actorName)}` : '';
         // 开票状态徽章 + 右侧「开票信息」小字(开票中/已开票可点查详情)。未开票不显徽章。
         const ivBadge = o.status==='credited' && o.invoiceStatus
