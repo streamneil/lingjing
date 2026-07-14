@@ -982,15 +982,32 @@ export type StartRefundOutcome = 'refunded' | 'refunding' | 'failed';
  *   通道同步成功(支付宝)→ 立即确认;受理中(微信)→ 等退款异步通知;
  *   通道失败 → refunding→credited 回退 + attempt→refund_failed(订单不卡死)。
  */
+/** 退款单号:RF + attempt id 前 30 位 = 32 字符(微信 out_refund_no 上限 64,支付宝 out_request_no 64;
+ *  取 32 与 out_trade_no 同宽,便于人工对照)。同 attempt 重试复用同号 → 通道侧幂等。 */
+function refundNoFor(attempt: PaymentAttemptRow): string {
+  return attempt.refund_no ?? `RF${attempt.id.slice(0, 30)}`;
+}
+
+/** refunding 卡死判定:进程在「本地置 refunding」与「通道调用」之间崩溃时,退款从未发出,
+ *  但守卫会永久拒绝重试。超过此时长的 refunding 视为可重驱(同 refund_no 通道幂等,安全)。 */
+const REFUND_STALE_MS = 10 * 60 * 1000;
+
 export async function startRefund(orderId: string, adminId: string, reason: string): Promise<StartRefundOutcome> {
   const order = getOrder(orderId);
   if (!order) throw new OrderError('ORDER_NOT_FOUND', '订单不存在');
   const attempt = paidAttemptForOrder(orderId);
   if (!attempt || !attempt.txn_id)
     throw new OrderError('NO_ONLINE_PAYMENT', '该订单无在线支付流水,不能原路退款(对公单请线下处理)');
-  if (attempt.status === 'refunding') throw new OrderError('REFUND_IN_FLIGHT', '退款处理中,请稍候');
 
-  const refundNo = attempt.refund_no ?? `RF${attempt.id.slice(0, 30)}`; // 重试复用同号,通道侧幂等
+  const refundNo = refundNoFor(attempt);
+  // 崩溃恢复:refunding 已停滞 → 跳过本地迁移(订单/attempt 已在 refunding),直接重驱通道退款。
+  if (attempt.status === 'refunding') {
+    if (now() - attempt.updated_at < REFUND_STALE_MS)
+      throw new OrderError('REFUND_IN_FLIGHT', '退款处理中,请稍候');
+    console.warn(`[支付] 检测到停滞的退款(${attempt.id}),重驱通道退款(同 refund_no 幂等)`);
+    return executeChannelRefund(attempt.id, refundNo, reason);
+  }
+
   db.transaction(() => {
     // 挂票拒退(决策5):在途/已开发票都拦,提示先驳回发票(避免票账不平/永远开不出的发票)。
     const occupied = db.prepare(`SELECT 1 FROM invoice_order WHERE order_id=?`).get(orderId);
@@ -1009,11 +1026,24 @@ export async function startRefund(orderId: string, adminId: string, reason: stri
   return executeChannelRefund(attempt.id, refundNo, reason);
 }
 
-/** 对「已收款但订单不可入账」的尝试退款(差异表处理入口;无 ledger 追回,决策11)。 */
+/**
+ * 对「已收款但订单不可入账」的尝试退款(差异表处理入口;无 ledger 追回,决策11)。
+ *
+ * 守卫(评审 CRITICAL):若该 attempt 正是给订单入账的那一笔(订单 credited/refunding/refunded),
+ * 走这条路会把钱退了却不追回积分 —— 租户白拿积分。这种单必须走订单级 startRefund(同事务追 ledger)。
+ * 双重收款差异(同 attempt 两个交易号)通道侧只认一个 out_trade_no,无法按单号退第二笔,
+ * 需在商户后台人工原路退回 —— 这里明确拒绝并提示,而不是退错那一笔。
+ */
 export async function startRefundForAttempt(attemptId: string, reason: string): Promise<StartRefundOutcome> {
   const attempt = getAttempt(attemptId);
   if (!attempt || !attempt.txn_id) throw new OrderError('ATTEMPT_NOT_FOUND', '支付流水不存在或未收款');
-  const refundNo = attempt.refund_no ?? `RF${attempt.id.slice(0, 30)}`;
+  const order = getOrder(attempt.order_id);
+  if (order && (order.status === 'credited' || order.status === 'refunding' || order.status === 'refunded'))
+    throw new OrderError(
+      'ATTEMPT_CREDITED_ORDER',
+      '该流水已给订单入账:请用订单「原路退款」(会同时扣回积分);重复收款需在商户后台人工退回',
+    );
+  const refundNo = refundNoFor(attempt);
   const moved = transitionAttempt(attemptId, ['paid', 'refund_failed'], 'refunding', { refund_no: refundNo });
   if (!moved) throw new OrderError('REFUND_IN_FLIGHT', '退款处理中或已退款');
   return executeChannelRefund(attemptId, refundNo, reason);
@@ -1085,10 +1115,17 @@ export const applyRefundResult = db.transaction(
 
 let sweepInFlight = false; // 重入守卫:通道慢于 tick 时跳过本轮(决策27)
 
+/** 每 tick 处理的在途码上限:每单最多 2 次外呼(查单+关单),通道 15s 超时 —— 不设上限时
+ *  一次通道抖动就能让单 tick 跑成分钟级,把后面的查单和本地取消全饿死。剩余的下轮自然接上。 */
+const SWEEP_BATCH = 40;
+
 export async function sweepExpiredAttempts(): Promise<void> {
   const rows = db
-    .prepare(`SELECT id FROM payment_attempt WHERE status='pending' AND expires_at < ?`)
-    .all(now()) as { id: string }[];
+    .prepare(
+      `SELECT id FROM payment_attempt WHERE status='pending' AND expires_at < ?
+        ORDER BY expires_at ASC LIMIT ?`,
+    )
+    .all(now(), SWEEP_BATCH) as { id: string }[];
   for (const r of rows) {
     try {
       const attempt = getAttempt(r.id);
@@ -1123,11 +1160,14 @@ export async function sweepExpiredAttempts(): Promise<void> {
  */
 export async function pollActivePendingAttempts(): Promise<void> {
   const t = now();
+  // 轮转公平 + 批上限:按 updated_at 最旧优先(每次查单会刷新 updated_at → 天然 round-robin),
+  // 单 tick 至多 SWEEP_BATCH 单,避免大量在途码时外呼扇出无界。
   const rows = db
     .prepare(
-      `SELECT id FROM payment_attempt WHERE status='pending' AND expires_at >= ? AND created_at < ?`,
+      `SELECT id FROM payment_attempt WHERE status='pending' AND expires_at >= ? AND created_at < ?
+        ORDER BY updated_at ASC LIMIT ?`,
     )
-    .all(t, t - 30_000) as { id: string }[];
+    .all(t, t - 30_000, SWEEP_BATCH) as { id: string }[];
   for (const r of rows) {
     try {
       const attempt = getAttempt(r.id);
@@ -1135,8 +1175,12 @@ export async function pollActivePendingAttempts(): Promise<void> {
       const provider = getProvider(attempt.channel);
       if (!provider) continue;
       const q = await provider.queryPayment(r.id);
-      if (q.status === 'paid')
+      if (q.status === 'paid') {
         applyPaymentSuccess(attempt.channel, r.id, q.txnId ?? '', q.paidAmountFen ?? attempt.amount_fen);
+      } else {
+        // 记一次「已轮询」时间戳:排序键前移,保证多单时人人轮得到(不改状态)。
+        db.prepare(`UPDATE payment_attempt SET updated_at=? WHERE id=? AND status='pending'`).run(now(), r.id);
+      }
       // pending/not_found:继续等回调或下轮;closed:留给过期 sweep 统一收尾。
     } catch (e) {
       console.warn(`[支付] 在途码查单失败 ${r.id}(下轮重试):`, e instanceof Error ? e.message : e);
@@ -1149,9 +1193,12 @@ export async function sweepOrders(): Promise<number> {
   if (sweepInFlight) return 0;
   sweepInFlight = true;
   try {
+    // 本地超时取消先跑(同步 SQLite,微秒级):它不依赖通道结果(已用 NOT EXISTS 排除在途码),
+    // 放在外呼之后会被通道抖动整轮饿死。
+    const cancelled = cancelStalePendingOrders();
     await sweepExpiredAttempts();
     await pollActivePendingAttempts();
-    return cancelStalePendingOrders();
+    return cancelled;
   } finally {
     sweepInFlight = false;
   }

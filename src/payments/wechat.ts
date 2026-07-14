@@ -285,17 +285,30 @@ export class WechatProvider implements PaymentProvider {
     return WechatProvider.parseBillCsv(dl.text);
   }
 
-  /** 按表头名定位列(防列序变化);数据行每字段以 ` 开头。汇总段(总交易单数…)自然被表头缺列过滤。 */
+  /**
+   * 按表头名定位列(防列序变化);数据行每字段以 ` 开头。汇总段(总交易单数…)自然被表头缺列过滤。
+   *
+   * 金额列名护栏(评审 CRITICAL):v3 交易账单用「订单金额 / 应结订单金额」,v2 才叫「总金额」。
+   * 早期实现只认「总金额」→ v3 账单下 iAmount=-1 → 每行金额 0 → 对账把每一笔成功单都判成
+   * amount_mismatch(告警风暴 + 对账失效)。这里按 精确「订单金额」→「应结订单金额」→ v2「总金额」
+   * 依次定位;三者全无 → 抛协议错误(recon 标 error 重试),绝不静默按 0 处理。
+   * 注意用精确匹配:includes('订单金额') 会先撞上「应结订单金额」「申请退款金额」。
+   */
   static parseBillCsv(csv: string): BillRow[] {
     const lines = csv.split('\n').filter((l) => l.trim());
     if (lines.length < 2) return [];
-    const header = lines[0]!.split(',').map((s) => s.trim());
+    const header = lines[0]!.split(',').map((s) => s.trim().replace(/^`/, ''));
+    const exact = (name: string) => header.findIndex((hh) => hh === name);
     const idx = (name: string) => header.findIndex((hh) => hh.includes(name));
     const iOtn = idx('商户订单号');
-    const iTxn = idx('微信支付订单号');
+    const iTxn = header.findIndex((hh) => hh.includes('微信支付订单号') || hh.includes('微信订单号'));
     const iState = idx('交易状态');
-    const iAmount = idx('总金额');
+    let iAmount = exact('订单金额');
+    if (iAmount < 0) iAmount = exact('应结订单金额');
+    if (iAmount < 0) iAmount = exact('总金额'); // v2 遗留
     if (iOtn < 0 || iState < 0) return [];
+    if (iAmount < 0)
+      throw new PaymentError('PROTOCOL', '微信账单无法定位金额列(表头变更?)—— 拒绝按 0 对账');
     const rows: BillRow[] = [];
     for (let i = 1; i < lines.length; i++) {
       const cells = lines[i]!.split(',').map((s) => s.trim().replace(/^`/, ''));
@@ -303,11 +316,11 @@ export class WechatProvider implements PaymentProvider {
       const outTradeNo = cells[iOtn] ?? '';
       if (!outTradeNo) continue;
       const state = cells[iState] ?? '';
-      let amountFen = 0;
+      let amountFen: number;
       try {
-        amountFen = iAmount >= 0 ? yuanStringToFen(cells[iAmount] || '0') : 0;
+        amountFen = yuanStringToFen(cells[iAmount] || '0');
       } catch {
-        continue;
+        continue; // 该行金额不可解析:跳过(账单单边差异会在 missing_channel 现形)
       }
       rows.push({
         outTradeNo,

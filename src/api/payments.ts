@@ -10,12 +10,13 @@
 // 处理中抛异常→5xx/failure(通道重试自愈,applyPaymentSuccess 幂等保证恰一次)。
 
 import { Router, raw, type Request, type Response } from 'express';
-import { getProvider, type PaymentChannel } from '../payments/index.js';
+import { CHANNELS, getProvider, type PaymentChannel } from '../payments/index.js';
 import { applyPaymentSuccess, applyRefundResult, getAttempt } from '../orders/index.js';
 
 export const paymentsNotifyRouter = Router();
 
-const CHANNEL_SET = new Set<PaymentChannel>(['wechat', 'alipay']);
+// 单一来源:新增通道只改 payments/index.ts 的 CHANNELS,回调路由自动跟上(否则新通道静默 404)。
+const CHANNEL_SET = new Set<PaymentChannel>(CHANNELS);
 
 paymentsNotifyRouter.post(
   '/:channel',

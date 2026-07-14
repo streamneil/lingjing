@@ -188,6 +188,28 @@ describe('微信交易账单 CSV 解析', () => {
   });
 });
 
+describe('微信账单金额列名护栏(评审 CRITICAL 回归)', () => {
+  const row = (amountHeader: string) =>
+    [
+      `交易时间,公众账号ID,商户号,微信支付订单号,商户订单号,交易类型,交易状态,${amountHeader}`,
+      '`2026-07-13 10:00:00,`wx_app,`190001,`wx_txn_9,`attempt9,`NATIVE,`SUCCESS,`350.00',
+    ].join('\n');
+
+  it('v3 表头「订单金额」→ 正确解析 35000 分(此前只认「总金额」→ 全表 0 分 → 每笔误判 amount_mismatch)', () => {
+    const rows = WechatProvider.parseBillCsv(row('订单金额'));
+    expect(rows[0]!.amountFen).toBe(35000);
+  });
+  it('v3 表头「应结订单金额」也认', () => {
+    expect(WechatProvider.parseBillCsv(row('应结订单金额'))[0]!.amountFen).toBe(35000);
+  });
+  it('v2 遗留「总金额」仍认(向后兼容)', () => {
+    expect(WechatProvider.parseBillCsv(row('总金额'))[0]!.amountFen).toBe(35000);
+  });
+  it('金额列完全缺失 → 抛协议错误(绝不静默按 0 对账,否则每笔成功单都成差异)', () => {
+    expect(() => WechatProvider.parseBillCsv(row('手续费'))).toThrow(/金额列/);
+  });
+});
+
 describe('支付宝 RSA2 验签(普通公钥模式)', () => {
   const alipay = () =>
     new AlipayProvider({

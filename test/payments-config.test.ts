@@ -43,6 +43,12 @@ describe('配置保存与回显', () => {
     expect(anyOnlineChannelAvailable()).toBe(true);
   });
   it('编辑保存省略 secrets → 保留原密钥(表单不回传)', () => {
+    // 自包含:先自己写一次密钥,不依赖上一个用例的残留(否则 it.only / shuffle 就挂)
+    saveChannelSetting('wechat', {
+      enabledScenes: ['native'],
+      config: { appid: 'wx_app', mchid: '190001', merchantSerial: 'SER01', publicKeyId: 'PUB_KEY_ID_1', publicKeyPem: PUB },
+      secrets: { apiV3Key: 'k'.repeat(32), privateKeyPem: PRIV },
+    });
     saveChannelSetting('wechat', {
       enabledScenes: ['native'],
       config: { appid: 'wx_app2', mchid: '190001', merchantSerial: 'SER01', publicKeyId: 'PUB_KEY_ID_1', publicKeyPem: PUB },

@@ -211,9 +211,11 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     reserve:'<span class="bdg bdg-dim">生成扣点</span>',
     settle:'<span class="bdg bdg-dim">结算</span>',
     release:'<span class="bdg" style="background:rgba(255,178,62,.14);color:var(--amber)">失败释放</span>',
+    refund:'<span class="bdg" style="background:rgba(255,107,107,.14);color:#FF6B6B">退款扣回</span>',
   };
   // 筛选分组:消耗(reserve)、入账(grant)、释放(release);settle 多为 0 差额,并入"消耗"组
-  const FILTER = { all:()=>true, spend:l=>l.kind==='reserve'||l.kind==='settle', grant:l=>l.kind==='grant', release:l=>l.kind==='release' };
+  // grant 组含 refund(退款扣回是充值入账的逆操作,与「入账」同轴查看才对得上账)。
+  const FILTER = { all:()=>true, spend:l=>l.kind==='reserve'||l.kind==='settle', grant:l=>l.kind==='grant'||l.kind==='refund', release:l=>l.kind==='release' };
   // 工具类型 → 中文场景名(与后端 ledger.csv TOOL_CN 同口径)
   const TOOL_CN = { video:'数字人视频', video_t2v:'文字转影片', video_i2v:'图片转影片', video_edit:'影片编辑', ai_image:'AI 图片', tts:'文字转语音', ai_music:'AI 音乐' };
   const toolLabel = t => t ? (TOOL_CN[t]||t) : '—';

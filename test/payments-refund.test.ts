@@ -124,6 +124,18 @@ describe('整单退款闭环', () => {
 });
 
 describe('attempt-only 退款(迟到收款差异单,决策11)', () => {
+  it('★守卫★ 已给订单入账的流水禁止走 attempt 退款(否则退钱不扣积分 → 租户白拿)', async () => {
+    const { orderId, attemptId } = await creditedOnlineOrder();
+    const before = balance(tId);
+    await expect(startRefundForAttempt(attemptId, '误操作')).rejects.toMatchObject({
+      code: 'ATTEMPT_CREDITED_ORDER',
+    });
+    expect(getOrder(orderId)!.status).toBe('credited'); // 订单未动
+    expect(getAttempt(attemptId)!.status).toBe('paid'); // 流水未动
+    expect(balance(tId)).toBe(before); // 积分未动
+    expect(refundCalls).toHaveLength(0); // 通道未被调用(钱没退)
+  });
+
   it('已取消订单的迟到收款:退通道不追 ledger(从未 grant 过)', async () => {
     const planId = createPlan({ name: `迟到版#${++seq}`, priceYuan: 100, credits: 1000 }).id;
     const o = createOrder({ tenantId: tId, userId: admin, planId });
@@ -136,6 +148,25 @@ describe('attempt-only 退款(迟到收款差异单,决策11)', () => {
     expect(getAttempt(attemptId)!.status).toBe('refunded');
     expect(getOrder(o.id)!.status).toBe('cancelled'); // 订单不动
     expect(balance(tId)).toBe(before); // 不追 ledger(决策11)
+  });
+});
+
+describe('退款崩溃恢复(refunding 卡死防线)', () => {
+  it('本地已置 refunding 但通道从未调用(进程崩溃)→ 10 分钟后可重驱,同 refund_no 幂等', async () => {
+    const { orderId, attemptId } = await creditedOnlineOrder();
+    refundBehavior = { status: 'processing' };
+    await startRefund(orderId, padmin, '首次');
+    expect(getOrder(orderId)!.status).toBe('refunding');
+    // 立刻重试 → 被守卫拦(正常在途)
+    await expect(startRefund(orderId, padmin, '重复')).rejects.toMatchObject({ code: 'REFUND_IN_FLIGHT' });
+    // 时钟注入:退款停滞 > 10 分钟(崩溃场景)→ 允许重驱
+    db.prepare(`UPDATE payment_attempt SET updated_at=? WHERE id=?`).run(Date.now() - 11 * 60_000, attemptId);
+    refundBehavior = { status: 'succeeded' };
+    const before = balance(tId);
+    expect(await startRefund(orderId, padmin, '重驱')).toBe('refunded');
+    expect(getOrder(orderId)!.status).toBe('refunded');
+    expect(balance(tId)).toBe(before - 1100); // ledger 追回照常
+    expect((refundCalls[0] as any).refundNo).toBe((refundCalls[1] as any).refundNo); // 同号 → 通道幂等
   });
 });
 

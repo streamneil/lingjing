@@ -55,13 +55,21 @@ async function paidAttempt(amountFen = 10000) {
   return attemptId;
 }
 
+// 账单日按「该 attempt 的真实 paid_at」推导,而非 Date.now() —— 跑测试时若正好跨过
+// 北京时间午夜(16:00 UTC),now() 与 paid_at 会落在不同账单日,用例随机挂(flake)。
 const today = () => cstDateString(Date.now());
+const billDateOf = (attemptId: string) => {
+  const row = db.prepare(`SELECT paid_at, created_at FROM payment_attempt WHERE id=?`).get(attemptId) as
+    | { paid_at: number | null; created_at: number }
+    | undefined;
+  return cstDateString(row?.paid_at ?? row?.created_at ?? Date.now());
+};
 
 describe('对账四类差异', () => {
   it('全对平 → 0 差异', async () => {
     const a = await paidAttempt();
     bill = [{ outTradeNo: a, txnId: 'txn_x', amountFen: 10000, status: 'paid' }];
-    expect(await reconcileChannel(today(), 'wechat')).toBe(0);
+    expect(await reconcileChannel(billDateOf(a), 'wechat')).toBe(0);
   });
   it('账单有本地无 → missing_local(最严重:收了钱不知道)', async () => {
     bill = [{ outTradeNo: 'ffffffff'.repeat(4), txnId: 'txn_ghost', amountFen: 5000, status: 'paid' }];
@@ -81,13 +89,13 @@ describe('对账四类差异', () => {
   it('金额不符 → amount_mismatch', async () => {
     const a = await paidAttempt();
     bill = [{ outTradeNo: a, txnId: 'txn_amt', amountFen: 9999, status: 'paid' }];
-    expect(await reconcileChannel(today(), 'wechat')).toBe(1);
+    expect(await reconcileChannel(billDateOf(a), 'wechat')).toBe(1);
     expect((listReconDiffs({})[0] as any).kind).toBe('amount_mismatch');
   });
   it('本地已收款、账单没有 → missing_channel(单边账)', async () => {
-    await paidAttempt();
+    const a = await paidAttempt();
     bill = [];
-    expect(await reconcileChannel(today(), 'wechat')).toBe(1);
+    expect(await reconcileChannel(billDateOf(a), 'wechat')).toBe(1);
     expect((listReconDiffs({})[0] as any).kind).toBe('missing_channel');
   });
 });

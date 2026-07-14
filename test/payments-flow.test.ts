@@ -67,7 +67,8 @@ function fakeProvider(channel: 'wechat' | 'alipay') {
         };
       },
       async closePayment(id: string) { calls.close.push(id); },
-      async refund(input: any) { calls.refund.push(input); return { status: 'succeeded' as const }; },
+      refundResult: { status: 'succeeded' } as import('../src/payments/types.js').RefundResult,
+      async refund(input: any) { calls.refund.push(input); return state.provider.refundResult; },
       async downloadBill() { return []; },
     },
   };
@@ -157,9 +158,12 @@ describe('startPayment:出码 / 复用 / 切换 / 并发唯一', () => {
   it('未启用场景 → CHANNEL_UNAVAILABLE', async () => {
     const o = newOrder();
     saveChannelSetting('wechat', { enabledScenes: ['native'], config: {} }); // 关 h5
-    await expect(startPayment({ orderId: o.id, tenantId: tId, channel: 'wechat', scene: 'h5', clientIp: '' }))
-      .rejects.toMatchObject({ code: 'CHANNEL_UNAVAILABLE' });
-    saveChannelSetting('wechat', { enabledScenes: ['native', 'h5'], config: {} });
+    try {
+      await expect(startPayment({ orderId: o.id, tenantId: tId, channel: 'wechat', scene: 'h5', clientIp: '' }))
+        .rejects.toMatchObject({ code: 'CHANNEL_UNAVAILABLE' });
+    } finally {
+      saveChannelSetting('wechat', { enabledScenes: ['native', 'h5'], config: {} });
+    }
   });
 });
 
@@ -230,7 +234,7 @@ describe('applyPaymentSuccess 幂等矩阵(决策4/22/25)', () => {
     expect(confirmAndCredit(o.id, admin)).toBe(false);
     expect(balance(tId)).toBe(before + 3850);
   });
-  it('混沌:同一入账被并发触发两路(回调+查单)→ 恰一次 grant', async () => {
+  it('多路入账触发(回调+查单)同交易号 → 恰一次 grant(better-sqlite3 同步执行,此处验顺序幂等)', async () => {
     const { attemptId } = await paidSetup();
     const before = balance(tId);
     const results = [
@@ -381,9 +385,12 @@ describe('HTTP 端点:回调 / 主动查单 / 支付方式', () => {
     expect(m1.body.channels.wechat).toContain('native');
     const saved = process.env.PUBLIC_BASE_URL;
     delete process.env.PUBLIC_BASE_URL;
-    const m2 = await c.get('/api/payment-methods');
-    expect(m2.body.channels.wechat).toEqual([]); // 决策26:基址未配 → 在线通道占位
-    process.env.PUBLIC_BASE_URL = saved;
+    try {
+      const m2 = await c.get('/api/payment-methods');
+      expect(m2.body.channels.wechat).toEqual([]); // 决策26:基址未配 → 在线通道占位
+    } finally {
+      process.env.PUBLIC_BASE_URL = saved; // 断言失败也必须恢复(否则后续全体 CHANNEL_UNAVAILABLE)
+    }
   });
   it('POST /orders/:id/pay:全链出码 + GET 订单详情带 pendingAttempt(刷新恢复)', async () => {
     const c = await loggedIn();

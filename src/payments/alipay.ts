@@ -108,21 +108,24 @@ export class AlipayProvider implements PaymentProvider {
     } catch {
       throw new PaymentError('PROTOCOL', `支付宝响应非 JSON: ${text.slice(0, 200)}`);
     }
+    const isBusiness = !!parsed[nodeName]; // error_response(网关级错误)官方不签名
     const node = (parsed[nodeName] ?? parsed.error_response) as Record<string, unknown> | undefined;
     if (!node) throw new PaymentError('PROTOCOL', `支付宝响应缺少 ${nodeName}`);
     // 响应验签:对原文中节点 JSON 子串验 RSA2(网关签名防篡改;取子串是官方 SDK 同款做法)。
+    // fail-closed(评审):业务响应缺 sign / 子串取不出 → 一律当验签失败抛,绝不放行未验签的
+    // 查单/退款/账单结果(它们直通 applyPaymentSuccess 与 ledger)。只有 error_response 免签。
     const sign = parsed.sign as string | undefined;
-    if (sign) {
+    if (isBusiness) {
+      if (!sign) throw new PaymentError('SIGNATURE', '支付宝业务响应缺少签名');
       const m = text.match(new RegExp(`"${nodeName}"\\s*:\\s*(\\{.*?\\})\\s*,\\s*"sign"`, 's'));
-      if (m?.[1]) {
-        let ok = false;
-        try {
-          ok = createVerify('RSA-SHA256').update(m[1], 'utf8').verify(this.cfg.alipayPublicKeyPem, sign, 'base64');
-        } catch {
-          ok = false;
-        }
-        if (!ok) throw new PaymentError('SIGNATURE', '支付宝响应验签失败');
+      if (!m?.[1]) throw new PaymentError('SIGNATURE', '支付宝响应无法提取验签原文');
+      let ok = false;
+      try {
+        ok = createVerify('RSA-SHA256').update(m[1], 'utf8').verify(this.cfg.alipayPublicKeyPem, sign, 'base64');
+      } catch {
+        ok = false;
       }
+      if (!ok) throw new PaymentError('SIGNATURE', '支付宝响应验签失败');
     }
     return node;
   }
@@ -233,15 +236,10 @@ export class AlipayProvider implements PaymentProvider {
 
   // ── 对账单:downloadurl.query → ZIP(GBK CSV,业务明细)──
   async downloadBill(billDate: string): Promise<BillRow[]> {
-    let node: Record<string, unknown>;
-    try {
-      node = await this.call('alipay.data.dataservice.bill.downloadurl.query', {
-        bill_type: 'trade',
-        bill_date: billDate,
-      });
-    } catch (e) {
-      throw e;
-    }
+    const node = await this.call('alipay.data.dataservice.bill.downloadurl.query', {
+      bill_type: 'trade',
+      bill_date: billDate,
+    });
     const code = String(node.code ?? '');
     if (code !== '10000') {
       const sub = String(node.sub_code ?? '');

@@ -1293,7 +1293,8 @@ function serializeAdminOrder(o: ReturnType<typeof getOrder> & object, tenantName
 // 合并了旧「对公收款」+「发票开具」两块的读取;订单为主体,发票作子状态。
 adminRouter.get('/api/recharge-orders', requirePlatformAdmin, (req: Request, res: Response) => {
   const view = (req.query.view as string) || (req.query.status as string) || 'todo';
-  const validView = ['todo', 'all', 'pending_payment', 'paid_claimed', 'credited', 'rejected', 'cancelled'];
+  // 新状态必须同步进这里(否则 admin 新 tab 一点就 400):refunding/refunded 属在线支付退款态。
+  const validView = ['todo', 'all', 'pending_payment', 'paid_claimed', 'credited', 'rejected', 'cancelled', 'refunding', 'refunded'];
   if (!validView.includes(view)) return res.status(400).json({ error: '无效视图' });
   const invoice = (req.query.invoice as string) || 'any';
   const validInv = ['any', 'none', 'requested', 'issued'];

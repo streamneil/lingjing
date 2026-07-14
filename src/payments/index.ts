@@ -11,12 +11,18 @@
 // └───────────────────────────────────────────────────────────────────────────────┘
 // 测试注入:setProviderForTest(镜 image-models 注册表范式,fake provider 全隔离零外呼)。
 
-import { createPrivateKey, createPublicKey } from 'node:crypto';
-import { db, type PaymentChannel, type PaymentChannelSettingRow, type PaymentScene } from '../db/index.js';
+import { createPrivateKey, createPublicKey, randomUUID } from 'node:crypto';
+import {
+  db,
+  type PaymentChannel,
+  type PaymentChannelSettingRow,
+  type PaymentScene,
+  type ReconDiffKind,
+} from '../db/index.js';
 import { encryptKey, decryptKey, masterKey } from '../gateway/key-crypto.js';
 import { WechatProvider, type WechatConfig } from './wechat.js';
 import { AlipayProvider, type AlipayConfig } from './alipay.js';
-import type { PaymentProvider } from './types.js';
+import { PaymentError, type PaymentProvider } from './types.js';
 
 export { yuanToFen, fenToYuan } from './money.js';
 export * from './types.js';
@@ -37,7 +43,11 @@ export function publicBaseUrl(): string | null {
 }
 
 export function notifyUrl(channel: PaymentChannel): string {
-  return `${publicBaseUrl()}/api/payments/notify/${channel}`;
+  const base = publicBaseUrl();
+  // 显式护栏:退款路径不经 availableScenes 检查,基址被清空后会拼出 'null/api/...' 发给通道,
+  // 换回一个看不懂的 PARAM_ERROR。这里当场给出可执行错误。
+  if (!base) throw new PaymentError('BASE_URL_MISSING', 'PUBLIC_BASE_URL 未配置,无法生成支付回调地址');
+  return `${base}/api/payments/notify/${channel}`;
 }
 
 // ── 配置存取 ──
@@ -257,9 +267,6 @@ export function anyOnlineChannelAvailable(): boolean {
 // ── 对账差异记录(零静默失败落点;orders 实时差异 + recon 账单差异共用)──
 // INSERT OR IGNORE + 唯一索引(channel,out_trade_no,txn_id,kind):微信重试/对账重跑不刷屏(决策25)。
 // billDate='-' 表示实时差异(回调/查单发现),非账单来源。
-import { randomUUID } from 'node:crypto';
-import type { ReconDiffKind } from '../db/index.js';
-
 export function recordReconDiff(p: {
   channel: PaymentChannel;
   kind: ReconDiffKind;

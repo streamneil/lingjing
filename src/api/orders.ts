@@ -44,10 +44,16 @@ const receiptUpload = multer({
   limits: { fileSize: RECEIPT_MAX },
 });
 
+// 409 = 状态冲突(客户端应刷新重试),400 = 请求本身有问题。在线支付的并发/状态冲突同属前者,
+// 否则同一类错误在不同端点返回不同码,客户端无法统一处理(评审 api-contract)。
+const CONFLICT_CODES = new Set([
+  'INVOICE_EXISTS', 'INVOICE_ATTACHED', 'CONCURRENT_PAYMENT', 'ORDER_NOT_PAYABLE',
+  'ONLINE_IN_FLIGHT', 'REFUND_IN_FLIGHT', 'ORDER_NOT_REFUNDABLE', 'ATTEMPT_CREDITED_ORDER',
+]);
+
 function handleOrderError(e: unknown, res: Response): void {
   if (e instanceof OrderError) {
-    // 409 用于「已申请开票」等冲突,其余 400。
-    const conflict = e.code === 'INVOICE_EXISTS';
+    const conflict = CONFLICT_CODES.has(e.code);
     res.status(conflict ? 409 : 400).json({ error: e.message, code: e.code });
     return;
   }
@@ -86,7 +92,9 @@ ordersRouter.post('/orders/:id/pay', requireRole('admin', 'creator'), async (req
       tenantId: req.user!.tenantId,
       channel,
       scene,
-      clientIp: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || '127.0.0.1',
+      // req.ip 已由 Express 按 trust proxy=1 解析(取反代追加的最后一跳);直接读 X-Forwarded-For
+      // 首段是客户端可伪造的,会把假 IP 报给微信风控。
+      clientIp: req.ip || req.socket.remoteAddress || '127.0.0.1',
     });
     if ('alreadyPaid' in r && r.alreadyPaid) return res.json({ alreadyPaid: true });
     audit(req, 'start_payment', `${o.order_no}|${channel}/${scene}`);
@@ -165,7 +173,7 @@ ordersRouter.get('/orders/:id', requireAuth, (req: Request, res: Response) => {
   });
 });
 
-// 我已完成打款(+可选回单截图)。pending|rejected → paid_claimed。
+// 我已完成打款(+可选回单截图)。pending_payment → paid_claimed(rejected 是终态,不可重提)。
 ordersRouter.post(
   '/orders/:id/claim-paid',
   requireRole('admin', 'creator'),

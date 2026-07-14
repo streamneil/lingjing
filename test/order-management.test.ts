@@ -88,6 +88,9 @@ describe('adminOrderCounts(增量,排除跨文件干扰)', () => {
     expect(c.byStatus.credited - base.byStatus.credited).toBe(5);
     expect(c.byStatus.rejected - base.byStatus.rejected).toBe(1);
     expect(c.byStatus.cancelled - base.byStatus.cancelled).toBe(1);
+    // 在线支付退款态进全枚举(决策5 回归铁律):本文件不造退款单,断言键存在且为数值即可
+    expect(c.byStatus.refunding - base.byStatus.refunding).toBe(0);
+    expect(c.byStatus.refunded - base.byStatus.refunded).toBe(0);
     expect(c.all - base.all).toBe(9);
     expect(c.todo - base.todo).toBe(4);
     expect(c.byInvoice.none - base.byInvoice.none).toBe(1);

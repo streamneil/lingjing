@@ -60,12 +60,12 @@
     .qrwrap img{ display:block; width:196px; height:196px; image-rendering:pixelated; }
     .qr-mask{ position:absolute; inset:0; border-radius:12px; background:rgba(10,10,12,.88); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; }
     .qr-mask .m-t{ font-size:13px; color:var(--t1); font-weight:700; }
-    .qr-mask button{ background:var(--blue); color:#fff; border:none; border-radius:999px; padding:9px 18px; font-size:13px; cursor:pointer; min-height:38px; font-family:inherit; }
+    .qr-mask button{ background:var(--blue); color:#fff; border:none; border-radius:999px; padding:11px 20px; font-size:13px; cursor:pointer; min-height:44px; font-family:inherit; }
     .qr-tip{ font-size:12px; color:var(--t3); margin-top:12px; line-height:1.7; }
     .qr-count{ font-size:12px; margin-top:8px; color:var(--t3); }
     .qr-count b{ color:var(--gold); font-family:var(--f-mono,monospace); }
     .qr-actions{ margin-top:14px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
-    .qr-actions .act{ background:none; border:1px solid var(--line); color:var(--t2); border-radius:999px; padding:9px 18px; font-size:13px; cursor:pointer; min-height:38px; font-family:inherit; }
+    .qr-actions .act{ background:none; border:1px solid var(--line); color:var(--t2); border-radius:999px; padding:11px 20px; font-size:13px; cursor:pointer; min-height:44px; font-family:inherit; }
     .qr-actions .act.primary{ background:var(--blue); border-color:var(--blue); color:#fff; }
     .pm-opt{ cursor:pointer; }
     .pm-opt.dis{ cursor:not-allowed; }
@@ -74,8 +74,10 @@
     .qr-status .dot{ width:8px; height:8px; border-radius:50%; background:var(--green); animation:qrpulse 1.2s ease-in-out infinite; }
     @keyframes qrpulse{ 0%,100%{opacity:.35;transform:scale(.85)} 50%{opacity:1;transform:scale(1)} }
     .qr-help{ margin-top:8px; font-size:12px; }
-    .qr-help a{ color:var(--t4); text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
-    .qr-help a:hover{ color:var(--t2); }
+    .qr-help button{ background:none; border:none; color:var(--t4); font-family:inherit; font-size:12px; text-decoration:underline; text-underline-offset:3px; cursor:pointer; padding:6px 4px; min-height:32px; }
+    .qr-help button:hover{ color:var(--t2); }
+    .qr-help button:focus-visible{ outline:2px solid var(--blue); outline-offset:2px; border-radius:4px; }
+    .pm-opt:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; }
     /* 支付成功(体验包②:即时变绿 + 积分跳动) */
     .pay-success{ background:linear-gradient(180deg, rgba(52,199,89,.12), transparent); border:1px solid rgba(52,199,89,.35); border-radius:16px; padding:40px 24px; text-align:center; }
     .pay-success .ic{ font-size:40px; }
@@ -204,19 +206,22 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       if(o.status==='cancelled'){ root.innerHTML = stateCard('🚫','订单已取消','该订单已取消,如需充值请重新下单。','recharge.html','重新充值'); return; }
       if(o.status==='refunding'){ root.innerHTML = stateCard('↩️','退款处理中','该订单退款处理中,完成后积分将扣回。','orders.html','查看订单'); return; }
       if(o.status==='refunded'){ root.innerHTML = stateCard('↩️','已退款','该订单已退款,对应积分已扣回。','orders.html','查看订单'); return; }
+      // rejected 是终态(服务端 claim-paid / startPayment 都会拒):不再渲染支付 UI,否则每个按钮都是死路。
+      if(o.status==='rejected'){
+        root.innerHTML = stateCard('🚫','打款已驳回', (o.adminNote? '原因:'+o.adminNote+'。':'') + '该订单不可继续支付,请重新下单。','recharge.html','重新充值');
+        return;
+      }
 
       const totalCredits = o.credits + o.bonusCredits;
-      const rejected = o.status==='rejected';
       root.innerHTML = `
         <div class="pay-sum">
           <div>
             <div class="pn">${esc(o.planName)}</div>
             <div class="pc">到账 <span class="cr">${fmtN(o.credits)}${o.bonusCredits>0?(' + '+fmtN(o.bonusCredits)+' 赠'):''} = ${fmtN(totalCredits)} 积分</span></div>
-            <div class="ono">订单号 ${esc(o.orderNo)} · ${rejected?'已驳回,可重新支付':'待支付'}</div>
+            <div class="ono">订单号 ${esc(o.orderNo)} · 待支付</div>
           </div>
           <div class="amt"><div class="lbl">应付金额</div><div class="big">¥${fmtN(o.priceYuan)}</div></div>
         </div>
-        ${rejected && o.adminNote ? `<div class="tip" style="background:rgba(255,107,107,.08);border-color:rgba(255,107,107,.25);color:#FF9B9B;margin-bottom:20px">驳回原因:${esc(o.adminNote)},请核对后重新提交。</div>` : ''}
 
         <div class="pay-sec">付款方式</div>
         <div class="pm" id="pmList">
@@ -226,9 +231,13 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         </div>
         <div id="payArea"></div>
       `;
+      const pick = (el)=>{ if(el.classList.contains('dis')) return; PM = el.dataset.pm; localStorage.setItem('ljPayMethod', PM); render(); };
       document.querySelectorAll('.pm-opt[data-pm]').forEach(el=>{
-        el.onclick = ()=>{ if(el.classList.contains('dis')) return; PM = el.dataset.pm; localStorage.setItem('ljPayMethod', PM); render(); };
+        el.onclick = ()=>pick(el);
+        // 键盘可达(付款方式是本页主操作,不能只给鼠标):Enter/空格选中。
+        el.onkeydown = (e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); pick(el); } };
       });
+      const pmList = document.getElementById('pmList'); if(pmList) pmList.setAttribute('role','radiogroup');
       renderPayArea();
       // 恢复在途在线支付(刷新/H5 返回):同通道直接续显码与倒计时。
       if(ATTEMPT && PM===ATTEMPT.channel) showAttempt(ATTEMPT);
@@ -238,7 +247,8 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     function pmOpt(m, icTxt, icBg, icColor, name, sub){
       const avail = isAvailable(m);
       const on = avail && PM===m;
-      return `<div class="pm-opt ${on?'on':''} ${avail?'':'dis'}" data-pm="${m}">
+      return `<div class="pm-opt ${on?'on':''} ${avail?'':'dis'}" data-pm="${m}"
+        role="radio" aria-checked="${on?'true':'false'}" aria-disabled="${avail?'false':'true'}" tabindex="${avail?'0':'-1'}">
         <div class="pm-radio"></div>
         <div class="pm-ic" style="background:${icBg};color:${icColor}">${icTxt}</div>
         <div><div class="pm-name">${name}</div><div class="pm-sub">${sub}</div></div>
@@ -286,7 +296,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     // 绝不显示对公流程那种「我已支付」主按钮(会误导用户以为必须点击)。
     function waitingHtml(){
       return `<div class="qr-status"><span class="dot"></span>等待支付中 · 支付成功后积分自动到账,无需操作</div>
-        <div class="qr-help">已支付但页面未更新?<a id="qrCheckLink">点此查询</a></div>`;
+        <div class="qr-help">已支付但页面未更新?<button type="button" id="qrCheckLink">点此查询</button></div>`;
     }
     function bindCheckLink(){
       const link = document.getElementById('qrCheckLink');
@@ -305,13 +315,16 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         startCountdown(a);
       }else{
         // redirect(微信 H5 / 支付宝 page|wap):移动端直接跳转;PC 新窗口打开保留收银台轮询。
-        document.getElementById('qrTip').textContent = '已打开支付页面,完成支付后本页自动更新。';
+        document.getElementById('qrTip').textContent = IS_MOBILE
+          ? '正在跳转支付页面,完成支付后返回本页自动更新。'
+          : '点击按钮打开支付页面,完成支付后本页自动更新。';
         if(IS_MOBILE){ location.href = a.payload; }
         else{
-          slot.innerHTML = `<button class="act primary" id="reopenPay" style="background:var(--blue);border:none;color:#fff;border-radius:999px;padding:12px 30px;font-size:14px;font-weight:700;cursor:pointer;min-height:44px;font-family:inherit">重新打开支付页</button>${waitingHtml()}`;
+          // 不自动 window.open:异步回调外的 open 会被弹窗拦截器挡掉,用户只看到「已打开支付页」却什么都没发生。
+          // 用显式按钮(用户手势内 open,必定成功)。
+          slot.innerHTML = `<button class="act primary" id="reopenPay" style="background:var(--blue);border:none;color:#fff;border-radius:999px;padding:12px 30px;font-size:14px;font-weight:700;cursor:pointer;min-height:44px;font-family:inherit">打开支付页面</button>${waitingHtml()}`;
           bindCheckLink();
           document.getElementById('reopenPay').onclick=()=>window.open(a.payload,'_blank');
-          window.open(a.payload,'_blank');
         }
       }
     }

@@ -80,11 +80,15 @@ export async function reconcileChannel(billDate: string, channel: PaymentChannel
 
   let diffs = 0;
   const seenInBill = new Set<string>();
+  // 跨日创建单的补查语句:循环外 prepare 一次(账单可能上万行,循环内 prepare 是纯浪费)。
+  const lookupStmt = db.prepare(
+    `SELECT id, txn_id, amount_fen, status, paid_at FROM payment_attempt WHERE id=? AND channel=?`,
+  );
   for (const row of bill) {
     seenInBill.add(row.outTradeNo);
-    const local = localById.get(row.outTradeNo) ?? (db
-      .prepare(`SELECT id, txn_id, amount_fen, status, paid_at FROM payment_attempt WHERE id=? AND channel=?`)
-      .get(row.outTradeNo, channel) as LocalAttempt | undefined); // 跨日创建的单补查
+    const local =
+      localById.get(row.outTradeNo) ??
+      (lookupStmt.get(row.outTradeNo, channel) as LocalAttempt | undefined);
     if (!local) {
       recordReconDiff({
         channel, kind: 'missing_local', outTradeNo: row.outTradeNo, txnId: row.txnId, billDate,
