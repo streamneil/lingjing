@@ -12,13 +12,18 @@ import { db } from '../src/db/index.js';
 import { config } from '../src/config.js';
 import { resolveImageToAsset } from '../src/gateway/ark-assets.js';
 
+// config 是 `as const`(类型只读),运行时仍是普通可变对象 → 测试经可变视图改配置。
+const ark = config.arkAssets as unknown as {
+  enabled: boolean; projectName: string; registerTimeoutMs: number; pollIntervalMs: number; retryOnCodes: string[];
+};
+
 beforeEach(() => {
   db.prepare('DELETE FROM ark_asset').run();
   db.prepare('DELETE FROM ark_asset_group').run();
   vi.clearAllMocks();
-  config.arkAssets.projectName = '';
-  config.arkAssets.registerTimeoutMs = 5000;
-  config.arkAssets.pollIntervalMs = 1;
+  ark.projectName = '';
+  ark.registerTimeoutMs = 5000;
+  ark.pollIntervalMs = 1;
 });
 
 describe('resolveImageToAsset', () => {
@@ -54,7 +59,7 @@ describe('resolveImageToAsset', () => {
 
   it('超时(一直 Processing):返回 null', async () => {
     (client.getAsset as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'asset-1', status: 'Processing' });
-    config.arkAssets.registerTimeoutMs = 5; // 立即超时
+    ark.registerTimeoutMs = 5; // 立即超时
     const uri = await resolveImageToAsset('t1', 'key-4', 'https://oss/w.jpg');
     expect(uri).toBeNull();
   });

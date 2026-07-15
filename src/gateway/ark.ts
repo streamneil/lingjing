@@ -153,7 +153,12 @@ export class ArkGateway implements CapabilityGateway, SyncImageGateway {
     if (input.ratio && def.ratios.includes(input.ratio)) body.ratio = input.ratio;
     if (def.supportsAudio) body.generate_audio = input.audio ?? false;
     const { status, json } = await arkHttp('POST', '/contents/generations/tasks', body);
-    if (status !== 200) throw new Error(`火山视频提交失败 HTTP ${status}: ${JSON.stringify(json?.error ?? json)}`);
+    if (status !== 200) {
+      const err = new Error(`火山视频提交失败 HTTP ${status}: ${JSON.stringify(json?.error ?? json)}`);
+      // 附拦截码供 worker 精确识别隐私拦截(InputImageSensitiveContentDetected.PrivacyInformation)。
+      (err as Error & { arkCode?: string }).arkCode = json?.error?.code ?? json?.code;
+      throw err;
+    }
     const taskId: string | undefined = json?.id;
     if (!taskId) throw new Error(`火山视频未返回任务 id: ${JSON.stringify(json)}`);
     return taskId;
