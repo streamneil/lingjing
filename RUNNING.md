@@ -64,3 +64,16 @@ npx tsc --noEmit  # 类型检查
 npm run probe:connect    # 验证 key 有效 + 百炼可达
 npm run probe:baichuan   # 打穿数字人链路出第一条视频
 ```
+
+## Seedance 私域素材库(人脸拦截解法,默认关)
+
+开关 `ARK_ASSET_LIBRARY_ENABLED=true` + 填 `.env` 的 `ARK_ASSET_AK`/`ARK_ASSET_SK` 后生效。
+先真机验证签名与权益包:`npx tsx scripts/ark-asset-spike.ts`(打印 group id 即通)。
+
+| 症状 | 原因 | 处置 |
+|---|---|---|
+| spike 报签名 / HTTP 403 | Signer 实参形状或服务器时钟偏差 | 对 @volcengine/openapi README 校 `signedArkCall` 的 requestData;校时间 |
+| CreateAsset 报无权限 | 未开通高级创作权益包 / 缺 IAM `ark:*Asset*` | 业务侧开权益包;IAM 加 `ark:*Asset*` 策略 |
+| 素材 Active 但生成仍失败 | project 不一致 | `ARK_ASSET_PROJECT` 填模型 key 所属 project |
+| 带脸图一直 Failed | 审核不过(疑真人脸) | 确认为虚拟/自有形象;真人脸需活体认证,非本通道 |
+| 拦截码不是 InputImageSensitiveContentDetected | 火山改码 | 日志看真实 code,填 `ARK_ASSET_RETRY_ON_CODES` |
