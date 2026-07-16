@@ -141,4 +141,13 @@ describe('POST /api/jobs (video_i2v) Seedance 有声(generate_audio)', () => {
     expect(r.status).toBe(400);
     expect(r.body.error).toContain('有声');
   });
+
+  it('/i2v-models 吐 supportsAudio(前端据此才显有声开关)', async () => {
+    const r = await client.get('/api/i2v-models');
+    expect(r.status).toBe(200);
+    const seedance = r.body.models.find((m: { key: string }) => m.key === 'doubao-seedance-2.0');
+    expect(seedance.supportsAudio).toBe(true); // Seedance → 显开关
+    const hh = r.body.models.find((m: { key: string }) => m.key === 'happyhorse-1.0-i2v');
+    expect(hh.supportsAudio).toBe(false); // 百炼 i2v → 不显
+  });
 });

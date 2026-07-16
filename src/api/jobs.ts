@@ -1192,6 +1192,7 @@ jobsRouter.get('/i2v-models', requireAuth, (_req: Request, res: Response) => {
     maxPromptChars: d.maxPromptChars,
     supportsNegative: d.supportsNegative,
     supportsPromptExtend: d.supportsPromptExtend,
+    supportsAudio: d.supportsAudio, // generate_audio 开关(Seedance i2v 有声)
     tasks: d.tasks, // 前端据此显隐 tab(first_frame/first_last/reference)
     maxRefImages: d.maxRefImages, // 参考生上限
     promptRequired: d.promptRequired, // 参考生 prompt 必填
