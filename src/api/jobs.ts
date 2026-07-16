@@ -577,9 +577,13 @@ function buildVideoI2VJob(body: Record<string, unknown>): JobBuildResult {
   }
   if (body.seed !== undefined && (typeof body.seed !== 'number' || body.seed < 0 || body.seed > 2147483647))
     return { ok: false, status: 400, error: 'seed 需在 0–2147483647 之间' };
+  // 有声仅 supportsAudio 模型(Seedance)可开;非该类模型传 audio=true 直接 400(不静默吞,同 t2v R5)。
+  if (body.audio === true && !def.supportsAudio)
+    return { ok: false, status: 400, error: '该模型不支持有声视频' };
 
-  // 派生(复用 deriveVideoT2VParams:duration clamp + res 档 + audio;i2v 全 V_DASH 故 audio false)
-  const { duration, priceTier } = deriveVideoT2VParams(def, body);
+  // 派生(复用 deriveVideoT2VParams:duration clamp + res 档 + audio)。
+  // Seedance i2v 支持 generate_audio(前端默认开);百炼 happyhorse/wan i2v supportsAudio=false → audio 恒 false。
+  const { duration, audio, priceTier } = deriveVideoT2VParams(def, body);
 
   const input: VideoGenT2VInput = { model: def.key, task, imageRefs: refs, resolution };
   if (prompt.trim()) input.prompt = prompt;
@@ -588,19 +592,20 @@ function buildVideoI2VJob(body: Record<string, unknown>): JobBuildResult {
     input.negativePrompt = body.negativePrompt;
   if (def.supportsPromptExtend && typeof body.promptExtend === 'boolean')
     input.promptExtend = body.promptExtend;
+  if (audio) input.audio = true; // Seedance i2v 有声(ark.ts 据此发 generate_audio)
   input.duration = duration;
   if (typeof body.seed === 'number') input.seed = body.seed;
-  // 快照(reserve==settle):duration/res/priceTier(R5.2:首帧跳 ratio 但仍快照 res);audio 恒 false。
+  // 快照(reserve==settle):duration/res/audio/priceTier(R5.2:首帧跳 ratio 但仍快照 res)。
   input.durationSnapshot = duration;
   input.resSnapshot = resolution;
-  input.audioSnapshot = false;
+  input.audioSnapshot = audio;
   input.priceTierSnapshot = priceTier;
 
   return {
     ok: true,
     type: 'video_i2v',
     input: input as unknown as Record<string, unknown>,
-    cost: estimateVideoCost(duration, priceTier, resolution, false),
+    cost: estimateVideoCost(duration, priceTier, resolution, audio),
   };
 }
 
@@ -1062,10 +1067,12 @@ jobsRouter.post('/jobs/estimate', requireAuth, async (req: Request, res: Respons
     return res.json({ cost: estimateVideoCost(duration, priceTier, resolution, audio) });
   }
   if (type === 'video_i2v') {
-    // 与 buildVideoI2VJob 同派生(audio 恒 false;i2v 全 V_DASH)。res 用 body.resolution。
+    // 与 buildVideoI2VJob 逐字节一致:Seedance i2v 有声入计价(priceTierAudio),estimate≡build。
     const def = getI2VModel(typeof body.model === 'string' ? body.model : undefined);
-    const { duration, resolution, priceTier } = deriveVideoT2VParams(def, body);
-    return res.json({ cost: estimateVideoCost(duration, priceTier, resolution, false) });
+    if (body.audio === true && !def.supportsAudio)
+      return res.status(400).json({ error: '该模型不支持有声视频' });
+    const { duration, resolution, audio, priceTier } = deriveVideoT2VParams(def, body);
+    return res.json({ cost: estimateVideoCost(duration, priceTier, resolution, audio) });
   }
   if (type === 'video_r2v') {
     // 与 buildVideoR2VJob 逐字节一致:audio 入计价(Seedance priceTierAudio,P1#1),estimate≡build。
@@ -1185,6 +1192,7 @@ jobsRouter.get('/i2v-models', requireAuth, (_req: Request, res: Response) => {
     maxPromptChars: d.maxPromptChars,
     supportsNegative: d.supportsNegative,
     supportsPromptExtend: d.supportsPromptExtend,
+    supportsAudio: d.supportsAudio, // generate_audio 开关(Seedance i2v 有声)
     tasks: d.tasks, // 前端据此显隐 tab(first_frame/first_last/reference)
     maxRefImages: d.maxRefImages, // 参考生上限
     promptRequired: d.promptRequired, // 参考生 prompt 必填
@@ -1302,7 +1310,7 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
           meta = {
             model: inp.model, modelLabel: idef.label, task: inp.task,
             ratio: inp.ratio, resolution: inp.resolution, sizeLabel: inp.resolution || '720P', duration: inp.duration,
-            negativePrompt: inp.negativePrompt, promptExtend: inp.promptExtend, seed: inp.seed,
+            audio: inp.audio, negativePrompt: inp.negativePrompt, promptExtend: inp.promptExtend, seed: inp.seed,
             imageRefs: inp.imageRefs, inputUrls, // 输入图缩略 + 重新生成回放
           };
         } else if (j.type === 'video_r2v') {

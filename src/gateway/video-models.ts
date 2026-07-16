@@ -245,6 +245,12 @@ export function isKnownVideoModel(key: string): boolean {
   return Object.prototype.hasOwnProperty.call(VIDEO_MODELS, key);
 }
 
+/** 是否 Seedance(火山 volc-ark)视频模型 —— 素材库资产化仅对它生效。
+ *  用精确 key 查表(不经 getVideoModel 的默认回落,避免未知 key 被误判成默认 wan)。 */
+export function isSeedanceVideoModel(key?: string): boolean {
+  return !!key && isKnownVideoModel(key) && VIDEO_MODELS[key]!.provider === 'volc-ark';
+}
+
 /** 用户端可选模型清单(前端下拉单一真相源)。 */
 export function listVideoModels(): VideoModelDef[] {
   return Object.values(VIDEO_MODELS);

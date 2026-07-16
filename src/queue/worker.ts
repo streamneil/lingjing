@@ -21,6 +21,8 @@ import { applyAiLabel, probeAudioDuration, concatVideos } from '../pipeline/ai-l
 import { segmentScript } from '../pipeline/segment.js';
 import { concatAudio } from '../pipeline/concat-audio.js';
 import { getImageModel } from '../gateway/image-models.js';
+import { isSeedanceVideoModel } from '../gateway/video-models.js';
+import { resolveImageToAsset } from '../gateway/ark-assets.js';
 import { settle, release, estimateCost, costFor, reservedFor } from '../credits/index.js';
 import { db } from '../db/index.js';
 
@@ -357,6 +359,25 @@ export async function finalizeVideoJob(
   settle(job.tenant_id, job.id, costFor(costType, costInput));
 }
 
+// ── 火山素材库:先试原图、被拦才入库(2026-07,默认关)────────────────────
+/** 火山提交错误是否隐私/真人拦截(InputImageSensitiveContentDetected 族)。
+ *  优先读 ark.ts 挂的 arkCode,回退 message 子串;匹配码由 config.arkAssets.retryOnCodes 配。 */
+export function isPrivacyBlockError(e: unknown): boolean {
+  const err = e as { arkCode?: string; message?: string };
+  const hay = `${err?.arkCode ?? ''} ${err?.message ?? ''}`;
+  return config.arkAssets.retryOnCodes.some((c) => hay.includes(c));
+}
+
+/** 是否该走"资产化重试":开关开 + Seedance 视频 + 有参考图 + 命中拦截码。 */
+export function shouldAssetRetry(e: unknown, modelKey: string | undefined, refCount: number): boolean {
+  return config.arkAssets.enabled && isSeedanceVideoModel(modelKey) && refCount > 0 && isPrivacyBlockError(e);
+}
+
+/** 把参考图(稳定 key + 当前公网 URL)逐张换成 asset://<id>;单图失败回退原 URL。 */
+export async function assetifyImageRefs(tenantId: string, keys: string[], urls: string[]): Promise<string[]> {
+  return Promise.all(keys.map(async (k, i) => (await resolveImageToAsset(tenantId, k, urls[i]!)) ?? urls[i]!));
+}
+
 /** 媒体类视频任务共享 runner(eng-review 2A:i2v 与视频编辑只差「是否先发布输入视频」一步,
  *  抽共享消第三份近似 worker)。镜像 runImageEditAsyncJob(送审 + publish)+ 视频尾段。
  *
@@ -417,7 +438,20 @@ async function runMediaVideoJob(
 
   // 3. 网关提交(按 task 组 media)+ 轮询;resume 守卫:已有 task_id 续跑不重提交。
   const gateway = getGateway(input.model);
-  const providerTaskId = await submitOrResume(job, () => gateway.submitVideoT2V(input));
+  // 素材库(默认关):先用原图提交;若被 Seedance 隐私拦截,把参考图 asset:// 化后重试一次。
+  //   无脸视频首次即成功,不进 catch —— 零延迟零入库。refs=publish 前稳定 key,refs2=publish 后公网 URL,下标对齐。
+  const refs2 = input.imageRefs ?? [];
+  let providerTaskId: string;
+  try {
+    providerTaskId = await submitOrResume(job, () => gateway.submitVideoT2V(input));
+  } catch (e) {
+    if (!shouldAssetRetry(e, input.model, refs.length) || refs.length !== refs2.length) throw e;
+    const assetified = await assetifyImageRefs(job.tenant_id, refs, refs2);
+    if (!assetified.some((u) => u.startsWith('asset://'))) throw e; // 全回退,重试白搭 → 保持原失败
+    input.imageRefs = assetified;
+    console.log(`[ark-asset] 命中隐私拦截,asset:// 化 ${assetified.filter((u) => u.startsWith('asset://')).length}/${refs.length} 张后重试提交`);
+    providerTaskId = await submitOrResume(job, () => gateway.submitVideoT2V(input));
+  }
 
   const deadline = Date.now() + config.baichuan.videoT2vTimeoutMs;
   const done = await pollUntilDone(

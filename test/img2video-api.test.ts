@@ -107,3 +107,47 @@ describe('POST /api/jobs/estimate (video_i2v) ≡ build', () => {
     expect(r1080.body.cost).toBe(5 * 56); // 280(真实比值 1.78,非 ×2)
   });
 });
+
+describe('POST /api/jobs (video_i2v) Seedance 有声(generate_audio)', () => {
+  it('Seedance i2v + audio=true → 202,快照 audio=true,reserve==settle', async () => {
+    const { costFor } = await import('../src/credits/index.js');
+    const body = { type: 'video_i2v', model: 'doubao-seedance-2.0', task: 'first_frame', imageRefs: ['k1'], resolution: '720P', duration: 5, audio: true };
+    const est = await client.post('/api/jobs/estimate', body);
+    const sub = await client.post('/api/jobs', { ...body });
+    expect(sub.status).toBe(202);
+    const inp = JSON.parse(getJob(sub.body.id)!.input_json);
+    expect(inp.audio).toBe(true);        // ark.ts 据此发 generate_audio=true
+    expect(inp.audioSnapshot).toBe(true);
+    expect(costFor('video_i2v', inp)).toBe(est.body.cost); // 有声计价 reserve==settle
+  });
+
+  it('Seedance i2v 有声比无声贵(priceTierAudio)', async () => {
+    const base = { type: 'video_i2v', model: 'doubao-seedance-2.0', task: 'first_frame', imageRefs: ['k1'], resolution: '720P', duration: 5 };
+    const silent = await client.post('/api/jobs/estimate', { ...base, audio: false });
+    const voiced = await client.post('/api/jobs/estimate', { ...base, audio: true });
+    expect(voiced.body.cost).toBeGreaterThan(silent.body.cost);
+  });
+
+  it('Seedance i2v 不传 audio → 后端默认无声(默认开在前端;后端契约同 r2v)', async () => {
+    const r = await client.post('/api/jobs', { type: 'video_i2v', model: 'doubao-seedance-2.0', task: 'first_frame', imageRefs: ['k1'], resolution: '720P', duration: 5 });
+    expect(r.status).toBe(202);
+    const inp = JSON.parse(getJob(r.body.id)!.input_json);
+    expect(inp.audioSnapshot).toBe(false);
+    expect(inp.audio).toBeUndefined();
+  });
+
+  it('非 supportsAudio 模型(happyhorse i2v)传 audio=true → 400,不静默吞', async () => {
+    const r = await client.post('/api/jobs', { type: 'video_i2v', model: 'happyhorse-1.0-i2v', task: 'first_frame', imageRefs: ['k1'], resolution: '720P', duration: 5, audio: true });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toContain('有声');
+  });
+
+  it('/i2v-models 吐 supportsAudio(前端据此才显有声开关)', async () => {
+    const r = await client.get('/api/i2v-models');
+    expect(r.status).toBe(200);
+    const seedance = r.body.models.find((m: { key: string }) => m.key === 'doubao-seedance-2.0');
+    expect(seedance.supportsAudio).toBe(true); // Seedance → 显开关
+    const hh = r.body.models.find((m: { key: string }) => m.key === 'happyhorse-1.0-i2v');
+    expect(hh.supportsAudio).toBe(false); // 百炼 i2v → 不显
+  });
+});

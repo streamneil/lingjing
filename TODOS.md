@@ -264,3 +264,13 @@ docs/superpowers/specs/2026-06-18-nano-banana-resolutions-design.md 的 Flash 14
 - **Cons:** 碰活着的 Gemini provider(有回归面),故本轮特意后置,不阻 gpt-image-2 上线。
 - **Context:** 来自 2026-07-07 /plan-eng-review + 外部声音 #8。外部声音提醒「别为 DRY 拿活 provider 降险」→ 决定:本轮只建 helper + OpenAI 用,Gemini 改调作独立后续 commit。注意:只搬「已提取的 buffer → url 尾」+ 代理;Gemini 的响应解析(inline_data snake/camel、thinking-part 跳过、safety-block)是 Gemini 专属,不进共享 helper。
 - **Depends on / blocked by:** 本轮 gpt-image-2 的 sync-image-common.ts 先落地。**Priority:** P3(清理,不阻功能)。
+
+### T-SEEDANCE-ASSET:火山私域素材库解 Seedance 人脸拦截(2026-07 上线,默认关)
+- **What:** 开关 `ARK_ASSET_LIBRARY_ENABLED`(默认 false)。开=Seedance 视频"先用原图提交,若被隐私拦截(HTTP 400 `InputImageSensitiveContentDetected`)才把参考图报备入库换 `asset://` 重试一次";无脸视频首次即成功,不入库。
+- **Why:** Seedance 2.0 反 Deepfake 会拦带脸参考图 → 图生视频/首帧/首尾帧/参考生全挂。素材库是火山给的官方白名单通道。
+- **范围:** 仅 Seedance 视频(volc-ark);Seedream 图片不适用(火山未提供 asset:// 图片输入)。拦截码可配 `ARK_ASSET_RETRY_ON_CODES`。被拦 job 多一次厂商提交往返,无脸 job 无额外开销。
+- **真人脸约束:** 素材库虚拟人像通道自动审核;真实真人脸需"被拍摄者本人活体认证",后端传照片≠授权。本方案面向虚拟/自有形象。
+- **实现:** `src/gateway/ark-assets-client.ts`(AK/SK 签名)+ `ark-assets.ts`(入库轮询缓存)+ `worker.ts` runMediaVideoJob 提交处 try/catch。表 `ark_asset` / `ark_asset_group`。计划:`docs/superpowers/plans/2026-07-16-seedance-asset-library.md`。
+- **待真机验证:** AK/SK 是脱敏的,真机 spike(`npx tsx scripts/ark-asset-spike.ts`)+ 端到端需真实 key。ProjectName 先按 default,不通再问对接方。**Priority:** 待验证后启用。
+- **【二期 P2】** AK/SK 从 .env 迁到加密入库(provider-keys,同其它厂商 key);素材入库轮询在 worker 线内阻塞该 job,并发大时可抽独立预注册队列。
+

@@ -84,6 +84,25 @@ export const config = {
     videoT2vTimeoutMs: Number(optional('VIDEO_T2V_TIMEOUT_MS', '900000')),
   },
 
+  // ── 火山方舟 私域素材库(Seedance 人脸拦截解法,2026-07)──
+  // 默认关:enabled=false 时视频路径行为与今天逐字节一致(无任何素材库调用)。
+  // 机制(先试原图、被拦才入库):Seedance 提交若被隐私拦截(HTTP 400
+  //   InputImageSensitiveContentDetected),把参考图报备入库换 asset:// 后重试一次;无脸首次即成功不入库。
+  // AK/SK 是素材库签名凭证(≠ volc-ark 的模型调用 Bearer key),走顶层 OpenAPI 签名(open.volcengineapi.com)。
+  // projectName 空 = 不传 ProjectName = 落 default 项目(须与 ark- 模型 key 的 project 一致)。
+  arkAssets: {
+    enabled: optional('ARK_ASSET_LIBRARY_ENABLED', 'false') === 'true',
+    accessKeyId: optional('ARK_ASSET_AK', ''),
+    secretAccessKey: optional('ARK_ASSET_SK', ''),
+    projectName: optional('ARK_ASSET_PROJECT', ''), // 空 = default 项目
+    groupName: optional('ARK_ASSET_GROUP', 'lingjing-portraits'),
+    registerTimeoutMs: Number(optional('ARK_ASSET_REGISTER_TIMEOUT_MS', '90000')),
+    pollIntervalMs: Number(optional('ARK_ASSET_POLL_INTERVAL_MS', '3000')),
+    // 触发资产化重试的火山拦截码(逗号分隔);默认匹配隐私/真人拦截族。
+    retryOnCodes: optional('ARK_ASSET_RETRY_ON_CODES', 'InputImageSensitiveContentDetected')
+      .split(',').map((s) => s.trim()).filter(Boolean),
+  },
+
   // ── MinIO（S3 兼容，托管/私有化同构）──
   minio: {
     endPoint: optional('MINIO_ENDPOINT', '127.0.0.1'),

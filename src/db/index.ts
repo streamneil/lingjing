@@ -608,6 +608,30 @@ db.exec(`
 `);
 // schema_meta:迁移版本标记(eng 外部声音 P3)。让迁移可识别「已跑/未跑」,避免重复/半态。
 db.exec(`CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
+
+// ── 火山素材库资产缓存(2026-07,Seedance 人脸拦截解法)──
+// ark_asset_group:每 project 一个素材组(get-or-create 缓存)。
+// ark_asset:storage_key(稳定去重键)→ asset_id + 状态;同一张脸只入库一次复用。
+// 注意:避让已有 asset 表(形象/音色素材),故用 ark_ 前缀。
+db.exec(`
+  CREATE TABLE IF NOT EXISTS ark_asset_group (
+    project_name  TEXT PRIMARY KEY,     -- '' = default 项目
+    group_id      TEXT NOT NULL,
+    created_at    INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS ark_asset (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id     TEXT NOT NULL,
+    storage_key   TEXT NOT NULL,        -- publish 前的稳定存储 key(去重键)
+    project_name  TEXT NOT NULL,        -- '' = default
+    asset_id      TEXT NOT NULL,        -- 火山 asset-xxx
+    status        TEXT NOT NULL,        -- 'Processing' | 'Active' | 'Failed'
+    created_at    INTEGER NOT NULL,
+    updated_at    INTEGER NOT NULL,
+    UNIQUE (tenant_id, storage_key, project_name)
+  );
+  CREATE INDEX IF NOT EXISTS idx_ark_asset_tenant ON ark_asset(tenant_id);
+`);
 // 启动幂等迁移:provider 表空时种子 bailian。base_url 取现 config 默认;
 //   key 从 .env 的 DASHSCOPE_API_KEY 加密搬入(仅当 MASTER_KEY 配置;否则 cipher 留空、运行时回落 .env)。
 {

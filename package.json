@@ -18,6 +18,7 @@
     "seed:voices": "tsx scripts/seed-preset-samples.mjs"
   },
   "dependencies": {
+    "@volcengine/openapi": "^1.36.2",
     "ali-oss": "^6.23.0",
     "bcrypt": "^5.1.1",
     "better-sqlite3": "^11.8.1",
