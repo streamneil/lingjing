@@ -52,12 +52,29 @@ export async function signedArkCall<T = unknown>(action: string, version: string
     .sort()
     .map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(requestData.params[k]!)}`)
     .join('&');
-  const res = await fetch(`https://${HOST}${requestData.pathname}?${qs}`, {
+  const fullUrl = `https://${HOST}${requestData.pathname}?${qs}`;
+  // 调试 dump(ARK_ASSET_DEBUG=1):打印实际发出的完整请求(供对接方/字节排查 403)。
+  //   Authorization 是 HMAC 单向签名,不含也推不出 SK,可安全外发;SK 永不出现在任何头/体里。
+  const DEBUG = process.env.ARK_ASSET_DEBUG === '1';
+  if (DEBUG) {
+    console.error('===== ARK ASSET 请求 =====');
+    console.error(`POST ${fullUrl}`);
+    for (const [k, v] of Object.entries(requestData.headers)) console.error(`${k}: ${v}`);
+    console.error(`BODY: ${bodyStr}`);
+  }
+  const res = await fetch(fullUrl, {
     method: 'POST',
     headers: requestData.headers,
     body: bodyStr,
   });
   const text = await res.text();
+  if (DEBUG) {
+    console.error('===== ARK ASSET 响应 =====');
+    console.error(`HTTP ${res.status}`);
+    res.headers.forEach((v, k) => console.error(`${k}: ${v}`));
+    console.error(`BODY: ${text}`);
+    console.error('==========================');
+  }
   let json: { ResponseMetadata?: { Error?: { Code?: string; Message?: string } }; Result?: T };
   try {
     json = JSON.parse(text);
