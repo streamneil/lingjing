@@ -730,7 +730,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     <script>
       const ta = document.getElementById('prompt'), cnt = document.getElementById('cnt'), btn = document.getElementById('createBtn');
       const feedList = document.querySelector('.feed-list');
-      let model = '', allModels = [], task = 'first_frame', ratio = '16:9', resolution = '720P', duration = 5, negativePrompt = '', promptExtend = false, seed = '';
+      let model = '', allModels = [], task = 'first_frame', ratio = '16:9', resolution = '720P', duration = 5, negativePrompt = '', promptExtend = false, audio = true, seed = '';
       // 输入图状态:单/双槽 slots(固定位:开始图/结束图),参考多图 refs
       let firstFrame = null, lastFrame = null, refFiles = []; // {file,url}
       // 重新提示复用原 job 输入图(免重传;贴 ai-image-edit 的 reuseRefs 模式)
@@ -943,15 +943,19 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         const m = curModel(); const box = document.getElementById('modelOpts2'); let h = '';
         if (m.supportsPromptExtend) h += `<div class="opt-toggle"><span class="ol">智能改写提示词</span><input type="checkbox" id="extendChk"${promptExtend ? ' checked' : ''}></div>`;
         if (m.supportsNegative) h += `<input class="neg-input" id="negInput" placeholder="反向提示词(不希望出现的元素,可选)" value="${esc(negativePrompt)}">`;
+        // 有声视频(仅 Seedance supportsAudio;默认开)。非 supportsAudio 模型强制无声。
+        if (m.supportsAudio) h += `<div class="opt-toggle"><span class="ol">生成有声视频</span><input type="checkbox" id="audioChk"${audio ? ' checked' : ''}></div>`;
+        else audio = false;
         box.innerHTML = h;
         const e = document.getElementById('extendChk'); if (e) e.onchange = () => { promptExtend = e.checked; };
         const n = document.getElementById('negInput'); if (n) n.oninput = () => { negativePrompt = n.value; };
+        const a = document.getElementById('audioChk'); if (a) a.onchange = () => { audio = a.checked; syncPills(); scheduleEstimate(); };
       }
       function syncPills() {
         const m = curModel();
         document.getElementById('modelPillV').textContent = m ? m.label : '模型';
         const ratioPart = (task === 'reference' && m && m.ratios.length) ? ' · ' + ratio : '';
-        document.getElementById('setPillV').textContent = `${resolution} · ${duration}秒${ratioPart}`;
+        document.getElementById('setPillV').textContent = `${resolution} · ${duration}秒${ratioPart}${audio ? ' · 有声' : ''}`;
       }
 
       // ── popover 开关 ──
@@ -1015,6 +1019,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         if (seed) b.seed = parseInt(seed, 10);
         if (m.supportsNegative && negativePrompt.trim()) b.negativePrompt = negativePrompt;
         if (m.supportsPromptExtend) b.promptExtend = promptExtend;
+        b.audio = (m && m.supportsAudio) ? audio : false; // 有声(仅 Seedance;非该类恒 false,防后端 400)
         return b;
       }
 
@@ -1066,6 +1071,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         const c = []; if (job.modelLabel) c.push(job.modelLabel);
         if (job.task) c.push(TASK_LABEL[job.task] || job.task);
         if (job.sizeLabel) c.push(job.sizeLabel); if (job.duration) c.push(job.duration + '秒'); if (job.ratio) c.push(job.ratio);
+        if (job.audio) c.push('有声');
         return c.length ? `<div class="card-meta">${c.map(x => `<span class="chip">${esc(x)}</span>`).join('')}</div>` : '';
       }
       function cardActs(job, ok) {
@@ -1118,9 +1124,10 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
           if (inp.ratio) body.ratio = inp.ratio;
           if (inp.negativePrompt) body.negativePrompt = inp.negativePrompt;
           if (typeof inp.promptExtend === 'boolean') body.promptExtend = inp.promptExtend;
+          if (inp.audio) body.audio = true;
           if (typeof inp.seed === 'number') body.seed = inp.seed;
           const r = await LJ.createJob(body);
-          renderCard({ id: r.id, status: 'queued', progress: 0, prompt: inp.prompt, modelLabel: findLabel(inp.model), task: inp.task, ratio: inp.ratio, duration: inp.duration, sizeLabel: inp.resolution, inputUrls: inp.inputUrls });
+          renderCard({ id: r.id, status: 'queued', progress: 0, prompt: inp.prompt, modelLabel: findLabel(inp.model), task: inp.task, ratio: inp.ratio, duration: inp.duration, audio: inp.audio, sizeLabel: inp.resolution, inputUrls: inp.inputUrls });
           jobInputs[r.id] = inp;
           track(r.id, inp.prompt, inp.inputUrls);
           window.LJToast && window.LJToast('✓ 已重新提交生成');
@@ -1157,7 +1164,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         window.LJToast && window.LJToast('✓ 已开始下载');
       };
 
-      async function track(id, prompt, inputUrls) { try { await LJ.pollJob(id, (job) => renderCard({ ...job, prompt, inputUrls, ...(jobInputs[id] ? { modelLabel: findLabel(jobInputs[id].model), task: jobInputs[id].task, ratio: jobInputs[id].ratio, duration: jobInputs[id].duration } : {}) })); } catch (e) { } }
+      async function track(id, prompt, inputUrls) { try { await LJ.pollJob(id, (job) => renderCard({ ...job, prompt, inputUrls, ...(jobInputs[id] ? { modelLabel: findLabel(jobInputs[id].model), task: jobInputs[id].task, ratio: jobInputs[id].ratio, duration: jobInputs[id].duration, audio: jobInputs[id].audio } : {}) })); } catch (e) { } }
 
       let _histPage = 0, _histTotal = 0, _histLoaded = 0; // 服务端分页游标(本模块 = video_i2v)
       async function loadHistory(more) {
@@ -1171,7 +1178,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         _histLoaded += mine.length;
         // DESC 追加:page1 新→旧在顶,「加载更多」续更旧于底。
         for (const j of mine) {
-          jobInputs[j.id] = { model: j.model, task: j.task, prompt: j.script, imageRefs: j.imageRefs, inputUrls: j.inputUrls, resolution: j.resolution, ratio: j.ratio, duration: j.duration, negativePrompt: j.negativePrompt, promptExtend: j.promptExtend, seed: j.seed };
+          jobInputs[j.id] = { model: j.model, task: j.task, prompt: j.script, imageRefs: j.imageRefs, inputUrls: j.inputUrls, resolution: j.resolution, ratio: j.ratio, duration: j.duration, audio: j.audio, negativePrompt: j.negativePrompt, promptExtend: j.promptExtend, seed: j.seed };
           renderCard({ ...j, prompt: j.script }, true);
           if (j.status === 'queued' || j.status === 'running') track(j.id, j.script, j.inputUrls);
         }
@@ -1191,11 +1198,11 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
           const r = await LJ.createJob(body);
           const thumbs = reuseActive() ? (reuseUrls || []).slice()
             : (task === 'reference' ? refFiles.map(x => x.url) : [firstFrame, lastFrame].filter(Boolean).map(x => x.url));
-          jobInputs[r.id] = { model: body.model, task: body.task, prompt: body.prompt, imageRefs, inputUrls: thumbs, resolution: body.resolution, ratio: body.ratio, duration: body.duration, negativePrompt: body.negativePrompt, promptExtend: body.promptExtend, seed: body.seed };
+          jobInputs[r.id] = { model: body.model, task: body.task, prompt: body.prompt, imageRefs, inputUrls: thumbs, resolution: body.resolution, ratio: body.ratio, duration: body.duration, audio: body.audio, negativePrompt: body.negativePrompt, promptExtend: body.promptExtend, seed: body.seed };
           const sizeLabel = resolution;
           // 提交成功即清左侧回空态(防误点重复扣费);先于 renderCard/track,避免下游异常打断清理。
           resetAfterSubmit();
-          renderCard({ id: r.id, status: 'queued', progress: 0, prompt: body.prompt, modelLabel: findLabel(body.model), task: body.task, ratio: body.ratio, duration: body.duration, sizeLabel, inputUrls: thumbs });
+          renderCard({ id: r.id, status: 'queued', progress: 0, prompt: body.prompt, modelLabel: findLabel(body.model), task: body.task, ratio: body.ratio, duration: body.duration, audio: body.audio, sizeLabel, inputUrls: thumbs });
           track(r.id, body.prompt, thumbs);
           window.LJToast && window.LJToast('✓ 已提交生成,可在右侧查看进度');
         } catch (e) { window.LJToast && window.LJToast('提交失败:' + e.message, 'err'); }
