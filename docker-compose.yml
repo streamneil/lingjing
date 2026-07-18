@@ -61,6 +61,18 @@ services:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
       WECHAT_PROXY: ${WECHAT_PROXY:-}
       ALIPAY_PROXY: ${ALIPAY_PROXY:-}
+      # 火山方舟私域素材库(Seedance 真人图被拦 → asset:// 化重试;默认关,.env 开)。
+      # 缺这些行 → .env 配了也进不了容器(OPENAI_PROXY 漏转发同款事故,勿删)。
+      # 注意:config.ts optional() 用 ??,空串不回落默认 → 有默认值的项这里必须复制代码默认值。
+      ARK_ASSET_LIBRARY_ENABLED: ${ARK_ASSET_LIBRARY_ENABLED:-false}
+      ARK_ASSET_AK: ${ARK_ASSET_AK:-}
+      ARK_ASSET_SK: ${ARK_ASSET_SK:-}
+      ARK_ASSET_PROJECT: ${ARK_ASSET_PROJECT:-}
+      ARK_ASSET_GROUP: ${ARK_ASSET_GROUP:-lingjing-portraits}
+      ARK_ASSET_REGISTER_TIMEOUT_MS: ${ARK_ASSET_REGISTER_TIMEOUT_MS:-90000}
+      ARK_ASSET_POLL_INTERVAL_MS: ${ARK_ASSET_POLL_INTERVAL_MS:-3000}
+      ARK_ASSET_RETRY_ON_CODES: ${ARK_ASSET_RETRY_ON_CODES:-InputImageSensitiveContentDetected}
+      ARK_ASSET_DEBUG: ${ARK_ASSET_DEBUG:-}
     # 让容器能解析宿主机(Gemini 走宿主机 clash 代理时:GEMINI_PROXY=http://host.docker.internal:7890)。
     # 无害:没配 GEMINI_PROXY 时没人解析它。需 Docker 20.10+。
     extra_hosts:
