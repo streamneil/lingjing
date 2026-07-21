@@ -235,6 +235,9 @@ img { display: block; }
 
 /* 左输入区 sticky 置顶;高超一屏时自身内部滚动(max-height 锁视口),底部提交按钮始终可达,不联动右侧记录 */
 .cfg { background: var(--card); border: 1px solid var(--line-soft); border-radius: var(--r-lg); padding: 24px; display: flex; flex-direction: column; gap: 13px; position: sticky; top: 90px; max-height: calc(100vh - 114px); overflow-y: auto; overscroll-behavior: contain; box-shadow: var(--sh-card); animation: rise .6s var(--ease-out) both; }
+/* 可滚动但不显示滚动条(同 .pop / .ss-body 约定):卡片圆角内浮出的原生滚动条视觉突兀 */
+.cfg { scrollbar-width: none; -ms-overflow-style: none; }
+.cfg::-webkit-scrollbar { width: 0; height: 0; display: none; }
 /* 子项不收缩:否则在 max-height + overflow 的 flex 列里会被压扁而非溢出滚动(.cfg-sp 仍靠 flex:1 占位) */
 .cfg > * { flex-shrink: 0; }
 .cfg-h { font-size: 18px; font-weight: 800; letter-spacing: -.01em; margin-bottom: 5px; display: flex; align-items: center; gap: 9px; }
@@ -292,6 +295,8 @@ img { display: block; }
 
 /* 向上浮层 popover(深色,贴 pill;点外关) */
 .pop-anchor { position: relative; }
+/* cfgbar 内的 anchor 可收缩:长模型名靠 .cpill 的 ellipsis 截断,不把 .cfg 撑出横向滚动条 */
+.cfgbar .pop-anchor { min-width: 0; }
 .pop { position: absolute; left: 0; right: auto; bottom: calc(100% + 8px); min-width: 340px; max-width: 92vw; max-height: min(56vh, 440px); overflow-y: auto; overscroll-behavior: contain; background: var(--card); border: 1px solid var(--line-hi); border-radius: 13px; padding: 14px; box-shadow: 0 14px 36px -10px rgba(0,0,0,.7); z-index: 60; display: none; animation: popup .18s var(--ease-out); }
 /* 全站下拉/弹层滚动条隐藏(仍可滚):.pop 自身及其内部选项容器 */
 .pop, .pop [id$="Opts"], .pop > div[id$="Opts"] { scrollbar-width: none; -ms-overflow-style: none; }

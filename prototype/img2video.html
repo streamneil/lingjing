@@ -213,7 +213,7 @@
     }
 
     /* 空态:大上传区占满整高整宽 */
-    .img-tiles:not(.empty):not(.dual2) {
+    .img-tiles:not(.empty):not(.dual2):not(.multirow) {
       grid-template-rows: 1fr;
     }
 
@@ -224,6 +224,20 @@
     }
 
     /* 图片间:开始|⇄|结束 */
+    /* 参考图 >3 张(2~3 行):卡高随行数增长、行高固定缩略;
+       否则固定 196px 卡里隐式 auto 行会把第 1 行(1fr)压成 0 高,图1~3 只剩边框细线 */
+    .img-tiles-card.grow {
+      height: auto;
+      min-height: 196px;
+    }
+
+    /* 类名避开 app.css 全局 .wrap(页面容器) */
+    .img-tiles.multirow {
+      flex: none;
+      grid-template-rows: none;
+      grid-auto-rows: 110px;
+    }
+
     /* 格子高度跟随固定卡(aspect 改 auto,由 100% 高 + grid 列宽决定),不再用 1:1 撑出高矮不一 */
     .img-tile {
       position: relative;
@@ -843,6 +857,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       }
       function renderImgArea() {
         const area = document.getElementById('imgArea');
+        area.closest('.img-tiles-card').classList.remove('grow');
         if (task === 'first_frame') {
           const url = slotView('first');
           if (!url) {
@@ -879,9 +894,12 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
             const dz = area.querySelector('#imgDrop'); dz.onclick = () => pick('ref');
             bindDrop(dz, fs => Array.from(fs).forEach(f => addFile(f, 'ref')));
           } else {
+            const withAdd = urls.length < max && !reuseActive();
             let tiles = urls.map((u, i) => tileImgHtml(u, `图${i + 1}`, `data-rm="${i}"`)).join('');
-            if (urls.length < max && !reuseActive()) tiles += tileAddHtml('点击 / 拖放', 'id="addRef" role="button" aria-label="添加参考图"');
-            area.innerHTML = `<div class="img-tiles">${tiles}</div><div class="area-hint">已选 ${urls.length}/${max} 张${reuseActive() ? '(复用上次原图,点 × 删除单张;如需新增请先清空再上传)' : ''}。提示词用 [图N] 指代第 N 张。</div>`;
+            if (withAdd) tiles += tileAddHtml('点击 / 拖放', 'id="addRef" role="button" aria-label="添加参考图"');
+            const multirow = urls.length + (withAdd ? 1 : 0) > 3; // 超一行:卡增高 + 固定行高缩略
+            if (multirow) area.closest('.img-tiles-card').classList.add('grow');
+            area.innerHTML = `<div class="img-tiles${multirow ? ' multirow' : ''}">${tiles}</div><div class="area-hint">已选 ${urls.length}/${max} 张${reuseActive() ? '(复用上次原图,点 × 删除单张;如需新增请先清空再上传)' : ''}。提示词用 [图N] 指代第 N 张。</div>`;
             const add = area.querySelector('#addRef'); if (add) { add.onclick = () => pick('ref'); bindDrop(add, fs => Array.from(fs).forEach(f => addFile(f, 'ref'))); }
             area.querySelectorAll('.rmx[data-rm]').forEach(el => el.onclick = (e) => {
               e.stopPropagation(); const i = Number(el.dataset.rm);
