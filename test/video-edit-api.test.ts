@@ -37,14 +37,19 @@ const { Client } = await import('./helpers.js');
 const app = createApp();
 const client = new Client(app);
 
-// 预置两个 sidecar(模拟 /video-uploads 探测产物):8s 视频 + 30s 视频
-const VID8 = 'video-inputs/t/vid8.mp4';
-const VID30 = 'video-inputs/t/vid30.mp4';
-mem.set(`${VID8}.meta.json`, Buffer.from(JSON.stringify({ duration: 8, width: 1280, height: 720, size: 1000 })));
-mem.set(`${VID30}.meta.json`, Buffer.from(JSON.stringify({ duration: 30, width: 1920, height: 1080, size: 2000 })));
+// 输入 key 必须带本租户 video-inputs/<tid>/ 前缀(IDOR 归属校验);sidecar 与 VID 常量
+// 依赖真实 tenant id,故在 beforeAll 创建租户后再赋值 + 预置 sidecar。
+let VID8 = '', VID30 = '', GHOST = '', II = '';
 
 beforeAll(async () => {
   const t = createTenant('视频编辑测试台');
+  VID8 = `video-inputs/${t.id}/vid8.mp4`;
+  VID30 = `video-inputs/${t.id}/vid30.mp4`;
+  GHOST = `video-inputs/${t.id}/ghost.mp4`; // 本租户前缀但无 sidecar → 触发「元数据丢失」路径
+  II = `image-inputs/${t.id}/`;
+  // 预置两个 sidecar(模拟 /video-uploads 探测产物):8s 视频 + 30s 视频
+  mem.set(`${VID8}.meta.json`, Buffer.from(JSON.stringify({ duration: 8, width: 1280, height: 720, size: 1000 })));
+  mem.set(`${VID30}.meta.json`, Buffer.from(JSON.stringify({ duration: 30, width: 1920, height: 1080, size: 2000 })));
   await createUser(t.id, 'vecreator', 'pw123456', 'creator');
   grant(t.id, 100000);
   const r = await client.login('vecreator', 'pw123456');
@@ -59,7 +64,7 @@ describe('POST /api/jobs (video_edit) 校验', () => {
   });
 
   it('sidecar 缺失 → 400 元数据丢失', async () => {
-    const r = await client.post('/api/jobs', { type: 'video_edit', model: 'wan2.7-videoedit', videoRef: 'video-inputs/t/ghost.mp4', prompt: 'x' });
+    const r = await client.post('/api/jobs', { type: 'video_edit', model: 'wan2.7-videoedit', videoRef: GHOST, prompt: 'x' });
     expect(r.status).toBe(400);
     expect(r.body.error).toContain('元数据');
   });
@@ -78,7 +83,7 @@ describe('POST /api/jobs (video_edit) 校验', () => {
   });
 
   it('参考图超限(wan 最多 4)→ 400', async () => {
-    const r = await client.post('/api/jobs', { type: 'video_edit', model: 'wan2.7-videoedit', videoRef: VID8, imageRefs: ['a', 'b', 'c', 'd', 'e'] });
+    const r = await client.post('/api/jobs', { type: 'video_edit', model: 'wan2.7-videoedit', videoRef: VID8, imageRefs: [II+'a', II+'b', II+'c', II+'d', II+'e'] });
     expect(r.status).toBe(400);
     expect(r.body.error).toContain('最多 4');
   });
@@ -96,7 +101,7 @@ describe('POST /api/jobs (video_edit) 校验', () => {
 
   it('合法提交(wan 8s + 截断 5s + 原声)→ 202 + 快照 billable=8+5=13', async () => {
     const r = await client.post('/api/jobs', {
-      type: 'video_edit', model: 'wan2.7-videoedit', videoRef: VID8, imageRefs: ['ref1'],
+      type: 'video_edit', model: 'wan2.7-videoedit', videoRef: VID8, imageRefs: [II+'ref1'],
       prompt: '把衣服换成参考图', resolution: '720P', truncateDuration: 5, audioSetting: 'origin',
     });
     expect(r.status).toBe(202);
@@ -145,7 +150,7 @@ describe('POST /api/jobs/estimate (video_edit) ≡ build', () => {
   });
 
   it('estimate 无 sidecar → 400', async () => {
-    const r = await client.post('/api/jobs/estimate', { type: 'video_edit', model: 'wan2.7-videoedit', videoRef: 'video-inputs/t/ghost.mp4' });
+    const r = await client.post('/api/jobs/estimate', { type: 'video_edit', model: 'wan2.7-videoedit', videoRef: GHOST });
     expect(r.status).toBe(400);
   });
 });

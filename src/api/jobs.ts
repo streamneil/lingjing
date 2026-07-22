@@ -796,6 +796,33 @@ async function buildVideoEditJob(body: Record<string, unknown>): Promise<JobBuil
   };
 }
 
+// ── 输入素材归属校验(T-IMGREF-IDOR / PR0)──
+// imageRefs/videoRefs/audioRefs/videoRef 是存储 key,worker 会签名后送厂商生成。
+// 缺前缀校验则:登录用户带 image-inputs/<他租户>/... 即可跨租户读取输入素材(IDOR)+ 枚举探测,
+// 且旁路深度合成 consent 闸。修复:提交/估价入口统一限定「本租户上传前缀」,builder/sidecar 读取之前拦截。
+// 注:数字人 video 的 avatarRef/voiceRef 是形象/音色 ID(非存储 key,各自 isUsable 账号校验),不在此列。
+const REF_ARRAY_PREFIX: Record<string, (tid: string) => string> = {
+  imageRefs: (t) => `image-inputs/${t}/`,
+  videoRefs: (t) => `video-inputs/${t}/`,
+  audioRefs: (t) => `audio-inputs/${t}/`,
+};
+const REF_OWNERSHIP_ERROR = '输入素材不属于本机构或引用无效';
+/** 校验 body 内所有输入素材 key 属本租户上传前缀。返回错误文案(400)或 null(通过)。 */
+function checkRefsOwned(body: Record<string, unknown>, tid: string): string | null {
+  for (const [field, prefixOf] of Object.entries(REF_ARRAY_PREFIX)) {
+    const v = body[field];
+    if (!Array.isArray(v)) continue;
+    const pfx = prefixOf(tid);
+    for (const k of v) {
+      if (typeof k !== 'string') continue; // 非字符串留给 builder 结构校验(filter 会丢弃)
+      if (!k.startsWith(pfx)) return REF_OWNERSHIP_ERROR;
+    }
+  }
+  const vr = body.videoRef;
+  if (typeof vr === 'string' && vr && !vr.startsWith(`video-inputs/${tid}/`)) return REF_OWNERSHIP_ERROR;
+  return null;
+}
+
 // 封闭 allowlist:type → builder。Object.create(null) 防原型链污染(type='__proto__' 取不到)。
 // builder 可同步可异步(eng-review E1:video_edit 须 await 读 sidecar;同步 builder 被 await 后行为不变)。
 // 账号隔离:video/tts 的形象/音色校验需 actingUserId+isAdmin;其余 builder 不用,忽略多余参数。
@@ -826,6 +853,10 @@ jobsRouter.post('/jobs', requireRole('admin', 'creator'), async (req: Request, r
   if (!builder) {
     return res.status(400).json({ error: `不支持的任务类型:${type}` });
   }
+
+  // 输入素材归属校验(T-IMGREF-IDOR):builder 前拦截跨租户/伪造 key。
+  const refErr = checkRefsOwned(body, tid);
+  if (refErr) return res.status(400).json({ error: refErr });
 
   const built = await builder(body, tid, req.user!.id, req.user!.role === 'admin');
   if (!built.ok) {
@@ -1000,6 +1031,9 @@ jobsRouter.post(
 jobsRouter.post('/jobs/estimate', requireAuth, async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
   const type = typeof body.type === 'string' && body.type ? body.type : 'video';
+  // 输入素材归属校验(T-IMGREF-IDOR):防借报价接口读他租户 sidecar(video_edit 会 readVideoSidecar)。
+  const refErr = checkRefsOwned(body, req.user!.tenantId);
+  if (refErr) return res.status(400).json({ error: refErr });
   if (type === 'ai_image') {
     const m = body.mode === 'img2img' ? 'img2img' : 'text2img';
     // D9 报价≡实扣要求「拒绝路径」也一致(red-team):未知模型/模型不支持该模式,
