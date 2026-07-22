@@ -71,7 +71,7 @@
 - **What:** moderateScript/moderateOutput 从本地敏感词表升级为阿里云内容安全(Green)文本/图像检测 API。
 - **Why:** 本轮做的是本地敏感词表过渡,覆盖有限;政企/广电审计可能要求真实内容检测(政治敏感、违禁、涉黄涉暴)。
 - **Context:** 来自 /plan-ceo-review 项目收尾 D6。钩子已在 worker.ts:80/146 调用,接入成本低(换 moderation.ts 实现即可)。成片营业样先调低门槛(未达限放行加日志),避免阻断命脉。
-- **Priority:** P2  **Depends on:** 阿里云内容安全 API 查证 + 开通
+- **Priority:** ~~P2~~ → **P1**(2026-07-22 Open API eng-review D8 升级:API key 开放给外部 Agent 后,本地敏感词 stub 的盲区被自动化流量放大;定为 API **对外推广**(非上线)前的硬条件)  **Depends on:** 阿里云内容安全 API 查证 + 开通
 
 ### T-VOICE-MIGRATION:声音迁移(歌曲演唱迁移)
 - **What:** 上传歌曲,用克隆音色完成演唱迁移,自动识别并校正歌词。
@@ -128,6 +128,33 @@
 - **Cons:** 要逐文件把「跨 describe 共享可变状态」改成各自造数据(或用 beforeEach 重置),涉及多个存量测试文件。
 - **Context:** **不是本轮引入**——在 v0.6.0.0 前的 base(6aeac96)上打乱跑挂 12-13 例,本轮后反而只挂 4-8 例。默认顺序在 base 与 main 上都全绿(822 / 931)。修复策略:自破坏性用例(如 sweep、全局取消)独立文件或自造数据;计数类断言用增量基线(order-management 已用此范式,只是被后续用例破坏)。
 - **Effort:** M(human)→ S(CC)。**Priority:** P2(不影响当前 CI,但属定时炸弹)。
+
+## Open API 评审补充(2026-07-22,/plan-eng-review — API key + MCP 轮)
+
+### T-APIKEY-SPEND-CAP:per-key 日消费上限 + 异常用量告警
+- **What:** API key 增加可选「日消费积分上限」;超常用量(如单 key 单日消耗超历史均值 N 倍)告警给 admin。
+- **Why:** key 存在客户 agent 的配置文件里,泄露概率高于人用 session;当前模型「余额即上限」意味着泄露即可烧光租户全部余额。本轮产品决策明确不做(保持简单),此条保留风险记录。
+- **Pros:** 泄露爆炸半径从「全部余额」缩到「日上限」;Cons:多一层配置概念,与「简单」原则相悖。
+- **Context:** 来自 2026-07-22 Open API eng-review 外部声音 #10(「最贵资产×最易泄露凭证」)。设计文档:docs/superpowers/specs/2026-07-22-open-api-mcp-design.md。
+- **Effort:** M(human)→ S(CC)。**Priority:** P2(触发条件:出现真实 API 客户)。**Depends on:** PR1 api_key 落地。
+
+### T-RATELIMIT-UTIL-MIGRATE:login-throttle 迁移到通用滑窗限速工具
+- **What:** PR1 新建 src/auth/rate-limit.ts 通用滑窗限速器(API key 限速用);本条把 login-throttle.ts 迁到同一工具,消除第二份滑窗副本。
+- **Why:** DRY 收口,同 T-GPTIMG2-GEMINI-DRY 节奏(先建 helper 新代码用,老副本独立后续迁)。
+- **Cons:** 碰活的认证代码,需登录限流回归(login-throttle.test.ts 全绿)。
+- **Context:** 2026-07-22 Open API eng-review D5。**Priority:** P3。**Depends on:** PR1 rate-limit.ts 落地。
+
+### T-API-CLI:命令行客户端(npm 包)
+- **What:** `npx lingjing gen ...` 风格 CLI,REST 开放面的薄封装(~200 行)。
+- **Why:** 脚本/CI 场景接入;方案评审时已定后置(MCP 优先,Agent 生态 MCP 是事实标准)。
+- **Cons:** 多一个需构建/发布/更新的 npm 制品,发布管线(npm registry、版本策略)是本条 scope 的一部分,不另立项。
+- **Context:** 2026-07-22 Open API 方案讨论,接入层三形态(REST/MCP/CLI)中的第三档。**Priority:** P3(触发条件:客户明确要脚本化接入)。**Depends on:** PR1 REST 落地。
+
+### T-API-WEBHOOK:任务完成 Webhook 回调
+- **What:** 任务终态时 POST 客户配置的回调 URL(带签名),免轮询。
+- **Why:** 纯轮询模式下视频类长任务轮询流量大;PR1 的读写分级限流(读 300/min)已缓解,webhook 是根治。
+- **Cons:** 出站请求一整套新面:重试、HMAC 签名、SSRF 防护(回调 URL 校验)、失败降级回轮询。
+- **Context:** 2026-07-22 Open API eng-review 外部声音 #5 派生。**Priority:** P3(触发条件:轮询流量成为可观测问题)。**Depends on:** PR1/PR2 落地。
 
 ## ✅ 已完成(归档,保留可追溯)
 
