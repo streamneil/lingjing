@@ -23,7 +23,7 @@ import { paymentsNotifyRouter } from './api/payments.js';
 import { adminRouter } from './api/admin.js';
 import { captchaRouter } from './api/captcha.js';
 import { showcaseRouter } from './api/showcase.js';
-import { attachUser } from './auth/middleware.js';
+import { attachUser, requireApiScope } from './auth/middleware.js';
 import { bootstrapSuperadmin } from './auth/platform.js';
 import { startWorker } from './queue/worker.js';
 import { listPresets } from './voices/index.js';
@@ -52,6 +52,8 @@ export function createApp() {
   // 注意:attachUser 不再全局挂(E-1.1)—— 它只覆盖 /admin 之后注册的租户路由与静态页;
   // /admin 已在上面注册,不会经过 attachUser。
   app.use(attachUser);
+  // Open API key 作用域守卫:仅约束 viaApiKey 流量(生成面白名单),cookie/公开接口不受影响。
+  app.use(requireApiScope);
   app.use('/api', captchaRouter); // 滑块出题/校验(公开,登录前用)
   app.use('/api', showcaseRouter); // 示范素材(公开,落地页登录前用):签名重定向 + 本地兜底
   app.use('/api', authRouter);
