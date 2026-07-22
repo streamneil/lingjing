@@ -22,6 +22,7 @@ const { createCustomAvatar, listCustom, getAvatar, isUsableAvatar } = await impo
 const { createDesignVoice, listClones, isUsableVoice } = await import('../src/voices/index.js');
 const { grant, reserve, ledger } = await import('../src/credits/index.js');
 const { writeAudit, listAudit } = await import('../src/audit/index.js');
+const { Client } = await import('./helpers.js');
 
 const app = createApp();
 let tId = '';
@@ -173,6 +174,93 @@ describe('老资产 backfill(部署前建的资产迁移后原创作者仍可见
     // 回填后 alice(creator)能看到
     expect(listCustom(tId, aliceId, false).map((a) => a.id)).toContain(avId);
     expect(listCustom(tId, bobId, false).map((a) => a.id)).not.toContain(avId);
+  });
+});
+
+// ── 输入素材引用跨租户 IDOR(T-IMGREF-IDOR,PR0 修复)──
+// 攻击面:POST /jobs 与 /jobs/estimate 的 imageRefs/videoRefs/audioRefs/videoRef
+// 直接透传存储 key,worker 会签名送厂商。修复:路由入口校验 key 必须带本租户上传前缀
+// (image-inputs/<tid>/ 等),builder 执行前拦截(estimate 的 sidecar 读也一并挡住)。
+// 自造数据,不依赖本文件其他 describe 的状态(T-TEST-ORDER-DEPENDENCE 规范)。
+describe('输入素材引用跨租户 IDOR(POST /jobs 前缀校验)', () => {
+  const idorClient = new Client(app);
+  let tA = ''; // 攻击者租户
+  let tB = ''; // 受害者租户
+
+  beforeAll(async () => {
+    tA = createTenant('IDOR 攻击方').id;
+    tB = createTenant('IDOR 受害方').id;
+    await createUser(tA, 'idorattacker', 'pw123456', 'creator');
+    grant(tA, 100000);
+    const r = await idorClient.login('idorattacker', 'pw123456');
+    expect(r.status).toBe(200);
+  }, 30000);
+
+  it('图生图带他租户 imageRef → 400,不入队', async () => {
+    const r = await idorClient.post('/api/jobs', {
+      type: 'ai_image', mode: 'img2img', prompt: 'p',
+      imageRefs: [`image-inputs/${tB}/steal.png`],
+    });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toContain('素材');
+  });
+
+  it('图生图无前缀裸 key → 400(伪造/枚举探测)', async () => {
+    const r = await idorClient.post('/api/jobs', {
+      type: 'ai_image', mode: 'img2img', prompt: 'p', imageRefs: ['k1'],
+    });
+    expect(r.status).toBe(400);
+  });
+
+  it('i2v 首帧带他租户 imageRef → 400', async () => {
+    const r = await idorClient.post('/api/jobs', {
+      type: 'video_i2v', model: 'happyhorse-1.0-i2v', task: 'first_frame',
+      imageRefs: [`image-inputs/${tB}/face.png`],
+    });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toContain('素材');
+  });
+
+  it('r2v 的 videoRefs/audioRefs 带他租户 key → 400', async () => {
+    const r = await idorClient.post('/api/jobs', {
+      type: 'video_r2v', prompt: '按[视频1]生成',
+      imageRefs: [`image-inputs/${tA}/mine.png`],
+      videoRefs: [`video-inputs/${tB}/steal.mp4`],
+    });
+    expect(r.status).toBe(400);
+    const r2 = await idorClient.post('/api/jobs', {
+      type: 'video_r2v', prompt: '按[图1]生成',
+      imageRefs: [`image-inputs/${tA}/mine.png`],
+      audioRefs: [`audio-inputs/${tB}/steal.mp3`],
+    });
+    expect(r2.status).toBe(400);
+  });
+
+  it('video_edit 带他租户 videoRef → 400,且不泄漏 sidecar 元数据("元数据丢失"也不该出现)', async () => {
+    const r = await idorClient.post('/api/jobs', {
+      type: 'video_edit', model: 'wan2.7-videoedit', prompt: 'x',
+      videoRef: `video-inputs/${tB}/private.mp4`,
+    });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toContain('素材'); // 是前缀拦截,不是走到 sidecar 读取后的报错
+  });
+
+  it('estimate 同样拦截(不能借报价接口探测他租户 sidecar)', async () => {
+    const r = await idorClient.post('/api/jobs/estimate', {
+      type: 'video_edit', model: 'wan2.7-videoedit',
+      videoRef: `video-inputs/${tB}/private.mp4`,
+    });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toContain('素材');
+  });
+
+  it('本租户前缀的 imageRef → 通过校验正常入队(202)', async () => {
+    const r = await idorClient.post('/api/jobs', {
+      type: 'ai_image', mode: 'img2img', prompt: 'p',
+      imageRefs: [`image-inputs/${tA}/mine.png`],
+    });
+    expect(r.status).toBe(202);
+    expect(r.body.id).toBeTruthy();
   });
 });
 

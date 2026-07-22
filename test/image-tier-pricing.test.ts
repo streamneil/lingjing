@@ -138,7 +138,7 @@ describe('estimate ≡ build:逐档报价一致且值正确', () => {
   it('img2img(图片编辑)同样按档计价:Flash 1K 编辑 = 17', async () => {
     const est = await client.post('/api/jobs/estimate', { type: 'ai_image', model: FLASH, mode: 'img2img', count: 1, resolution: '1K' });
     expect(est.body.cost).toBe(17);
-    const job = await client.post('/api/jobs', { type: 'ai_image', model: FLASH, mode: 'img2img', prompt: '改成蓝色', imageRefs: ['fake/x.png'], count: 1, resolution: '1K' });
+    const job = await client.post('/api/jobs', { type: 'ai_image', model: FLASH, mode: 'img2img', prompt: '改成蓝色', imageRefs: [`image-inputs/${tenantId}/x.png`], count: 1, resolution: '1K' });
     expect(job.status).toBe(202);
     expect(job.body.cost).toBe(17);
   });
@@ -389,7 +389,7 @@ describe('review 修复:像素推档下架 / estimate 拒绝路径 / 全档下�
   it('img2img 不传 resolution:默认 2K 档价 26,input 写 2K(D2 补全)', async () => {
     const est = await client.post('/api/jobs/estimate', { type: 'ai_image', model: FLASH, mode: 'img2img', count: 1 });
     expect(est.body.cost).toBe(26);
-    const job = await client.post('/api/jobs', { type: 'ai_image', model: FLASH, mode: 'img2img', prompt: 'x', imageRefs: ['fake/x.png'], count: 1 });
+    const job = await client.post('/api/jobs', { type: 'ai_image', model: FLASH, mode: 'img2img', prompt: 'x', imageRefs: [`image-inputs/${tenantId}/x.png`], count: 1 });
     expect(job.status).toBe(202);
     expect(job.body.cost).toBe(26);
     expect(JSON.parse(getJob(job.body.id)!.input_json as unknown as string).resolution).toBe('2K');

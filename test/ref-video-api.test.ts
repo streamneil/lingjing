@@ -23,8 +23,14 @@ const { Client } = await import('./helpers.js');
 const app = createApp();
 const client = new Client(app);
 
+// 本租户输入素材前缀(IDOR 归属校验:输入 key 必须带对应前缀,否则路由 400)。
+let II = '', VV = '', AA = '';
+
 beforeAll(async () => {
   const t = createTenant('r2v 测试台');
+  II = `image-inputs/${t.id}/`;
+  VV = `video-inputs/${t.id}/`;
+  AA = `audio-inputs/${t.id}/`;
   await createUser(t.id, 'rcreator', 'pw123456', 'creator');
   grant(t.id, 1000000);
   const r = await client.login('rcreator', 'pw123456');
@@ -50,32 +56,32 @@ describe('r2v 模型注册(能力门控)', () => {
 
 describe('POST /api/jobs (video_r2v) 多模态组合校验', () => {
   it('能力门控:非 r2v 模型(wan2.7-r2v 无多模态)→ 400', async () => {
-    const r = await client.post('/api/jobs', { type: 'video_r2v', model: 'wan2.7-r2v', prompt: '图片1', imageRefs: ['k1'] });
+    const r = await client.post('/api/jobs', { type: 'video_r2v', model: 'wan2.7-r2v', prompt: '图片1', imageRefs: [II+'k1'] });
     expect(r.status).toBe(400);
   });
   it('仅音频(无图/视频/文本)→ 400', async () => {
-    const r = await client.post('/api/jobs', { type: 'video_r2v', model: 'doubao-seedance-2.0', audioRefs: ['a1'] });
+    const r = await client.post('/api/jobs', { type: 'video_r2v', model: 'doubao-seedance-2.0', audioRefs: [AA+'a1'] });
     expect(r.status).toBe(400);
   });
   it('文本+仅音频(无画面来源)→ 400', async () => {
-    const r = await client.post('/api/jobs', { type: 'video_r2v', model: 'doubao-seedance-2.0', prompt: '配乐', audioRefs: ['a1'] });
+    const r = await client.post('/api/jobs', { type: 'video_r2v', model: 'doubao-seedance-2.0', prompt: '配乐', audioRefs: [AA+'a1'] });
     expect(r.status).toBe(400);
   });
   it('视频超 3 → 400', async () => {
-    const r = await client.post('/api/jobs', { type: 'video_r2v', model: 'doubao-seedance-2.0', prompt: '视频1', videoRefs: ['v1', 'v2', 'v3', 'v4'] });
+    const r = await client.post('/api/jobs', { type: 'video_r2v', model: 'doubao-seedance-2.0', prompt: '视频1', videoRefs: [VV+'v1', VV+'v2', VV+'v3', VV+'v4'] });
     expect(r.status).toBe(400);
   });
   it('音频超 3 → 400', async () => {
-    const r = await client.post('/api/jobs', { type: 'video_r2v', model: 'doubao-seedance-2.0', prompt: '图片1', imageRefs: ['k1'], audioRefs: ['a1', 'a2', 'a3', 'a4'] });
+    const r = await client.post('/api/jobs', { type: 'video_r2v', model: 'doubao-seedance-2.0', prompt: '图片1', imageRefs: [II+'k1'], audioRefs: [AA+'a1', AA+'a2', AA+'a3', AA+'a4'] });
     expect(r.status).toBe(400);
   });
   it('图超 9 → 400', async () => {
-    const imgs = Array.from({ length: 10 }, (_, i) => `k${i}`);
+    const imgs = Array.from({ length: 10 }, (_, i) => II + `k${i}`);
     const r = await client.post('/api/jobs', { type: 'video_r2v', model: 'doubao-seedance-2.0', prompt: '图片1', imageRefs: imgs });
     expect(r.status).toBe(400);
   });
   it('比例不支持 → 400', async () => {
-    const r = await client.post('/api/jobs', { type: 'video_r2v', model: 'doubao-seedance-2.0', prompt: '图片1', imageRefs: ['k1'], ratio: '2:3' });
+    const r = await client.post('/api/jobs', { type: 'video_r2v', model: 'doubao-seedance-2.0', prompt: '图片1', imageRefs: [II+'k1'], ratio: '2:3' });
     expect(r.status).toBe(400);
   });
 });
@@ -85,14 +91,14 @@ describe('POST /api/jobs (video_r2v) 成功 + 快照', () => {
     const r = await client.post('/api/jobs', {
       type: 'video_r2v', model: 'doubao-seedance-2.0',
       prompt: '[图片1]的人用[图片2]的杯子,背景[视频1],配[音频1]',
-      imageRefs: ['k1', 'k2'], videoRefs: ['v1'], audioRefs: ['a1'],
+      imageRefs: [II+'k1', II+'k2'], videoRefs: [VV+'v1'], audioRefs: [AA+'a1'],
       resolution: '720P', ratio: '16:9', duration: 11, audio: true,
     });
     expect(r.status).toBe(202);
     const inp = JSON.parse(getJob(r.body.id)!.input_json);
-    expect(inp.imageRefs).toEqual(['k1', 'k2']);
-    expect(inp.videoRefs).toEqual(['v1']);
-    expect(inp.audioRefs).toEqual(['a1']);
+    expect(inp.imageRefs).toEqual([II+'k1', II+'k2']);
+    expect(inp.videoRefs).toEqual([VV+'v1']);
+    expect(inp.audioRefs).toEqual([AA+'a1']);
     expect(inp.audio).toBe(true);
     expect(inp.audioSnapshot).toBe(true);
     expect(inp.ratio).toBe('16:9');
@@ -105,7 +111,7 @@ describe('POST /api/jobs (video_r2v) 成功 + 快照', () => {
   });
 
   it('estimate ≡ build(reserve==settle)', async () => {
-    const body = { type: 'video_r2v', model: 'doubao-seedance-2.0', prompt: '图片1', imageRefs: ['k1'], resolution: '720P', duration: 5, audio: true };
+    const body = { type: 'video_r2v', model: 'doubao-seedance-2.0', prompt: '图片1', imageRefs: [II+'k1'], resolution: '720P', duration: 5, audio: true };
     const est = await client.post('/api/jobs/estimate', body);
     expect(est.status).toBe(200);
     const job = await client.post('/api/jobs', body);
