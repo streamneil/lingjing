@@ -63,6 +63,23 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES user(id)
   );
   CREATE INDEX IF NOT EXISTS idx_session_user ON session(user_id);
+
+  -- Open API key(lj_sk_…):key == 成员本人。只存 sha256 哈希,明文创建时回传一次。
+  -- 无生命周期联动(产品决策):认证时每请求查 user 最新状态,主人停用即 401(免费,非联动)。
+  CREATE TABLE IF NOT EXISTS api_key (
+    id            TEXT PRIMARY KEY,
+    tenant_id     TEXT NOT NULL,
+    user_id       TEXT NOT NULL,                    -- key 的主人,key 即此人
+    name          TEXT NOT NULL,                    -- 用户备注名,如 "我的 Claude Code"
+    key_hash      TEXT NOT NULL,                    -- sha256(key) hex,明文不落库
+    key_prefix    TEXT NOT NULL,                    -- 前 12 位明文,列表页展示 "lj_sk_a3f9…"
+    created_at    INTEGER NOT NULL,
+    last_used_at  INTEGER,
+    revoked_at    INTEGER,                           -- 非空即吊销;不删行,留审计
+    FOREIGN KEY (user_id) REFERENCES user(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_api_key_hash ON api_key(key_hash);
+  CREATE INDEX IF NOT EXISTS idx_api_key_tenant ON api_key(tenant_id);
 `);
 
 // ── Slice 3:积分 + 审计 ──
