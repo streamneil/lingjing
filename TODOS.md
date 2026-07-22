@@ -201,7 +201,7 @@
 
 ## 安全(2026-06-15,eng-review 发现 — explore 多模态轮)
 
-### T-IMGREF-IDOR:/jobs 输入图 imageRefs 跨租户/越权(MEDIUM)
+### T-IMGREF-IDOR:/jobs 输入图 imageRefs 跨租户/越权(MEDIUM) — ✅ 2026-07-23(Open API PR0)
 - **What:** `/jobs` 的 i2v/图片编辑/视频编辑 builder 只做 `imageRefs.filter(string)`(src/api/jobs.ts:446/534),不校验 key 归属本租户、不校验有无 authorization 行;worker 对任意 key 直接 `publisher.publish(k)→getSignedUrl(k)`(worker.ts:363)。
 - **Why:** 登录用户 POST `/jobs` 带 `imageRefs:["image-inputs/<他租户>/<uuid>.png"]` → worker 签名送百炼 = 跨租户输入图读取(IDOR)+ consent 合规闸旁路。需登录 + 猜 UUID(跨租户),故 MEDIUM。
 - **Fix:** builder 加校验:imageRef 必须 `image-inputs/<本租户>/` 前缀 **且** 存在对应 authorization 行(本租户)。回归测试入 `test/account-isolation.test.ts`(creator A 拿 B 的 imageRef 建 job → 拒)。
