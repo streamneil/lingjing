@@ -2,6 +2,18 @@
 
 灵镜平台的用户可见变更记录。版本号为四段式 `MAJOR.MINOR.PATCH.MICRO`(与 `VERSION` 文件一致)。
 
+## [0.7.0.0] - 2026-07-23
+
+### Added
+- **开放 API(API 密钥)**:让机构的 AI Agent 通过 HTTP 直接调用生图 / 生视频 / 生音乐 / 语音。成员在系统设置自助创建密钥(`lj_sk_…`,明文仅创建时显示一次),密钥即本人身份、消耗本机构积分。管理员可查看并吊销全租户任意密钥。
+- **接入文档页** `/api-docs.html`:认证、提交生成、幂等、查询/下载、模型列表、上传与合规、限速、错误码表。
+- **幂等键**:提交生成支持 `Idempotency-Key` 请求头,Agent 超时重试不会重复扣费(同键同请求返原任务,异请求体 409)。
+- **审计标记**:经 API 密钥发起的操作在审计日志标记来源密钥,区分本人网页操作与 Agent 操作。
+
+### Security
+- API 密钥作用域受限:只能访问生成相关接口,越界访问账号 / 成员 / 支付返回 403;读写分级限速防滥用;主人停用或密钥吊销即时失效。
+- 开放接口错误统一携带机器可读 `code`(`UNAUTHORIZED` / `SCOPE_FORBIDDEN` / `ROLE_FORBIDDEN` / `RATE_LIMITED` / `INSUFFICIENT_CREDITS` / `IDEMPOTENCY_CONFLICT`),便于 Agent 判断是否重试。
+
 ## [0.6.0.1] - 2026-07-23
 
 ### Security
