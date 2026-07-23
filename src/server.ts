@@ -25,6 +25,7 @@ import { captchaRouter } from './api/captcha.js';
 import { showcaseRouter } from './api/showcase.js';
 import { attachUser, requireApiScope, apiRateLimit } from './auth/middleware.js';
 import { apiKeysRouter } from './api/api-keys.js';
+import { mcpRouter } from './mcp/index.js';
 import { bootstrapSuperadmin } from './auth/platform.js';
 import { startWorker } from './queue/worker.js';
 import { listPresets } from './voices/index.js';
@@ -48,6 +49,10 @@ export function createApp() {
   // 故 req.user 在 /admin 链路永远 undefined(E-1.1 结构隔离)。requirePlatformAdmin 只认
   // lj_padmin —— 租户拿 lj_session 打 /admin/* 也只会 401。
   app.use('/admin', adminRouter);
+
+  // Open API MCP server:自带 Bearer 认证 + 读写限速,独立于 /api 中间件栈(同 /admin 隔离)。
+  // 挂在全局 attachUser / requireApiScope 之前,故作用域守卫不会拦 /mcp(它自认证)。
+  app.use('/mcp', mcpRouter);
 
   // 每个请求先解析 session 挂 req.user(不强制),路由各自决定是否要求登录/角色。
   // 注意:attachUser 不再全局挂(E-1.1)—— 它只覆盖 /admin 之后注册的租户路由与静态页;

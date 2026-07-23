@@ -1101,128 +1101,100 @@ jobsRouter.post(
   },
 );
 
-// 费用预估(生成前展示,验收第4条)。按 type 计价;默认 video。
-jobsRouter.post('/jobs/estimate', requireAuth, async (req: Request, res: Response) => {
-  const body = (req.body ?? {}) as Record<string, unknown>;
+// ── estimateJob:费用预估服务函数(REST 路由与 MCP 工具共用)。返回 {ok,cost,extra?} 或错误。──
+export type EstimateResult =
+  | { ok: true; cost: number; extra?: Record<string, unknown> }
+  | { ok: false; status: number; error: string };
+
+export async function estimateJob(tid: string, body: Record<string, unknown>): Promise<EstimateResult> {
   const type = typeof body.type === 'string' && body.type ? body.type : 'video';
   // 输入素材归属校验(T-IMGREF-IDOR):防借报价接口读他租户 sidecar(video_edit 会 readVideoSidecar)。
-  const refErr = checkRefsOwned(body, req.user!.tenantId);
-  if (refErr) return res.status(400).json({ error: refErr });
+  const refErr = checkRefsOwned(body, tid);
+  if (refErr) return { ok: false, status: 400, error: refErr };
   if (type === 'ai_image') {
     const m = body.mode === 'img2img' ? 'img2img' : 'text2img';
-    // D9 报价≡实扣要求「拒绝路径」也一致(red-team):未知模型/模型不支持该模式,
-    // build 会 400,estimate 若静默回落默认模型出价 = 给买不到的东西报价。与 buildImageJob 同校验。
     if (body.model !== undefined && (typeof body.model !== 'string' || !isKnownModel(body.model)))
-      return res.status(400).json({ error: '模型不可用' });
+      return { ok: false, status: 400, error: '模型不可用' };
     const def = getImageModel(typeof body.model === 'string' ? body.model : undefined, m);
     if (!def.modes.includes(m))
-      return res.status(400).json({ error: `该模型不支持${m === 'img2img' ? '图生图' : '文生图'}` });
-    // 与 buildImageJob 共用 resolveImageRes(D9:报价≡实扣逐字节;非法/下架档同样 400,
-    // 不再对不存在的档出价 —— 否则传 '3K' 报出 2K 价而提交 400,报价≠实扣)。
-    const rr = resolveImageRes(
-      def,
-      typeof body.resolution === 'string' ? body.resolution : undefined,
-      typeof body.ratio === 'string' ? body.ratio : undefined,
-    );
-    if (!rr.ok) return res.status(400).json({ error: rr.error });
-    // 画质校验(token 计价模型;与 buildImageJob 同校验 → 报价≡实扣的拒绝路径也一致)
+      return { ok: false, status: 400, error: `该模型不支持${m === 'img2img' ? '图生图' : '文生图'}` };
+    const rr = resolveImageRes(def, typeof body.resolution === 'string' ? body.resolution : undefined, typeof body.ratio === 'string' ? body.ratio : undefined);
+    if (!rr.ok) return { ok: false, status: 400, error: rr.error };
     const qr = resolveImageQuality(def, body);
-    if (!qr.ok) return res.status(400).json({ error: qr.error });
-    const tier = imagePriceTier(def, rr.effRes); // 按档取价(2026-07 分档)
+    if (!qr.ok) return { ok: false, status: 400, error: qr.error };
+    const tier = imagePriceTier(def, rr.effRes);
     if (m === 'img2img') {
-      // token 计价编辑(gpt-image-2):恒 1K 输出档,经 costFor 上界估算(与 buildImageJob 同源)。
       if (def.priceRate != null) {
         const estInput = {
-          model: def.key, mode: 'img2img',
-          ratio: typeof body.ratio === 'string' ? body.ratio : undefined,
-          resolution: '1K', // 编辑仅 3 标准尺寸,恒 1K 档
-          quality: qr.quality,
-          count: clampImageCount(body.count, def.maxImages),
-          // 输入底图张数(报价≡实扣:reserve 含输入图 token 成本)。前端传数量;buildImageJob 用真实 imageRefs。
+          model: def.key, mode: 'img2img', ratio: typeof body.ratio === 'string' ? body.ratio : undefined,
+          resolution: '1K', quality: qr.quality, count: clampImageCount(body.count, def.maxImages),
           inputImageCount: typeof body.inputImageCount === 'number' ? Math.max(0, Math.floor(body.inputImageCount)) : 0,
           priceRateSnapshot: imageTokenRate(def),
         };
-        return res.json({ cost: costFor('ai_image', estInput as unknown as Record<string, unknown>) });
+        return { ok: true, cost: costFor('ai_image', estInput as unknown as Record<string, unknown>) };
       }
-      // 其余编辑模型按 n 张计价(与 buildImageJob/costFor 一致):count clamp 到 maxImages
-      // (qwen-image-edit maxImages=1 → 固定 1)。
-      const editCount = clampImageCount(body.count, def.maxImages);
-      return res.json({ cost: estimateImageEditCost(rr.effRes, tier, editCount) });
+      return { ok: true, cost: estimateImageEditCost(rr.effRes, tier, clampImageCount(body.count, def.maxImages)) };
     }
-    // token 计价模型(gpt-image-2):与 buildImageJob 同经 costFor 上界估算(报价≡预扣,同一函数)。
     if (def.priceRate != null) {
       const estInput = {
-        model: def.key,
-        mode: 'text2img',
-        ratio: typeof body.ratio === 'string' ? body.ratio : undefined,
-        resolution: rr.effRes,
-        quality: qr.quality,
-        count: clampImageCount(body.count, def.maxImages),
-        priceRateSnapshot: imageTokenRate(def),
+        model: def.key, mode: 'text2img', ratio: typeof body.ratio === 'string' ? body.ratio : undefined,
+        resolution: rr.effRes, quality: qr.quality, count: clampImageCount(body.count, def.maxImages), priceRateSnapshot: imageTokenRate(def),
       };
-      return res.json({ cost: costFor('ai_image', estInput as unknown as Record<string, unknown>) });
+      return { ok: true, cost: costFor('ai_image', estInput as unknown as Record<string, unknown>) };
     }
-    return res.json({
-      cost: estimateImageCost(clampImageCount(body.count, def.maxImages), rr.effRes, tier, def.maxImages),
-    });
+    return { ok: true, cost: estimateImageCost(clampImageCount(body.count, def.maxImages), rr.effRes, tier, def.maxImages) };
   }
   if (type === 'video_t2v') {
-    // eng-review N1/N2:与 buildVideoT2VJob 逐字节一致(同 deriveVideoT2VParams + 同 audio 校验)。
     const def = getVideoModel(typeof body.model === 'string' ? body.model : undefined);
-    if (body.audio === true && !def.supportsAudio)
-      return res.status(400).json({ error: '该模型不支持有声视频' });
+    if (body.audio === true && !def.supportsAudio) return { ok: false, status: 400, error: '该模型不支持有声视频' };
     const { duration, resolution, audio, priceTier } = deriveVideoT2VParams(def, body);
-    return res.json({ cost: estimateVideoCost(duration, priceTier, resolution, audio) });
+    return { ok: true, cost: estimateVideoCost(duration, priceTier, resolution, audio) };
   }
   if (type === 'video_i2v') {
-    // 与 buildVideoI2VJob 逐字节一致:Seedance i2v 有声入计价(priceTierAudio),estimate≡build。
     const def = getI2VModel(typeof body.model === 'string' ? body.model : undefined);
-    if (body.audio === true && !def.supportsAudio)
-      return res.status(400).json({ error: '该模型不支持有声视频' });
+    if (body.audio === true && !def.supportsAudio) return { ok: false, status: 400, error: '该模型不支持有声视频' };
     const { duration, resolution, audio, priceTier } = deriveVideoT2VParams(def, body);
-    return res.json({ cost: estimateVideoCost(duration, priceTier, resolution, audio) });
+    return { ok: true, cost: estimateVideoCost(duration, priceTier, resolution, audio) };
   }
   if (type === 'video_r2v') {
-    // 与 buildVideoR2VJob 逐字节一致:audio 入计价(Seedance priceTierAudio,P1#1),estimate≡build。
     const def = getR2VModel(typeof body.model === 'string' ? body.model : undefined);
     const resolution = typeof body.resolution === 'string' ? body.resolution : '720P';
     const { duration } = deriveVideoT2VParams(def, body);
     const audio = def.supportsAudio ? !!body.audio : false;
-    return res.json({ cost: estimateVideoCost(duration, videoPriceTier(def, resolution, audio), resolution, audio) });
+    return { ok: true, cost: estimateVideoCost(duration, videoPriceTier(def, resolution, audio), resolution, audio) };
   }
   if (type === 'video_edit') {
-    // 与 buildVideoEditJob 同读 sidecar(时长服务端真相,estimate≡build → reserve==settle)。
     const def = getEditModel(typeof body.model === 'string' ? body.model : undefined);
     const videoRef = typeof body.videoRef === 'string' ? body.videoRef : '';
-    if (!videoRef) return res.status(400).json({ error: '请先上传视频' });
+    if (!videoRef) return { ok: false, status: 400, error: '请先上传视频' };
     const meta = await readVideoSidecar(videoRef);
-    if (!meta) return res.status(400).json({ error: '视频元数据丢失,请重新上传' });
+    if (!meta) return { ok: false, status: 400, error: '视频元数据丢失,请重新上传' };
     const truncate = def.supportsTruncate && typeof body.truncateDuration === 'number' ? body.truncateDuration : undefined;
     const billable = editBillableSeconds(def, meta.duration, truncate);
-    const resolution = typeof body.resolution === 'string' && def.resolutions.includes(body.resolution as '720P' | '1080P')
-      ? body.resolution : def.resolutions[0]!;
-    return res.json({ cost: estimateVideoCost(billable, videoPriceTier(def, resolution, false), resolution, false), inputDuration: meta.duration });
+    const resolution = typeof body.resolution === 'string' && def.resolutions.includes(body.resolution as '720P' | '1080P') ? body.resolution : def.resolutions[0]!;
+    return { ok: true, cost: estimateVideoCost(billable, videoPriceTier(def, resolution, false), resolution, false), extra: { inputDuration: meta.duration } };
   }
   if (type === 'tts') {
-    // 全 Qwen-TTS 扁价(无品质模型);estimate≡build → reserve==settle。
-    return res.json({
-      cost: estimateTtsCost(typeof body.text === 'string' ? body.text.length : 0),
-    });
+    return { ok: true, cost: estimateTtsCost(typeof body.text === 'string' ? body.text.length : 0) };
   }
   if (type === 'ai_music') {
-    // 按歌词/提示词估算预期时长(与 buildAiMusicJob 同口径);完成后按实际秒结算并封顶 reserved。
-    return res.json({ cost: estimateAiMusicCost(estimateAiMusicSeconds(body)) });
+    return { ok: true, cost: estimateAiMusicCost(estimateAiMusicSeconds(body)) };
   }
-  if (typeof body.script !== 'string') return res.status(400).json({ error: '缺少 script' });
-  return res.json({
-    // 数字人:秒数×每秒售价,speed 影响秒数(与 buildVideoJob 同口径 → 预估≡reserve)。
-    cost: estimateCost(
-      body.script.length,
-      typeof body.resolution === 'string' ? body.resolution : undefined,
-      typeof body.speed === 'number' ? body.speed : undefined,
-    ),
-  });
+  if (typeof body.script !== 'string') return { ok: false, status: 400, error: '缺少 script' };
+  return {
+    ok: true,
+    cost: estimateCost(body.script.length, typeof body.resolution === 'string' ? body.resolution : undefined, typeof body.speed === 'number' ? body.speed : undefined),
+  };
+}
+
+// 费用预估(生成前展示,验收第4条)。薄壳:estimateJob → HTTP。
+jobsRouter.post('/jobs/estimate', requireAuth, async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const r = await estimateJob(req.user!.tenantId, body);
+  if (!r.ok) return res.status(r.status).json({ error: r.error });
+  return res.json({ cost: r.cost, ...(r.extra ?? {}) });
 });
+
 
 // 图像模型清单 — 前端下拉的单一真相源(P2-b:requireAuth,同级路由一致)。
 // 吐 registry 的 UI 相关字段(不泄漏内部 modelId/priceTier 计费细节)。

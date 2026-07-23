@@ -18,6 +18,7 @@
     "seed:voices": "tsx scripts/seed-preset-samples.mjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@volcengine/openapi": "^1.36.2",
     "ali-oss": "^6.23.0",
     "bcrypt": "^5.1.1",
@@ -27,7 +28,8 @@
     "multer": "^1.4.5-lts.1",
     "tsx": "^4.19.2",
     "undici": "^8.5.0",
-    "ws": "^8.21.0"
+    "ws": "^8.21.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/ali-oss": "^6.23.3",

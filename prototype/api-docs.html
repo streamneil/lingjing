@@ -115,8 +115,29 @@
     </table>
     <p>内容审核拒绝不在提交时返回,而是任务落为 <code>failed</code>,<code>error</code> 字段说明原因(轮询 §3 可见)。</p>
 
-    <h2>10. MCP</h2>
-    <p>面向 Claude Code / Cursor 等 Agent 的原生接入(<code>generate_image</code> / <code>generate_video</code> / <code>get_job</code> 等工具)即将上线,敬请期待。届时用同一把 <code>lj_sk_</code> 密钥,加一行配置即可让 Agent 原生调用。</p>
+    <h2>10. MCP(Claude Code / Cursor 原生接入)</h2>
+    <p>用同一把 <code>lj_sk_</code> 密钥,在 Agent 里加一段配置即可原生调用。端点:<span class="method post">POST</span><code>/mcp</code>(Streamable HTTP,无状态)。</p>
+    <pre><code>{
+  "mcpServers": {
+    "lingjing": {
+      "type": "http",
+      "url": "https://你的域名/mcp",
+      "headers": { "Authorization": "Bearer lj_sk_..." }
+    }
+  }
+}</code></pre>
+    <p>工具集(全部异步:生成类返回 <code>job_id</code>,用 <code>get_job</code> 轮询取结果):</p>
+    <table>
+      <tr><th>工具</th><th>说明</th></tr>
+      <tr><td><code>generate_image</code></td><td>文生图 / 图生图</td></tr>
+      <tr><td><code>generate_video</code></td><td>文字转影片</td></tr>
+      <tr><td><code>generate_music</code></td><td>AI 音乐</td></tr>
+      <tr><td><code>generate_speech</code></td><td>文字转语音(需 <code>voice_ref</code>)</td></tr>
+      <tr><td><code>get_job</code></td><td>查任务状态;完成后含签名下载 URL</td></tr>
+      <tr><td><code>list_models</code> / <code>list_voices</code> / <code>list_avatars</code></td><td>发现可用模型 / 音色 / 形象</td></tr>
+      <tr><td><code>estimate</code></td><td>提交前预估费用</td></tr>
+    </table>
+    <p>认证、限速、错误、计费与 REST 完全一致(§1、§7、§9)。</p>
 
     <p style="margin-top:48px"><a href="/settings.html">← 返回系统设置</a></p>
   </div>
