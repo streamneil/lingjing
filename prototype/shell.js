@@ -144,7 +144,7 @@
     <header class="app-bar">
       <div class="crumb">${crumb}</div>
       <div class="sp"></div>
-      <a class="lj-apikey" href="api-keys.html" title="API 密钥" aria-label="API 密钥"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.8 12.2 8.2-8.2"/><path d="m16 5 3 3"/><path d="m13.4 7.6 2.5 2.5"/></svg></a>
+      <a class="lj-apikey" href="api-keys.html" title="API 密钥" aria-label="API 密钥"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.8 12.2 8.2-8.2"/><path d="m16 5 3 3"/><path d="m13.4 7.6 2.5 2.5"/></svg><span>API 密钥</span></a>
       <div class="credits">
         <span class="gem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/><path d="M2 9h20M9 3 6.5 9 12 21M15 3l2.5 6L12 21"/></svg></span>
         剩余 <b class="num" id="lj-balance">—</b><a href="recharge.html" class="topup">充值</a>
@@ -170,9 +170,10 @@
   //     样式仍由 LJConfirm/LJPrompt(ljBuildOverlay)动态复用 —— 全站登出确认、定价咨询输入都靠它。
   const styleEl = document.createElement('style');
   styleEl.textContent = `
-    .lj-apikey{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;margin-right:12px;border-radius:10px;color:var(--t2);border:1px solid var(--line);transition:.15s;flex:0 0 auto}
+    .lj-apikey{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 13px;margin-right:12px;border-radius:10px;color:var(--t2);border:1px solid var(--line);transition:.15s;flex:0 0 auto;font-size:13px;font-weight:500;font-family:var(--f);white-space:nowrap;text-decoration:none}
     .lj-apikey:hover{color:var(--t1);background:var(--card-hi,#1C1C1F);border-color:var(--t3)}
-    .lj-apikey svg{width:18px;height:18px}
+    .lj-apikey svg{width:17px;height:17px;flex:0 0 auto}
+    @media (max-width:640px){.lj-apikey span{display:none}.lj-apikey{padding:0;width:34px;justify-content:center}}
     .lj-mi{display:block;width:100%;text-align:left;background:none;border:none;color:var(--t2);font-size:13.5px;font-family:var(--f);padding:9px 12px;border-radius:9px;cursor:pointer;transition:.15s}
     .lj-mi:hover{background:var(--card-hi,#1C1C1F);color:var(--t1)}
     .lj-ov{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:none;place-items:center;z-index:300}
