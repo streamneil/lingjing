@@ -5,9 +5,10 @@
 
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import {
   enqueueJob,
+  deleteJobRow,
   getJobForTenant,
   listJobsForTenant,
   countJobsForTenant,
@@ -15,6 +16,8 @@ import {
   deleteJobForTenant,
 } from '../queue/index.js';
 import type { JobStatus } from '../db/index.js';
+import type { Role } from '../db/index.js';
+import { writeAudit } from '../audit/index.js';
 import {
   signOutputUrls,
   getSignedUrl,
@@ -840,42 +843,113 @@ const JOB_BUILDERS: Record<
     ai_music: (body: Record<string, unknown>) => buildAiMusicJob(body),
   });
 
-// 提交生成 — 仅 admin/creator(viewer 不能发起生成,验收第8条)
-jobsRouter.post('/jobs', requireRole('admin', 'creator'), async (req: Request, res: Response) => {
-  const body = (req.body ?? {}) as Record<string, unknown>;
-  const tid = req.user!.tenantId;
+/** 取客户端 IP(供 submitJob 审计;与 audit 模块内部同口径:X-Forwarded-For 首段 → socket)。 */
+function clientIpOf(req: Request): string | null {
+  const xf = req.headers['x-forwarded-for'];
+  if (typeof xf === 'string') return xf.split(',')[0]!.trim();
+  return req.socket?.remoteAddress ?? null;
+}
 
+// ── submitJob:提交生成的服务函数(REST 路由与 MCP 工具共用,D4)──
+// 流程:type→builder → 归属校验 → (幂等命中判定) → builder → 余额 → 入队 → reserve → 审计。
+// req-free:入参 actor(身份)+ body + 可选幂等键;不碰 Express,便于 PR2 的 MCP 直接调用。
+export interface SubmitActor {
+  tenantId: string;
+  userId: string;
+  role: Role;
+  ip?: string | null;
+  viaApiKey?: boolean; // 预留:T6 审计标记 via_api_key(本轮不写,AuditDetail 形状待扩)
+}
+export type SubmitResult =
+  | { ok: true; id: string; cost: number; status: 'queued'; reused: boolean }
+  | { ok: false; status: number; error: string; code?: string; extra?: Record<string, unknown> };
+
+/** 稳定序列化(递归排序对象键),用于幂等 body 哈希 —— 键顺序不同不误判 409。 */
+function canonicalStringify(v: unknown): string {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v);
+  if (Array.isArray(v)) return `[${v.map(canonicalStringify).join(',')}]`;
+  const keys = Object.keys(v as Record<string, unknown>).sort();
+  return `{${keys.map((k) => JSON.stringify(k) + ':' + canonicalStringify((v as Record<string, unknown>)[k])).join(',')}}`;
+}
+function bodyHash(body: Record<string, unknown>): string {
+  return createHash('sha256').update(canonicalStringify(body)).digest('hex');
+}
+
+/** 幂等命中判定:按 (tenant, key) 查已有 job。返回 reuse 结果 / 409 冲突 / null(无命中,继续新建)。 */
+function idempotencyHit(tid: string, key: string, hash: string): SubmitResult | null {
+  const row = db
+    .prepare(`SELECT id, status, idempotency_hash, reserved_cost FROM job WHERE tenant_id=? AND idempotency_key=?`)
+    .get(tid, key) as { id: string; status: string; idempotency_hash: string | null; reserved_cost: number | null } | undefined;
+  if (!row) return null;
+  if (row.idempotency_hash !== hash) {
+    return { ok: false, status: 409, error: '相同 Idempotency-Key 的请求体不一致', code: 'IDEMPOTENCY_CONFLICT' };
+  }
+  return { ok: true, id: row.id, cost: row.reserved_cost ?? 0, status: 'queued', reused: true };
+}
+
+export async function submitJob(
+  actor: SubmitActor,
+  body: Record<string, unknown>,
+  idempotencyKey?: string,
+): Promise<SubmitResult> {
+  const tid = actor.tenantId;
   // type 默认 video(兼容现有数字人前端不传 type 的请求);封闭 allowlist。
   const type = typeof body.type === 'string' && body.type ? body.type : 'video';
-  const builder = Object.prototype.hasOwnProperty.call(JOB_BUILDERS, type)
-    ? JOB_BUILDERS[type]
-    : undefined;
-  if (!builder) {
-    return res.status(400).json({ error: `不支持的任务类型:${type}` });
-  }
+  const builder = Object.prototype.hasOwnProperty.call(JOB_BUILDERS, type) ? JOB_BUILDERS[type] : undefined;
+  if (!builder) return { ok: false, status: 400, error: `不支持的任务类型:${type}` };
 
   // 输入素材归属校验(T-IMGREF-IDOR):builder 前拦截跨租户/伪造 key。
   const refErr = checkRefsOwned(body, tid);
-  if (refErr) return res.status(400).json({ error: refErr });
+  if (refErr) return { ok: false, status: 400, error: refErr };
 
-  const built = await builder(body, tid, req.user!.id, req.user!.role === 'admin');
-  if (!built.ok) {
-    return res.status(built.status).json({ error: built.error, ...(built.extra ?? {}) });
+  // 幂等键:先查命中(同 body 返原 job;异 body 409)。未命中继续新建,并在插入时靠唯一索引兜并发。
+  const hash = idempotencyKey ? bodyHash(body) : '';
+  if (idempotencyKey) {
+    const hit = idempotencyHit(tid, idempotencyKey, hash);
+    if (hit) return hit;
   }
 
-  // 先入队拿 jobId,再按预估 reserve(reserve 关联 jobId,失败时能精确 release)
+  const built = await builder(body, tid, actor.userId, actor.role === 'admin');
+  if (!built.ok) return { ok: false, status: built.status, error: built.error, extra: built.extra };
+
   const { cost } = built;
-  if (balance(tid) < cost) {
-    return res.status(402).json({ error: '积分余额不足', need: cost, balance: balance(tid) });
+  if (balance(tid) < cost) return { ok: false, status: 402, error: '积分余额不足', code: 'INSUFFICIENT_CREDITS', extra: { need: cost, balance: balance(tid) } };
+
+  // 入队拿 jobId(带幂等键则写唯一列);并发同键第二插入撞 idx_job_idem → 抛错,兜底返原 job。
+  let id: string;
+  try {
+    id = enqueueJob(built.type, built.input, tid, actor.userId, idempotencyKey ? { key: idempotencyKey, hash, reservedCost: cost } : undefined);
+  } catch (e) {
+    if (idempotencyKey) {
+      const hit = idempotencyHit(tid, idempotencyKey, hash); // 并发对手已插入 → 返其 job(同 body)或 409(异 body)
+      if (hit) return hit;
+    }
+    throw e;
   }
-  const id = enqueueJob(built.type, built.input, tid, req.user!.id); // 记创建者(计费归属"谁消费")
   try {
     reserve(tid, id, cost); // 原子:再次校验余额 + 预扣
   } catch (e) {
-    return res.status(402).json({ error: e instanceof Error ? e.message : '预扣失败' });
+    deleteJobRow(id); // 回滚刚建的行:不烧幂等键、不留无预扣的孤儿队列项
+    return { ok: false, status: 402, error: e instanceof Error ? e.message : '预扣失败', code: 'INSUFFICIENT_CREDITS' };
   }
-  audit(req, 'create_job', id);
-  return res.status(202).json({ id, status: 'queued', cost });
+  writeAudit(tid, actor.userId, 'create_job', id, actor.ip ?? null, 'user'); // 计费归属"谁消费"
+  return { ok: true, id, cost, status: 'queued', reused: false };
+}
+
+// 提交生成 — 仅 admin/creator(viewer 不能发起生成,验收第8条)。薄壳:解析请求 → submitJob → 映射 HTTP。
+jobsRouter.post('/jobs', requireRole('admin', 'creator'), async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const idemKey = typeof req.headers['idempotency-key'] === 'string' ? req.headers['idempotency-key'] : undefined;
+  const r = await submitJob(
+    { tenantId: req.user!.tenantId, userId: req.user!.id, role: req.user!.role as Role, ip: clientIpOf(req), viaApiKey: !!req.viaApiKey },
+    body,
+    idemKey,
+  );
+  if (!r.ok) {
+    return res.status(r.status).json({ error: r.error, ...(r.code ? { code: r.code } : {}), ...(r.extra ?? {}) });
+  }
+  // 幂等命中 → 200(原 job);新建 → 202。
+  return res.status(r.reused ? 200 : 202).json({ id: r.id, status: r.status, cost: r.cost });
 });
 
 // ── 图生图输入图上传 ──

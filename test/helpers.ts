@@ -144,8 +144,8 @@ export class Client {
   get(path: string) {
     return this.request('GET', path);
   }
-  post(path: string, body?: unknown) {
-    return this.request('POST', path, body);
+  post(path: string, body?: unknown, extraHeaders?: Record<string, string>) {
+    return this.request('POST', path, body, extraHeaders);
   }
   put(path: string, body?: unknown) {
     return this.request('PUT', path, body);

@@ -319,6 +319,14 @@ addColumnIfMissing('job', 'output_kind', `output_kind TEXT NOT NULL DEFAULT 'vid
 // 用量计费归属(谁消费):记录创建该任务的用户 id(可空)。老 job 为 NULL → 计费明细显「—」。
 // credit_ledger 不冗余存用户/工具,经 job_id JOIN job(取 created_by + type)还原"谁 + 什么工具"。
 addColumnIfMissing('job', 'created_by', `created_by TEXT`);
+// Open API 幂等键(设计文档 §4.4):客户端可选 Idempotency-Key,防 Agent 超时重试双扣费。
+//   idempotency_key = 客户端任意串;idempotency_hash = 请求 body 的 canonical sha256(检测同键异 body → 409)。
+//   reserved_cost 存本次预扣积分,幂等命中时原样返回,无需 JOIN ledger。
+addColumnIfMissing('job', 'idempotency_key', `idempotency_key TEXT`);
+addColumnIfMissing('job', 'idempotency_hash', `idempotency_hash TEXT`);
+addColumnIfMissing('job', 'reserved_cost', `reserved_cost INTEGER`);
+// 部分唯一索引:同租户同 key 唯一;key 为 NULL(绝大多数请求)不参与唯一。并发同键第二插入撞此索引 → submitJob 兜底返原 job。
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_job_idem ON job(tenant_id, idempotency_key) WHERE idempotency_key IS NOT NULL`);
 
 // 失败可读化(用户反馈:前端不能出现英文 JSON;admin 需看到原始日志排障)。
 //   error 列语义收敛为「用户可读中文」;新增 error_detail 存「原始技术日志」(厂商 code/RequestId)。
