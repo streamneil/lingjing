@@ -2,6 +2,11 @@
 
 灵镜平台的用户可见变更记录。版本号为四段式 `MAJOR.MINOR.PATCH.MICRO`(与 `VERSION` 文件一致)。
 
+## [0.8.0.0] - 2026-07-23
+
+### Added
+- **MCP 接入(Claude Code / Cursor 原生调用)**:在 Agent 里加一段配置(端点 `/mcp` + `Authorization: Bearer lj_sk_…`),即可用原生工具 `generate_image` / `generate_video` / `generate_music` / `generate_speech` / `get_job` / `list_models` / `list_voices` / `list_avatars` / `estimate` 调用灵镜。生成类工具异步返回任务 id,用 `get_job` 轮询取签名下载 URL。认证、限速、计费与开放 API 完全一致。
+
 ## [0.7.0.0] - 2026-07-23
 
 ### Added
