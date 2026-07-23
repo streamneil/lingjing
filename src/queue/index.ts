@@ -22,20 +22,36 @@ export function outputKindForType(type: string): 'image' | 'audio' | 'video' {
 
 /** 入队一个生成任务(通用,按 type),返回 jobId。
  *  多工具平台:type 决定 worker 走哪个 runner;input 是该工具的入参(JSON 序列化存)。 */
+export interface EnqueueIdempotency {
+  key: string; // 客户端 Idempotency-Key
+  hash: string; // 请求 body 的 canonical sha256
+  reservedCost: number; // 本次预扣积分(幂等命中原样返回)
+}
+
 export function enqueueJob(
   type: string,
   input: unknown,
   tenantId: string = config.defaultTenantId,
   createdBy: string | null = null, // 创建者用户 id(计费归属;缺省 null = 老路径/系统)
+  idem?: EnqueueIdempotency, // Open API 幂等键(可选);带则写入唯一列,并发同键第二插入会撞 idx_job_idem 抛错
 ): string {
   const id = randomUUID();
   const t = now();
   // output_kind 创建即按 type 定(修:失败任务此前停在列默认 'video' → 图片/音频失败被当视频 → 前端卡 Loading)。
   db.prepare(
-    `INSERT INTO job (id, tenant_id, type, status, input_json, output_kind, created_by, created_at, updated_at)
-     VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?)`,
-  ).run(id, tenantId, type, JSON.stringify(input), outputKindForType(type), createdBy, t, t);
+    `INSERT INTO job (id, tenant_id, type, status, input_json, output_kind, created_by, created_at, updated_at,
+                      idempotency_key, idempotency_hash, reserved_cost)
+     VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id, tenantId, type, JSON.stringify(input), outputKindForType(type), createdBy, t, t,
+    idem?.key ?? null, idem?.hash ?? null, idem?.reservedCost ?? null,
+  );
   return id;
+}
+
+/** 删除一个 job 行(仅用于 submitJob 在 reserve 失败时回滚刚建的行,避免烧掉幂等键 / 留孤儿队列项)。 */
+export function deleteJobRow(id: string): void {
+  db.prepare(`DELETE FROM job WHERE id=?`).run(id);
 }
 
 /** 入队一个视频(AI 虚拟人)生成任务,返回 jobId。enqueueJob 的 video 便捷包装(向后兼容)。 */

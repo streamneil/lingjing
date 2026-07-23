@@ -25,7 +25,7 @@ export function audit(
   target?: string,
   detail?: AuditDetail,
 ): void {
-  writeAudit(req.user?.tenantId ?? 'unknown', req.user?.id ?? null, action, target ?? null, clientIp(req), 'user', detail);
+  writeAudit(req.user?.tenantId ?? 'unknown', req.user?.id ?? null, action, target ?? null, clientIp(req), 'user', detail, req.apiKeyId ?? null);
 }
 
 export type AuditDetail = { field: string; old: string; new: string }[];
@@ -42,11 +42,12 @@ export function writeAudit(
   ip: string | null,
   actorType: ActorType = 'user',
   detail?: AuditDetail,
+  viaApiKeyId?: string | null, // 经 API key 发起时记 key id(区分本人 vs Agent);cookie 操作省略 → null
 ): void {
   db.prepare(
-    `INSERT INTO audit_log (id,tenant_id,user_id,actor_type,action,target,ip,detail,created_at)
-     VALUES (?,?,?,?,?,?,?,?,?)`,
-  ).run(randomUUID(), tenantId, userId, actorType, action, target, ip, detail ? JSON.stringify(detail) : null, Date.now());
+    `INSERT INTO audit_log (id,tenant_id,user_id,actor_type,action,target,ip,detail,via_api_key,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+  ).run(randomUUID(), tenantId, userId, actorType, action, target, ip, detail ? JSON.stringify(detail) : null, viaApiKeyId ?? null, Date.now());
 }
 
 /** 平台超管操作审计(actor_type=platform_admin)。

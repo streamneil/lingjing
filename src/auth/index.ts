@@ -385,27 +385,12 @@ export const loginOrRegisterByPhone = db.transaction(
 );
 
 /** 校验 session token,返回当前用户(含最新角色/状态),无效返回 null。 */
-export function resolveSession(token: string | undefined): AuthedUser | null {
-  if (!token) return null;
-  const s = db.prepare(`SELECT * FROM session WHERE token=?`).get(token) as SessionRow | undefined;
-  if (!s) return null;
-  if (s.expires_at < now()) {
-    db.prepare(`DELETE FROM session WHERE token=?`).run(token);
-    return null;
-  }
-  // 每次都查 user 最新状态:停用即生效(JWT 做不到这点)
-  const u = db.prepare(`SELECT * FROM user WHERE id=?`).get(s.user_id) as UserRow | undefined;
-  if (!u || u.status === 'disabled') return null;
-  // 最近活跃 throttle 写:距上次 >5min 才 UPDATE,避免轮询场景每请求写库胀 WAL。
-  // best-effort:吞错(含 SQLITE_BUSY),写失败绝不影响鉴权读路径。
-  const ACTIVE_THROTTLE_MS = 5 * 60 * 1000;
-  if (!u.last_active || now() - u.last_active > ACTIVE_THROTTLE_MS) {
-    try {
-      db.prepare(`UPDATE user SET last_active=? WHERE id=?`).run(now(), u.id);
-    } catch {
-      /* 活跃时间是 best-effort,写失败忽略 */
-    }
-  }
+// 距上次活跃 >5min 才写 last_active,避免轮询场景每请求写库胀 WAL。best-effort:写失败绝不影响鉴权读路径。
+const ACTIVE_THROTTLE_MS = 5 * 60 * 1000;
+
+/** 从 user 行构造完整 AuthedUser 身份(session 与 API key 共用,保证两条认证路径身份逐字段一致)。
+ *  含品牌/logo 派生。传入的 user 行已确认存在且非停用。 */
+export function buildAuthedUser(u: UserRow): AuthedUser {
   const t = db.prepare(`SELECT name FROM tenant WHERE id=?`).get(u.tenant_id) as { name: string } | undefined;
   // 机构 logo key(供前端拼公开读路径;不在此签名,零额外开销)。
   const logoRow = db
@@ -429,6 +414,32 @@ export function resolveSession(token: string | undefined): AuthedUser | null {
     username: u.username, displayName: u.display_name || u.username, role: u.role,
     phone: u.phone, hasPassword: userHasPassword(u),
   };
+}
+
+/** 距上次活跃 >5min 才更新 last_active(best-effort,写失败忽略)。session/API key 共用。 */
+export function touchLastActive(u: UserRow): void {
+  if (!u.last_active || now() - u.last_active > ACTIVE_THROTTLE_MS) {
+    try {
+      db.prepare(`UPDATE user SET last_active=? WHERE id=?`).run(now(), u.id);
+    } catch {
+      /* 活跃时间是 best-effort,写失败忽略 */
+    }
+  }
+}
+
+export function resolveSession(token: string | undefined): AuthedUser | null {
+  if (!token) return null;
+  const s = db.prepare(`SELECT * FROM session WHERE token=?`).get(token) as SessionRow | undefined;
+  if (!s) return null;
+  if (s.expires_at < now()) {
+    db.prepare(`DELETE FROM session WHERE token=?`).run(token);
+    return null;
+  }
+  // 每次都查 user 最新状态:停用即生效(JWT 做不到这点)
+  const u = db.prepare(`SELECT * FROM user WHERE id=?`).get(s.user_id) as UserRow | undefined;
+  if (!u || u.status === 'disabled') return null;
+  touchLastActive(u);
+  return buildAuthedUser(u);
 }
 
 /** 改昵称(展示名)。 */

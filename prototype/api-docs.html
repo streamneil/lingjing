@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>开放 API 文档 · 灵镜</title>
+  <style>
+    :root { --bg: #0e0e10; --card: #17171a; --line: #2a2a30; --t1: #ececf0; --t2: #a8a8b3; --accent: #6ea8fe; --ok: #4ade80; --amber: #fbbf24; --code: #1d1d22; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--t1); font: 15px/1.75 -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 48px 24px 96px; }
+    h1 { font-size: 30px; margin: 0 0 6px; }
+    h2 { font-size: 21px; margin: 44px 0 12px; padding-top: 18px; border-top: 1px solid var(--line); }
+    h3 { font-size: 16px; margin: 26px 0 8px; color: var(--t1); }
+    p, li { color: var(--t2); }
+    a { color: var(--accent); }
+    code { background: var(--code); padding: 2px 6px; border-radius: 5px; font-family: "SF Mono", Menlo, monospace; font-size: 13px; color: #e6e6ea; word-break: break-word; }
+    pre { background: var(--code); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { color: var(--t1); font-weight: 600; }
+    .method { display: inline-block; font-weight: 700; font-size: 12px; padding: 1px 7px; border-radius: 5px; margin-right: 6px; font-family: monospace; }
+    .get { background: rgba(74, 222, 128, .16); color: var(--ok); }
+    .post { background: rgba(110, 168, 254, .16); color: var(--accent); }
+    .del { background: rgba(251, 191, 36, .16); color: var(--amber); }
+    .lead { font-size: 16px; color: var(--t2); }
+    .tag { color: var(--ok); }
+    .no { color: var(--amber); }
+    .note { background: rgba(110, 168, 254, .07); border: 1px solid rgba(110, 168, 254, .25); border-radius: 10px; padding: 12px 16px; margin: 16px 0; }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <h1>灵镜 开放 API</h1>
+    <p class="lead">让你的 AI Agent 通过 HTTP 直接调用灵镜的生图、生视频、生音乐、语音能力。密钥即成员本人身份,消耗本机构积分。</p>
+
+    <h2>1. 认证</h2>
+    <p>在<b>系统设置 → API 密钥</b>创建密钥(格式 <code>lj_sk_…</code>,明文仅创建时显示一次)。每个请求带上:</p>
+    <pre><code>Authorization: Bearer lj_sk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</code></pre>
+    <p>密钥以创建者身份行动:权限、计费、作品归属都和这个人网页操作一致。<b>viewer 角色的密钥不能发起生成</b>(会返回 <code>403 ROLE_FORBIDDEN</code>)。密钥只能访问生成相关接口,不能管理账号 / 成员 / 支付(其余接口返回 <code>403 SCOPE_FORBIDDEN</code>)。</p>
+    <div class="note">主人被停用或密钥被吊销后,密钥立即失效(返回 <code>401 UNAUTHORIZED</code>)。管理员可在系统设置吊销任意密钥。</div>
+
+    <h2>2. 提交生成</h2>
+    <p><span class="method post">POST</span><code>/api/jobs</code></p>
+    <p>所有生成走同一个提交接口,用 <code>type</code> 区分工具。返回任务 id,再轮询取结果(见 §3)。</p>
+    <table>
+      <tr><th>type</th><th>工具</th><th>关键参数</th></tr>
+      <tr><td><code>ai_image</code></td><td>AI 图片(文生图 / 图生图)</td><td><code>prompt</code>, <code>count</code>, <code>model?</code>, <code>mode?</code>, <code>imageRefs?</code></td></tr>
+      <tr><td><code>video_t2v</code></td><td>文字转影片</td><td><code>prompt</code>, <code>model?</code>, <code>resolution?</code>, <code>duration?</code></td></tr>
+      <tr><td><code>video_i2v</code></td><td>图片转影片(首帧 / 首尾帧 / 参考)</td><td><code>task</code>, <code>imageRefs</code>, <code>prompt?</code></td></tr>
+      <tr><td><code>video_r2v</code></td><td>多模态参考生影片</td><td><code>prompt</code>, <code>imageRefs?</code>, <code>videoRefs?</code>, <code>audioRefs?</code></td></tr>
+      <tr><td><code>video_edit</code></td><td>影片编辑</td><td><code>videoRef</code>, <code>prompt</code></td></tr>
+      <tr><td><code>tts</code></td><td>文字转语音</td><td><code>text</code>, <code>voiceRef</code></td></tr>
+      <tr><td><code>ai_music</code></td><td>AI 音乐</td><td><code>prompt</code></td></tr>
+    </table>
+    <p><code>model</code> 缺省用当前默认模型;可选项见 §5 的模型列表接口。<code>voiceRef</code> / <code>avatarRef</code> 等 ID 见 §6 发现接口。</p>
+    <pre><code>curl -X POST https://你的域名/api/jobs \
+  -H "Authorization: Bearer lj_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{"type":"ai_image","prompt":"一只在雪地里的柴犬","count":1}'
+
+# → 202 {"id":"...","status":"queued","cost":11}</code></pre>
+
+    <h3>幂等(强烈建议)</h3>
+    <p>Agent 超时重试是常态。带上 <code>Idempotency-Key</code> 请求头(客户端生成的任意唯一串),同一个键的重复提交<b>不会重复扣费</b>:</p>
+    <pre><code>-H "Idempotency-Key: 8f14e45f-你的唯一串"</code></pre>
+    <ul>
+      <li>同键 + 相同请求体 → 返回<b>原任务</b>(<code>200</code>,不再扣费)</li>
+      <li>同键 + 不同请求体 → <code>409 IDEMPOTENCY_CONFLICT</code></li>
+      <li>幂等作用域按机构隔离,不同机构互不影响</li>
+    </ul>
+
+    <h2>3. 查询任务 / 取结果</h2>
+    <p><span class="method get">GET</span><code>/api/jobs/:id</code> — 返回状态。终态 <code>done</code> 后含产物;<code>failed</code> 时 <code>error</code> 为中文可读原因(如送审拒绝、余额不足)。</p>
+    <p><span class="method get">GET</span><code>/api/jobs/:id/download/:idx</code> — 下载第 <code>idx</code> 个产物(签名 URL 重定向)。</p>
+    <div class="note">视频类任务是分钟级异步。建议轮询 <code>GET /api/jobs/:id</code> 的间隔 <b>≥ 5 秒</b>,直到 <code>status</code> 为 <code>done</code> 或 <code>failed</code>。读接口限速较宽(见 §7)。</div>
+
+    <h2>4. 费用预估</h2>
+    <p><span class="method post">POST</span><code>/api/jobs/estimate</code> — 参数同提交,返回 <code>{cost}</code>。生成前预估扣费,报价≡实扣。</p>
+
+    <h2>5. 模型列表</h2>
+    <p><span class="method get">GET</span> <code>/api/image-models</code> · <code>/api/video-models</code> · <code>/api/i2v-models</code> · <code>/api/r2v-models</code> · <code>/api/edit-models</code> · <code>/api/tts-models</code></p>
+    <p>让 Agent 自己发现可用模型、能力、分辨率档与计价。</p>
+
+    <h2>6. 发现音色 / 形象 · 上传参考素材</h2>
+    <p><span class="method get">GET</span><code>/api/voices</code> · <span class="method get">GET</span><code>/api/avatars</code> — 拿到 <code>voiceRef</code> / <code>avatarRef</code> ID(TTS、数字人视频需要)。</p>
+    <p><span class="method post">POST</span><code>/api/image-uploads</code> · <code>/api/video-uploads</code> · <code>/api/audio-uploads</code> — 上传参考素材(<code>multipart/form-data</code>),返回存储 key 供 <code>imageRefs</code> 等引用。</p>
+    <div class="note">⚠️ 合规:上传含<b>真人</b>的素材必须持有被摄主体的授权(<code>consent=true</code>),这与网页端同一口径。责任主体为你的机构。深度合成生成受平台内容审核约束。</div>
+
+    <h2>7. 限速</h2>
+    <p>按密钥计数,读写分级。超限返回 <code>429 RATE_LIMITED</code>,请<b>指数退避</b>后重试。</p>
+    <table>
+      <tr><th>口径</th><th>上限</th><th>包含</th></tr>
+      <tr><td>写</td><td>60 次 / 分钟 / 密钥</td><td>提交生成、上传</td></tr>
+      <tr><td>读</td><td>300 次 / 分钟 / 密钥</td><td>查询任务、模型列表、余额</td></tr>
+    </table>
+
+    <h2>8. 余额</h2>
+    <p><span class="method get">GET</span><code>/api/credits/balance</code> — 返回 <code>{balance}</code>(当前机构积分)。余额不足时提交返回 <code>402 INSUFFICIENT_CREDITS</code>。</p>
+
+    <h2>9. 错误码</h2>
+    <p>开放接口的错误响应统一为 <code>{"error":"中文可读","code":"机器可读"}</code>。按 <code>code</code> 决定是否重试:</p>
+    <table>
+      <tr><th>code</th><th>HTTP</th><th>含义</th><th>可重试?</th></tr>
+      <tr><td><code>UNAUTHORIZED</code></td><td>401</td><td>密钥无效 / 已吊销 / 主人被停用</td><td class="no">否</td></tr>
+      <tr><td><code>SCOPE_FORBIDDEN</code></td><td>403</td><td>密钥访问了生成面以外的接口</td><td class="no">否</td></tr>
+      <tr><td><code>ROLE_FORBIDDEN</code></td><td>403</td><td>viewer 密钥不能发起生成</td><td class="no">否</td></tr>
+      <tr><td><code>RATE_LIMITED</code></td><td>429</td><td>超出限速</td><td class="tag">是(退避)</td></tr>
+      <tr><td><code>INSUFFICIENT_CREDITS</code></td><td>402</td><td>积分余额不足</td><td class="no">否(充值后)</td></tr>
+      <tr><td><code>IDEMPOTENCY_CONFLICT</code></td><td>409</td><td>相同幂等键但请求体不同</td><td class="no">否</td></tr>
+      <tr><td>(无 code)</td><td>400</td><td>参数错误</td><td class="no">否</td></tr>
+    </table>
+    <p>内容审核拒绝不在提交时返回,而是任务落为 <code>failed</code>,<code>error</code> 字段说明原因(轮询 §3 可见)。</p>
+
+    <h2>10. MCP</h2>
+    <p>面向 Claude Code / Cursor 等 Agent 的原生接入(<code>generate_image</code> / <code>generate_video</code> / <code>get_job</code> 等工具)即将上线,敬请期待。届时用同一把 <code>lj_sk_</code> 密钥,加一行配置即可让 Agent 原生调用。</p>
+
+    <p style="margin-top:48px"><a href="/settings.html">← 返回系统设置</a></p>
+  </div>
+</body>
+
+</html>

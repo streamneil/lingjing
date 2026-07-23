@@ -37,6 +37,20 @@ export function genToken(): string {
   return randomBytes(32).toString('hex');
 }
 
+// ── Open API key(lj_sk_…)──
+// 自家 API key 只需单向哈希(不像第三方 provider key 要解密回来),故用 SHA-256 不用 AES。
+// key = lj_sk_ + 32 字节随机 hex;明文仅创建时回传一次,库里只存 sha256(key)。
+export const API_KEY_PREFIX = 'lj_sk_';
+/** 生成 API key。返回明文 + 展示前缀(前 12 位)。明文不落库,仅创建时回传。 */
+export function genApiKey(): { key: string; prefix: string } {
+  const key = API_KEY_PREFIX + randomBytes(32).toString('hex');
+  return { key, prefix: key.slice(0, 12) };
+}
+/** API key 单向哈希(sha256 hex);认证时重算比对。 */
+export function hashApiKey(key: string): string {
+  return createHash('sha256').update(key).digest('hex');
+}
+
 // 临时密码字符集:去掉易混淆字符(0/O、1/l/I)+ 安全符号子集,管理员口头/复制传达不歧义。
 const TMP_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789@#%*';
 /** 生成 12 位随机强密码(crypto 随机源,无歧义字符)。管理员重置成员密码用,明文仅回传一次。 */

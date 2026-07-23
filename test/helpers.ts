@@ -45,7 +45,7 @@ export class Client {
   private cookie: string | undefined;
   constructor(private app: Express) {}
 
-  private async request(method: string, path: string, body?: unknown): Promise<Res> {
+  private async request(method: string, path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<Res> {
     const port = await portFor(this.app);
     return new Promise((resolveP, reject) => {
       const data = body !== undefined ? JSON.stringify(body) : undefined;
@@ -55,6 +55,7 @@ export class Client {
         headers['Content-Length'] = String(Buffer.byteLength(data));
       }
       if (this.cookie) headers['Cookie'] = this.cookie;
+      if (extraHeaders) Object.assign(headers, extraHeaders);
 
       const req = http.request({ host: '127.0.0.1', port, path, method, headers }, (res) => {
         let buf = '';
@@ -143,14 +144,21 @@ export class Client {
   get(path: string) {
     return this.request('GET', path);
   }
-  post(path: string, body?: unknown) {
-    return this.request('POST', path, body);
+  post(path: string, body?: unknown, extraHeaders?: Record<string, string>) {
+    return this.request('POST', path, body, extraHeaders);
   }
   put(path: string, body?: unknown) {
     return this.request('PUT', path, body);
   }
   del(path: string) {
     return this.request('DELETE', path);
+  }
+  /** Open API key 请求(不带 cookie,只带 Authorization: Bearer)。用于 API key 端到端测试。 */
+  getKey(path: string, key: string) {
+    return this.request('GET', path, undefined, { Authorization: `Bearer ${key}` });
+  }
+  postKey(path: string, key: string, body?: unknown) {
+    return this.request('POST', path, body, { Authorization: `Bearer ${key}` });
   }
   /** 原始 GET:拿 status + headers + 二进制 body(下载端点测 Content-Disposition / 字节)。 */
   async getRaw(path: string): Promise<RawRes> {
