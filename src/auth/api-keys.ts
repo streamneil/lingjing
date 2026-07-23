@@ -40,9 +40,12 @@ export function createApiKey(
   return { id, key, prefix };
 }
 
-/** 解析 Authorization 头(Bearer lj_sk_…)→ 与 session 一致的 AuthedUser,或 null。
- *  校验链:形状 → 哈希查未吊销 key → 查 user 最新状态(停用→null)→ 更新 last_used(节流)。 */
-export function resolveApiKey(authHeader: string | undefined): AuthedUser | null {
+/** 解析 Authorization 头(Bearer lj_sk_…)→ {与 session 一致的 AuthedUser, key id},或 null。
+ *  校验链:形状 → 哈希查未吊销 key → 查 user 最新状态(停用→null)→ 更新 last_used(节流)。
+ *  返回 keyId 供限速(每 key 计数)与审计标记(via_api_key)用。 */
+export function resolveApiKeyFull(
+  authHeader: string | undefined,
+): { user: AuthedUser; keyId: string } | null {
   if (!authHeader || typeof authHeader !== 'string') return null;
   const m = authHeader.match(/^Bearer\s+(\S+)$/);
   if (!m) return null;
@@ -68,7 +71,12 @@ export function resolveApiKey(authHeader: string | undefined): AuthedUser | null
     }
   }
   touchLastActive(u); // 用户维度活跃也刷新(与网页端一致)
-  return buildAuthedUser(u);
+  return { user: buildAuthedUser(u), keyId: row.id };
+}
+
+/** resolveApiKeyFull 的薄包装:只要身份(不要 key id)。 */
+export function resolveApiKey(authHeader: string | undefined): AuthedUser | null {
+  return resolveApiKeyFull(authHeader)?.user ?? null;
 }
 
 /** 列 key。成员看自己的;admin 看全租户。永不含哈希(只前缀 + 元数据)。 */

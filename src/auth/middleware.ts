@@ -16,7 +16,8 @@
 
 import type { Request, Response, NextFunction } from 'express';
 import { resolveSession, type AuthedUser } from './index.js';
-import { resolveApiKey } from './api-keys.js';
+import { resolveApiKeyFull } from './api-keys.js';
+import { SlidingWindowLimiter } from './rate-limit.js';
 import { secureAttr } from './cookie.js';
 
 // 把当前用户挂到 req 上(扩展 Express 类型)
@@ -26,6 +27,7 @@ declare global {
     interface Request {
       user?: AuthedUser;
       viaApiKey?: boolean; // 经 Open API key 认证(非 cookie session):作用域受限,见 requireApiScope
+      apiKeyId?: string; // 命中的 api_key.id(限速计数 + 审计 via_api_key 标记用)
     }
   }
 }
@@ -64,12 +66,32 @@ export function attachUser(req: Request, _res: Response, next: NextFunction): vo
     req.user = user;
     return next();
   }
-  const viaKey = resolveApiKey(req.headers.authorization);
+  const viaKey = resolveApiKeyFull(req.headers.authorization);
   if (viaKey) {
-    req.user = viaKey;
+    req.user = viaKey.user;
     req.viaApiKey = true;
+    req.apiKeyId = viaKey.keyId;
   }
   next();
+}
+
+// ── Open API key 限速(设计文档 §4.3,D9 读写分级)──
+// 单进程内存滑窗,每 key 计数。写(提交/上传)易烧积分,严;读(查询/列表)Agent 需高频轮询,宽。
+// 上限可经 env 覆盖(测试用小值);默认 写 60/min、读 300/min。
+const WRITE_PER_MIN = Number(process.env.API_RATE_WRITE_PER_MIN) || 60;
+const READ_PER_MIN = Number(process.env.API_RATE_READ_PER_MIN) || 300;
+const writeLimiter = new SlidingWindowLimiter(60_000, WRITE_PER_MIN);
+const readLimiter = new SlidingWindowLimiter(60_000, READ_PER_MIN);
+// 惰性回收:每分钟 sweep 一次空 key(unref 不阻塞进程退出)。
+const _sweep = setInterval(() => { writeLimiter.sweep(); readLimiter.sweep(); }, 60_000);
+if (typeof _sweep.unref === 'function') _sweep.unref();
+
+/** API key 限速守卫:仅约束 viaApiKey 流量,读写分级。超限 → 429 RATE_LIMITED。 */
+export function apiRateLimit(req: Request, res: Response, next: NextFunction): void {
+  if (!req.viaApiKey || !req.apiKeyId) return next(); // 只约束 API key 流量
+  const limiter = req.method === 'GET' ? readLimiter : writeLimiter;
+  if (limiter.allow(req.apiKeyId)) return next();
+  res.status(429).json({ error: '请求过于频繁,请稍后重试', code: 'RATE_LIMITED' });
 }
 
 // ── Open API key 作用域白名单(设计文档 §4.2)──
