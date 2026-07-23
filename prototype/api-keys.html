@@ -32,7 +32,17 @@
     .ak-reveal { display: none; margin: 4px 0 14px; padding: 13px 15px; background: rgba(110, 168, 254, .08); border: 1px solid rgba(110, 168, 254, .3); border-radius: 12px; font-size: 13px; line-height: 1.7; }
     .ak-note { font-size: 11.5px; color: var(--t4); margin-top: 6px; line-height: 1.5; }
     .ak-link { color: var(--blue, #6ea8fe); }
-    .ak-soon { font-size: 11px; padding: 1px 7px; border-radius: 6px; background: var(--line); color: var(--t3); margin-left: 6px; }
+    .ak-hd { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+    .ak-hd > div { flex: 1; }
+    /* 创建密钥弹框 */
+    .ak-modal { position: fixed; inset: 0; z-index: 1000; display: none; align-items: center; justify-content: center; padding: 24px; }
+    .ak-modal.show { display: flex; }
+    .ak-modal-bd { position: absolute; inset: 0; background: rgba(0, 0, 0, .62); backdrop-filter: blur(4px); }
+    .ak-modal-box { position: relative; width: 100%; max-width: 440px; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 24px; box-shadow: 0 30px 80px -20px rgba(0, 0, 0, .92); }
+    .ak-modal-box h3 { font-size: 16px; font-weight: 700; margin: 0 0 4px; }
+    .ak-modal-box .sub { margin-bottom: 16px; }
+    .ak-modal-box input { width: 100%; box-sizing: border-box; background: var(--field, #101012); border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; color: var(--t1); font-size: 14px; font-family: inherit; outline: none; }
+    .ak-modal-box input:focus { border-color: var(--blue); }
     @media (max-width:720px) { .ak-code { padding-right: 14px; } .ak-copy { position: static; margin-top: 8px; display: inline-block; } }
   </style>
   <script defer src="tools.js"></script>
@@ -82,18 +92,18 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
 
           <div class="ak-step">③ 通用 MCP 配置(OpenClaw / Cursor / Codex 等,复制即用)</div>
           <div class="ak-code"><span id="cmdJson">—</span><button class="ak-copy" onclick="akCopyEl('cmdJson')">复制</button></div>
-          <div class="ak-note">MCP 端点:<code id="mcpUrlLabel">—</code> · 认证、限速、计费与 REST 一致。REST 详参见 <a class="ak-link" href="/api-docs.html" target="_blank" rel="noopener">API 文档</a>。独立 CLI<span class="ak-soon">即将上线</span></div>
+          <div class="ak-note">MCP 端点:<code id="mcpUrlLabel">—</code> · 认证、限速、计费与 REST 一致。REST 详参见 <a class="ak-link" href="/api-docs.html" target="_blank" rel="noopener">API 文档</a>。</div>
         </div>
 
         <!-- ② 密钥管理 -->
         <div class="ak-card">
-          <h2>我的密钥</h2>
-          <div class="sub">起个名字(如「我的 Claude Code」)。密钥明文<b>只在创建时显示一次</b>,请立即保存。<span id="akAdminHint" style="display:none">管理员可见并吊销本机构所有成员的密钥。</span></div>
-          <div class="ak-row">
-            <div class="ak-field"><input id="akName" maxlength="64" placeholder="密钥名称"></div>
-            <button class="ak-pill" onclick="createApiKey()">创建密钥</button>
+          <div class="ak-hd">
+            <div>
+              <h2>我的密钥</h2>
+              <div class="sub">密钥明文<b>只在创建时显示一次</b>,请立即保存。<span id="akAdminHint" style="display:none">管理员可见并管理本机构所有成员的密钥。</span></div>
+            </div>
+            <button class="ak-pill" style="flex:0 0 auto" onclick="openCreateModal()">＋ 创建密钥</button>
           </div>
-          <div class="ak-reveal" id="akReveal"></div>
           <table class="ak-tbl">
             <thead>
               <tr>
@@ -126,6 +136,32 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     </div>
   </div>
 
+  <!-- 创建密钥弹框 -->
+  <div class="ak-modal" id="akModal">
+    <div class="ak-modal-bd" onclick="closeCreateModal()"></div>
+    <div class="ak-modal-box">
+      <div id="akModalForm">
+        <h3>创建密钥</h3>
+        <div class="sub">给密钥起个名字(如「我的 Claude Code」),方便你识别。</div>
+        <input id="akName" maxlength="64" placeholder="密钥名称" onkeydown="if(event.key==='Enter')submitCreate()">
+        <div class="ak-row" style="margin-top:16px;justify-content:flex-end">
+          <button class="ak-pill ak-ghost" onclick="closeCreateModal()">取消</button>
+          <button class="ak-pill" id="akCreateBtn" onclick="submitCreate()">创建</button>
+        </div>
+      </div>
+      <div id="akModalDone" style="display:none">
+        <h3>密钥已创建 🔑</h3>
+        <div class="sub">明文<b>只显示这一次</b>,请立即复制保存。</div>
+        <div class="ak-code" style="padding-right:14px"><span id="akModalKey" style="user-select:all"></span></div>
+        <div class="ak-row" style="margin-top:16px;justify-content:flex-end">
+          <button class="ak-pill" onclick="copyModalKey()">复制密钥</button>
+          <button class="ak-pill ak-ghost" onclick="closeCreateModal()">我已保存</button>
+        </div>
+        <div class="ak-note" style="margin-top:10px">上方的接入命令已自动填好这把密钥 ↑</div>
+      </div>
+    </div>
+  </div>
+
   <script src="api.js"></script>
   <script>
     const ORIGIN = location.origin;
@@ -154,11 +190,16 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     function akFmtUsed(ts) { return ts ? new Date(ts).toLocaleString('zh-CN') : '从未'; }
     function renderKeyRow(k) {
       const revoked = !!k.revoked_at;
-      const status = revoked ? '<span class="ak-bdg ak-bdg-off">已吊销</span>' : '<span class="ak-bdg ak-bdg-ok">有效</span>';
+      const status = revoked ? '<span class="ak-bdg ak-bdg-off">已禁用</span>' : '<span class="ak-bdg ak-bdg-ok">有效</span>';
       const ownerCell = akIsAdmin ? '<td>' + esc(k.owner_name || '—') + '</td>' : '';
-      const action = revoked ? '' : '<button class="ak-pill ak-ghost" style="padding:5px 12px;font-size:12px" onclick="revokeApiKey(\'' + k.id + '\',\'' + esc(k.name).replace(/'/g, '&#39;') + '\')">吊销</button>';
+      const nm = esc(k.name).replace(/'/g, '&#39;');
+      const btn = (fn, label, danger) => '<button class="ak-pill ak-ghost" style="padding:5px 11px;font-size:12px' +
+        (danger ? ';color:var(--red,#f87171);border-color:var(--red,#f87171)' : '') + '" onclick="' + fn + '(\'' + k.id + '\',\'' + nm + '\')">' + label + '</button>';
+      // 有效 → 禁用 + 删除;已禁用 → 只剩删除
+      const actions = '<div style="display:flex;gap:6px;justify-content:flex-end">' +
+        (revoked ? '' : btn('disableKey', '禁用', false)) + btn('deleteKey', '删除', true) + '</div>';
       return '<tr><td>' + esc(k.name) + '</td><td><code>' + esc(k.key_prefix) + '…</code></td>' + ownerCell +
-        '<td>' + akFmtUsed(k.last_used_at) + '</td><td>' + status + '</td><td>' + action + '</td></tr>';
+        '<td>' + akFmtUsed(k.last_used_at) + '</td><td>' + status + '</td><td>' + actions + '</td></tr>';
     }
     async function loadApiKeys() {
       try {
@@ -166,34 +207,49 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         const res = await LJ.get('/api-keys');
         const keys = res.keys || [];
         document.getElementById('akBody').innerHTML = keys.length ? keys.map(renderKeyRow).join('')
-          : '<tr><td colspan="6" style="color:var(--t3);padding:14px 10px">还没有密钥,创建一个开始接入。</td></tr>';
+          : '<tr><td colspan="6" style="color:var(--t3);padding:14px 10px">还没有密钥,点右上角「创建密钥」开始接入。</td></tr>';
       } catch (e) { }
     }
-    async function createApiKey() {
-      const el = document.getElementById('akName');
-      const name = (el.value || '').trim();
+
+    // ── 创建密钥弹框 ──
+    function openCreateModal() {
+      document.getElementById('akModalForm').style.display = '';
+      document.getElementById('akModalDone').style.display = 'none';
+      document.getElementById('akName').value = '';
+      document.getElementById('akModal').classList.add('show');
+      setTimeout(() => document.getElementById('akName').focus(), 30);
+    }
+    function closeCreateModal() { document.getElementById('akModal').classList.remove('show'); }
+    let _lastKey = '';
+    async function submitCreate() {
+      const name = (document.getElementById('akName').value || '').trim();
       if (!name) { window.LJToast('请填写密钥名称', 'err'); return; }
+      const btn = document.getElementById('akCreateBtn'); btn.disabled = true; btn.textContent = '创建中…';
       try {
         const r = await LJ.post('/api-keys', { name });
-        el.value = '';
-        renderConnectCommands(r.key); // 明文一次性:立即填进接入命令
-        const box = document.getElementById('akReveal');
-        box.style.display = '';
-        box.innerHTML = '🔑 密钥已创建,请<b>立即复制保存</b>(关闭后不再显示):<br>' +
-          '<code style="word-break:break-all;user-select:all">' + esc(r.key) + '</code>' +
-          '<div style="margin-top:8px" class="ak-row">' +
-          '<button class="ak-pill" style="padding:6px 14px;font-size:12.5px" onclick="akCopyPlain(\'' + r.key + '\')">复制密钥</button>' +
-          '<button class="ak-pill ak-ghost" style="padding:6px 14px;font-size:12.5px" onclick="document.getElementById(\'akReveal\').style.display=\'none\'">我已保存</button>' +
-          '<span style="font-size:12px;color:var(--t3)">接入命令已在上方填好 ↑</span></div>';
+        _lastKey = r.key;
+        renderConnectCommands(r.key);            // 明文一次性:立即填进上方接入命令
+        document.getElementById('akModalKey').textContent = r.key;
+        document.getElementById('akModalForm').style.display = 'none';
+        document.getElementById('akModalDone').style.display = '';
         loadApiKeys();
-        window.scrollTo({ top: 0, behavior: 'smooth' });
       } catch (e) { window.LJToast(e.message || '创建失败', 'err'); }
+      finally { btn.disabled = false; btn.textContent = '创建'; }
     }
-    function akCopyPlain(k) { navigator.clipboard.writeText(k).then(() => window.LJToast('✓ 已复制')).catch(() => window.LJToast('复制失败', 'err')); }
-    async function revokeApiKey(id, name) {
-      if (!confirm('确认吊销密钥「' + name + '」?使用它的 Agent 将立即失效。')) return;
-      try { await LJ.del('/api-keys/' + id); window.LJToast('✓ 已吊销'); loadApiKeys(); }
-      catch (e) { window.LJToast(e.message || '吊销失败', 'err'); }
+    function copyModalKey() {
+      navigator.clipboard.writeText(_lastKey).then(() => window.LJToast('✓ 密钥已复制')).catch(() => window.LJToast('复制失败,请手动选择', 'err'));
+    }
+
+    // ── 禁用(软,留痕)/ 删除(硬,移除)──
+    async function disableKey(id, name) {
+      if (!confirm('禁用密钥「' + name + '」?使用它的 Agent 会立即失效,记录仍保留(可稍后删除)。')) return;
+      try { await LJ.post('/api-keys/' + id + '/disable'); window.LJToast('✓ 已禁用'); loadApiKeys(); }
+      catch (e) { window.LJToast(e.message || '禁用失败', 'err'); }
+    }
+    async function deleteKey(id, name) {
+      if (!confirm('永久删除密钥「' + name + '」?此操作不可撤销,使用它的 Agent 会立即失效。')) return;
+      try { await LJ.del('/api-keys/' + id); window.LJToast('✓ 已删除'); loadApiKeys(); }
+      catch (e) { window.LJToast(e.message || '删除失败', 'err'); }
     }
     function usePastedKey() {
       const v = (document.getElementById('akPaste').value || '').trim();

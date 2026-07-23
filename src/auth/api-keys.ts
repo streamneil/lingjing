@@ -93,8 +93,8 @@ export function listApiKeys(tenantId: string, userId: string, isAdmin: boolean):
   return rows as ApiKeyRow[];
 }
 
-/** 吊销 key(软删,留审计)。成员只能吊自己的;admin 可吊本租户任意。
- *  返回是否真正吊销了一条「本租户、(admin 或本人)、未吊销」的 key(幂等:已吊销/够不到 → false)。 */
+/** 禁用 key(软删,留痕/留审计,行仍在)。成员只能禁用自己的;admin 可禁用本租户任意。
+ *  返回是否真正禁用了一条「本租户、(admin 或本人)、未禁用」的 key(幂等:已禁用/够不到 → false)。 */
 export function revokeApiKey(id: string, tenantId: string, userId: string, isAdmin: boolean): boolean {
   const res = isAdmin
     ? db
@@ -105,5 +105,14 @@ export function revokeApiKey(id: string, tenantId: string, userId: string, isAdm
           `UPDATE api_key SET revoked_at=? WHERE id=? AND tenant_id=? AND user_id=? AND revoked_at IS NULL`,
         )
         .run(now(), id, tenantId, userId);
+  return res.changes > 0;
+}
+
+/** 删除 key(硬删,行移除)。成员只能删自己的;admin 可删本租户任意。已禁用的也能删。
+ *  返回是否真正删了一行(够不到 → false)。 */
+export function deleteApiKey(id: string, tenantId: string, userId: string, isAdmin: boolean): boolean {
+  const res = isAdmin
+    ? db.prepare(`DELETE FROM api_key WHERE id=? AND tenant_id=?`).run(id, tenantId)
+    : db.prepare(`DELETE FROM api_key WHERE id=? AND tenant_id=? AND user_id=?`).run(id, tenantId, userId);
   return res.changes > 0;
 }

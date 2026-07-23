@@ -88,35 +88,71 @@ describe('GET /api/api-keys(列表)', () => {
   });
 });
 
-describe('DELETE /api/api-keys/:id(吊销)', () => {
-  it('成员吊自己的 → 200,key 立即失效', async () => {
-    const k = await creator.post('/api/api-keys', { name: 'to-del' });
+describe('POST /api/api-keys/:id/disable(禁用 · 软,留痕)', () => {
+  it('成员禁用自己的 → 200,key 立即失效,行仍在列表(状态已禁用)', async () => {
+    const k = await creator.post('/api/api-keys', { name: 'to-disable' });
     const plain = k.body.key;
     expect(resolveApiKey(`Bearer ${plain}`)).not.toBeNull();
-    const r = await creator.del(`/api/api-keys/${k.body.id}`);
+    const r = await creator.post(`/api/api-keys/${k.body.id}/disable`);
     expect(r.status).toBe(200);
     expect(resolveApiKey(`Bearer ${plain}`)).toBeNull();
+    // 行仍在(留痕),revoked_at 非空
+    const list = await creator.get('/api/api-keys');
+    const row = list.body.keys.find((x: { id: string }) => x.id === k.body.id);
+    expect(row).toBeTruthy();
+    expect(row.revoked_at).toBeTruthy();
   });
 
-  it('成员吊别人的 → 404(够不到)', async () => {
-    const adminKey = await admin.post('/api/api-keys', { name: 'admin-key-2' });
-    const r = await creator.del(`/api/api-keys/${adminKey.body.id}`);
-    expect(r.status).toBe(404);
-    expect(resolveApiKey(`Bearer ${adminKey.body.key}`)).not.toBeNull(); // 仍有效
-  });
-
-  it('admin 吊任意成员的 → 200', async () => {
-    const creatorKey = await creator.post('/api/api-keys', { name: 'admin-revokes-this' });
-    const r = await admin.del(`/api/api-keys/${creatorKey.body.id}`);
-    expect(r.status).toBe(200);
+  it('成员禁用别人的 → 404;admin 禁用任意 → 200', async () => {
+    const adminKey = await admin.post('/api/api-keys', { name: 'disable-perm' });
+    expect((await creator.post(`/api/api-keys/${adminKey.body.id}/disable`)).status).toBe(404);
+    expect(resolveApiKey(`Bearer ${adminKey.body.key}`)).not.toBeNull();
+    const creatorKey = await creator.post('/api/api-keys', { name: 'admin-disables' });
+    expect((await admin.post(`/api/api-keys/${creatorKey.body.id}/disable`)).status).toBe(200);
     expect(resolveApiKey(`Bearer ${creatorKey.body.key}`)).toBeNull();
   });
 
-  it('吊销写审计', async () => {
-    const k = await creator.post('/api/api-keys', { name: 'audit-revoke' });
+  it('禁用写审计', async () => {
+    const k = await creator.post('/api/api-keys', { name: 'audit-disable' });
+    await creator.post(`/api/api-keys/${k.body.id}/disable`);
+    const rows = listAudit(tId, 50, creatorId, false) as { action: string }[];
+    expect(rows.some((a) => a.action === 'disable_api_key')).toBe(true);
+  });
+});
+
+describe('DELETE /api/api-keys/:id(删除 · 硬,移除行)', () => {
+  it('成员删除自己的 → 200,key 失效且行从列表消失', async () => {
+    const k = await creator.post('/api/api-keys', { name: 'to-delete' });
+    const plain = k.body.key;
+    const r = await creator.del(`/api/api-keys/${k.body.id}`);
+    expect(r.status).toBe(200);
+    expect(resolveApiKey(`Bearer ${plain}`)).toBeNull();
+    const list = await creator.get('/api/api-keys');
+    expect(list.body.keys.find((x: { id: string }) => x.id === k.body.id)).toBeUndefined();
+  });
+
+  it('成员删除别人的 → 404;admin 删除任意 → 200', async () => {
+    const adminKey = await admin.post('/api/api-keys', { name: 'del-perm' });
+    expect((await creator.del(`/api/api-keys/${adminKey.body.id}`)).status).toBe(404);
+    expect(resolveApiKey(`Bearer ${adminKey.body.key}`)).not.toBeNull();
+    const creatorKey = await creator.post('/api/api-keys', { name: 'admin-deletes' });
+    expect((await admin.del(`/api/api-keys/${creatorKey.body.id}`)).status).toBe(200);
+    expect(resolveApiKey(`Bearer ${creatorKey.body.key}`)).toBeNull();
+  });
+
+  it('已禁用的 key 也能删除(先禁用再删除)', async () => {
+    const k = await creator.post('/api/api-keys', { name: 'disable-then-delete' });
+    expect((await creator.post(`/api/api-keys/${k.body.id}/disable`)).status).toBe(200);
+    expect((await creator.del(`/api/api-keys/${k.body.id}`)).status).toBe(200);
+    const list = await creator.get('/api/api-keys');
+    expect(list.body.keys.find((x: { id: string }) => x.id === k.body.id)).toBeUndefined();
+  });
+
+  it('删除写审计', async () => {
+    const k = await creator.post('/api/api-keys', { name: 'audit-delete' });
     await creator.del(`/api/api-keys/${k.body.id}`);
     const rows = listAudit(tId, 50, creatorId, false) as { action: string }[];
-    expect(rows.some((a) => a.action === 'revoke_api_key')).toBe(true);
+    expect(rows.some((a) => a.action === 'delete_api_key')).toBe(true);
   });
 });
 
