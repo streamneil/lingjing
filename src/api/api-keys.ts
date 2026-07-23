@@ -9,7 +9,7 @@
 
 import { Router, type Request, type Response } from 'express';
 import { requireAuth } from '../auth/middleware.js';
-import { createApiKey, listApiKeys, revokeApiKey, deleteApiKey } from '../auth/api-keys.js';
+import { createApiKey, listApiKeys, revokeApiKey, deleteApiKey, revealApiKey } from '../auth/api-keys.js';
 import { audit } from '../audit/index.js';
 
 export const apiKeysRouter = Router();
@@ -32,6 +32,15 @@ apiKeysRouter.get('/api-keys', requireAuth, (req: Request, res: Response) => {
   const isAdmin = req.user!.role === 'admin';
   const keys = listApiKeys(req.user!.tenantId, req.user!.id, isAdmin);
   return res.json({ keys });
+});
+
+// 复现明文 —— 供随时复制。仅限本人(admin 也不能看别人的明文)。旧库/未配 MASTER_KEY → recoverable:false。
+apiKeysRouter.get('/api-keys/:id/reveal', requireAuth, (req: Request, res: Response) => {
+  const r = revealApiKey(req.params.id!, req.user!.tenantId, req.user!.id);
+  if (r === null) return res.status(404).json({ error: '密钥不存在', code: 'NOT_FOUND' });
+  if ('recoverable' in r) return res.json({ recoverable: false });
+  audit(req, 'reveal_api_key', req.params.id!); // 谁复现了哪把密钥,留痕
+  return res.json({ key: r.key });
 });
 
 // 禁用 —— 软删留痕/留审计;key 立即失效但行仍在(状态显「已禁用」)。够不到 → 404。

@@ -100,7 +100,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
           <div class="ak-hd">
             <div>
               <h2>我的密钥</h2>
-              <div class="sub">密钥明文<b>只在创建时显示一次</b>,请立即保存。<span id="akAdminHint" style="display:none">管理员可见并管理本机构所有成员的密钥。</span></div>
+              <div class="sub">密钥<b>可随时复制</b>,请妥善保管;泄露请立即禁用或删除。<span id="akAdminHint" style="display:none">管理员可管理本机构所有成员的密钥(但只能复制自己的明文)。</span></div>
             </div>
             <button class="ak-pill" style="flex:0 0 auto" onclick="openCreateModal()">＋ 创建密钥</button>
           </div>
@@ -151,7 +151,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       </div>
       <div id="akModalDone" style="display:none">
         <h3>密钥已创建 🔑</h3>
-        <div class="sub">明文<b>只显示这一次</b>,请立即复制保存。</div>
+        <div class="sub">复制保存好这把密钥(之后也可在列表里随时「复制」)。</div>
         <div class="ak-code" style="padding-right:14px"><span id="akModalKey" style="user-select:all"></span></div>
         <div class="ak-row" style="margin-top:16px;justify-content:flex-end">
           <button class="ak-pill" onclick="copyModalKey()">复制密钥</button>
@@ -195,9 +195,10 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       const nm = esc(k.name).replace(/'/g, '&#39;');
       const btn = (fn, label, danger) => '<button class="ak-pill ak-ghost" style="padding:5px 11px;font-size:12px' +
         (danger ? ';color:var(--red,#f87171);border-color:var(--red,#f87171)' : '') + '" onclick="' + fn + '(\'' + k.id + '\',\'' + nm + '\')">' + label + '</button>';
-      // 有效 → 禁用 + 删除;已禁用 → 只剩删除
+      // 有效 → 复制 + 禁用 + 删除;已禁用 → 只剩删除
       const actions = '<div style="display:flex;gap:6px;justify-content:flex-end">' +
-        (revoked ? '' : btn('disableKey', '禁用', false)) + btn('deleteKey', '删除', true) + '</div>';
+        (revoked ? '' : btn('revealAndCopy', '复制', false) + btn('disableKey', '禁用', false)) +
+        btn('deleteKey', '删除', true) + '</div>';
       return '<tr><td>' + esc(k.name) + '</td><td><code>' + esc(k.key_prefix) + '…</code></td>' + ownerCell +
         '<td>' + akFmtUsed(k.last_used_at) + '</td><td>' + status + '</td><td>' + actions + '</td></tr>';
     }
@@ -238,6 +239,16 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     }
     function copyModalKey() {
       navigator.clipboard.writeText(_lastKey).then(() => window.LJToast('✓ 密钥已复制')).catch(() => window.LJToast('复制失败,请手动选择', 'err'));
+    }
+
+    // ── 随时复制明文(reveal)──
+    async function revealAndCopy(id, name) {
+      try {
+        const r = await LJ.get('/api-keys/' + id + '/reveal');
+        if (r && r.recoverable === false) { window.LJToast('此密钥无法复制(旧版本创建或未启用明文存储),请删除重建', 'err'); return; }
+        await navigator.clipboard.writeText(r.key);
+        window.LJToast('✓ 密钥已复制');
+      } catch (e) { window.LJToast(e.message || '复制失败', 'err'); }
     }
 
     // ── 禁用(软,留痕)/ 删除(硬,移除)──

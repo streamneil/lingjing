@@ -11,6 +11,7 @@ import { db } from '../db/index.js';
 import type { UserRow } from '../db/index.js';
 import { genApiKey, hashApiKey, API_KEY_PREFIX } from './crypto.js';
 import { buildAuthedUser, touchLastActive, type AuthedUser } from './index.js';
+import { masterKey, encryptKey, decryptKey } from '../gateway/key-crypto.js';
 
 export interface ApiKeyRow {
   id: string;
@@ -26,7 +27,8 @@ export interface ApiKeyRow {
 
 const now = (): number => Date.now();
 
-/** 创建 API key。返回明文(仅此一次)+ id + 前缀;库里只存 sha256 哈希。 */
+/** 创建 API key。返回明文 + id + 前缀。库里存:sha256 哈希(用于认证)+ AES-256-GCM 密文(用于随时复现,AAD=id)。
+ *  未配 MASTER_KEY 时只存哈希(密文空,不可复现,行为回落"只显示一次")。 */
 export function createApiKey(
   tenantId: string,
   userId: string,
@@ -34,11 +36,30 @@ export function createApiKey(
 ): { id: string; key: string; prefix: string } {
   const { key, prefix } = genApiKey();
   const id = randomUUID();
+  // 有主密钥 → 加密存明文(AAD=id 绑定行,防行间搬移);无 → 密文列留空。
+  const enc = masterKey() ? encryptKey(key, id) : null;
   db.prepare(
-    `INSERT INTO api_key (id,tenant_id,user_id,name,key_hash,key_prefix,created_at)
-     VALUES (?,?,?,?,?,?,?)`,
-  ).run(id, tenantId, userId, name, hashApiKey(key), prefix, now());
+    `INSERT INTO api_key (id,tenant_id,user_id,name,key_hash,key_prefix,created_at,key_cipher,key_iv,key_tag,key_version)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(id, tenantId, userId, name, hashApiKey(key), prefix, now(),
+    enc?.cipher ?? null, enc?.iv ?? null, enc?.tag ?? null, enc?.keyVersion ?? null);
   return { id, key, prefix };
+}
+
+/** 复现明文密钥(供随时复制)。仅限本人(admin 也不能看别人的明文——最小权限)。
+ *  返回 {key} / {recoverable:false}(旧库无密文或未配 MASTER_KEY)/ null(不存在或非本人)。 */
+export function revealApiKey(id: string, tenantId: string, userId: string): { key: string } | { recoverable: false } | null {
+  const row = db
+    .prepare(`SELECT key_cipher, key_iv, key_tag, key_version FROM api_key WHERE id=? AND tenant_id=? AND user_id=?`)
+    .get(id, tenantId, userId) as { key_cipher: Buffer | null; key_iv: Buffer | null; key_tag: Buffer | null; key_version: number | null } | undefined;
+  if (!row) return null;
+  if (!row.key_cipher || !row.key_iv || !row.key_tag) return { recoverable: false };
+  try {
+    const key = decryptKey({ cipher: row.key_cipher, iv: row.key_iv, tag: row.key_tag, keyVersion: row.key_version ?? 1 }, id);
+    return { key };
+  } catch {
+    return { recoverable: false }; // MASTER_KEY 轮换/不符 → 解不出,当不可复现
+  }
 }
 
 /** 解析 Authorization 头(Bearer lj_sk_…)→ {与 session 一致的 AuthedUser, key id},或 null。

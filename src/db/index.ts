@@ -305,6 +305,12 @@ addColumnIfMissing('audit_log', 'actor_type', `actor_type TEXT NOT NULL DEFAULT 
 addColumnIfMissing('audit_log', 'detail', `detail TEXT`);
 // Open API:操作经 API key 发起时记 key id(区分本人网页操作 vs 客户 Agent 操作);cookie 操作为 null。
 addColumnIfMissing('audit_log', 'via_api_key', `via_api_key TEXT`);
+// API 密钥明文可随时复制(产品决策):除单向哈希外,再存一份 AES-256-GCM 密文(AAD=key id),
+// reveal 时解密回显。数据库单独泄露拿不到密钥(需同时有 MASTER_KEY)。旧 key / 未配 MASTER_KEY → 密文空,不可复现。
+addColumnIfMissing('api_key', 'key_cipher', `key_cipher BLOB`);
+addColumnIfMissing('api_key', 'key_iv', `key_iv BLOB`);
+addColumnIfMissing('api_key', 'key_tag', `key_tag BLOB`);
+addColumnIfMissing('api_key', 'key_version', `key_version INTEGER`);
 addColumnIfMissing('avatar', 'orientation', `orientation TEXT DEFAULT 'portrait'`);
 addColumnIfMissing('avatar', 'is_default', `is_default INTEGER NOT NULL DEFAULT 0`);
 addColumnIfMissing('user', 'display_name', `display_name TEXT`);
