@@ -24,6 +24,7 @@ import { adminRouter } from './api/admin.js';
 import { captchaRouter } from './api/captcha.js';
 import { showcaseRouter } from './api/showcase.js';
 import { attachUser, requireApiScope, apiRateLimit } from './auth/middleware.js';
+import { apiKeysRouter } from './api/api-keys.js';
 import { bootstrapSuperadmin } from './auth/platform.js';
 import { startWorker } from './queue/worker.js';
 import { listPresets } from './voices/index.js';
@@ -62,6 +63,7 @@ export function createApp() {
   app.use('/api', avatarsRouter);
   app.use('/api', voicesRouter);
   app.use('/api', settingsRouter);
+  app.use('/api', apiKeysRouter); // Open API key 自助管理(cookie session;不在 key 作用域白名单)
   app.use('/api', legalRouter);
   app.use('/api', pricingRouter);
   app.use('/api', ordersRouter);

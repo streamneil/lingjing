@@ -21,6 +21,7 @@ export interface ApiKeyRow {
   created_at: number;
   last_used_at: number | null;
   revoked_at: number | null;
+  owner_name: string | null; // 主人显示名(JOIN user);设置页 admin 视图「谁的 key」用
 }
 
 const now = (): number => Date.now();
@@ -79,13 +80,15 @@ export function resolveApiKey(authHeader: string | undefined): AuthedUser | null
   return resolveApiKeyFull(authHeader)?.user ?? null;
 }
 
-/** 列 key。成员看自己的;admin 看全租户。永不含哈希(只前缀 + 元数据)。 */
+/** 列 key。成员看自己的;admin 看全租户。永不含哈希(只前缀 + 元数据 + 主人显示名)。 */
 export function listApiKeys(tenantId: string, userId: string, isAdmin: boolean): ApiKeyRow[] {
-  const cols = `id, tenant_id, user_id, name, key_prefix, created_at, last_used_at, revoked_at`;
+  const cols = `k.id, k.tenant_id, k.user_id, k.name, k.key_prefix, k.created_at, k.last_used_at, k.revoked_at,
+                COALESCE(u.display_name, u.username) AS owner_name`;
+  const join = `LEFT JOIN user u ON u.id = k.user_id`;
   const rows = isAdmin
-    ? db.prepare(`SELECT ${cols} FROM api_key WHERE tenant_id=? ORDER BY created_at DESC`).all(tenantId)
+    ? db.prepare(`SELECT ${cols} FROM api_key k ${join} WHERE k.tenant_id=? ORDER BY k.created_at DESC`).all(tenantId)
     : db
-        .prepare(`SELECT ${cols} FROM api_key WHERE tenant_id=? AND user_id=? ORDER BY created_at DESC`)
+        .prepare(`SELECT ${cols} FROM api_key k ${join} WHERE k.tenant_id=? AND k.user_id=? ORDER BY k.created_at DESC`)
         .all(tenantId, userId);
   return rows as ApiKeyRow[];
 }
