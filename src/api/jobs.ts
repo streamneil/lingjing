@@ -858,7 +858,7 @@ export interface SubmitActor {
   userId: string;
   role: Role;
   ip?: string | null;
-  viaApiKey?: boolean; // 预留:T6 审计标记 via_api_key(本轮不写,AuditDetail 形状待扩)
+  apiKeyId?: string | null; // 经 API key 发起时的 key id → 审计标记 via_api_key(区分本人 vs Agent)
 }
 export type SubmitResult =
   | { ok: true; id: string; cost: number; status: 'queued'; reused: boolean }
@@ -932,7 +932,7 @@ export async function submitJob(
     deleteJobRow(id); // 回滚刚建的行:不烧幂等键、不留无预扣的孤儿队列项
     return { ok: false, status: 402, error: e instanceof Error ? e.message : '预扣失败', code: 'INSUFFICIENT_CREDITS' };
   }
-  writeAudit(tid, actor.userId, 'create_job', id, actor.ip ?? null, 'user'); // 计费归属"谁消费"
+  writeAudit(tid, actor.userId, 'create_job', id, actor.ip ?? null, 'user', undefined, actor.apiKeyId ?? null); // 计费归属"谁消费" + Agent 标记
   return { ok: true, id, cost, status: 'queued', reused: false };
 }
 
@@ -941,7 +941,7 @@ jobsRouter.post('/jobs', requireRole('admin', 'creator'), async (req: Request, r
   const body = (req.body ?? {}) as Record<string, unknown>;
   const idemKey = typeof req.headers['idempotency-key'] === 'string' ? req.headers['idempotency-key'] : undefined;
   const r = await submitJob(
-    { tenantId: req.user!.tenantId, userId: req.user!.id, role: req.user!.role as Role, ip: clientIpOf(req), viaApiKey: !!req.viaApiKey },
+    { tenantId: req.user!.tenantId, userId: req.user!.id, role: req.user!.role as Role, ip: clientIpOf(req), apiKeyId: req.apiKeyId ?? null },
     body,
     idemKey,
   );

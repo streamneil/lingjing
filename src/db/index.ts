@@ -303,6 +303,8 @@ function addColumnIfMissing(table: string, column: string, ddl: string): void {
 addColumnIfMissing('audit_log', 'actor_type', `actor_type TEXT NOT NULL DEFAULT 'user'`);
 // T-SETTINGS-AUDIT-DIFF:字段级变更详情(JSON [{field,old,new}]);只设置变更类操作写,其余 null。
 addColumnIfMissing('audit_log', 'detail', `detail TEXT`);
+// Open API:操作经 API key 发起时记 key id(区分本人网页操作 vs 客户 Agent 操作);cookie 操作为 null。
+addColumnIfMissing('audit_log', 'via_api_key', `via_api_key TEXT`);
 addColumnIfMissing('avatar', 'orientation', `orientation TEXT DEFAULT 'portrait'`);
 addColumnIfMissing('avatar', 'is_default', `is_default INTEGER NOT NULL DEFAULT 0`);
 addColumnIfMissing('user', 'display_name', `display_name TEXT`);
