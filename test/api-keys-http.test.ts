@@ -80,10 +80,10 @@ describe('API key 作用域守卫(白名单外 → 403 SCOPE_FORBIDDEN)', () => 
 });
 
 describe('API key 角色守卫(白名单内但角色不足)', () => {
-  it('viewer key 提交生成 → 403(权限不足,非作用域)', async () => {
+  it('viewer key 提交生成 → 403 ROLE_FORBIDDEN(角色不足,非作用域)', async () => {
     const r = await client.postKey('/api/jobs', viewerKey, { type: 'ai_image', prompt: 'x', count: 1 });
     expect(r.status).toBe(403);
-    expect(r.body.code).toBeUndefined(); // 现有 requireRole 文案,非 SCOPE_FORBIDDEN
+    expect(r.body.code).toBe('ROLE_FORBIDDEN'); // 落 requireRole,非 SCOPE_FORBIDDEN
     expect(r.body.error).toContain('权限');
   });
 

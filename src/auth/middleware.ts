@@ -122,7 +122,7 @@ export function requireApiScope(req: Request, res: Response, next: NextFunction)
 /** 要求已登录。 */
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   if (!req.user) {
-    res.status(401).json({ error: '未登录' });
+    res.status(401).json({ error: '未登录', code: 'UNAUTHORIZED' });
     return;
   }
   next();
@@ -132,11 +132,11 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 export function requireRole(...roles: AuthedUser['role'][]) {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.user) {
-      res.status(401).json({ error: '未登录' });
+      res.status(401).json({ error: '未登录', code: 'UNAUTHORIZED' });
       return;
     }
     if (!roles.includes(req.user.role)) {
-      res.status(403).json({ error: '权限不足', need: roles, have: req.user.role });
+      res.status(403).json({ error: '权限不足', code: 'ROLE_FORBIDDEN', need: roles, have: req.user.role });
       return;
     }
     next();
