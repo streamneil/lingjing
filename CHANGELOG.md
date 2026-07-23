@@ -2,6 +2,13 @@
 
 灵镜平台的用户可见变更记录。版本号为四段式 `MAJOR.MINOR.PATCH.MICRO`(与 `VERSION` 文件一致)。
 
+## [0.8.0.1] - 2026-07-23
+
+### Changed
+- **API 密钥独立成页**:从系统设置迁到独立的「API 密钥」页(右上角头像菜单进入),密钥管理与开发者接入合并到一处。
+- **Agent 一键接入**:密钥页给出三种接入方式——① `curl .../connect.sh | sh -s -- <mcp_url> <key>` 一键脚本(自动识别 Claude Code 并配好 MCP);② 等价 `claude mcp add` 原生命令;③ 通用 MCP 配置 JSON(OpenClaw / Cursor / Codex 等复制即用)。创建密钥后命令自动填好;换机器可用「粘贴密钥生成命令」(密钥不上传服务器)。
+- 明确 Agent 接入走 **MCP 协议**(原生工具调用),REST 为底座。
+
 ## [0.8.0.0] - 2026-07-23
 
 ### Added
