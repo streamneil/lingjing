@@ -156,6 +156,7 @@
             <div id="lj-menu-role" style="font-size:11.5px;color:var(--t3);margin-top:2px;font-family:var(--f-mono)"></div>
           </div>
           <button class="lj-mi" data-act="account">账户</button>
+          <button class="lj-mi" data-act="apikeys">API 密钥</button>
           <button class="lj-mi" data-act="pricing">定价</button>
           <button class="lj-mi" data-act="logout" style="color:var(--red)">登出</button>
         </div>
@@ -258,6 +259,7 @@
         // 账户/定价改为独立页跳转(原弹窗式个人信息/改密码已迁到 account.html)。
         if (act==='logout'){ if(!(await window.LJConfirm({title:'登出',body:'确认要退出当前账号吗?',confirmText:'登出',danger:true})))return; try{await LJ.logout();}catch{} try{localStorage.removeItem('ljBrand');}catch{} location.href='login.html'; }
         else if (act==='account'){ location.href='account.html'; }
+        else if (act==='apikeys'){ location.href='api-keys.html'; }
         else if (act==='pricing'){ location.href='pricing.html'; }
       });
       // 角色精简为 管理员/创作者,两者都可创作 → 无需隐藏创作入口(原 viewer 隐藏逻辑已移除)。

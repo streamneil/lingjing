@@ -149,39 +149,17 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
           </div>
         </div>
 
-        <!-- Open API 密钥(所有成员可为自己创建;admin 见全租户)-->
-        <div class="set-card" id="apiKeyCard" style="animation-delay:.18s">
+        <!-- API 密钥已迁到独立页(右上角菜单「API 密钥」)-->
+        <div class="set-card" style="animation-delay:.18s">
           <h3>API 密钥(开放接口 / MCP)</h3>
-          <div class="h-desc">给你的 AI Agent 一把钥匙,让它通过 API 或 MCP 直接调用生图 / 生视频 / 生音乐 / 语音。密钥即你本人身份,消耗本机构积分。<a href="/api-docs.html" target="_blank" rel="noopener" style="color:var(--accent,#6ea8fe)">查看接入文档 →</a></div>
+          <div class="h-desc">给 AI Agent 一把钥匙,通过 MCP / REST 直接调用生成能力。密钥管理与 Agent 一键接入已迁到独立页面。</div>
           <div class="set-row">
             <div class="info">
-              <div class="k">创建密钥</div>
-              <div class="v">起个名字(如「我的 Claude Code」)。密钥明文只在创建时显示一次,请立即保存。</div>
+              <div class="k">开发者接入</div>
+              <div class="v">创建 / 吊销密钥、获取 Claude Code / OpenClaw 等 Agent 的一键接入命令。</div>
             </div>
-            <div class="ctl">
-              <div style="display:flex;gap:8px;align-items:center"><input id="akName" maxlength="64"
-                  style="padding:9px 13px;width:200px;background:var(--field,#121214);border:1px solid var(--line);border-radius:10px;color:var(--t1);font-size:14px;font-family:var(--f);outline:none"
-                  placeholder="密钥名称"><button class="btn btn-dark" onclick="createApiKey()">创建</button></div>
-            </div>
+            <div class="ctl"><a class="btn btn-dark" href="api-keys.html" style="text-decoration:none">前往 API 密钥页 →</a></div>
           </div>
-          <div id="akReveal" style="display:none;margin:2px 0 12px 0;padding:12px 14px;background:rgba(110,168,254,.08);border:1px solid rgba(110,168,254,.3);border-radius:10px;font-size:13px;line-height:1.7"></div>
-          <table class="tbl">
-            <thead>
-              <tr>
-                <th scope="col">名称</th>
-                <th scope="col">前缀</th>
-                <th scope="col" id="akOwnerTh" style="display:none">所属成员</th>
-                <th scope="col">最后使用</th>
-                <th scope="col">状态</th>
-                <th scope="col"></th>
-              </tr>
-            </thead>
-            <tbody id="akBody">
-              <tr>
-                <td colspan="6" class="af-empty">加载中…</td>
-              </tr>
-            </tbody>
-          </table>
         </div>
 
         <!-- T8:审计日志(仅 admin)-->
@@ -395,62 +373,12 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
           document.querySelectorAll('.set-card .btn-dark').forEach(b => { if (/保存/.test(b.textContent)) b.disabled = true; });
         }
 
-        // Open API 密钥 —— 所有成员可为自己创建;admin 见全租户(带所属成员列)。
-        akIsAdmin = canEdit;
-        loadApiKeys();
+        // (API 密钥管理已迁到独立页 api-keys.html)
 
         // T8:审计日志 —— 所有登录成员可见可查(分页:page/pageSize → {rows,total})。
         document.getElementById('auditCard').style.display = '';
         loadAuditPage(1);
       } catch (e) { }
-    }
-
-    // ── Open API 密钥管理 ──
-    let akIsAdmin = false;
-    function akFmtUsed(ts) { return ts ? new Date(ts).toLocaleString('zh-CN') : '从未'; }
-    function renderKeyRow(k) {
-      const revoked = !!k.revoked_at;
-      const status = revoked ? '<span class="bdg">已吊销</span>' : '<span class="bdg bdg-ok">有效</span>';
-      const ownerCell = akIsAdmin ? '<td>' + esc(k.owner_name || '—') + '</td>' : '';
-      const action = revoked ? '' : '<button class="btn" onclick="revokeApiKey(\'' + k.id + '\',\'' + esc(k.name).replace(/'/g, '&#39;') + '\')">吊销</button>';
-      return '<tr><td>' + esc(k.name) + '</td><td><code>' + esc(k.key_prefix) + '…</code></td>' + ownerCell +
-        '<td>' + akFmtUsed(k.last_used_at) + '</td><td>' + status + '</td><td>' + action + '</td></tr>';
-    }
-    async function loadApiKeys() {
-      try {
-        const th = document.getElementById('akOwnerTh'); if (th) th.style.display = akIsAdmin ? '' : 'none';
-        const res = await LJ.get('/api-keys');
-        const keys = res.keys || [];
-        const cols = akIsAdmin ? 6 : 6; // 列数固定 6(所属成员列隐藏时仍占位)
-        document.getElementById('akBody').innerHTML = keys.length ? keys.map(renderKeyRow).join('')
-          : '<tr><td colspan="' + cols + '" class="af-empty">还没有密钥</td></tr>';
-      } catch (e) { }
-    }
-    async function createApiKey() {
-      const el = document.getElementById('akName');
-      const name = (el.value || '').trim();
-      if (!name) { window.LJToast('请填写密钥名称', 'err'); return; }
-      try {
-        const r = await LJ.post('/api-keys', { name });
-        el.value = '';
-        const box = document.getElementById('akReveal');
-        box.style.display = '';
-        box.innerHTML = '<div style="margin-bottom:6px">🔑 密钥已创建,请<b>立即复制保存</b>(关闭后不再显示):</div>' +
-          '<code id="akPlain" style="word-break:break-all;user-select:all">' + esc(r.key) + '</code>' +
-          '<div style="margin-top:8px;display:flex;gap:8px">' +
-          '<button class="btn btn-dark" onclick="akCopy()">复制</button>' +
-          '<button class="btn" onclick="document.getElementById(\'akReveal\').style.display=\'none\'">我已保存</button></div>';
-        loadApiKeys();
-      } catch (e) { window.LJToast(e.message || '创建失败', 'err'); }
-    }
-    function akCopy() {
-      const t = document.getElementById('akPlain'); if (!t) return;
-      navigator.clipboard.writeText(t.textContent).then(() => window.LJToast('✓ 已复制')).catch(() => window.LJToast('复制失败,请手动选择', 'err'));
-    }
-    async function revokeApiKey(id, name) {
-      if (!confirm('确认吊销密钥「' + name + '」?使用它的 Agent 将立即失效。')) return;
-      try { await LJ.del('/api-keys/' + id); window.LJToast('✓ 已吊销'); loadApiKeys(); }
-      catch (e) { window.LJToast(e.message || '吊销失败', 'err'); }
     }
 
     // 审计日志分页(经典页码)。

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API 密钥 · 灵镜</title>
+  <link rel="icon" type="image/svg+xml" href="/brand/lingjing-favicon.svg">
+  <link rel="stylesheet" href="app.css">
+  <style>
+    /* ── API 密钥 / 开发者接入(独立页)── */
+    .ak-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px 24px; margin-bottom: 18px; }
+    .ak-card h2 { font-size: 15px; font-weight: 700; margin: 0 0 4px; }
+    .ak-card .sub { font-size: 12.5px; color: var(--t3); margin-bottom: 16px; line-height: 1.6; }
+    .ak-step { font-size: 12px; color: var(--t3); margin: 14px 0 6px; font-weight: 600; }
+    .ak-code { position: relative; background: var(--field, #101012); border: 1px solid var(--line); border-radius: 10px; padding: 12px 44px 12px 14px; font-family: var(--f-mono, monospace); font-size: 12.5px; color: #e6e6ea; white-space: pre-wrap; word-break: break-all; line-height: 1.6; }
+    .ak-copy { position: absolute; top: 8px; right: 8px; background: var(--t1); color: #0A0A0B; border: none; border-radius: 7px; padding: 4px 10px; font-size: 11.5px; font-weight: 600; cursor: pointer; font-family: inherit; }
+    .ak-copy:hover { opacity: .88; }
+    .ak-field input { box-sizing: border-box; background: var(--field, #101012); border: 1px solid var(--line); border-radius: 10px; padding: 10px 13px; color: var(--t1); font-size: 14px; font-family: inherit; outline: none; }
+    .ak-field input:focus { border-color: var(--blue); }
+    .ak-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .ak-pill { padding: 9px 18px; border-radius: 999px; font-size: 13.5px; font-weight: 600; font-family: inherit; cursor: pointer; border: none; background: var(--t1); color: #0A0A0B; }
+    .ak-pill:disabled { opacity: .5; cursor: not-allowed; }
+    .ak-ghost { background: none; border: 1px solid var(--line); color: var(--t2); }
+    .ak-tbl { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 13px; }
+    .ak-tbl th, .ak-tbl td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); }
+    .ak-tbl th { color: var(--t3); font-weight: 600; font-size: 12px; }
+    .ak-tbl code { font-family: var(--f-mono, monospace); font-size: 12px; color: var(--t2); }
+    .ak-bdg { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+    .ak-bdg-ok { background: rgba(74, 222, 128, .14); color: var(--green, #4ade80); }
+    .ak-bdg-off { background: var(--line); color: var(--t3); }
+    .ak-reveal { display: none; margin: 4px 0 14px; padding: 13px 15px; background: rgba(110, 168, 254, .08); border: 1px solid rgba(110, 168, 254, .3); border-radius: 12px; font-size: 13px; line-height: 1.7; }
+    .ak-note { font-size: 11.5px; color: var(--t4); margin-top: 6px; line-height: 1.5; }
+    .ak-link { color: var(--blue, #6ea8fe); }
+    .ak-soon { font-size: 11px; padding: 1px 7px; border-radius: 6px; background: var(--line); color: var(--t3); margin-left: 6px; }
+    @media (max-width:720px) { .ak-code { padding-right: 14px; } .ak-copy { position: static; margin-top: 8px; display: inline-block; } }
+  </style>
+  <script defer src="tools.js"></script>
+  <script defer src="shell.js"></script>
+</head>
+
+<body data-page="api-keys" data-crumb="开发者 > API 密钥">
+  <div class="shell" id="shell-mount">
+<!--SIDEBAR:START 由 build-sidebar.mjs 生成,勿手改-->
+<aside class="sidebar">
+<a class="sb-brand" href="explore.html" title="灵镜 · 探索">
+<span class="logo-mark" id="lj-brand-mark"><svg viewBox="0 0 100 100" fill="none"><circle cx="37" cy="50" r="29" stroke="#0E0E0E" stroke-width="5"/><circle cx="63" cy="50" r="29" stroke="#0E0E0E" stroke-width="5"/><path d="M50 24.08 A29 29 0 0 1 50 75.92 A29 29 0 0 1 50 24.08 Z" fill="#0E0E0E"/></svg></span>
+<span class="nm">Lingjing</span><span class="cjk">灵镜</span>
+</a>
+<nav class="sb-nav"><a class="sb-item" data-page="explore" href="explore.html" data-label="探索"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m15 9-3.5 1.5L10 14l3.5-1.5L15 9Z"/></svg><span>探索</span></a><a class="sb-item" data-page="assets" href="assets.html" data-label="我的资产"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg><span>我的资产</span></a><div class="sb-group">创作工具</div><div id="sb-tools"><a class="sb-item sb-tool" data-page="ref-video" href="ref-video.html" data-label="参考生成影片" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="14" rx="2"/><path d="m17 9 4-2v10l-4-2"/><path d="m8 10 2 2-2 2"/></svg><span>参考生成影片</span><span class="nbadge">新</span></a><a class="sb-item sb-tool" data-page="img2video" href="img2video.html" data-label="图片转影片" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="14" height="14" rx="2"/><circle cx="8" cy="9" r="1.6"/><path d="m4 16 4-4 3 3"/><path d="m17 10 4-2v10l-4-2"/></svg><span>图片转影片</span></a><a class="sb-item sb-tool" data-page="text2video" href="text2video.html" data-label="文字转影片" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6h14M9 6v12M7 18h4"/><path d="m16 11 4-2v8l-4-2"/></svg><span>文字转影片</span></a><a class="sb-item sb-tool" data-page="ai-image" href="ai-image.html" data-label="AI 图片" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="9" cy="9" r="1.6"/><path d="m5 17 4-4 3 3 3-3 4 4"/></svg><span>AI 图片</span><span class="nano">Nano Banana</span></a><a class="sb-item sb-tool" data-page="ai-image-edit" href="ai-image-edit.html" data-label="AI 图片编辑器" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="13" height="13" rx="2"/><path d="m5 15 3-3 2 2"/><path d="M14 18.5 19 13.5l2.5 2.5-5 5H14v-2.5Z"/></svg><span>AI 图片编辑器</span></a><a class="sb-item sb-tool" data-page="ai-video-edit" href="video-edit.html" data-label="AI 影片编辑器" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="13" rx="2"/><path d="m8 9 4 2.5L8 14V9Z"/><path d="M15 18.5 20 13.5l2 2-5 5H15v-2.5Z"/></svg><span>AI 影片编辑器</span></a><a class="sb-item sb-tool" data-page="ai-music" href="ai-music.html" data-label="AI 音乐" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg><span>AI 音乐</span></a><a class="sb-item sb-tool" data-page="tts" href="tts.html" data-label="文字转语音" data-requires-create><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg><span>文字转语音</span></a></div><div class="sb-group">财务中心</div><a class="sb-item" data-page="billing" href="billing.html" data-label="用量计费"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 14 3-4 4 3 4-6"/></svg><span>用量计费</span></a><a class="sb-item" data-page="orders" href="orders.html" data-label="充值订单"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/></svg><span>充值订单</span></a><a class="sb-item" data-page="invoices" href="invoices.html" data-label="发票管理"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h11l3 3v15l-2-1.2L15 21l-2-1.2L11 21l-2-1.2L7 21l-2-1.2V3Z"/><path d="M8 8h7M8 12h7M8 16h4"/></svg><span>发票管理</span></a><div class="sb-group">经营管理</div><a class="sb-item" data-page="members" href="members.html" data-label="成员与权限"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg><span>成员与权限</span></a><a class="sb-item" data-page="settings" href="settings.html" data-label="系统设置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H1a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 2.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H7a1.6 1.6 0 0 0 1-1.5V1a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V7a1.6 1.6 0 0 0 1.5 1H23a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z"/></svg><span>系统设置</span></a></nav>
+</aside>
+<script>/* 品牌即时渲染:此内联脚本紧跟 .sb-brand,解析到此即同步执行(早于首次绘制),
+按 localStorage 缓存把默认「Lingjing 灵镜」改成机构真实名/Logo → Chrome/Safari 0 闪。
+shell.js(defer)随后用 LJ.me() 校正并写回缓存。 */
+(function(){try{var c=JSON.parse(localStorage.getItem('ljBrand')||'null');if(!c)return;
+var b=document.currentScript.previousElementSibling;
+var brand=b&&b.querySelector?b.querySelector('.sb-brand'):null;if(!brand)return;
+if(c.showName){var nm=brand.querySelector('.nm'),cj=brand.querySelector('.cjk');if(nm)nm.textContent=c.showName;if(cj)cj.style.display='none';brand.title=c.showName;}
+if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Image();img.src=c.logoUrl;img.style.cssText='width:100%;height:100%;object-fit:contain;border-radius:7px';img.onload=function(){m.innerHTML='';m.appendChild(img);};}}
+}catch(e){}})();
+</script>
+<!--SIDEBAR:END-->
+    <div class="main-col">
+      <main class="page">
+        <div class="ph">
+          <div>
+            <h1 class="t-h1">API 密钥</h1>
+            <p class="desc">给你的 AI Agent 一把钥匙,让它通过 <b>MCP</b> 或 REST 直接调用生图 / 生视频 / 生音乐 / 语音。密钥即你本人身份,消耗本机构积分。</p>
+          </div>
+        </div>
+
+        <!-- ① Agent 一键接入(MCP 主推) -->
+        <div class="ak-card">
+          <h2>让 Agent 接入(MCP)</h2>
+          <div class="sub">Claude Code / Cursor / OpenClaw 等 Agent 通过 <b>MCP 协议</b>原生调用(不是拼 API):连上后直接看到 <code>generate_image</code> / <code>get_job</code> 等工具。先在下方创建或粘贴密钥,命令会自动填好。</div>
+
+          <div class="ak-step">① 一键接入(推荐,自动识别 Claude Code)</div>
+          <div class="ak-code"><span id="cmdOneliner">在下方创建或粘贴密钥后,这里会生成命令</span><button class="ak-copy" onclick="akCopyEl('cmdOneliner')">复制</button></div>
+
+          <div class="ak-step">② 等价原生命令(Claude Code)</div>
+          <div class="ak-code"><span id="cmdNative">—</span><button class="ak-copy" onclick="akCopyEl('cmdNative')">复制</button></div>
+
+          <div class="ak-step">③ 通用 MCP 配置(OpenClaw / Cursor / Codex 等,复制即用)</div>
+          <div class="ak-code"><span id="cmdJson">—</span><button class="ak-copy" onclick="akCopyEl('cmdJson')">复制</button></div>
+          <div class="ak-note">MCP 端点:<code id="mcpUrlLabel">—</code> · 认证、限速、计费与 REST 一致。REST 详参见 <a class="ak-link" href="/api-docs.html" target="_blank" rel="noopener">API 文档</a>。独立 CLI<span class="ak-soon">即将上线</span></div>
+        </div>
+
+        <!-- ② 密钥管理 -->
+        <div class="ak-card">
+          <h2>我的密钥</h2>
+          <div class="sub">起个名字(如「我的 Claude Code」)。密钥明文<b>只在创建时显示一次</b>,请立即保存。<span id="akAdminHint" style="display:none">管理员可见并吊销本机构所有成员的密钥。</span></div>
+          <div class="ak-row">
+            <div class="ak-field"><input id="akName" maxlength="64" placeholder="密钥名称"></div>
+            <button class="ak-pill" onclick="createApiKey()">创建密钥</button>
+          </div>
+          <div class="ak-reveal" id="akReveal"></div>
+          <table class="ak-tbl">
+            <thead>
+              <tr>
+                <th>名称</th>
+                <th>前缀</th>
+                <th id="akOwnerTh" style="display:none">所属成员</th>
+                <th>最后使用</th>
+                <th>状态</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="akBody">
+              <tr>
+                <td colspan="6" style="color:var(--t3);padding:14px 10px">加载中…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- ③ 已有密钥?粘贴生成命令 -->
+        <div class="ak-card">
+          <h2>已保存的密钥?生成接入命令</h2>
+          <div class="sub">换一台机器接入时,把你保存的密钥粘进来,本地生成接入命令(密钥<b>不上传服务器</b>)。</div>
+          <div class="ak-row">
+            <div class="ak-field" style="flex:1;min-width:260px"><input id="akPaste" placeholder="lj_sk_…" style="width:100%"></div>
+            <button class="ak-pill ak-ghost" onclick="usePastedKey()">生成命令</button>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="api.js"></script>
+  <script>
+    const ORIGIN = location.origin;
+    const MCP_URL = ORIGIN + '/mcp';
+    let akIsAdmin = false;
+    function esc(s) { return (s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+    // 用当前密钥(或占位)渲染三段接入命令。
+    function renderConnectCommands(key) {
+      const k = key || '<在上方创建或粘贴你的密钥>';
+      document.getElementById('mcpUrlLabel').textContent = MCP_URL;
+      document.getElementById('cmdOneliner').textContent =
+        `curl -fsSL ${ORIGIN}/connect.sh | sh -s -- ${MCP_URL} ${k}`;
+      document.getElementById('cmdNative').textContent =
+        `claude mcp add --transport http lingjing ${MCP_URL} --header "Authorization: Bearer ${k}"`;
+      document.getElementById('cmdJson').textContent = JSON.stringify({
+        mcpServers: { lingjing: { type: 'http', url: MCP_URL, headers: { Authorization: `Bearer ${k}` } } }
+      }, null, 2);
+    }
+
+    function akCopyEl(id) {
+      const t = document.getElementById(id); if (!t) return;
+      navigator.clipboard.writeText(t.textContent).then(() => window.LJToast('✓ 已复制')).catch(() => window.LJToast('复制失败,请手动选择', 'err'));
+    }
+
+    function akFmtUsed(ts) { return ts ? new Date(ts).toLocaleString('zh-CN') : '从未'; }
+    function renderKeyRow(k) {
+      const revoked = !!k.revoked_at;
+      const status = revoked ? '<span class="ak-bdg ak-bdg-off">已吊销</span>' : '<span class="ak-bdg ak-bdg-ok">有效</span>';
+      const ownerCell = akIsAdmin ? '<td>' + esc(k.owner_name || '—') + '</td>' : '';
+      const action = revoked ? '' : '<button class="ak-pill ak-ghost" style="padding:5px 12px;font-size:12px" onclick="revokeApiKey(\'' + k.id + '\',\'' + esc(k.name).replace(/'/g, '&#39;') + '\')">吊销</button>';
+      return '<tr><td>' + esc(k.name) + '</td><td><code>' + esc(k.key_prefix) + '…</code></td>' + ownerCell +
+        '<td>' + akFmtUsed(k.last_used_at) + '</td><td>' + status + '</td><td>' + action + '</td></tr>';
+    }
+    async function loadApiKeys() {
+      try {
+        const th = document.getElementById('akOwnerTh'); if (th) th.style.display = akIsAdmin ? '' : 'none';
+        const res = await LJ.get('/api-keys');
+        const keys = res.keys || [];
+        document.getElementById('akBody').innerHTML = keys.length ? keys.map(renderKeyRow).join('')
+          : '<tr><td colspan="6" style="color:var(--t3);padding:14px 10px">还没有密钥,创建一个开始接入。</td></tr>';
+      } catch (e) { }
+    }
+    async function createApiKey() {
+      const el = document.getElementById('akName');
+      const name = (el.value || '').trim();
+      if (!name) { window.LJToast('请填写密钥名称', 'err'); return; }
+      try {
+        const r = await LJ.post('/api-keys', { name });
+        el.value = '';
+        renderConnectCommands(r.key); // 明文一次性:立即填进接入命令
+        const box = document.getElementById('akReveal');
+        box.style.display = '';
+        box.innerHTML = '🔑 密钥已创建,请<b>立即复制保存</b>(关闭后不再显示):<br>' +
+          '<code style="word-break:break-all;user-select:all">' + esc(r.key) + '</code>' +
+          '<div style="margin-top:8px" class="ak-row">' +
+          '<button class="ak-pill" style="padding:6px 14px;font-size:12.5px" onclick="akCopyPlain(\'' + r.key + '\')">复制密钥</button>' +
+          '<button class="ak-pill ak-ghost" style="padding:6px 14px;font-size:12.5px" onclick="document.getElementById(\'akReveal\').style.display=\'none\'">我已保存</button>' +
+          '<span style="font-size:12px;color:var(--t3)">接入命令已在上方填好 ↑</span></div>';
+        loadApiKeys();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } catch (e) { window.LJToast(e.message || '创建失败', 'err'); }
+    }
+    function akCopyPlain(k) { navigator.clipboard.writeText(k).then(() => window.LJToast('✓ 已复制')).catch(() => window.LJToast('复制失败', 'err')); }
+    async function revokeApiKey(id, name) {
+      if (!confirm('确认吊销密钥「' + name + '」?使用它的 Agent 将立即失效。')) return;
+      try { await LJ.del('/api-keys/' + id); window.LJToast('✓ 已吊销'); loadApiKeys(); }
+      catch (e) { window.LJToast(e.message || '吊销失败', 'err'); }
+    }
+    function usePastedKey() {
+      const v = (document.getElementById('akPaste').value || '').trim();
+      if (!/^lj_sk_[0-9a-f]+$/.test(v)) { window.LJToast('密钥格式不对(应以 lj_sk_ 开头)', 'err'); return; }
+      renderConnectCommands(v);
+      window.LJToast('✓ 接入命令已生成 ↑');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    (async function init() {
+      renderConnectCommands(null); // 占位命令先渲染
+      try {
+        const me = await LJ.me();
+        akIsAdmin = me.role === 'admin';
+        if (akIsAdmin) document.getElementById('akAdminHint').style.display = '';
+      } catch (e) { }
+      loadApiKeys();
+    })();
+  </script>
+</body>
+
+</html>
