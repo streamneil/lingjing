@@ -85,11 +85,13 @@ export class Client {
     });
   }
 
-  /** multipart/form-data 上传:fields 普通字段,files 文件(name → {filename, content, type})。 */
+  /** multipart/form-data 上传:fields 普通字段,files 文件(name → {filename, content, type})。
+   *  apiKey 传了则走 Bearer(不带 cookie),用于 Open API key 的上传端到端。 */
   async postMultipart(
     path: string,
     fields: Record<string, string>,
     files: Record<string, { filename: string; content: Buffer; type: string }>,
+    apiKey?: string,
   ): Promise<Res> {
     const port = await serverPort(this.app);
     return new Promise((resolveP, reject) => {
@@ -118,7 +120,8 @@ export class Client {
         'Content-Type': `multipart/form-data; boundary=${boundary}`,
         'Content-Length': String(body.length),
       };
-      if (this.cookie) headers['Cookie'] = this.cookie;
+      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+      else if (this.cookie) headers['Cookie'] = this.cookie;
       const req = http.request({ host: '127.0.0.1', port, path, method: 'POST', headers }, (res) => {
         let buf = '';
         res.on('data', (c) => (buf += c));
