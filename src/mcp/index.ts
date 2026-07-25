@@ -118,7 +118,11 @@ mcpRouter.post('/', async (req: Request, res: Response) => {
     return;
   }
 
-  const actor: SubmitActor = { tenantId: viaKey.user.tenantId, userId: viaKey.user.id, role: viaKey.user.role, ip: null, apiKeyId: viaKey.keyId };
+  const actor: SubmitActor = {
+    tenantId: viaKey.user.tenantId, userId: viaKey.user.id, role: viaKey.user.role,
+    ip: null, apiKeyId: viaKey.keyId,
+    channel: 'mcp', // 此端点只服务 MCP → 提交的 job 标 mcp,记录卡显「MCP 创建」
+  };
   const server = buildMcpServer(actor);
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined }); // stateless
   res.on('close', () => { transport.close(); server.close(); });

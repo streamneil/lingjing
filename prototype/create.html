@@ -588,6 +588,11 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   }
 
   // 渲染/更新一个 job 卡片(三态:running/done/failed),复用原型 class。
+  // 卡片时间戳(带生成来源:Agent 经 API/MCP 提交的作品显「· API 创建」,网页自己点的不显)。
+  function tsText(job){
+    const via = window.LJChannelLabel && LJChannelLabel(job.channel);
+    return ((window.LJTimeAgo&&LJTimeAgo(job.createdAt))||'刚刚') + (via?' · '+via:'');
+  }
   function renderCard(job, scriptText, append){
     const empty=document.getElementById('feedEmpty'); if(empty) empty.style.display='none';
     let card = document.getElementById('job-'+job.id); const existed=!!card;
@@ -613,7 +618,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     if(job.status==='queued' || job.status==='running'){
       card.dataset.st='running';
       card.innerHTML = `
-        <div class="fmeta"><b>AI 虚拟人</b><span class="ts">${(window.LJTimeAgo&&LJTimeAgo(job.createdAt))||'刚刚'}</span><span class="sp"></span>
+        <div class="fmeta"><b>AI 虚拟人</b><span class="ts">${tsText(job)}</span><span class="sp"></span>
           <span class="st" style="color:var(--amber)"><span class="led led-run"></span>${job.status==='queued'?'排队中':'生成中'}</span></div>
         ${bubble}
         <div class="fvideo proc"><div class="proc-in"><div class="spinner"></div>
@@ -633,7 +638,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         <button onclick="delJob('${job.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除</button>
       </div>` : '';
       card.innerHTML = `
-        <div class="fmeta"><b>AI 虚拟人</b><span class="ts">${(window.LJTimeAgo&&LJTimeAgo(job.createdAt))||'刚刚'}</span><span class="sp"></span>
+        <div class="fmeta"><b>AI 虚拟人</b><span class="ts">${tsText(job)}</span><span class="sp"></span>
           <span class="st" style="color:var(--green)"><span class="led led-ok"></span>已完成${job.aiLabel==='native'?' · 含AI标识':''}</span></div>
         ${bubble}
         ${v}
@@ -641,7 +646,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     } else { // failed
       card.dataset.st='failed';
       card.innerHTML = `
-        <div class="fmeta"><b>AI 虚拟人</b><span class="ts">${(window.LJTimeAgo&&LJTimeAgo(job.createdAt))||'刚刚'}</span><span class="sp"></span>
+        <div class="fmeta"><b>AI 虚拟人</b><span class="ts">${tsText(job)}</span><span class="sp"></span>
           <span class="st" style="color:var(--red)"><span class="led led-err"></span>生成失败</span></div>
         ${bubble}
         <div class="fvideo err"><div class="err-in"><div class="ei">!</div>

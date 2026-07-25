@@ -546,7 +546,12 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
 
   // 标准记录卡(对齐 img2video 等):head(时间+状态)+ 文本气泡 + 音频/进度/错误 + card-acts。
   const ttsTexts={};   // jobId → 原文(供重新提示回填)
-  function head(color,led,txt,createdAt){ return `<div class="fmeta"><b>文字转语音</b><span class="ts">${(window.LJTimeAgo&&LJTimeAgo(createdAt))||'刚刚'}</span><span class="sp"></span><span class="st" style="color:${color}"><span class="led ${led}"></span>${txt}</span></div>`; }
+  // 本页卡片无 meta chips 行 → 来源徽章并入时间戳(「3 分钟前 · MCP 创建」),不新增样式。
+  function head(color,led,txt,createdAt,channel){
+    const via=window.LJChannelLabel&&LJChannelLabel(channel);
+    const ts=((window.LJTimeAgo&&LJTimeAgo(createdAt))||'刚刚')+(via?' · '+via:'');
+    return `<div class="fmeta"><b>文字转语音</b><span class="ts">${ts}</span><span class="sp"></span><span class="st" style="color:${color}"><span class="led ${led}"></span>${txt}</span></div>`;
+  }
   function txtBubble(t){ return t?`<div class="fbubble"><div class="tx-wrap"><div class="tx clamp">${esc(t)}</div><span class="tx-toggle" onclick="toggleTx(this)">展开</span></div></div>`:''; }
   function cardActs(job,ok){
     const url=(job.outputUrls||[])[0];
@@ -570,17 +575,17 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     }
     if(job.status==='queued'||job.status==='running'){
       card.dataset.st='running';
-      card.innerHTML=head('var(--amber)','led-run',job.status==='queued'?'排队中':'生成中',job.createdAt)+txtBubble(t)+
+      card.innerHTML=head('var(--amber)','led-run',job.status==='queued'?'排队中':'生成中',job.createdAt,job.channel)+txtBubble(t)+
         `<div class="fvideo proc"><div class="proc-in"><div class="spinner"></div><div class="lbl">${job.progress?('进度 '+job.progress+'%'):'已进入生成队列'}</div><div class="proc-bar"><i style="width:${job.progress||8}%"></i></div></div></div>`;
     } else if(job.status==='done'){
       card.dataset.st='done';
       const url=(job.outputUrls||[])[0];
       const wave='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 11v2M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>';
       const player=url?`<div class="aud"><div class="aud-ic">${wave}</div><audio src="${url}" controls preload="metadata"></audio></div>`:'<div class="aud-empty">已生成</div>';
-      card.innerHTML=head('var(--green)','led-ok','已完成',job.createdAt)+txtBubble(t)+player+cardActs(job,true);
+      card.innerHTML=head('var(--green)','led-ok','已完成',job.createdAt,job.channel)+txtBubble(t)+player+cardActs(job,true);
     } else {
       card.dataset.st='failed';
-      card.innerHTML=head('var(--red)','led-err','生成失败',job.createdAt)+txtBubble(t)+
+      card.innerHTML=head('var(--red)','led-err','生成失败',job.createdAt,job.channel)+txtBubble(t)+
         `<div class="fvideo err"><div class="err-in"><div class="ei">!</div><div class="lbl">${esc(job.error||'生成失败,请重试')}</div></div></div>`+cardActs(job,false);
     }
     fitBubble(card);  // 文本超 3 行才显示「展开」按钮(对齐其他模块)

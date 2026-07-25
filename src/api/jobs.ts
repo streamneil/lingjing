@@ -15,7 +15,7 @@ import {
   retryJob,
   deleteJobForTenant,
 } from '../queue/index.js';
-import type { JobStatus } from '../db/index.js';
+import type { JobChannel, JobStatus } from '../db/index.js';
 import type { Role } from '../db/index.js';
 import { writeAudit } from '../audit/index.js';
 import {
@@ -859,6 +859,7 @@ export interface SubmitActor {
   role: Role;
   ip?: string | null;
   apiKeyId?: string | null; // 经 API key 发起时的 key id → 审计标记 via_api_key(区分本人 vs Agent)
+  channel?: JobChannel | null; // 提交来源 → job.channel(记录卡徽章);REST 路由 web|rest,MCP 传 mcp
 }
 export type SubmitResult =
   | { ok: true; id: string; cost: number; status: 'queued'; reused: boolean }
@@ -918,7 +919,11 @@ export async function submitJob(
   // 入队拿 jobId(带幂等键则写唯一列);并发同键第二插入撞 idx_job_idem → 抛错,兜底返原 job。
   let id: string;
   try {
-    id = enqueueJob(built.type, built.input, tid, actor.userId, idempotencyKey ? { key: idempotencyKey, hash, reservedCost: cost } : undefined);
+    id = enqueueJob(
+      built.type, built.input, tid, actor.userId,
+      idempotencyKey ? { key: idempotencyKey, hash, reservedCost: cost } : undefined,
+      actor.channel ?? null,
+    );
   } catch (e) {
     if (idempotencyKey) {
       const hit = idempotencyHit(tid, idempotencyKey, hash); // 并发对手已插入 → 返其 job(同 body)或 409(异 body)
@@ -941,7 +946,11 @@ jobsRouter.post('/jobs', requireRole('admin', 'creator'), async (req: Request, r
   const body = (req.body ?? {}) as Record<string, unknown>;
   const idemKey = typeof req.headers['idempotency-key'] === 'string' ? req.headers['idempotency-key'] : undefined;
   const r = await submitJob(
-    { tenantId: req.user!.tenantId, userId: req.user!.id, role: req.user!.role as Role, ip: clientIpOf(req), apiKeyId: req.apiKeyId ?? null },
+    {
+      tenantId: req.user!.tenantId, userId: req.user!.id, role: req.user!.role as Role,
+      ip: clientIpOf(req), apiKeyId: req.apiKeyId ?? null,
+      channel: req.apiKeyId ? 'rest' : 'web', // 同一条路由:带 key = 客户直调 API,cookie = 网页自己点的
+    },
     body,
     idemKey,
   );
@@ -1453,6 +1462,7 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
         outputUrls, // 多产物全量(图片多图)
         script,
         ...meta,
+        channel: j.channel, // 生成来源(web|rest|mcp|null)→ 记录卡「API/MCP 创建」徽章
         createdAt: j.created_at,
       };
     }),
@@ -1473,6 +1483,7 @@ jobsRouter.get('/jobs/:id', requireAuth, async (req: Request, res: Response) => 
     outputKind: job.output_kind,
     aiLabel: job.ai_label,
     error: job.error,
+    channel: job.channel, // 生成来源(轮询期间卡片重建也要带,否则徽章会闪没)
     createdAt: job.created_at,
     input: JSON.parse(job.input_json), // 供"重新编辑"回填原入参(T5)
   };

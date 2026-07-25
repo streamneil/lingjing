@@ -77,6 +77,7 @@
     <p><span class="method get">GET</span><code>/api/jobs/:id</code> — 返回状态。终态 <code>done</code> 后含产物;<code>failed</code> 时 <code>error</code> 为中文可读原因(如送审拒绝、余额不足)。</p>
     <p><span class="method get">GET</span><code>/api/jobs/:id/download/:idx</code> — 下载第 <code>idx</code> 个产物(签名 URL 重定向)。</p>
     <div class="note">视频类任务是分钟级异步。建议轮询 <code>GET /api/jobs/:id</code> 的间隔 <b>≥ 5 秒</b>,直到 <code>status</code> 为 <code>done</code> 或 <code>failed</code>。读接口限速较宽(见 §7)。</div>
+    <p>响应含 <code>channel</code> 字段标记任务来源:<code>rest</code>(本接口提交)/ <code>mcp</code>(MCP 工具提交)/ <code>web</code>(成员在网页上创建)。经密钥提交的任务会在网页端的生成记录里显示「API 创建」/「MCP 创建」徽章,便于机构区分人工创作与 Agent 产出。该字段由服务端按认证方式判定,请求体无法指定。</p>
 
     <h2>4. 费用预估</h2>
     <p><span class="method post">POST</span><code>/api/jobs/estimate</code> — 参数同提交,返回 <code>{cost}</code>。生成前预估扣费,报价≡实扣。</p>

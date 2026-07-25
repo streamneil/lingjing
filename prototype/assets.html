@@ -252,7 +252,9 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     const canDl = job.status==='done' && urls.length;
     const dl = canDl ? `<div class="a-iconbtn dl" onclick="event.stopPropagation();dlMedia('${job.id}','${kind}')" title="下载" role="button" aria-label="下载">${DL_SVG}</div>` : '';
     const del = `<div class="a-iconbtn del" onclick="event.stopPropagation();delMedia('${job.id}')" title="删除" role="button" aria-label="删除">${TRASH_SVG}</div>`;
-    return `<div class="acard" onclick="openAsset('${job.id}','${kind}',event)">${thumb}<div class="a-acts">${dl}${del}</div><div class="a-b"><h4 title="${esc(job.script||'')}">${esc(title)}${(job.script||'').length>18?'…':''}</h4><div class="m">${from} · ${fmtTime(job.createdAt)}</div></div></div>`;
+    // 来源(Agent 发起的作品)并入卡片副标题:「AI 图片 · 14:03 · MCP 创建」。
+    const via = window.LJChannelLabel && LJChannelLabel(job.channel);
+    return `<div class="acard" onclick="openAsset('${job.id}','${kind}',event)">${thumb}<div class="a-acts">${dl}${del}</div><div class="a-b"><h4 title="${esc(job.script||'')}">${esc(title)}${(job.script||'').length>18?'…':''}</h4><div class="m">${from} · ${fmtTime(job.createdAt)}${via?' · '+via:''}</div></div></div>`;
   }
 
   // 成品 URL 失效(OSS 404/过期/防盗链)→ 缩略图降级为「成品已失效」占位,不留全黑;
