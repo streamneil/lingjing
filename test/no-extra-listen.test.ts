@@ -18,8 +18,21 @@ const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
 // 本文件自身豁免:用例标题里带字面量 "app.listen(" 会命中自己(误报,非真调用)。
 const ALLOWED = new Set(['helpers.ts', 'no-extra-listen.test.ts']);
 
+/** 递归收集 test/ 下所有 .ts(相对 TEST_DIR 的路径)。
+ *  非递归的 readdirSync 会给护栏留个静默盲区 —— 今天 test/ 是平的,
+ *  哪天有人建了子目录,漏扫不会报错、只会悄悄不管用(正是本 PR 要消灭的形状)。 */
+function collectTs(dir: string, prefix = ''): string[] {
+  const out: string[] = [];
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const rel = prefix ? path.join(prefix, e.name) : e.name;
+    if (e.isDirectory()) out.push(...collectTs(path.join(dir, e.name), rel));
+    else if (e.name.endsWith('.ts') && !ALLOWED.has(e.name)) out.push(rel);
+  }
+  return out;
+}
+
 describe('测试文件不得自己 app.listen', () => {
-  const files = readdirSync(TEST_DIR).filter((f) => f.endsWith('.ts') && !ALLOWED.has(f));
+  const files = collectTs(TEST_DIR);
 
   it.each(files)('%s 不含 app.listen(', (file) => {
     const src = readFileSync(path.join(TEST_DIR, file), 'utf8');
