@@ -41,6 +41,12 @@ export function createApp() {
   // 支付回调必须挂在 express.json 之前(决策9):微信 v3 验签要原始 body 字节,
   // json parser 一碰就废;支付宝是 form-urlencoded。路由内部用 express.raw 收 Buffer。
   app.use('/api/payments/notify', paymentsNotifyRouter);
+  // Open API MCP server:挂在全局 express.json **之前** —— upload_image 走 base64 内联,
+  // 1mb 的全局上限会把参考图打成 413(且是非 JSON-RPC 响应,Agent 只看到一串 HTML)。
+  // mcpRouter 自带更大上限的 json parser + 413 转 JSON 提示,见 src/mcp/index.ts。
+  // 同时它自带 Bearer 认证 + 读写限速,独立于 /api 中间件栈(同 /admin 隔离),
+  // 故全局 attachUser / requireApiScope 也不会拦它。
+  app.use('/mcp', mcpRouter);
   app.use(express.json({ limit: '1mb' }));
 
   app.get('/healthz', (_req, res) => res.json({ ok: true }));
@@ -49,10 +55,6 @@ export function createApp() {
   // 故 req.user 在 /admin 链路永远 undefined(E-1.1 结构隔离)。requirePlatformAdmin 只认
   // lj_padmin —— 租户拿 lj_session 打 /admin/* 也只会 401。
   app.use('/admin', adminRouter);
-
-  // Open API MCP server:自带 Bearer 认证 + 读写限速,独立于 /api 中间件栈(同 /admin 隔离)。
-  // 挂在全局 attachUser / requireApiScope 之前,故作用域守卫不会拦 /mcp(它自认证)。
-  app.use('/mcp', mcpRouter);
 
   // 每个请求先解析 session 挂 req.user(不强制),路由各自决定是否要求登录/角色。
   // 注意:attachUser 不再全局挂(E-1.1)—— 它只覆盖 /admin 之后注册的租户路由与静态页;
