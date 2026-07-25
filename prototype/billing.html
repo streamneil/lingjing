@@ -97,6 +97,32 @@
   .bl-work:focus-visible{ outline:2px solid var(--blue); outline-offset:2px; }
   .bl-empty{ text-align:center; color:var(--t4); padding:54px 20px; }
   .bl-empty svg{ width:34px; height:34px; color:var(--t5); margin-bottom:12px; }
+
+  /* ── 成员用量(admin 专属)──
+     隐私隔离的正面补偿:只呈现数字(次数/点数/工具分布),绝不出现文案或产物。
+     每行一条占比条,让「谁在烧钱」一眼可读,不用去比对数字。 */
+  .mu-note{ display:flex; align-items:center; gap:8px; font-size:12px; color:var(--t4); margin:0 0 14px; line-height:1.6; }
+  .mu-note svg{ width:14px; height:14px; flex:none; color:var(--t5); }
+  .mu-row{ display:grid; grid-template-columns:1.1fr 84px 104px 1.5fr; gap:16px; align-items:center;
+    padding:14px 16px; border:1px solid var(--line); border-radius:var(--r); background:var(--card); margin-bottom:8px; }
+  @media (max-width:820px){ .mu-row{ grid-template-columns:1fr 72px 92px; } .mu-row .mu-tools{ grid-column:1/-1; } }
+  .mu-who{ display:flex; align-items:center; gap:10px; min-width:0; }
+  .mu-av{ width:28px; height:28px; flex:none; border-radius:50%; background:var(--field); border:1px solid var(--line);
+    display:grid; place-items:center; font-size:11.5px; font-weight:600; color:var(--t2); }
+  .mu-name{ font-size:13px; color:var(--t1); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mu-name .mu-self{ font-size:11px; color:var(--t4); font-weight:400; margin-left:5px; }
+  .mu-num{ font-family:var(--f-en); font-size:14px; font-weight:700; color:var(--t1); text-align:right; }
+  .mu-num small{ font-size:10.5px; color:var(--t4); font-weight:400; margin-left:3px; }
+  .mu-tools{ display:flex; flex-direction:column; gap:5px; min-width:0; }
+  .mu-bar{ display:flex; height:6px; border-radius:3px; overflow:hidden; background:var(--field); }
+  .mu-bar i{ display:block; height:100%; }
+  .mu-legend{ display:flex; flex-wrap:wrap; gap:4px 12px; font-size:11px; color:var(--t4); }
+  .mu-legend span{ display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
+  .mu-legend em{ width:7px; height:7px; border-radius:2px; flex:none; font-style:normal; }
+  .mu-head{ display:grid; grid-template-columns:1.1fr 84px 104px 1.5fr; gap:16px;
+    padding:0 16px 8px; font-size:11.5px; color:var(--t4); }
+  @media (max-width:820px){ .mu-head{ display:none; } }
+  .mu-head .r{ text-align:right; }
   /* .ld-pager/.ld-pg 页码条样式在 app.css(审计/消费明细共用)*/
 </style>
 <script defer src="tools.js"></script>
@@ -166,6 +192,28 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         <div class="stat" style="animation-delay:.16s"><div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 4v4h-4"/></svg>失败释放</div><div class="val" id="statRelease">—</div><div class="sub">失败任务退还(不计费)</div></div>
       </div>
 
+      <!-- ── 成员用量(仅管理员可见)──
+           隐私隔离后管理员看不到成员的作品与资产,这里用纯聚合数字回答「谁在烧钱、烧在哪」。
+           整块由 renderMemberUsage() 填充;非管理员 load() 时直接移除。 -->
+      <section id="member-usage" class="mu-wrap" style="display:none">
+        <div class="sec-head" style="margin-top:30px">
+          <span class="sec-title">成员用量</span>
+          <div class="bl-tools">
+            <div class="bl-seg" id="muRangeSeg">
+              <button data-r="today">今日</button>
+              <button data-r="month" class="on">本月</button>
+              <button data-r="30d">近 30 天</button>
+              <button data-r="all">全部</button>
+            </div>
+          </div>
+        </div>
+        <p class="mu-note">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 16v-4M12 8h.01"/><circle cx="12" cy="12" r="9"/></svg>
+          出于成员隐私保护,管理员可查看每位成员的用量数据,但不能查看其生成记录与资产内容。
+        </p>
+        <div id="muBody"><div class="bl-empty" style="padding:28px">加载中…</div></div>
+      </section>
+
       <!-- ── 消费明细 ── -->
       <div class="sec-head" style="margin-top:30px">
         <span class="sec-title">消费明细</span>
@@ -219,7 +267,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   // 工具类型 → 中文场景名(与后端 ledger.csv TOOL_CN 同口径)
   const TOOL_CN = { video:'数字人视频', video_t2v:'文字转影片', video_i2v:'图片转影片', video_edit:'影片编辑', ai_image:'AI 图片', tts:'文字转语音', ai_music:'AI 音乐' };
   const toolLabel = t => t ? (TOOL_CN[t]||t) : '—';
-  let LEDGER = [], curFilter = 'all', selUser = 'all', selTool = 'all', isAdmin = false;
+  let LEDGER = [], curFilter = 'all', selUser = 'all', selTool = 'all', isAdmin = false, ME = null;
   let ledPage = 1, ledTotal = 0; const LED_PAGE_SIZE = 20; // 消费明细分页(仅驱动明细表/筛选)
   let SUMMARY = null; // 整租户用量汇总(/credits/summary):余额卡/趋势图/统计卡全用它,不再从分页 ledger 现算
 
@@ -321,6 +369,60 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     document.body.appendChild(ov);
   };
 
+  // ── 成员用量(admin 专属)──
+  // 数据来自 /credits/usage-by-member(纯聚合:成员/次数/点数/工具分布,无文案无产物)。
+  // 口径与统计卡的「净消耗」一致,故各成员之和 ≤ 累计消耗(差额 = 无主作品,正常为 0)。
+  const MU_COLORS = ['#4D8DFF','#22C55E','#F59E0B','#A855F7','#EC4899','#14B8A6','#EF4444'];
+  let muRange = 'month', muLoading = false;
+
+  function muInitials(name){
+    const s = (name||'?').trim();
+    return s ? [...s][0].toUpperCase() : '?';
+  }
+
+  async function loadMemberUsage(range){
+    if(muLoading) return;
+    muLoading = true; muRange = range;
+    const body = document.getElementById('muBody');
+    try{
+      const res = await LJ.get('/credits/usage-by-member?range='+encodeURIComponent(range));
+      renderMemberUsage(Array.isArray(res.members) ? res.members : []);
+    }catch(e){
+      body.innerHTML = `<div class="bl-empty" style="padding:28px">用量数据加载失败</div>`;
+    }finally{ muLoading = false; }
+  }
+
+  function renderMemberUsage(members){
+    const body = document.getElementById('muBody');
+    // 净消耗为 0 的成员不占版面(只 reserve 又全额 release 的纯失败,或该周期没动过)
+    const rows = members.filter(m => m.spend !== 0 || m.genCount > 0);
+    if(!rows.length){
+      body.innerHTML = `<div class="bl-empty" style="padding:34px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+        <div>该时间范围内暂无成员消耗</div></div>`;
+      return;
+    }
+    const max = Math.max(...rows.map(m => Math.abs(m.spend)), 1);
+    const head = `<div class="mu-head"><span>成员</span><span class="r">生成次数</span><span class="r">消耗点数</span><span>工具分布</span></div>`;
+    body.innerHTML = head + rows.map(m=>{
+      const name = m.userName || (m.userId ? '已删除成员' : '无主作品');
+      const self = (ME && m.userId === ME.id) ? '<span class="mu-self">(我)</span>' : '';
+      const total = m.byTool.reduce((a,t)=>a+Math.abs(t.spend),0) || 1;
+      const seg = m.byTool.slice(0,MU_COLORS.length).map((t,i)=>
+        `<i style="width:${(Math.abs(t.spend)/total*100).toFixed(1)}%;background:${MU_COLORS[i]}"></i>`).join('');
+      const legend = m.byTool.slice(0,MU_COLORS.length).map((t,i)=>
+        `<span><em style="background:${MU_COLORS[i]}"></em>${esc(toolLabel(t.toolType))} ${fmtN(Math.abs(t.spend))}</span>`).join('');
+      // 行底占比条:该成员消耗相对本周期最高者的比例,让「谁在烧钱」不用比数字
+      const share = (Math.abs(m.spend)/max*100).toFixed(1);
+      return `<div class="mu-row" style="background:linear-gradient(90deg,rgba(77,141,255,.06) ${share}%,transparent ${share}%),var(--card)">
+        <div class="mu-who"><div class="mu-av">${esc(muInitials(name))}</div><div class="mu-name">${esc(name)}${self}</div></div>
+        <div class="mu-num">${fmtN(m.genCount)}<small>次</small></div>
+        <div class="mu-num">${fmtN(m.spend)}<small>点</small></div>
+        <div class="mu-tools">${seg?`<div class="mu-bar">${seg}</div><div class="mu-legend">${legend}</div>`:'<span style="font-size:11.5px;color:var(--t5)">—</span>'}</div>
+      </div>`;
+    }).join('');
+  }
+
   // ── 明细表(可筛选:类型 + 消费人 + 工具)──
   function renderTable(){
     const body = document.getElementById('ledgerBody');
@@ -401,11 +503,22 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   async function load(){
     try{
       const me = await LJ.me();
+      ME = me;
       isAdmin = me.role==='admin';
       if(!isAdmin){
         const r=document.getElementById('renewBtn'); if(r) r.style.display='none';
         document.getElementById('renewHint').textContent='点数不足时,请联系您的机构管理员申请扩容。';
       }
+      // 成员用量:仅 admin。非 admin 直接把整块摘掉(后端也是 403,双保险)。
+      const mu = document.getElementById('member-usage');
+      if(isAdmin){
+        mu.style.display='';
+        document.querySelectorAll('#muRangeSeg button').forEach(b=>b.onclick=()=>{
+          document.querySelectorAll('#muRangeSeg button').forEach(x=>x.classList.remove('on'));
+          b.classList.add('on'); loadMemberUsage(b.dataset.r);
+        });
+        loadMemberUsage(muRange); // 不 await:与余额/明细并行,慢查询不拖首屏
+      } else { mu.remove(); }
       const [bal, warn, summary] = await Promise.all([
         LJ.get('/credits/balance'),
         LJ.get('/credits/warning').catch(()=>null),

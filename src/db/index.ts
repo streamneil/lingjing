@@ -386,7 +386,7 @@ db.exec(`CREATE INDEX IF NOT EXISTS idx_job_tenant_active ON job(tenant_id, stat
 db.prepare(`UPDATE user SET role='creator' WHERE role='viewer'`).run();
 // ④ 老资产回填:从 audit_log(create_avatar / clone_voice / design_voice 行带 user_id + target=assetId)
 //   回填 created_by,让原创作者部署后仍看得到自己部署前建的资产。只在刚加列时跑一次(幂等,只填 NULL)。
-//   回填不到的(audit 无记录)→ 留 NULL = 机构公共,仅 admin 可见。
+//   回填不到的(audit 无记录)→ 留 NULL = 机构公共,全员可见可用(scopeByOwner orgPublic)。
 if (!avatarHadCreatedBy) {
   db.prepare(
     `UPDATE avatar SET created_by = (
@@ -645,6 +645,24 @@ db.exec(`
 `);
 // schema_meta:迁移版本标记(eng 外部声音 P3)。让迁移可识别「已跑/未跑」,避免重复/半态。
 db.exec(`CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
+
+// ── 租户管理员隐私隔离(2026-07)迁移:无主作品认领给首个 admin ──
+// 背景:此前 admin 豁免 created_by 过滤,故 job.created_by IS NULL 的老行靠「admin 看全机构」兜底可见。
+// admin 收窄到只看自己后,这些行会变成谁都看不见的孤儿 —— 连带 credit_ledger 的归属
+// (经 JOIN job ON l.job_id 派生)一起失联,消费明细里显示「消费人 —」且不计入任何成员用量。
+// 故一次性认领给租户「首个 active admin」:历史不丢,用量口径闭合(各成员之和 == 租户净消耗)。
+// 租户无 active admin → 子查询得 NULL → 保持 NULL(自然隐身,仅平台超管可处理),不报错。
+// 幂等:schema_meta 打标只跑一次;即便重复跑也只填 NULL 行,无副作用。
+if (!db.prepare(`SELECT 1 FROM schema_meta WHERE key='job_creator_backfilled'`).get()) {
+  db.prepare(
+    `UPDATE job SET created_by = (
+       SELECT u.id FROM user u
+       WHERE u.tenant_id = job.tenant_id AND u.role='admin' AND u.status='active'
+       ORDER BY u.created_at ASC, u.rowid ASC LIMIT 1)
+     WHERE created_by IS NULL`,
+  ).run();
+  db.prepare(`INSERT OR REPLACE INTO schema_meta (key,value) VALUES ('job_creator_backfilled','1')`).run();
+}
 
 // ── 火山素材库资产缓存(2026-07,Seedance 人脸拦截解法)──
 // ark_asset_group:每 project 一个素材组(get-or-create 缓存)。
@@ -1266,7 +1284,7 @@ export interface AvatarRow {
   authorization_id: string | null;
   orientation: string | null;
   is_default: number;
-  created_by: string | null; // 创建者用户 id(账号隔离);老资产/回填不到 → NULL = 机构公共,仅 admin 可见
+  created_by: string | null; // 创建者用户 id(账号隔离);老资产/回填不到 → NULL = 机构公共,全员可见可用(不可删改)
   created_at: number;
 }
 
@@ -1294,16 +1312,41 @@ export interface VoiceRow {
   source_key: string | null;
   provider_voice_id: string | null;
   authorization_id: string | null;
-  created_by: string | null; // 创建者用户 id(账号隔离);老资产/回填不到 → NULL = 机构公共,仅 admin 可见
+  created_by: string | null; // 创建者用户 id(账号隔离);老资产/回填不到 → NULL = 机构公共,全员可见可用(不可删改)
   created_at: number;
 }
 
-// ── 账号级数据隔离 helper ──
-// 在租户隔离(WHERE tenant_id=?)之上叠加账号隔离:
-//   admin → 看全机构(不加 created_by 限制,返回空片段);
-//   creator → 仅看 created_by=自己(NULL 老数据自然不匹配 → 看不到,符合「机构公共仅 admin 可见」)。
-// 用法:`WHERE tenant_id=? ${scope.clause} ORDER BY ... LIMIT ?`,参数按位拼 `.all(tenantId, ...scope.params, limit)`。
+// ── 账号级数据隔离 helper(两种作用域,按数据性质二选一)──
+//
+// 用法(两者相同):`WHERE tenant_id=? ${scope.clause} ORDER BY ... LIMIT ?`,
+// 参数按位拼 `.all(tenantId, ...scope.params, limit)`。
 // 关键:scope.params 插在 tenantId 与 limit 之间,绝不追加末尾(会与 LIMIT ? 错位)。
+
+/** 隐私域:内容归个人,**任何角色都只看自己** —— 含机构管理员。
+ *
+ *  用于作品/生成记录、形象、音色:这些是成员的创作内容与素材,机构管理员看不得
+ *  (2026-07 决策:同租户内个人隐私优先于管理便利;管理员改看聚合用量)。
+ *
+ *  注意签名里**没有 isAdmin** —— 这是刻意的。若保留参数让调用点传 false,
+ *  日后总会有人传回 true 而无人察觉;删掉参数则由编译器兜底,想放宽必须改 helper 本身。
+ *
+ *  orgPublic:created_by IS NULL 的老行视为「机构公共」,全员可见可用(形象/音色库场景)。
+ *  作品/消费明细不开这个口 —— 它们的 NULL 行已由启动迁移认领给首个 admin。
+ */
+export function scopeByOwner(
+  actingUserId: string,
+  opts: { orgPublic?: boolean } = {},
+  col = 'created_by',
+): { clause: string; params: string[] } {
+  return opts.orgPublic
+    ? { clause: ` AND (${col} = ? OR ${col} IS NULL)`, params: [actingUserId] }
+    : { clause: ` AND ${col} = ?`, params: [actingUserId] };
+}
+
+/** 经营域:admin 看全机构,成员看自己。
+ *
+ *  用于订单/发票/消费明细/审计日志 —— 这些是机构的经营与合规数据,不是个人内容,
+ *  管理员需要逐笔对账与追溯能力。消费明细另有「按归属抹去文案摘要」的脱敏(见 credits.ledger)。 */
 export function scopeByActor(
   actingUserId: string,
   isAdmin: boolean,
