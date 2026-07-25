@@ -1145,6 +1145,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         if (job.sizeLabel) c.push(job.sizeLabel);
         if (job.ratio) c.push(job.ratio);
         if (job.audioSetting === 'origin') c.push('原声');
+        const via = window.LJChannelLabel && LJChannelLabel(job.channel); if (via) c.push(via); // Agent 发起的作品标来源
         return c.length ? `<div class="card-meta">${c.map(x => `<span class="chip">${esc(x)}</span>`).join('')}</div>` : '';
       }
       function cardActs(job, ok) {

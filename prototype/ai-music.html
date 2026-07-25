@@ -628,7 +628,12 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
 
       // ── 记录卡(复用 TTS 标准卡:head + 提示词气泡 + 音频/进度/错误 + 歌词可展开 + card-acts)──
       const musicMeta = {};  // jobId → {prompt, lyrics}(供重新提示/展示)
-      function head(color, led, txt, createdAt) { return `<div class="fmeta"><b>AI 音乐</b><span class="ts">${(window.LJTimeAgo && LJTimeAgo(createdAt)) || '刚刚'}</span><span class="sp"></span><span class="st" style="color:${color}"><span class="led ${led}"></span>${txt}</span></div>`; }
+      // 本页卡片无 meta chips 行 → 来源徽章并入时间戳(「3 分钟前 · MCP 创建」),不新增样式。
+      function head(color, led, txt, createdAt, channel) {
+        const via = window.LJChannelLabel && LJChannelLabel(channel);
+        const ts = ((window.LJTimeAgo && LJTimeAgo(createdAt)) || '刚刚') + (via ? ' · ' + via : '');
+        return `<div class="fmeta"><b>AI 音乐</b><span class="ts">${ts}</span><span class="sp"></span><span class="st" style="color:${color}"><span class="led ${led}"></span>${txt}</span></div>`;
+      }
       function promptBubble(t) { return t ? `<div class="fbubble"><div class="tx-wrap"><div class="tx-label">提示词</div><div class="tx clamp">${esc(t)}</div><span class="tx-toggle" onclick="toggleTx(this)">展开</span></div></div>` : ''; }
       // 歌词完整展示(不 clamp;保留换行/结构,长曲内部滚动)。clamp 会截断且 line-clamp+pre-wrap 易测错。
       function lyricsBlock(t) { return t ? `<div class="fbubble" style="margin-top:8px"><div class="tx-wrap"><div class="tx-label">歌词</div><div class="tx tx-lyrics">${esc(t)}</div></div></div>` : ''; }
@@ -654,7 +659,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         }
         if (job.status === 'queued' || job.status === 'running') {
           card.dataset.st = 'running';
-          card.innerHTML = head('var(--amber)', 'led-run', job.status === 'queued' ? '排队中' : '生成中', job.createdAt) + promptBubble(pt) +
+          card.innerHTML = head('var(--amber)', 'led-run', job.status === 'queued' ? '排队中' : '生成中', job.createdAt, job.channel) + promptBubble(pt) +
             `<div class="fvideo proc"><div class="proc-in"><div class="spinner"></div><div class="lbl">${job.progress ? ('进度 ' + job.progress + '%') : '已进入生成队列'}</div><div class="proc-bar"><i style="width:${job.progress || 8}%"></i></div></div></div>`;
         } else if (job.status === 'done') {
           card.dataset.st = 'done';
@@ -662,10 +667,10 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
           const wave = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>';
           const player = url ? `<div class="aud"><div class="aud-ic">${wave}</div><audio src="${url}" controls preload="metadata"></audio></div>` : '<div class="aud-empty">已生成</div>';
           const resultLyrics = job.lyricsResult || lt;
-          card.innerHTML = head('var(--green)', 'led-ok', '已完成', job.createdAt) + promptBubble(pt) + player + lyricsBlock(resultLyrics) + cardActs(job, true);
+          card.innerHTML = head('var(--green)', 'led-ok', '已完成', job.createdAt, job.channel) + promptBubble(pt) + player + lyricsBlock(resultLyrics) + cardActs(job, true);
         } else {
           card.dataset.st = 'failed';
-          card.innerHTML = head('var(--red)', 'led-err', '生成失败', job.createdAt) + promptBubble(pt) +
+          card.innerHTML = head('var(--red)', 'led-err', '生成失败', job.createdAt, job.channel) + promptBubble(pt) +
             `<div class="fvideo err"><div class="err-in"><div class="ei">!</div><div class="lbl">${esc(job.error || '生成失败,请重试')}</div></div></div>` + cardActs(job, false);
         }
         card.querySelectorAll('.fitem .tx.clamp, .tx.clamp').forEach(() => { }); fitBubbles(card);

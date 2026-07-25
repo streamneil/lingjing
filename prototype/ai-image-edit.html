@@ -701,6 +701,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     // gpt-image-2 编辑:清晰度恒 1K 无意义 → 不显,改显画质(有 job.quality 即 token 计价模型)。
     if(job.resolution && !job.quality) c.push(job.resolution);
     if(job.quality) c.push('画质·'+(QUALITY_LABEL[job.quality]||job.quality));
+    const via=window.LJChannelLabel&&LJChannelLabel(job.channel); if(via) c.push(via); // Agent 发起的作品标来源
     return c.length?`<div class="card-meta">${c.map(x=>`<span class="chip">${esc(x)}</span>`).join('')}</div>`:'';
   }
   function cardActs(job,ok){

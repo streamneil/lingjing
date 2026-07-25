@@ -352,6 +352,14 @@
     return t.getFullYear() + '-' + pad(t.getMonth()+1) + '-' + pad(t.getDate());
   };
 
+  // 生成来源徽章文案(记录卡 metaChips 共用)。job.channel 由后端给:
+  //   mcp = Agent 走 MCP 提交 | rest = API 密钥直调 REST | web/null = 网页自己点的(不显徽章)。
+  window.LJChannelLabel = function(ch){
+    if(ch === 'mcp') return 'MCP 创建';
+    if(ch === 'rest') return 'API 创建';
+    return '';
+  };
+
   /**
    * 统一下载工具(图片/视频/音频通用)。
    * 「下载一闪而过」根因:OSS 签名 URL 无 CORS 头,fetch(签名URL) 被浏览器 CORS 拦截,
