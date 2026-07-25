@@ -335,6 +335,10 @@ addColumnIfMissing('job', 'idempotency_hash', `idempotency_hash TEXT`);
 addColumnIfMissing('job', 'reserved_cost', `reserved_cost INTEGER`);
 // 部分唯一索引:同租户同 key 唯一;key 为 NULL(绝大多数请求)不参与唯一。并发同键第二插入撞此索引 → submitJob 兜底返原 job。
 db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_job_idem ON job(tenant_id, idempotency_key) WHERE idempotency_key IS NOT NULL`);
+// 生成来源(用户反馈:Agent 发起的作品要能在记录里一眼认出):web=网页自己点的 | rest=API 密钥直调 REST | mcp=Agent 走 MCP。
+//   落在 job 行而非只靠 audit_log.via_api_key —— 记录列表直接读 job,审计表会归档,不能当业务字段用。
+//   老 job 为 NULL,前端按「网页」处理(不显徽章),向后兼容。
+addColumnIfMissing('job', 'channel', `channel TEXT`);
 
 // 失败可读化(用户反馈:前端不能出现英文 JSON;admin 需看到原始日志排障)。
 //   error 列语义收敛为「用户可读中文」;新增 error_detail 存「原始技术日志」(厂商 code/RequestId)。
@@ -1155,7 +1159,11 @@ export interface JobRow {
   updated_at: number;
   started_at: number | null;
   created_by: string | null; // 创建该任务的用户 id(计费归属;老 job 为 NULL)
+  channel: JobChannel | null; // 提交来源:web|rest|mcp(老 job 为 NULL,按 web 处理)
 }
+
+/** 生成来源渠道:网页 / API 密钥直调 REST / Agent 走 MCP。 */
+export type JobChannel = 'web' | 'rest' | 'mcp';
 
 export type Role = 'admin' | 'creator';
 export type UserStatus = 'active' | 'disabled';

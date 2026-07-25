@@ -5,7 +5,7 @@
 // 更新做"领取",等价于 Postgres 的 SELECT FOR UPDATE SKIP LOCKED。
 
 import { randomUUID } from 'node:crypto';
-import { db, scopeByActor, type JobRow, type JobStatus } from '../db/index.js';
+import { db, scopeByActor, type JobChannel, type JobRow, type JobStatus } from '../db/index.js';
 import { config } from '../config.js';
 import type { VideoGenInput } from '../gateway/types.js';
 import { translateProviderError } from '../gateway/provider-errors.js';
@@ -34,17 +34,18 @@ export function enqueueJob(
   tenantId: string = config.defaultTenantId,
   createdBy: string | null = null, // 创建者用户 id(计费归属;缺省 null = 老路径/系统)
   idem?: EnqueueIdempotency, // Open API 幂等键(可选);带则写入唯一列,并发同键第二插入会撞 idx_job_idem 抛错
+  channel: JobChannel | null = null, // 提交来源(web|rest|mcp);缺省 null = 老路径/系统,前端按网页处理
 ): string {
   const id = randomUUID();
   const t = now();
   // output_kind 创建即按 type 定(修:失败任务此前停在列默认 'video' → 图片/音频失败被当视频 → 前端卡 Loading)。
   db.prepare(
     `INSERT INTO job (id, tenant_id, type, status, input_json, output_kind, created_by, created_at, updated_at,
-                      idempotency_key, idempotency_hash, reserved_cost)
-     VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?)`,
+                      idempotency_key, idempotency_hash, reserved_cost, channel)
+     VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id, tenantId, type, JSON.stringify(input), outputKindForType(type), createdBy, t, t,
-    idem?.key ?? null, idem?.hash ?? null, idem?.reservedCost ?? null,
+    idem?.key ?? null, idem?.hash ?? null, idem?.reservedCost ?? null, channel,
   );
   return id;
 }
