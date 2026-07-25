@@ -22,7 +22,7 @@ const { createApiKey } = await import('../src/auth/api-keys.js');
 const { grant } = await import('../src/credits/index.js');
 const { getJob, enqueueJob } = await import('../src/queue/index.js');
 const { seedPlatformDefaults } = await import('./../src/seed/platform-defaults.js');
-const { Client } = await import('./helpers.js');
+const { Client, serverPort } = await import('./helpers.js');
 
 seedPlatformDefaults();
 const app = createApp();
@@ -40,11 +40,8 @@ beforeAll(async () => {
   grant(tId, 1_000_000);
   key = createApiKey(tId, creatorId, 'ch-key').key;
   await client.login('chcreator', 'pw123456');
-  // MCP 走官方 SDK transport,需要真实端口(helpers 的常驻 server 不暴露端口)。
-  mcpPort = await new Promise<number>((resolve) => {
-    const s = app.listen(0, () => resolve((s.address() as { port: number }).port));
-    s.unref();
-  });
+  // MCP 走官方 SDK transport,需要真实端口 → 复用 helpers 的常驻 server(不自己 listen)。
+  mcpPort = await serverPort(app);
 }, 30000);
 
 describe('提交路径 → job.channel', () => {

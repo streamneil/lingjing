@@ -27,8 +27,11 @@ export interface RawRes {
 
 // 每个 app 一个常驻监听 server(listen 一次,所有 Client / 请求复用)。
 // unref:不阻塞进程退出;从不 close:省掉每请求的 listen/close 端口 churn(flake 根因)。
+// 需要真实端口的测试(MCP SDK transport 等)也走这里拿端口 —— 别自己再 app.listen(0),
+// 那等于把上面说的 churn 加回来(2026-07-25 复发过一次:mcp / job-channel 各自多 listen 了
+// 一个 server,全量跑约 20% 概率随机某个文件整体级联失败)。
 const _servers = new WeakMap<Express, Promise<number>>();
-function portFor(app: Express): Promise<number> {
+export function serverPort(app: Express): Promise<number> {
   let p = _servers.get(app);
   if (!p) {
     p = new Promise<number>((resolve, reject) => {
@@ -46,7 +49,7 @@ export class Client {
   constructor(private app: Express) {}
 
   private async request(method: string, path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<Res> {
-    const port = await portFor(this.app);
+    const port = await serverPort(this.app);
     return new Promise((resolveP, reject) => {
       const data = body !== undefined ? JSON.stringify(body) : undefined;
       const headers: Record<string, string> = {};
@@ -88,7 +91,7 @@ export class Client {
     fields: Record<string, string>,
     files: Record<string, { filename: string; content: Buffer; type: string }>,
   ): Promise<Res> {
-    const port = await portFor(this.app);
+    const port = await serverPort(this.app);
     return new Promise((resolveP, reject) => {
       const boundary = '----ljtest' + Math.random().toString(36).slice(2);
       const parts: Buffer[] = [];
@@ -162,7 +165,7 @@ export class Client {
   }
   /** 原始 GET:拿 status + headers + 二进制 body(下载端点测 Content-Disposition / 字节)。 */
   async getRaw(path: string): Promise<RawRes> {
-    const port = await portFor(this.app);
+    const port = await serverPort(this.app);
     return new Promise((resolveP, reject) => {
       const headers: Record<string, string> = {};
       if (this.cookie) headers['Cookie'] = this.cookie;
