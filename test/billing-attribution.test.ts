@@ -78,10 +78,13 @@ describe('ledger() JOIN 出消费人 + 工具', () => {
 });
 
 describe('ledger() 关联作品文案摘要(taskTitle)', () => {
+  // 隐私隔离(2026-07):taskTitle/outputKind 按**归属**脱敏 —— 只有本人看自己的行才带文案。
+  // 故本块一律以创建者 uid 的视角查;不传 actingUserId 时(内部调用)一律按「非本人」从严处理。
+  const led = () => ledger(tenant(), 100, uid, false);
   it('video → 取 script 文案', () => {
     const id = enqueueJob('video', { script: '大家好我是数字人' }, tenant(), uid);
     reserve(tenant(), id, 5);
-    const row = ledger(tenant()).find((l) => l.job_id === id);
+    const row = led().find((l) => l.job_id === id);
     expect(row!.taskTitle).toBe('大家好我是数字人');
     expect(row!.outputKind ?? null).toBeNull(); // 未完成(无 output_url)→ outputKind 不暴露,前端不可点
   });
@@ -91,7 +94,7 @@ describe('ledger() 关联作品文案摘要(taskTitle)', () => {
     const id = enqueueJob('ai_image', { prompt: '出图测试' }, tenant(), uid);
     reserve(tenant(), id, 5);
     markDone(id, JSON.stringify(['ai-images/x.png']), 'qwen', 'image');
-    const row = ledger(tenant()).find((l) => l.job_id === id);
+    const row = led().find((l) => l.job_id === id);
     expect(row!.outputKind).toBe('image'); // 有成品 → 暴露产物类型
     expect(row!.taskTitle).toBe('出图测试');
   });
@@ -99,43 +102,43 @@ describe('ledger() 关联作品文案摘要(taskTitle)', () => {
   it('tts → 取 text 文案', () => {
     const id = enqueueJob('tts', { text: '欢迎收听本期节目', voiceRef: 'Cherry' }, tenant(), uid);
     reserve(tenant(), id, 5);
-    const row = ledger(tenant()).find((l) => l.job_id === id);
+    const row = led().find((l) => l.job_id === id);
     expect(row!.taskTitle).toBe('欢迎收听本期节目');
   });
 
   it('ai_image / video_edit → 取 prompt 文案', () => {
     const img = enqueueJob('ai_image', { prompt: '一只赛博朋克猫' }, tenant(), uid);
     reserve(tenant(), img, 5);
-    expect(ledger(tenant()).find((l) => l.job_id === img)!.taskTitle).toBe('一只赛博朋克猫');
+    expect(led().find((l) => l.job_id === img)!.taskTitle).toBe('一只赛博朋克猫');
   });
 
   it('ai_music → prompt 优先,无 prompt 回落 lyrics', () => {
     const a = enqueueJob('ai_music', { prompt: '轻快的电子乐', lyrics: '副歌' }, tenant(), uid);
     reserve(tenant(), a, 5);
-    expect(ledger(tenant()).find((l) => l.job_id === a)!.taskTitle).toBe('轻快的电子乐');
+    expect(led().find((l) => l.job_id === a)!.taskTitle).toBe('轻快的电子乐');
     const b = enqueueJob('ai_music', { lyrics: '只有歌词' }, tenant(), uid);
     reserve(tenant(), b, 5);
-    expect(ledger(tenant()).find((l) => l.job_id === b)!.taskTitle).toBe('只有歌词');
+    expect(led().find((l) => l.job_id === b)!.taskTitle).toBe('只有歌词');
   });
 
   it('长文案截前 24 字 + 省略号', () => {
     const long = '一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十';
     const id = enqueueJob('tts', { text: long, voiceRef: 'Cherry' }, tenant(), uid);
     reserve(tenant(), id, 5);
-    const t = ledger(tenant()).find((l) => l.job_id === id)!.taskTitle!;
+    const t = led().find((l) => l.job_id === id)!.taskTitle!;
     expect(t).toBe(long.slice(0, 24) + '…');
     expect([...t].length).toBeLessThanOrEqual(25); // 24 字 + 省略号
   });
 
   it('grant 发放行 → taskTitle 空(无 job)', () => {
-    const row = ledger(tenant()).find((l) => l.kind === 'grant');
+    const row = led().find((l) => l.kind === 'grant');
     expect(row!.taskTitle ?? null).toBeNull();
   });
 
   it('空文案 → taskTitle 空(前端回退工具名/「—」)', () => {
     const id = enqueueJob('tts', { text: '   ', voiceRef: 'Cherry' }, tenant(), uid);
     reserve(tenant(), id, 5);
-    expect(ledger(tenant()).find((l) => l.job_id === id)!.taskTitle ?? null).toBeNull();
+    expect(led().find((l) => l.job_id === id)!.taskTitle ?? null).toBeNull();
   });
 
   it('坏 input_json 不让计费查询崩(安全回退空)', () => {
@@ -143,8 +146,8 @@ describe('ledger() 关联作品文案摘要(taskTitle)', () => {
     reserve(tenant(), id, 5);
     // 直接把 input_json 写坏,模拟脏数据
     db.prepare(`UPDATE job SET input_json='{not valid json' WHERE id=?`).run(id);
-    expect(() => ledger(tenant())).not.toThrow();
-    expect(ledger(tenant()).find((l) => l.job_id === id)!.taskTitle ?? null).toBeNull();
+    expect(() => led()).not.toThrow();
+    expect(led().find((l) => l.job_id === id)!.taskTitle ?? null).toBeNull();
   });
 });
 

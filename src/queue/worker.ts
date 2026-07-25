@@ -14,8 +14,8 @@ import { buildInstruction } from '../gateway/tts-models.js';
 import { getMediaPublisher, tenantDelivery } from '../gateway/media-publisher.js';
 import type { VideoGenInput, VideoSubmitUrls, ImageGenInput, TtsGenInput, VideoGenT2VInput, ProviderJobStatus, AiMusicGenInput } from '../gateway/types.js';
 import { storage } from '../storage/index.js';
-import { listPresets as listAvatarPresets, getAvatar } from '../avatars/index.js';
-import { isPreset as isPresetVoice, getVoice } from '../voices/index.js';
+import { listPresets as listAvatarPresets, getAvatarWithinTenant } from '../avatars/index.js';
+import { isPreset as isPresetVoice, getVoiceWithinTenant } from '../voices/index.js';
 import { moderateScript, moderatePrompt, moderateImageInput, moderateOutput } from '../pipeline/moderation.js';
 import { applyAiLabel, probeAudioDuration, concatVideos } from '../pipeline/ai-label.js';
 import { segmentScript } from '../pipeline/segment.js';
@@ -128,8 +128,8 @@ async function resolveImageUrl(avatarRef: string, tenantId: string): Promise<str
   // 预置源帧改走与自定义形象同一发布策略(去中心化:不再依赖公共桶外链)。thumbKey 在运营自己桶,
   // publish() 按交付模式转成百炼可拉 URL(托管=签名直链;私有化=中转,见 media-publisher)。
   if (preset) return getMediaPublisher(tenantDelivery(tenantId)).publish(preset.thumbKey);
-  // worker 无 acting user(异步处理);提交时已做账号校验(isUsableAvatar),此处按租户解析(isAdmin=true)即可。
-  const custom = getAvatar(avatarRef, tenantId, '', true);
+  // worker 无 acting user(异步处理);提交时已做账号校验(isUsableAvatar),此处按租户解析。
+  const custom = getAvatarWithinTenant(avatarRef, tenantId);
   if (custom?.source_key) {
     // 自定义素材经发布策略(托管=签名URL;私有化=中转),保证百炼可访问
     return getMediaPublisher(tenantDelivery(tenantId)).publish(custom.source_key);
@@ -153,8 +153,8 @@ export function resolveVoice(
   // isSystem:系统(预置)音色才支持 instructions(情绪/语速/音高)与 language_type;
   // 复刻(VC)/设计(VD)音色均不支持(阿里官方),给它们下发会 400(TTS speak request failed)。
   if (isPresetVoice(voiceRef)) return { voice: voiceRef, model: presetModel, isSystem: true };
-  // worker 无 acting user;提交时已账号校验,此处按租户解析(isAdmin=true)。
-  const v = getVoice(voiceRef, tenantId, '', true);
+  // worker 无 acting user;提交时已账号校验,此处按租户解析。
+  const v = getVoiceWithinTenant(voiceRef, tenantId);
   if (v?.provider_voice_id) {
     if (v.kind === 'design') return { voice: v.provider_voice_id, model: config.baichuan.designModel, isSystem: false };
     // 克隆(VC):voice + 同 target_model 合成

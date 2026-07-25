@@ -3,7 +3,7 @@
 // 决策来源:/plan-eng-review D10 + 外部声音#6 —— 克隆他人声音同样需"本人授权"凭证。
 
 import { randomUUID } from 'node:crypto';
-import { db, scopeByActor, type VoiceRow } from '../db/index.js';
+import { db, scopeByOwner, type VoiceRow } from '../db/index.js';
 import { TERMS_VERSION } from '../legal/index.js';
 
 const now = () => Date.now();
@@ -161,27 +161,36 @@ export function countRecentDesignVoices(tenantId: string, windowMs: number): num
   return row.n;
 }
 
-/** 列自建音色。账号隔离:creator 仅自己建的;admin 全机构(含 NULL 老资产)。 */
-export function listClones(tenantId: string, actingUserId: string, isAdmin: boolean): VoiceRow[] {
-  const scope = scopeByActor(actingUserId, isAdmin);
+/** 列自建音色。隐私域:只列自己建的(admin 也不例外)+ 机构公共(created_by NULL 的部署前老资产)。 */
+export function listClones(tenantId: string, actingUserId: string): VoiceRow[] {
+  const scope = scopeByOwner(actingUserId, { orgPublic: true });
   return db
     .prepare(`SELECT * FROM voice WHERE tenant_id=?${scope.clause} ORDER BY created_at DESC`)
     .all(tenantId, ...scope.params) as VoiceRow[];
 }
-/** 取单个音色(账号隔离)。非本人非 admin → undefined → 路由 404。 */
-export function getVoice(id: string, tenantId: string, actingUserId: string, isAdmin: boolean): VoiceRow | undefined {
-  const scope = scopeByActor(actingUserId, isAdmin);
+/** 取单个音色。隐私域:自己的 + 机构公共可取;他人的 → undefined → 路由 404(admin 亦然)。 */
+export function getVoice(id: string, tenantId: string, actingUserId: string): VoiceRow | undefined {
+  const scope = scopeByOwner(actingUserId, { orgPublic: true });
   return db.prepare(`SELECT * FROM voice WHERE id=? AND tenant_id=?${scope.clause}`).get(id, tenantId, ...scope.params) as
     | VoiceRow
     | undefined;
 }
-export function deleteVoice(id: string, tenantId: string, actingUserId: string, isAdmin: boolean): boolean {
-  const scope = scopeByActor(actingUserId, isAdmin);
+/** **系统内部解析**:按租户取音色,不做账号隔离。契约与 getAvatarWithinTenant 一致 ——
+ *  唯一调用点是 worker(无 acting user,归属已在提交时由 isUsableVoice 校验)。
+ *  ⚠️ 绝不可用于响应用户传入的 id;请求路径一律用 getVoice()。 */
+export function getVoiceWithinTenant(id: string, tenantId: string): VoiceRow | undefined {
+  return db.prepare(`SELECT * FROM voice WHERE id=? AND tenant_id=?`).get(id, tenantId) as VoiceRow | undefined;
+}
+
+/** 删除音色。隐私域:只能删自己建的;机构公共(NULL)行谁都删不掉,防误删共享库。 */
+export function deleteVoice(id: string, tenantId: string, actingUserId: string): boolean {
+  const scope = scopeByOwner(actingUserId); // 不开 orgPublic:公共库只读
   return db.prepare(`DELETE FROM voice WHERE id=? AND tenant_id=?${scope.clause}`).run(id, tenantId, ...scope.params).changes === 1;
 }
-/** 校验 voiceRef 是否可用于生成。预置全员可用;自定义音色**账号隔离**(用户定:自己的不共享)。 */
-export function isUsableVoice(ref: string, tenantId: string, actingUserId: string, isAdmin: boolean): boolean {
+/** 校验 voiceRef 是否可用于生成。预置全员可用;自定义音色**账号隔离**(自己的不共享):
+ *  只认自己建的 + 机构公共(NULL)老资产;他人的一律不可用,admin 也不例外。 */
+export function isUsableVoice(ref: string, tenantId: string, actingUserId: string): boolean {
   if (isPreset(ref)) return true;
-  const v = getVoice(ref, tenantId, actingUserId, isAdmin);
+  const v = getVoice(ref, tenantId, actingUserId);
   return !!v && v.status === 'ready';
 }

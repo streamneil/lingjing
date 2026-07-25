@@ -4,7 +4,7 @@
 // 必须留"本人授权"凭证。未授权直接拒绝(政企法律门票 + 百炼接口可能硬性要求)。
 
 import { randomUUID } from 'node:crypto';
-import { db, scopeByActor, type AvatarRow, type AvatarKind } from '../db/index.js';
+import { db, scopeByOwner, type AvatarRow, type AvatarKind } from '../db/index.js';
 import { TERMS_VERSION } from '../legal/index.js';
 
 const now = () => Date.now();
@@ -101,9 +101,9 @@ export function createCustomAvatar(p: CreateAvatarParams): AvatarRow {
   return av;
 }
 
-/** C6:重命名形象(账号隔离:creator 仅改自己的;admin 任意)。 */
-export function renameAvatar(id: string, tenantId: string, name: string, actingUserId: string, isAdmin: boolean): boolean {
-  const scope = scopeByActor(actingUserId, isAdmin);
+/** C6:重命名形象。隐私域:只能改自己建的,admin 也不例外;机构公共(NULL)行谁都改不动。 */
+export function renameAvatar(id: string, tenantId: string, name: string, actingUserId: string): boolean {
+  const scope = scopeByOwner(actingUserId); // 不开 orgPublic:公共库只读
   const res = db.prepare(`UPDATE avatar SET name=? WHERE id=? AND tenant_id=?${scope.clause}`).run(name, id, tenantId, ...scope.params);
   return res.changes === 1;
 }
@@ -122,32 +122,47 @@ export function getDefaultAvatar(tenantId: string): AvatarRow | null {
   return (db.prepare(`SELECT * FROM avatar WHERE tenant_id=? AND is_default=1`).get(tenantId) as AvatarRow) ?? null;
 }
 
-/** 列自定义形象。账号隔离:creator 仅自己建的;admin 全机构(含 NULL 老资产)。 */
-export function listCustom(tenantId: string, actingUserId: string, isAdmin: boolean): AvatarRow[] {
-  const scope = scopeByActor(actingUserId, isAdmin);
+/** 列自定义形象。隐私域:只列自己建的(admin 也不例外)+ 机构公共(created_by NULL 的部署前老资产)。 */
+export function listCustom(tenantId: string, actingUserId: string): AvatarRow[] {
+  const scope = scopeByOwner(actingUserId, { orgPublic: true });
   return db
     .prepare(`SELECT * FROM avatar WHERE tenant_id=?${scope.clause} ORDER BY created_at DESC`)
     .all(tenantId, ...scope.params) as AvatarRow[];
 }
 
-/** 取单个形象(账号隔离)。非本人非 admin → undefined → 路由 404。 */
-export function getAvatar(id: string, tenantId: string, actingUserId: string, isAdmin: boolean): AvatarRow | undefined {
-  const scope = scopeByActor(actingUserId, isAdmin);
+/** 取单个形象。隐私域:自己的 + 机构公共可取;他人的 → undefined → 路由 404(admin 亦然)。 */
+export function getAvatar(id: string, tenantId: string, actingUserId: string): AvatarRow | undefined {
+  const scope = scopeByOwner(actingUserId, { orgPublic: true });
   return db.prepare(`SELECT * FROM avatar WHERE id=? AND tenant_id=?${scope.clause}`).get(id, tenantId, ...scope.params) as
     | AvatarRow
     | undefined;
 }
 
-export function deleteAvatar(id: string, tenantId: string, actingUserId: string, isAdmin: boolean): boolean {
-  const scope = scopeByActor(actingUserId, isAdmin);
+/** **系统内部解析**:按租户取形象,只受租户边界约束,不做账号隔离。
+ *
+ *  使用前提(调用方必须已满足):**归属已在上游确认**。两个合法调用点 ——
+ *   · worker:异步执行体无 acting user,归属在提交时由 isUsableAvatar 校验过;
+ *   · signAvatarThumb:为「调用方自己的 job」渲染缩略图,job 本身已经过 scopeByOwner 过滤。
+ *
+ *  ⚠️ 绝不可直接挂到 HTTP 路由上响应用户传入的 id —— 那样等于绕过账号隔离。
+ *  凡是「用户给什么 id 就查什么」的路径一律用 getAvatar()。
+ *  此前这两处靠传 isAdmin=true 达到同样效果;隐私隔离后该口子已封,
+ *  故显式化为独立函数,避免下次有人「顺手把 isAdmin 加回来」。 */
+export function getAvatarWithinTenant(id: string, tenantId: string): AvatarRow | undefined {
+  return db.prepare(`SELECT * FROM avatar WHERE id=? AND tenant_id=?`).get(id, tenantId) as AvatarRow | undefined;
+}
+
+/** 删除形象。隐私域:只能删自己建的;机构公共(NULL)行谁都删不掉,防误删共享库。 */
+export function deleteAvatar(id: string, tenantId: string, actingUserId: string): boolean {
+  const scope = scopeByOwner(actingUserId); // 不开 orgPublic:公共库只读
   const res = db.prepare(`DELETE FROM avatar WHERE id=? AND tenant_id=?${scope.clause}`).run(id, tenantId, ...scope.params);
   return res.changes === 1;
 }
 
-/** 校验 avatarRef 是否可用于生成。预置形象全员可用;自定义形象**账号隔离**(用户定:自己的不共享):
- *  creator 仅认自己建的;admin 认本机构任意。 */
-export function isUsableAvatar(avatarRef: string, tenantId: string, actingUserId: string, isAdmin: boolean): boolean {
+/** 校验 avatarRef 是否可用于生成。预置形象全员可用;自定义形象**账号隔离**(自己的不共享):
+ *  只认自己建的 + 机构公共(NULL)老资产;他人的一律不可用,admin 也不例外。 */
+export function isUsableAvatar(avatarRef: string, tenantId: string, actingUserId: string): boolean {
   if (isPreset(avatarRef)) return true;
-  const av = getAvatar(avatarRef, tenantId, actingUserId, isAdmin);
+  const av = getAvatar(avatarRef, tenantId, actingUserId);
   return !!av && av.status === 'ready';
 }

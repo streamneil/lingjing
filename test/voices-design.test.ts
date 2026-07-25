@@ -68,7 +68,7 @@ describe('createDesignVoice 服务', () => {
     expect(v.status).toBe('ready');
     expect(v.provider_voice_id).toBe('qwen-x');
     expect(v.authorization_id).toBeNull(); // 合成音色无真人,无授权存证
-    expect(voices.isUsableVoice(v.id, tid, creatorId, false)).toBe(true);
+    expect(voices.isUsableVoice(v.id, tid, creatorId)).toBe(true);
   });
   it('countCustomVoices 计克隆+设计', () => {
     voices.createDesignVoice({ tenantId: tid, name: 'a', providerVoiceId: 'q1', userId: creatorId });
@@ -107,7 +107,7 @@ describe('POST /api/voices/design', () => {
     expect(r.status).toBe(201);
     expect(r.body.status).toBe('ready');
     expect(r.body.previewUrl).toContain('signed');
-    const v = voices.getVoice(r.body.id, tid, creatorId, false);
+    const v = voices.getVoice(r.body.id, tid, creatorId);
     expect(v?.kind).toBe('design');
   });
 
