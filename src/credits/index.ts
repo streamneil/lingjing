@@ -404,6 +404,73 @@ export interface UsageSummary {
   spend30: number; // 近 30 天净消耗合计
 }
 
+// ── 按成员用量(2026-07 隐私隔离的正面补偿)──
+// 背景:admin 收窄到看不见他人的作品与资产后,仍需回答「谁在烧钱、烧在哪」。
+// 这里给出**纯聚合**口径:成员 / 次数 / 点数 / 按工具分布 —— 全是数字,不含任何文案或产物。
+// 这是隐私与管理之间的那条线:管理员看得到「张三本月用了 1200 点、其中 AI 图片占 70%」,
+// 但看不到张三生成了什么。
+export interface MemberToolUsage {
+  toolType: string; // job.type(video / ai_image / tts …)
+  spend: number; // 该工具净消耗
+  genCount: number; // 该工具完成次数
+}
+export interface MemberUsage {
+  userId: string | null; // job.created_by;NULL = 无主老数据(本次不迁移,故这个桶会长期存在)
+  userName: string | null; // 展示名;用户已删 → null,前端回退「已删除成员」
+  spend: number; // 净消耗(口径与 usageSummary.consumed 完全一致)
+  genCount: number; // 完成生成次数(settle 行数)
+  byTool: MemberToolUsage[]; // 按工具分布(spend 降序)
+}
+
+/**
+ * 按成员聚合用量(仅 admin 可读,见 /credits/usage-by-member 路由)。
+ *
+ * 净消耗口径与 usageSummary 严格一致(-SUM(amount) over kind in reserve/settle/release),
+ * 保证「各成员之和 == 租户净消耗」—— 口径漂移会让管理员当场失去对数字的信任。
+ * 有测试守这条恒等式。
+ *
+ * grant 行无 job_id,JOIN 不上 job → 天然不计入任何成员(发放是机构钱包入账,不是谁的消耗)。
+ * since 省略 → 全时段累计。
+ */
+export function usageByMember(tenantId: string, since = 0): MemberUsage[] {
+  const SPEND = `SUM(CASE WHEN l.kind IN ('reserve','settle','release') THEN -l.amount ELSE 0 END)`;
+  const GEN = `SUM(CASE WHEN l.kind='settle' THEN 1 ELSE 0 END)`;
+  const rows = db
+    .prepare(
+      `SELECT j.created_by AS userId,
+              COALESCE(u.display_name, u.username) AS userName,
+              j.type AS toolType,
+              COALESCE(${SPEND},0) AS spend,
+              COALESCE(${GEN},0)   AS genCount
+         FROM credit_ledger l
+         JOIN job j ON l.job_id = j.id
+         LEFT JOIN user u ON j.created_by = u.id
+        WHERE l.tenant_id = ? AND l.created_at >= ?
+        GROUP BY j.created_by, j.type`,
+    )
+    .all(tenantId, since) as { userId: string | null; userName: string | null; toolType: string; spend: number; genCount: number }[];
+
+  // 成员维度合并(SQL 出的是 成员×工具 的笛卡尔行,这里折叠成 成员 → byTool[])。
+  const byUser = new Map<string, MemberUsage>();
+  for (const r of rows) {
+    const key = r.userId ?? '__unowned__'; // NULL 归一个桶(不与真实 id 撞:真实 id 是 UUID)
+    let m = byUser.get(key);
+    if (!m) {
+      m = { userId: r.userId, userName: r.userName, spend: 0, genCount: 0, byTool: [] };
+      byUser.set(key, m);
+    }
+    m.spend += r.spend;
+    m.genCount += r.genCount;
+    // 零消耗的工具行不进分布(reserve+release 相抵的纯失败任务),避免一堆 0 噪音;
+    // 但它的 genCount=0 也不影响成员合计,故只过滤展示层。
+    if (r.spend !== 0 || r.genCount !== 0) {
+      m.byTool.push({ toolType: r.toolType, spend: r.spend, genCount: r.genCount });
+    }
+  }
+  for (const m of byUser.values()) m.byTool.sort((a, b) => b.spend - a.spend);
+  return [...byUser.values()].sort((a, b) => b.spend - a.spend); // 消耗高的排前
+}
+
 /**
  * 用量统计汇总(整租户,非个人)。修「客户端从分页 ledger 现算 → 只见一页」的欠计。
  * 净消耗口径:每笔 reserve/settle/release 对余额的负向影响 = -amount。

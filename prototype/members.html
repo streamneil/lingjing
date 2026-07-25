@@ -70,6 +70,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
               <th>角色</th>
               <th>占用席位</th>
               <th>最近活跃</th>
+              <th class="mu-col" style="display:none;text-align:right">本月消耗</th>
               <th>状态</th>
               <th></th>
             </tr>
@@ -409,9 +410,36 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       <td><span class="bdg bdg-role">${ROLE_CN[m.role] || m.role}</span></td>
       <td class="num">${seatNo || '—'}</td>
       <td class="num">${fmtActive(m.last_active)}</td>
+      ${usageCell(m.id)}
       <td>${statusBdg}</td>
       ${actions}
     </tr>`;
+    }
+
+    // ── 本月消耗列(仅 admin)──
+    // 隐私隔离(2026-07):管理员看不到成员的作品与资产,但看得到用量。这里给一个轻量入口,
+    // 点数字跳 billing 的「成员用量」板块看工具分布。数据在 admin 视角才拉,非 admin 整列不渲染。
+    let usageById = null; // null = 未加载/无权限 → 不渲染该列
+
+    function usageCell(uid) {
+      if (!usageById) return '';
+      const u = usageById[uid];
+      const n = u ? u.spend : 0;
+      const txt = n ? `<a href="billing.html#member-usage" style="color:var(--blue);text-decoration:none">${fmtPts(n)}</a>`
+        : '<span style="color:var(--t4)">—</span>';
+      return `<td class="num mu-col" style="text-align:right">${txt}</td>`;
+    }
+    const fmtPts = n => Math.round(n).toLocaleString('en-US');
+
+    // 拉本月按成员用量 → { userId: {spend, genCount} }。403/失败 → 静默降级(整列不出现)。
+    async function loadUsage() {
+      try {
+        const res = await LJ.get('/credits/usage-by-member?range=month');
+        const map = {};
+        (res.members || []).forEach(m => { if (m.userId) map[m.userId] = m; });
+        usageById = map;
+        document.querySelectorAll('.mu-col').forEach(el => el.style.display = '');
+      } catch (e) { usageById = null; }
     }
 
     function render(roleFilter) {
@@ -421,7 +449,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       else if (['admin', 'creator'].includes(roleFilter)) list = members.filter(m => m.role === roleFilter);
       const empty = roleFilter === 'disabled' ? '暂无停用成员' : '暂无成员';
       body.innerHTML = list.length ? list.map(m => row(m, sn[m.id])).join('')
-        : `<tr><td colspan="6" style="text-align:center;color:var(--t4);padding:40px">${empty}</td></tr>`;
+        : `<tr><td colspan="7" style="text-align:center;color:var(--t4);padding:40px">${empty}</td></tr>`;
     }
 
     // 真实统计卡:机构名 / 创作席位(已用/上限) / 成员总数 / 角色分布。
@@ -444,10 +472,10 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     // 骨架屏:加载期 3 行灰色闪动占位(与作品库/创作台一致),不闪假数据。
     function skeleton() {
       body.innerHTML = Array.from({ length: 3 }).map(() =>
-        `<tr class="skel-row"><td colspan="6"><div class="skel-bar"></div></td></tr>`).join('');
+        `<tr class="skel-row"><td colspan="7"><div class="skel-bar"></div></td></tr>`).join('');
     }
     function errorRow() {
-      body.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--t4);padding:40px">加载失败 <button class="btn btn-dark" style="margin-left:8px;padding:6px 12px;font-size:12px" onclick="load()">重试</button></td></tr>`;
+      body.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--t4);padding:40px">加载失败 <button class="btn btn-dark" style="margin-left:8px;padding:6px 12px;font-size:12px" onclick="load()">重试</button></td></tr>`;
     }
 
     // ── 角色权限两卡(创作者 / 管理员;viewer 已下线) ──
@@ -589,6 +617,9 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         }
         const data = await LJ.get('/members');   // { members, seats };非 admin 也能取
         members = data.members || []; seats = data.seats || null;
+        // 用量列仅 admin;必须在 render 之前拿到,否则单元格渲染不出来。
+        // 与名单串行(名单已到手,这一跳很快);失败静默降级为「无此列」。
+        if (myRole === 'admin') await loadUsage();
         renderStats(me.tenantName);
         render(curFilter);
         renderRolePerms();

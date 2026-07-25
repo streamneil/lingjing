@@ -5,8 +5,8 @@
 // 审计日志:仅 admin(政企合规)。
 
 import { Router, type Request, type Response } from 'express';
-import { requireAuth } from '../auth/middleware.js';
-import { balance, ledger, countLedger, usageSummary } from '../credits/index.js';
+import { requireAuth, requireRole } from '../auth/middleware.js';
+import { balance, ledger, countLedger, usageSummary, usageByMember } from '../credits/index.js';
 import { listAudit, countAudit } from '../audit/index.js';
 
 export const creditsRouter = Router();
@@ -27,6 +27,27 @@ creditsRouter.get('/credits/balance', requireAuth, (req: Request, res: Response)
 // 修「客户端从分页 ledger 现算」的欠计(累计生成只见一页、近30天误判暂无消耗)。任何登录用户看本机构口径。
 creditsRouter.get('/credits/summary', requireAuth, (req: Request, res: Response) => {
   return res.json(usageSummary(req.user!.tenantId));
+});
+
+// 按成员用量(仅 admin)。隐私隔离后管理员看不到他人作品与资产,靠这里回答「谁在烧钱、烧在哪」。
+// 返回纯聚合数字(成员/次数/点数/工具分布),不含任何文案或产物 —— 这就是隐私与管理的分界线。
+// range:today | month | 30d | all(默认 month)。
+creditsRouter.get('/credits/usage-by-member', requireAuth, requireRole('admin'), (req: Request, res: Response) => {
+  const range = String(req.query.range ?? 'month');
+  const d = new Date();
+  let since = 0;
+  if (range === 'today') {
+    d.setHours(0, 0, 0, 0);
+    since = d.getTime();
+  } else if (range === 'month') {
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    since = d.getTime();
+  } else if (range === '30d') {
+    d.setHours(0, 0, 0, 0);
+    since = d.getTime() - 29 * 86_400_000;
+  } // 'all' → since=0
+  return res.json({ range, since, members: usageByMember(req.user!.tenantId, since) });
 });
 
 // 消费记录(分页:page/pageSize → {rows, total, page, pageSize})。

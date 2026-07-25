@@ -24,7 +24,8 @@ const { enqueueJob, listJobsForTenant, getJobForTenant, deleteJobForTenant, retr
 const { createCustomAvatar, listCustom, getAvatar, isUsableAvatar, setDefaultAvatar, getDefaultAvatar } =
   await import('../src/avatars/index.js');
 const { createDesignVoice, listClones, isUsableVoice } = await import('../src/voices/index.js');
-const { grant, reserve, ledger } = await import('../src/credits/index.js');
+const { grant, reserve, settle, release, ledger, usageByMember, usageSummary } =
+  await import('../src/credits/index.js');
 const { writeAudit, listAudit } = await import('../src/audit/index.js');
 const { Client } = await import('./helpers.js');
 
@@ -169,6 +170,63 @@ describe('计费明细:行可见性 + 内容闸门(「只看账不看内容」)'
     // 全是 alice 的消费行或 grant 行(没串入 bob 的)
     expect(limited.every((r) => r.kind === 'grant' || r.userName === 'alice')).toBe(true);
   });
+});
+
+describe('按成员用量聚合(隐私隔离的正面补偿)', () => {
+  it('口径闭合:各成员净消耗之和 == usageSummary.consumed', async () => {
+    // 独立租户,避免主租户既有数据把恒等式算糊
+    const t3 = createTenant('用量聚合台').id;
+    const u1 = (await createUser(t3, 'usage-a', 'pw123456', 'admin')).id;
+    const u2 = (await createUser(t3, 'usage-b', 'pw123456', 'creator')).id;
+    grant(t3, 100000);
+
+    const j1 = enqueueJob('ai_image', { prompt: 'x' }, t3, u1);
+    reserve(t3, j1, 10);
+    settle(t3, j1, 8); // token 模型:预扣 10 实扣 8,退差 2
+    const j2 = enqueueJob('tts', { text: 'y' }, t3, u2);
+    reserve(t3, j2, 50);
+    settle(t3, j2, 50);
+    const j3 = enqueueJob('video', { script: 'z' }, t3, u2);
+    reserve(t3, j3, 70);
+    release(t3, j3); // 失败任务:reserve+release 相抵 = 0
+
+    const members = usageByMember(t3);
+    const sum = members.reduce((a, m) => a + m.spend, 0);
+    expect(sum).toBe(usageSummary(t3).consumed); // ← 恒等式:数字必须对得上,否则管理员不信
+    expect(sum).toBe(58); // 8 + 50 + 0
+
+    const mb = members.find((m) => m.userId === u2)!;
+    expect(mb.spend).toBe(50);
+    expect(mb.genCount).toBe(1); // 只有 tts 结算成功计一次;video 失败走 release,不算完成
+    expect(mb.byTool.map((t) => t.toolType)).toContain('tts');
+  }, 30000);
+
+  it('不含任何文案/产物字段(只给数字)', async () => {
+    const t4 = createTenant('用量脱敏台').id;
+    const u = (await createUser(t4, 'usage-c', 'pw123456', 'creator')).id;
+    grant(t4, 10000);
+    const j = enqueueJob('ai_image', { prompt: '绝密文案不该出现在用量里' }, t4, u);
+    reserve(t4, j, 5);
+    settle(t4, j, 5);
+    // 整个返回体序列化后不得出现文案原文
+    expect(JSON.stringify(usageByMember(t4))).not.toContain('绝密文案');
+  }, 30000);
+
+  it('creator 调 /credits/usage-by-member → 403;admin → 200', async () => {
+    const t5 = createTenant('用量鉴权台').id;
+    await createUser(t5, 'usage-admin', 'pw123456', 'admin');
+    await createUser(t5, 'usage-creator', 'pw123456', 'creator');
+
+    const cCreator = new Client(app);
+    expect((await cCreator.login('usage-creator', 'pw123456')).status).toBe(200);
+    expect((await cCreator.get('/api/credits/usage-by-member')).status).toBe(403);
+
+    const cAdmin = new Client(app);
+    expect((await cAdmin.login('usage-admin', 'pw123456')).status).toBe(200);
+    const r = await cAdmin.get('/api/credits/usage-by-member?range=month');
+    expect(r.status).toBe(200);
+    expect(Array.isArray(r.body.members)).toBe(true);
+  }, 30000);
 });
 
 describe('审计日志账号隔离', () => {
