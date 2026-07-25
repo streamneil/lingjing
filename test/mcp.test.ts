@@ -3,8 +3,7 @@
 // 用官方 SDK Client 走完整协议(initialize → tools/list → tools/call)打真实 /mcp 端点,
 // 同一把 lj_sk_ 密钥认证。覆盖协议层 + 工具逻辑层(D6 两层都测)。
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import http from 'node:http';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
@@ -17,10 +16,11 @@ const { createApiKey } = await import('../src/auth/api-keys.js');
 const { grant } = await import('../src/credits/index.js');
 const { getJob } = await import('../src/queue/index.js');
 const { seedPlatformDefaults } = await import('../src/seed/platform-defaults.js');
+const { serverPort } = await import('./helpers.js');
 
 seedPlatformDefaults(); // 种默认模型(list_models 才有内容,与生产一致)
 const app = createApp();
-let server: http.Server;
+// MCP SDK transport 要真实 URL → 用 helpers 的常驻 server 端口(不自己 listen,见 helpers 文件头)。
 let port = 0;
 let key = '';
 let tId = '';
@@ -31,10 +31,8 @@ beforeAll(async () => {
   creatorId = (await createUser(tId, 'mcpcreator', 'pw123456', 'creator')).id;
   grant(tId, 1_000_000);
   key = createApiKey(tId, creatorId, 'mcp-key').key;
-  await new Promise<void>((resolve) => { server = app.listen(0, () => { port = (server.address() as { port: number }).port; resolve(); }); });
+  port = await serverPort(app);
 }, 30000);
-
-afterAll(() => { server?.close(); });
 
 function mcpClient(bearer: string) {
   const transport = new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`), {

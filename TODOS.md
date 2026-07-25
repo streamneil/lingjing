@@ -128,6 +128,7 @@
 - **Cons:** 要逐文件把「跨 describe 共享可变状态」改成各自造数据(或用 beforeEach 重置),涉及多个存量测试文件。
 - **Context:** **不是本轮引入**——在 v0.6.0.0 前的 base(6aeac96)上打乱跑挂 12-13 例,本轮后反而只挂 4-8 例。默认顺序在 base 与 main 上都全绿(822 / 931)。修复策略:自破坏性用例(如 sweep、全局取消)独立文件或自造数据;计数类断言用增量基线(order-management 已用此范式,只是被后续用例破坏)。
 - **Effort:** M(human)→ S(CC)。**Priority:** P2(不影响当前 CI,但属定时炸弹)。
+- **注意(2026-07-25):** v0.8.0.6 修的是**另一个** flake 源(端口 churn:mcp / job-channel 各自多 listen 了一个 server,默认顺序下约 20% 概率随机某文件级联失败),不是本条。本条的顺序依赖仍未修 —— 别因为「flake 修好了」就关掉它。
 
 ## Open API 评审补充(2026-07-22,/plan-eng-review — API key + MCP 轮)
 
