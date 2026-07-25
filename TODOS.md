@@ -129,6 +129,7 @@
 - **Context:** **不是本轮引入**——在 v0.6.0.0 前的 base(6aeac96)上打乱跑挂 12-13 例,本轮后反而只挂 4-8 例。默认顺序在 base 与 main 上都全绿(822 / 931)。修复策略:自破坏性用例(如 sweep、全局取消)独立文件或自造数据;计数类断言用增量基线(order-management 已用此范式,只是被后续用例破坏)。
 - **Effort:** M(human)→ S(CC)。**Priority:** P2(不影响当前 CI,但属定时炸弹)。
 - **注意(2026-07-25):** v0.8.0.6 修的是**另一个** flake 源(端口 churn:mcp / job-channel 各自多 listen 了一个 server,默认顺序下约 20% 概率随机某文件级联失败),不是本条。本条的顺序依赖仍未修 —— 别因为「flake 修好了」就关掉它。
+- **新观测(2026-07-26,v0.8.0.7 /ship):** 默认顺序下仍偶发,约 23 次全量跑挂 2 次(~9%)。形态:`api-keys-reveal.test.ts` 的 `beforeAll` 里 `POST /api/login` 返 **404**(该路由无条件注册,逻辑上不可能 404),整文件 7 例级联 skip;另一次是 4 例散落失败。**同一 commit 上基线跑 8 次全绿、分支跑 8 次也全绿**,故非确定性回归,属资源竞争。诱因是并行 fork 下的内存/IO 压力:v0.8.0.7 的新测试原本每轮要推 ~28MB base64 过 HTTP(10MB 图闸端到端 + MB 级 body 上限 payload),已压到 ~6MB(10MB 闸改单测、body 上限取刚跨过全局 1mb 的 1200kb),压后连跑 10 次全绿。**这只是降低了触发概率,没有根治** —— 根因仍是本条的共享状态/顺序耦合,谁再往套件里加重负载测试都可能把它顶出来。
 
 ## Open API 评审补充(2026-07-22,/plan-eng-review — API key + MCP 轮)
 
@@ -156,6 +157,21 @@
 - **Why:** 纯轮询模式下视频类长任务轮询流量大;PR1 的读写分级限流(读 300/min)已缓解,webhook 是根治。
 - **Cons:** 出站请求一整套新面:重试、HMAC 签名、SSRF 防护(回调 URL 校验)、失败降级回轮询。
 - **Context:** 2026-07-22 Open API eng-review 外部声音 #5 派生。**Priority:** P3(触发条件:轮询流量成为可观测问题)。**Depends on:** PR1/PR2 落地。
+
+## Open API 补充(2026-07-26,/ship v0.8.0.7 落地前审查发现)
+
+### T-UPLOAD-PARTIAL-WRITE:多图上传中途失败会留孤儿对象与存证行
+- **What:** `storeImageInputs` 逐张 `putObject` + 写 `authorization` 行;若第 N 张落盘失败,前 N-1 张的对象和存证行已提交,函数返回 500 但不回滚。
+- **Why:** 调用方拿不到 imageRefs、不会有 job 引用这批素材,于是它们成为无主孤儿:占存储、且 `authorization` 表里多出对应不上任何生成记录的存证行(合规审计时是噪声)。
+- **Pros:** 修完存储与存证严格一致,审计表干净。**Cons:** 需要补偿删除(已落盘的 putObject 要逐个 delete)或把存证行改成上传成功后批量写,两种都要碰合规链路。
+- **Context:** 2026-07-26 /ship 落地前审查(confidence 9/10)。**既有行为**,非 v0.8.0.7 引入 —— 循环结构自 REST `/image-uploads` 首版即如此,本次只是把它抽成共用函数时看见了。触发条件是 MinIO 中途抖动,概率低但非零。
+- **Effort:** S(human)→ XS(CC)。**Priority:** P3。
+
+### T-MCP-VERSION-DRIFT:MCP server 版本号写死,与 VERSION 漂移
+- **What:** `src/mcp/index.ts` 里 `new McpServer({ name: 'lingjing', version: '0.7.0' })` 是硬编码字面量,VERSION 已到 0.8.0.7。
+- **Why:** 该版本号在 MCP 握手时回给 Agent,客户端可见。报错的版本会让客户排查问题时对不上号。
+- **Cons:** 直接改成 0.8.0.7 只是把漂移推后一版,真正的修法是从 VERSION/package.json 读取,需引入一次启动期读文件。
+- **Context:** 2026-07-26 /ship 落地前审查(confidence 8/10)。既有问题,无功能影响。**Priority:** P4。
 
 ## ✅ 已完成(归档,保留可追溯)
 

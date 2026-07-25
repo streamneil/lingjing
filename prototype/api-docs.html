@@ -107,7 +107,7 @@
     <table>
       <tr><th>code</th><th>HTTP</th><th>含义</th><th>可重试?</th></tr>
       <tr><td><code>UNAUTHORIZED</code></td><td>401</td><td>密钥无效 / 已吊销 / 主人被停用</td><td class="no">否</td></tr>
-      <tr><td><code>SCOPE_FORBIDDEN</code></td><td>403</td><td>密钥访问了生成面以外的接口</td><td class="no">否</td></tr>
+      <tr><td><code>SCOPE_FORBIDDEN</code></td><td>403</td><td>密钥访问了生成面以外的接口。<b>路径写错(不存在)也返回本码</b> —— 响应的 <code>allowed</code> 字段列出全部可用端点,先照它核对路径,再考虑权限</td><td class="no">否</td></tr>
       <tr><td><code>ROLE_FORBIDDEN</code></td><td>403</td><td>viewer 密钥不能发起生成</td><td class="no">否</td></tr>
       <tr><td><code>RATE_LIMITED</code></td><td>429</td><td>超出限速</td><td class="tag">是(退避)</td></tr>
       <tr><td><code>INSUFFICIENT_CREDITS</code></td><td>402</td><td>积分余额不足</td><td class="no">否(充值后)</td></tr>
@@ -130,6 +130,7 @@
     <p>工具集(全部异步:生成类返回 <code>job_id</code>,用 <code>get_job</code> 轮询取结果):</p>
     <table>
       <tr><th>工具</th><th>说明</th></tr>
+      <tr><td><code>upload_image</code></td><td>上传参考图(base64),返回 <code>imageRefs</code> 供图生图用</td></tr>
       <tr><td><code>generate_image</code></td><td>文生图 / 图生图</td></tr>
       <tr><td><code>generate_video</code></td><td>文字转影片</td></tr>
       <tr><td><code>generate_music</code></td><td>AI 音乐</td></tr>
@@ -138,6 +139,8 @@
       <tr><td><code>list_models</code> / <code>list_voices</code> / <code>list_avatars</code></td><td>发现可用模型 / 音色 / 形象</td></tr>
       <tr><td><code>estimate</code></td><td>提交前预估费用</td></tr>
     </table>
+    <p><b>图生图闭环</b>(MCP 侧全程不用碰 REST):<code>upload_image</code> 拿 <code>imageRefs</code> → <code>generate_image</code> 传 <code>mode="img2img"</code> + <code>imageRefs</code> → <code>get_job</code> 取结果。图片走 base64 内联,单张 ≤10MB、一次 ≤9 张;单次请求体上限 32MB(超限返回 <code>413 PAYLOAD_TOO_LARGE</code>,减张数或压缩后重试)。</p>
+    <div class="note">「参考图」不是「数字人形象」:参考图用于图生图/图转影片,<code>upload_image</code> 即可;<b>数字人形象</b>(<code>avatarRef</code>)只用于口播视频,需在灵镜后台创建并完成授权存证,API 侧只读(<code>list_avatars</code> / <code>GET /api/avatars</code>)。</div>
     <p>认证、限速、错误、计费与 REST 完全一致(§1、§7、§9)。</p>
 
     <p style="margin-top:48px"><a href="/settings.html">← 返回系统设置</a></p>

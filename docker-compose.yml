@@ -73,6 +73,10 @@ services:
       ARK_ASSET_POLL_INTERVAL_MS: ${ARK_ASSET_POLL_INTERVAL_MS:-3000}
       ARK_ASSET_RETRY_ON_CODES: ${ARK_ASSET_RETRY_ON_CODES:-InputImageSensitiveContentDetected}
       ARK_ASSET_DEBUG: ${ARK_ASSET_DEBUG:-}
+      # MCP 请求体上限(upload_image 走 base64 内联,故 /mcp 需要远大于全局 1mb 的上限)。
+      # 缺这行 → .env 配了也进不了容器,运营调不动上限(OPENAI_PROXY 漏转发同款事故,勿删)。
+      # 默认值与 src/mcp/index.ts 保持一致;填非法值时代码会告警并回落 32mb。
+      MCP_BODY_LIMIT: ${MCP_BODY_LIMIT:-32mb}
     # 让容器能解析宿主机(Gemini 走宿主机 clash 代理时:GEMINI_PROXY=http://host.docker.internal:7890)。
     # 无害:没配 GEMINI_PROXY 时没人解析它。需 Docker 20.10+。
     extra_hosts:
