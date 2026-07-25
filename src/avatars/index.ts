@@ -4,7 +4,7 @@
 // 必须留"本人授权"凭证。未授权直接拒绝(政企法律门票 + 百炼接口可能硬性要求)。
 
 import { randomUUID } from 'node:crypto';
-import { db, scopeByActor, type AvatarRow, type AvatarKind } from '../db/index.js';
+import { db, scopeByOwner, type AvatarRow, type AvatarKind } from '../db/index.js';
 import { TERMS_VERSION } from '../legal/index.js';
 
 const now = () => Date.now();
@@ -101,53 +101,69 @@ export function createCustomAvatar(p: CreateAvatarParams): AvatarRow {
   return av;
 }
 
-/** C6:重命名形象(账号隔离:creator 仅改自己的;admin 任意)。 */
-export function renameAvatar(id: string, tenantId: string, name: string, actingUserId: string, isAdmin: boolean): boolean {
-  const scope = scopeByActor(actingUserId, isAdmin);
+/** C6:重命名形象(账号隔离:仅改自己建的,管理员亦然)。 */
+export function renameAvatar(id: string, tenantId: string, name: string, actingUserId: string): boolean {
+  const scope = scopeByOwner(actingUserId);
   const res = db.prepare(`UPDATE avatar SET name=? WHERE id=? AND tenant_id=?${scope.clause}`).run(name, id, tenantId, ...scope.params);
   return res.changes === 1;
 }
 
-/** C6:设为默认形象(同租户内互斥,事务保证只有一个默认)。 */
-export const setDefaultAvatar = db.transaction((id: string, tenantId: string): boolean => {
-  const exists = db.prepare(`SELECT 1 FROM avatar WHERE id=? AND tenant_id=?`).get(id, tenantId);
+/** C6:设为默认形象。互斥范围 = (租户, 创建者) —— 形象已按人隔离,若仍按租户清 is_default,
+ *  甲设默认会顺手清掉乙的默认(乙的形象甲根本看不见,却被改了状态)。事务保证每人只有一个默认。
+ *  只能对自己建的形象设默认:不属于本人 → exists 查不到 → 返回 false → 路由 404。 */
+export const setDefaultAvatar = db.transaction((id: string, tenantId: string, actingUserId: string): boolean => {
+  const scope = scopeByOwner(actingUserId);
+  const exists = db.prepare(`SELECT 1 FROM avatar WHERE id=? AND tenant_id=?${scope.clause}`).get(id, tenantId, ...scope.params);
   if (!exists) return false;
-  db.prepare(`UPDATE avatar SET is_default=0 WHERE tenant_id=?`).run(tenantId);
-  db.prepare(`UPDATE avatar SET is_default=1 WHERE id=? AND tenant_id=?`).run(id, tenantId);
+  db.prepare(`UPDATE avatar SET is_default=0 WHERE tenant_id=?${scope.clause}`).run(tenantId, ...scope.params);
+  db.prepare(`UPDATE avatar SET is_default=1 WHERE id=? AND tenant_id=?${scope.clause}`).run(id, tenantId, ...scope.params);
   return true;
 });
 
-/** 当前租户的默认形象(没有则 null)。**保持租户级**:is_default 是 tenant 单例,账号化会让多数创作者无默认。 */
-export function getDefaultAvatar(tenantId: string): AvatarRow | null {
-  return (db.prepare(`SELECT * FROM avatar WHERE tenant_id=? AND is_default=1`).get(tenantId) as AvatarRow) ?? null;
+/** 当前用户的默认形象(没有则 null)。随 is_default 一并账号化 —— 租户级会把他人形象递给本人。 */
+export function getDefaultAvatar(tenantId: string, actingUserId: string): AvatarRow | null {
+  const scope = scopeByOwner(actingUserId);
+  return (
+    (db
+      .prepare(`SELECT * FROM avatar WHERE tenant_id=?${scope.clause} AND is_default=1`)
+      .get(tenantId, ...scope.params) as AvatarRow) ?? null
+  );
 }
 
-/** 列自定义形象。账号隔离:creator 仅自己建的;admin 全机构(含 NULL 老资产)。 */
-export function listCustom(tenantId: string, actingUserId: string, isAdmin: boolean): AvatarRow[] {
-  const scope = scopeByActor(actingUserId, isAdmin);
+/** 列自定义形象。账号隔离:仅自己建的(created_by NULL 的老资产对所有人不可见)。 */
+export function listCustom(tenantId: string, actingUserId: string): AvatarRow[] {
+  const scope = scopeByOwner(actingUserId);
   return db
     .prepare(`SELECT * FROM avatar WHERE tenant_id=?${scope.clause} ORDER BY created_at DESC`)
     .all(tenantId, ...scope.params) as AvatarRow[];
 }
 
-/** 取单个形象(账号隔离)。非本人非 admin → undefined → 路由 404。 */
-export function getAvatar(id: string, tenantId: string, actingUserId: string, isAdmin: boolean): AvatarRow | undefined {
-  const scope = scopeByActor(actingUserId, isAdmin);
+/** 取单个形象(账号隔离)。非本人 → undefined → 路由 404。 */
+export function getAvatar(id: string, tenantId: string, actingUserId: string): AvatarRow | undefined {
+  const scope = scopeByOwner(actingUserId);
   return db.prepare(`SELECT * FROM avatar WHERE id=? AND tenant_id=?${scope.clause}`).get(id, tenantId, ...scope.params) as
     | AvatarRow
     | undefined;
 }
 
-export function deleteAvatar(id: string, tenantId: string, actingUserId: string, isAdmin: boolean): boolean {
-  const scope = scopeByActor(actingUserId, isAdmin);
+/** worker 专用:按租户取形象,**不做账号隔离**。
+ *  worker 是后台进程、没有 acting user,但要为在跑的任务解析素材 URL。
+ *  安全性由提交侧保证:submitJob 已用 isUsableAvatar(ref, tenant, userId) 校验过归属,
+ *  能进队列的 avatarRef 一定是提交人自己的。此函数不得暴露到任何用户可达的路由上。 */
+export function getAvatarForWorker(id: string, tenantId: string): AvatarRow | undefined {
+  return db.prepare(`SELECT * FROM avatar WHERE id=? AND tenant_id=?`).get(id, tenantId) as AvatarRow | undefined;
+}
+
+export function deleteAvatar(id: string, tenantId: string, actingUserId: string): boolean {
+  const scope = scopeByOwner(actingUserId);
   const res = db.prepare(`DELETE FROM avatar WHERE id=? AND tenant_id=?${scope.clause}`).run(id, tenantId, ...scope.params);
   return res.changes === 1;
 }
 
-/** 校验 avatarRef 是否可用于生成。预置形象全员可用;自定义形象**账号隔离**(用户定:自己的不共享):
- *  creator 仅认自己建的;admin 认本机构任意。 */
-export function isUsableAvatar(avatarRef: string, tenantId: string, actingUserId: string, isAdmin: boolean): boolean {
+/** 校验 avatarRef 是否可用于生成。预置形象全员可用;自定义形象**账号隔离**:仅认自己建的
+ *  —— 管理员也不能拿他人形象去生成(否则等于绕过隔离读到他人肖像)。 */
+export function isUsableAvatar(avatarRef: string, tenantId: string, actingUserId: string): boolean {
   if (isPreset(avatarRef)) return true;
-  const av = getAvatar(avatarRef, tenantId, actingUserId, isAdmin);
+  const av = getAvatar(avatarRef, tenantId, actingUserId);
   return !!av && av.status === 'ready';
 }

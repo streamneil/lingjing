@@ -1299,11 +1299,23 @@ export interface VoiceRow {
 }
 
 // ── 账号级数据隔离 helper ──
-// 在租户隔离(WHERE tenant_id=?)之上叠加账号隔离:
-//   admin → 看全机构(不加 created_by 限制,返回空片段);
-//   creator → 仅看 created_by=自己(NULL 老数据自然不匹配 → 看不到,符合「机构公共仅 admin 可见」)。
+// 两个闸门,语义不同,别混用:
+//
+//   scopeByOwner —— 「资产口径」。用于作品/生成记录、自定义形象、克隆音色。
+//     无逃生口:任何角色(含租户 admin)都只能读写 created_by=自己 的行。
+//     产品决策(2026-07-25):个人生成的内容是私有的,机构管理员也不得查看/下载/删除。
+//     故这里刻意不接受 isAdmin 之类的提权入参 —— 没有参数可传,就没有传错的可能。
+//     created_by IS NULL 的历史行不匹配任何人 → 对所有人不可见(老数据不迁移,已确认可接受)。
+//
+//   scopeByActor —— 「财务口径」。仅限充值订单 / 发票(见 src/orders/index.ts)。
+//     机构的钱机构该看得见,故 admin 保留全机构视野。禁止用于任何生成内容类查询。
+//
 // 用法:`WHERE tenant_id=? ${scope.clause} ORDER BY ... LIMIT ?`,参数按位拼 `.all(tenantId, ...scope.params, limit)`。
 // 关键:scope.params 插在 tenantId 与 limit 之间,绝不追加末尾(会与 LIMIT ? 错位)。
+export function scopeByOwner(actingUserId: string, col = 'created_by'): { clause: string; params: string[] } {
+  return { clause: ` AND ${col} = ?`, params: [actingUserId] };
+}
+
 export function scopeByActor(
   actingUserId: string,
   isAdmin: boolean,

@@ -31,6 +31,12 @@ function tenant(): string {
   return (globalThis as Record<string, unknown>).__T as string;
 }
 
+// 以本人视角读计费明细。ledger() 的文案摘要/产物入口只对作品主人下发(账号隔离
+// 「只看账不看内容」),不传 actingUserId 会拿到屏蔽后的 null —— 本文件的 job 都归 uid。
+function myLedger() {
+  return ledger(tenant(), 500, uid);
+}
+
 describe('enqueueJob 记录创建者', () => {
   it('带 createdBy → job.created_by 入库', () => {
     const id = enqueueJob('tts', { text: 'x', voiceRef: 'Cherry' }, tenant(), uid);
@@ -46,7 +52,7 @@ describe('ledger() JOIN 出消费人 + 工具', () => {
   it('有 job 的预扣行 → toolType + userName', () => {
     const id = enqueueJob('ai_image', { prompt: 'p' }, tenant(), uid);
     reserve(tenant(), id, 10);
-    const row = ledger(tenant()).find((l) => l.job_id === id && l.kind === 'reserve');
+    const row = myLedger().find((l) => l.job_id === id && l.kind === 'reserve');
     expect(row).toBeTruthy();
     expect(row!.toolType).toBe('ai_image');
     expect(row!.userName).toBe('attruser'); // display_name 空 → 回落 username
@@ -56,13 +62,13 @@ describe('ledger() JOIN 出消费人 + 工具', () => {
     const id = enqueueJob('ai_music', { mode: 'song', prompt: 'p' }, tenant(), uid);
     reserve(tenant(), id, 12);
     settle(tenant(), id, 12);
-    const row = ledger(tenant()).find((l) => l.job_id === id && l.kind === 'settle');
+    const row = myLedger().find((l) => l.job_id === id && l.kind === 'settle');
     expect(row!.toolType).toBe('ai_music');
     expect(row!.userName).toBe('attruser');
   });
 
   it('grant 发放行 → toolType / userName 均空(无 job)', () => {
-    const row = ledger(tenant()).find((l) => l.kind === 'grant');
+    const row = myLedger().find((l) => l.kind === 'grant');
     expect(row).toBeTruthy();
     expect(row!.toolType ?? null).toBeNull();
     expect(row!.userName ?? null).toBeNull();
@@ -71,9 +77,13 @@ describe('ledger() JOIN 出消费人 + 工具', () => {
   it('老 job(created_by NULL)→ userName 空、toolType 仍有(工具不依赖用户)', () => {
     const id = enqueueJob('video', { script: 'x' }, tenant()); // 不传 createdBy
     reserve(tenant(), id, 5);
-    const row = ledger(tenant()).find((l) => l.job_id === id);
+    // 无主行对 creator 不可见(账号隔离:created_by NULL 谁都不匹配),故这里用 admin 视角读——
+    // admin 保留全机构**行**可见性(机构要管预算),只是内容被屏蔽。此用例验的是 JOIN 派生列语义。
+    const row = ledger(tenant(), 500, uid, true).find((l) => l.job_id === id);
     expect(row!.toolType).toBe('video');
     expect(row!.userName ?? null).toBeNull();
+    // 顺带锁死内容闸门:非本人的行(无主行同样不属于 uid)不下发文案摘要。
+    expect(row!.taskTitle ?? null).toBeNull();
   });
 });
 
@@ -81,7 +91,7 @@ describe('ledger() 关联作品文案摘要(taskTitle)', () => {
   it('video → 取 script 文案', () => {
     const id = enqueueJob('video', { script: '大家好我是数字人' }, tenant(), uid);
     reserve(tenant(), id, 5);
-    const row = ledger(tenant()).find((l) => l.job_id === id);
+    const row = myLedger().find((l) => l.job_id === id);
     expect(row!.taskTitle).toBe('大家好我是数字人');
     expect(row!.outputKind ?? null).toBeNull(); // 未完成(无 output_url)→ outputKind 不暴露,前端不可点
   });
@@ -91,7 +101,7 @@ describe('ledger() 关联作品文案摘要(taskTitle)', () => {
     const id = enqueueJob('ai_image', { prompt: '出图测试' }, tenant(), uid);
     reserve(tenant(), id, 5);
     markDone(id, JSON.stringify(['ai-images/x.png']), 'qwen', 'image');
-    const row = ledger(tenant()).find((l) => l.job_id === id);
+    const row = myLedger().find((l) => l.job_id === id);
     expect(row!.outputKind).toBe('image'); // 有成品 → 暴露产物类型
     expect(row!.taskTitle).toBe('出图测试');
   });
@@ -99,43 +109,43 @@ describe('ledger() 关联作品文案摘要(taskTitle)', () => {
   it('tts → 取 text 文案', () => {
     const id = enqueueJob('tts', { text: '欢迎收听本期节目', voiceRef: 'Cherry' }, tenant(), uid);
     reserve(tenant(), id, 5);
-    const row = ledger(tenant()).find((l) => l.job_id === id);
+    const row = myLedger().find((l) => l.job_id === id);
     expect(row!.taskTitle).toBe('欢迎收听本期节目');
   });
 
   it('ai_image / video_edit → 取 prompt 文案', () => {
     const img = enqueueJob('ai_image', { prompt: '一只赛博朋克猫' }, tenant(), uid);
     reserve(tenant(), img, 5);
-    expect(ledger(tenant()).find((l) => l.job_id === img)!.taskTitle).toBe('一只赛博朋克猫');
+    expect(myLedger().find((l) => l.job_id === img)!.taskTitle).toBe('一只赛博朋克猫');
   });
 
   it('ai_music → prompt 优先,无 prompt 回落 lyrics', () => {
     const a = enqueueJob('ai_music', { prompt: '轻快的电子乐', lyrics: '副歌' }, tenant(), uid);
     reserve(tenant(), a, 5);
-    expect(ledger(tenant()).find((l) => l.job_id === a)!.taskTitle).toBe('轻快的电子乐');
+    expect(myLedger().find((l) => l.job_id === a)!.taskTitle).toBe('轻快的电子乐');
     const b = enqueueJob('ai_music', { lyrics: '只有歌词' }, tenant(), uid);
     reserve(tenant(), b, 5);
-    expect(ledger(tenant()).find((l) => l.job_id === b)!.taskTitle).toBe('只有歌词');
+    expect(myLedger().find((l) => l.job_id === b)!.taskTitle).toBe('只有歌词');
   });
 
   it('长文案截前 24 字 + 省略号', () => {
     const long = '一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十';
     const id = enqueueJob('tts', { text: long, voiceRef: 'Cherry' }, tenant(), uid);
     reserve(tenant(), id, 5);
-    const t = ledger(tenant()).find((l) => l.job_id === id)!.taskTitle!;
+    const t = myLedger().find((l) => l.job_id === id)!.taskTitle!;
     expect(t).toBe(long.slice(0, 24) + '…');
     expect([...t].length).toBeLessThanOrEqual(25); // 24 字 + 省略号
   });
 
   it('grant 发放行 → taskTitle 空(无 job)', () => {
-    const row = ledger(tenant()).find((l) => l.kind === 'grant');
+    const row = myLedger().find((l) => l.kind === 'grant');
     expect(row!.taskTitle ?? null).toBeNull();
   });
 
   it('空文案 → taskTitle 空(前端回退工具名/「—」)', () => {
     const id = enqueueJob('tts', { text: '   ', voiceRef: 'Cherry' }, tenant(), uid);
     reserve(tenant(), id, 5);
-    expect(ledger(tenant()).find((l) => l.job_id === id)!.taskTitle ?? null).toBeNull();
+    expect(myLedger().find((l) => l.job_id === id)!.taskTitle ?? null).toBeNull();
   });
 
   it('坏 input_json 不让计费查询崩(安全回退空)', () => {
@@ -143,8 +153,8 @@ describe('ledger() 关联作品文案摘要(taskTitle)', () => {
     reserve(tenant(), id, 5);
     // 直接把 input_json 写坏,模拟脏数据
     db.prepare(`UPDATE job SET input_json='{not valid json' WHERE id=?`).run(id);
-    expect(() => ledger(tenant())).not.toThrow();
-    expect(ledger(tenant()).find((l) => l.job_id === id)!.taskTitle ?? null).toBeNull();
+    expect(() => myLedger()).not.toThrow();
+    expect(myLedger().find((l) => l.job_id === id)!.taskTitle ?? null).toBeNull();
   });
 });
 

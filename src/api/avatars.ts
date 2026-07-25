@@ -32,7 +32,7 @@ const upload = multer({
 // 列表:预置 + 本租户自定义(自定义缩略图签名后返回)
 avatarsRouter.get('/avatars', requireAuth, async (req: Request, res: Response) => {
   const presets = listPresets();
-  const custom = listCustom(req.user!.tenantId, req.user!.id, req.user!.role === 'admin');
+  const custom = listCustom(req.user!.tenantId, req.user!.id);
   const customOut = await Promise.all(
     custom.map(async (a) => ({
       id: a.id,
@@ -122,21 +122,20 @@ avatarsRouter.post(
 avatarsRouter.put('/avatars/:id', requireRole('admin', 'creator'), (req: Request, res: Response) => {
   const name = (req.body?.name as string || '').trim();
   if (!name) return res.status(400).json({ error: '缺少 name' });
-  const ok = renameAvatar(req.params.id!, req.user!.tenantId, name, req.user!.id, req.user!.role === 'admin');
+  const ok = renameAvatar(req.params.id!, req.user!.tenantId, name, req.user!.id);
   return ok ? res.json({ ok: true }) : res.status(404).json({ error: '形象不存在' });
 });
 
 // C6:设为默认
 avatarsRouter.post('/avatars/:id/default', requireRole('admin', 'creator'), (req: Request, res: Response) => {
-  const ok = setDefaultAvatar(req.params.id!, req.user!.tenantId);
+  const ok = setDefaultAvatar(req.params.id!, req.user!.tenantId, req.user!.id);
   return ok ? res.json({ ok: true }) : res.status(404).json({ error: '形象不存在' });
 });
 
 avatarsRouter.delete('/avatars/:id', requireRole('admin', 'creator'), (req: Request, res: Response) => {
-  const isAdmin = req.user!.role === 'admin';
-  const av = getAvatar(req.params.id!, req.user!.tenantId, req.user!.id, isAdmin);
+  const av = getAvatar(req.params.id!, req.user!.tenantId, req.user!.id);
   if (!av) return res.status(404).json({ error: '形象不存在' });
-  deleteAvatar(req.params.id!, req.user!.tenantId, req.user!.id, isAdmin);
+  deleteAvatar(req.params.id!, req.user!.tenantId, req.user!.id);
   audit(req, 'delete_avatar', req.params.id!);
   res.json({ ok: true });
 });

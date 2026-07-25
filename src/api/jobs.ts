@@ -101,11 +101,17 @@ async function signInputUrls(refs?: string[]): Promise<string[]> {
 
 // 数字人 avatarRef → 形象缩略 URL(记录卡每条显各自形象,修「全是同一人」)。
 // 预置:公网外链直接用;自定义:thumb_url 签名(私有 key)。查不到/坏数据回 null(卡片回退占位)。
-async function signAvatarThumb(avatarRef: string | undefined, tenantId: string): Promise<string | null> {
+async function signAvatarThumb(
+  avatarRef: string | undefined,
+  tenantId: string,
+  actingUserId: string,
+): Promise<string | null> {
   if (!avatarRef) return null;
   const preset = listAvatarPresets().find((p) => p.id === avatarRef);
   if (preset) return preset.thumb;
-  const custom = getAvatar(avatarRef, tenantId, '', true); // worker 无 acting user,按租户解析(isAdmin)
+  // 账号隔离:按请求者本人解析。调用点渲染的都是本人的作品(getJobForTenant/listJobsForTenant 已隔离),
+  // 故正常情况必命中;查不到(他人形象 / created_by NULL 的老资产)→ null → 卡片回退占位,不泄漏缩略图。
+  const custom = getAvatar(avatarRef, tenantId, actingUserId);
   if (custom?.thumb_url) return getSignedUrl(custom.thumb_url).catch(() => null);
   return null;
 }
@@ -118,7 +124,7 @@ type JobBuildResult =
   | { ok: false; status: number; error: string; extra?: Record<string, unknown> };
 
 /** 校验并构建 video(AI 虚拟人)job 入参 + 计价。 */
-function buildVideoJob(body: Record<string, unknown>, tid: string, actingUserId: string, isAdmin: boolean): JobBuildResult {
+function buildVideoJob(body: Record<string, unknown>, tid: string, actingUserId: string): JobBuildResult {
   const { avatarRef, voiceRef, script, resolution, ratio, speed, volume } =
     body as Partial<VideoGenInput>;
   if (!avatarRef || typeof avatarRef !== 'string')
@@ -129,9 +135,9 @@ function buildVideoJob(body: Record<string, unknown>, tid: string, actingUserId:
     return { ok: false, status: 400, error: '缺少 script(文案)' };
   if (script.length > 2000)
     return { ok: false, status: 400, error: '文案超过 2000 字上限', extra: { length: script.length } };
-  if (!isUsableAvatar(avatarRef, tid, actingUserId, isAdmin))
+  if (!isUsableAvatar(avatarRef, tid, actingUserId))
     return { ok: false, status: 400, error: '形象不可用(不存在、非本机构、或非本人创建)' };
-  if (!isUsableVoice(voiceRef, tid, actingUserId, isAdmin))
+  if (!isUsableVoice(voiceRef, tid, actingUserId))
     return { ok: false, status: 400, error: '音色不可用(不存在、非本机构、或非本人创建)' };
   if (speed !== undefined && (typeof speed !== 'number' || speed < 0.5 || speed > 2))
     return { ok: false, status: 400, error: '语速需在 0.5–2 倍之间' };
@@ -353,13 +359,13 @@ function buildImageJob(body: Record<string, unknown>): JobBuildResult {
 /** 校验并构建 tts(文转语音)job 入参 + 计价。
  *  全 Qwen-TTS:无「品质」模型选择(系统按是否带情绪自动选 flash/instruct,见 worker.resolveVoice)。
  *  计价扁价(estimateTtsCost 默认 0.02/字);情绪/音高对所有音色开放(系统音色用 instruct 落地)。 */
-function buildTtsJob(body: Record<string, unknown>, tid: string, actingUserId: string, isAdmin: boolean): JobBuildResult {
+function buildTtsJob(body: Record<string, unknown>, tid: string, actingUserId: string): JobBuildResult {
   const { text, voiceRef } = body as Partial<TtsGenInput>;
   if (!text || typeof text !== 'string' || text.trim().length === 0)
     return { ok: false, status: 400, error: '缺少 text(配音文本)' };
   if (!voiceRef || typeof voiceRef !== 'string')
     return { ok: false, status: 400, error: '缺少 voiceRef(音色)' };
-  if (!isUsableVoice(voiceRef, tid, actingUserId, isAdmin))
+  if (!isUsableVoice(voiceRef, tid, actingUserId))
     return { ok: false, status: 400, error: '音色不可用(不存在、非本机构、或非本人创建)' };
 
   // 情绪 / 语速 / 音高(T-TTS-EMOTION):Qwen 系统音色经 instruct 模型落地;复刻/设计忽略(worker 处理)。
@@ -828,10 +834,10 @@ function checkRefsOwned(body: Record<string, unknown>, tid: string): string | nu
 
 // 封闭 allowlist:type → builder。Object.create(null) 防原型链污染(type='__proto__' 取不到)。
 // builder 可同步可异步(eng-review E1:video_edit 须 await 读 sidecar;同步 builder 被 await 后行为不变)。
-// 账号隔离:video/tts 的形象/音色校验需 actingUserId+isAdmin;其余 builder 不用,忽略多余参数。
+// 账号隔离:video/tts 的形象/音色校验需 actingUserId(只认本人的形象/音色);其余 builder 不用,忽略多余参数。
 const JOB_BUILDERS: Record<
   string,
-  (body: Record<string, unknown>, tid: string, actingUserId: string, isAdmin: boolean) => JobBuildResult | Promise<JobBuildResult>
+  (body: Record<string, unknown>, tid: string, actingUserId: string) => JobBuildResult | Promise<JobBuildResult>
 > = Object.assign(Object.create(null), {
     video: buildVideoJob,
     ai_image: (body: Record<string, unknown>) => buildImageJob(body),
@@ -910,7 +916,7 @@ export async function submitJob(
     if (hit) return hit;
   }
 
-  const built = await builder(body, tid, actor.userId, actor.role === 'admin');
+  const built = await builder(body, tid, actor.userId);
   if (!built.ok) return { ok: false, status: built.status, error: built.error, extra: built.extra };
 
   const { cost } = built;
@@ -1345,12 +1351,12 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
   const sourceModeImg2img = source === 'ai-image-edit' ? true : source === 'ai-image' ? false : undefined;
   const filter = { types, source, sourceModeImg2img, status };
 
-  const rows = listJobsForTenant(req.user!.tenantId, req.user!.id, req.user!.role === 'admin', {
+  const rows = listJobsForTenant(req.user!.tenantId, req.user!.id, {
     ...filter,
     limit: pageSize,
     offset: (page - 1) * pageSize,
   });
-  const total = countJobsForTenant(req.user!.tenantId, req.user!.id, req.user!.role === 'admin', filter);
+  const total = countJobsForTenant(req.user!.tenantId, req.user!.id, filter);
   const jobs = await Promise.all(
     rows.map(async (j) => {
       // 成品签名 URL:支持多产物(图片多图)。向后兼容旧视频裸 key(signOutputUrls 内处理)。
@@ -1442,7 +1448,7 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
           };
         } else if (j.type === 'video') {
           // 数字人卡片:每条显各自形象缩略(修「记录头像全是同一人」)+ 回放 avatarRef/voiceRef/speed。
-          const avatarThumb = await signAvatarThumb(inp.avatarRef, req.user!.tenantId);
+          const avatarThumb = await signAvatarThumb(inp.avatarRef, req.user!.tenantId, req.user!.id);
           meta = {
             avatarRef: inp.avatarRef, voiceRef: inp.voiceRef, avatarThumb,
             resolution: inp.resolution, ratio: inp.ratio, speed: inp.speed,
@@ -1470,9 +1476,9 @@ jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {
   return res.json({ jobs, total, page, pageSize });
 });
 
-// 状态快照(前端轮询)— 任何登录角色可读,但只能读本租户的
+// 状态快照(前端轮询)— 任何登录角色可读,但只能读本人的作品(账号隔离,管理员亦然)
 jobsRouter.get('/jobs/:id', requireAuth, async (req: Request, res: Response) => {
-  const job = getJobForTenant(req.params.id!, req.user!.tenantId, req.user!.id, req.user!.role === 'admin');
+  const job = getJobForTenant(req.params.id!, req.user!.tenantId, req.user!.id);
   if (!job) return res.status(404).json({ error: '任务不存在' });
 
   const payload: Record<string, unknown> = {
@@ -1492,7 +1498,7 @@ jobsRouter.get('/jobs/:id', requireAuth, async (req: Request, res: Response) => 
   const inp = payload.input as { imageRefs?: string[]; videoRef?: string; videoRefs?: string[]; audioRefs?: string[]; avatarRef?: string } | undefined;
   if (inp?.imageRefs?.length) payload.inputUrls = await signInputUrls(inp.imageRefs);
   // 数字人(video):形象缩略 URL,记录卡每条显各自形象(修「全是同一人」;轮询期间也带上)。
-  if (job.type === 'video') payload.avatarThumb = await signAvatarThumb(inp?.avatarRef, job.tenant_id);
+  if (job.type === 'video') payload.avatarThumb = await signAvatarThumb(inp?.avatarRef, job.tenant_id, req.user!.id);
   // 视频编辑:输入视频签名 URL(记录卡显原片 + 重新提示视频预览,video-inputs 同桶)。
   if (inp?.videoRef) payload.inputVideoUrl = await getSignedUrl(inp.videoRef).catch(() => null);
   // 多模态参考生影片(video_r2v):签名图/视频/音频参考 → 记录卡输入缩略全显(修「轮询时没有输入」)。
@@ -1522,10 +1528,10 @@ jobsRouter.get('/jobs/:id', requireAuth, async (req: Request, res: Response) => 
 // 根因:OSS 签名 URL 无 CORS 头,前端 fetch(签名URL) 被浏览器 CORS 拦截 → 回落
 // window.open 打开图片直链 → 一闪而过。改由后端拉对象、加 Content-Disposition:
 // attachment 回传(同源,无 CORS,<a download> 直接生效)。覆盖图/视频/未来音频。
-// 鉴权:复用 getJobForTenant 做租户隔离,只能下本机构的成品;越权/越界一律 404。
+// 鉴权:复用 getJobForTenant 做租户 + 账号隔离,只能下自己的成品;越权/越界一律 404。
 jobsRouter.get('/jobs/:id/download/:idx', requireAuth, async (req: Request, res: Response) => {
-  const job = getJobForTenant(req.params.id!, req.user!.tenantId, req.user!.id, req.user!.role === 'admin');
-  // 不存在 / 非本租户 / 非本人(非 admin) / 未完成 / 无产物 → 统一 404(不泄露任务存在性)
+  const job = getJobForTenant(req.params.id!, req.user!.tenantId, req.user!.id);
+  // 不存在 / 非本租户 / 非本人 / 未完成 / 无产物 → 统一 404(不泄露任务存在性)
   if (!job || job.status !== 'done' || !job.output_url) return res.status(404).end();
 
   const keys = parseOutputKeys(job.output_url);
@@ -1561,16 +1567,16 @@ jobsRouter.get('/jobs/:id/download/:idx', requireAuth, async (req: Request, res:
 // (已移除 /api/demo-assets 火山 TOS 同源代理:果茶示范素材已随 git 进 prototype/showcase/ref-video/,
 //  统一走公开端点 /api/showcase-asset/(签名重定向自己桶 / 本地兜底),去中心化、离线/私有化可用。)
 
-// 失败重试 — 仅 admin/creator,且只能重试本租户的
+// 失败重试 — 仅 admin/creator,且只能重试自己的作品
 jobsRouter.post('/jobs/:id/retry', requireRole('admin', 'creator'), (req: Request, res: Response) => {
-  const ok = retryJob(req.params.id!, req.user!.tenantId, req.user!.id, req.user!.role === 'admin');
+  const ok = retryJob(req.params.id!, req.user!.tenantId, req.user!.id);
   if (!ok) return res.status(409).json({ error: '任务不存在、非本机构、非本人、或非 failed 状态' });
   return res.json({ id: req.params.id, status: 'queued' });
 });
 
-// 删除作品 — 仅 admin/creator,租户隔离,生成中不可删
+// 删除作品 — 仅 admin/creator,租户 + 账号隔离(只能删自己的),生成中不可删
 jobsRouter.delete('/jobs/:id', requireRole('admin', 'creator'), (req: Request, res: Response) => {
-  const ok = deleteJobForTenant(req.params.id!, req.user!.tenantId, req.user!.id, req.user!.role === 'admin');
+  const ok = deleteJobForTenant(req.params.id!, req.user!.tenantId, req.user!.id);
   if (!ok) return res.status(409).json({ error: '任务不存在、非本机构、非本人、或生成中不可删' });
   return res.json({ ok: true });
 });

@@ -33,7 +33,7 @@ voicesRouter.get('/voices', requireAuth, async (req: Request, res: Response) => 
   // 预置:试听样本走公共只读桶直链(所有部署共享,无需签名/本桶上传)。
   const presets = listPresets().map((p) => ({ ...p, sample: p.sampleUrl }));
   const clones = await Promise.all(
-    listClones(req.user!.tenantId, req.user!.id, req.user!.role === 'admin').map(async (v) => ({
+    listClones(req.user!.tenantId, req.user!.id).map(async (v) => ({
       id: v.id,
       name: v.name,
       kind: v.kind,
@@ -143,10 +143,9 @@ voicesRouter.post('/voices/design', requireRole('admin', 'creator'), async (req:
 });
 
 voicesRouter.delete('/voices/:id', requireRole('admin', 'creator'), (req: Request, res: Response) => {
-  const isAdmin = req.user!.role === 'admin';
-  const v = getVoice(req.params.id!, req.user!.tenantId, req.user!.id, isAdmin);
+  const v = getVoice(req.params.id!, req.user!.tenantId, req.user!.id);
   if (!v) return res.status(404).json({ error: '音色不存在' });
-  deleteVoice(req.params.id!, req.user!.tenantId, req.user!.id, isAdmin);
+  deleteVoice(req.params.id!, req.user!.tenantId, req.user!.id);
   audit(req, 'delete_voice', req.params.id!);
   res.json({ ok: true });
 });

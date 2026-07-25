@@ -1,12 +1,15 @@
 // 灵镜 — 账号级数据隔离(机构共享 → 账号私有)。
 //
-// 覆盖(CEO + eng review 定稿):
-//   - creator 只看自己的:作品(list/get/download/delete 四端点)+ 形象 + 音色;IDOR(拿别人 ID)→ 404
-//   - admin 看全机构 + 能删 creator 的作品
-//   - NULL 老数据:creator 不可见、admin 可见
-//   - isUsable* 账号隔离(自己的不共享;预置仍全员可用)
-//   - 计费 ledger:creator 只看自己消费行 + grant 行(eng-review 1B);参数不错位(eng-review 1A)
-//   - 审计 listAudit:非 admin 只看自己
+// 2026-07-25 产品决策:生成内容彻底私有,**租户管理员也不例外**。本文件此前断言的
+// 「admin 看全机构 / admin 能删 creator 的作品 / admin 可用任意形象」已全部反转为负向断言。
+//
+// 覆盖:
+//   - 所有角色(含 admin)只看自己的:作品(list/get/download/delete 四端点)+ 形象 + 音色;IDOR → 404
+//   - admin 越权负向:看不到、取不到、删不掉、重试不了他人作品
+//   - NULL 老数据:对所有人不可见(含 admin)——老数据不迁移,已确认可接受
+//   - isUsable* 账号隔离(自己的不共享,admin 亦然;预置仍全员可用)
+//   - 计费 ledger「只看账不看内容」:admin 见他人行(谁/工具/积分)但 taskTitle/outputKind 被屏蔽
+//   - 审计 listAudit:非 admin 只看自己(合规口径,**未随资产隔离改动**)
 //   - 老资产 backfill(从 audit_log 回填 created_by)正确性
 //   - 砍 viewer:createUser/changeRole 拒 viewer;viewer→creator 迁移幂等
 
@@ -17,8 +20,9 @@ process.env.DB_FILE = ':memory:';
 const { db } = await import('../src/db/index.js');
 const { createApp } = await import('../src/server.js');
 const { createTenant, createUser, changeRole } = await import('../src/auth/index.js');
-const { enqueueJob, listJobsForTenant, getJobForTenant, deleteJobForTenant } = await import('../src/queue/index.js');
-const { createCustomAvatar, listCustom, getAvatar, isUsableAvatar } = await import('../src/avatars/index.js');
+const { enqueueJob, listJobsForTenant, getJobForTenant, deleteJobForTenant, retryJob } = await import('../src/queue/index.js');
+const { createCustomAvatar, listCustom, getAvatar, isUsableAvatar, setDefaultAvatar, getDefaultAvatar } =
+  await import('../src/avatars/index.js');
 const { createDesignVoice, listClones, isUsableVoice } = await import('../src/voices/index.js');
 const { grant, reserve, ledger } = await import('../src/credits/index.js');
 const { writeAudit, listAudit } = await import('../src/audit/index.js');
@@ -44,61 +48,79 @@ function jobBy(userId: string): string {
 }
 
 describe('作品(job)账号隔离', () => {
-  it('creator 只看自己的;admin 看全机构', () => {
+  it('每个人只看自己的 —— 管理员也一样', () => {
     const ja = jobBy(aliceId);
     const jb = jobBy(bobId);
-    const aliceList = listJobsForTenant(tId, aliceId, false).map((j) => j.id);
+    const aliceList = listJobsForTenant(tId, aliceId).map((j) => j.id);
     expect(aliceList).toContain(ja);
     expect(aliceList).not.toContain(jb); // 看不到 bob 的
-    const adminList = listJobsForTenant(tId, adminId, true).map((j) => j.id);
-    expect(adminList).toContain(ja);
-    expect(adminList).toContain(jb); // admin 全看
+    const adminList = listJobsForTenant(tId, adminId).map((j) => j.id);
+    expect(adminList).not.toContain(ja); // admin 看不到 alice 的
+    expect(adminList).not.toContain(jb); // 也看不到 bob 的
   });
 
   it('IDOR:creator 拿别人 jobId 取/删 → 取不到/删不掉(返回 undefined/false → 路由 404)', () => {
     const jb = jobBy(bobId);
-    expect(getJobForTenant(jb, tId, aliceId, false)).toBeUndefined(); // alice 取 bob 的 → 看不到
-    expect(getJobForTenant(jb, tId, bobId, false)).toBeTruthy(); // 本人能取
-    expect(deleteJobForTenant(jb, tId, aliceId, false)).toBe(false); // alice 删 bob 的 → 失败
+    expect(getJobForTenant(jb, tId, aliceId)).toBeUndefined(); // alice 取 bob 的 → 看不到
+    expect(getJobForTenant(jb, tId, bobId)).toBeTruthy(); // 本人能取
+    expect(deleteJobForTenant(jb, tId, aliceId)).toBe(false); // alice 删 bob 的 → 失败
   });
 
-  it('admin 能删 creator 的作品(善后/审核)', () => {
+  it('admin 越权负向:他人作品取不到、删不掉、重试不了', () => {
     const ja = jobBy(aliceId);
-    expect(deleteJobForTenant(ja, tId, adminId, true)).toBe(true);
+    expect(getJobForTenant(ja, tId, adminId)).toBeUndefined(); // 取不到
+    expect(deleteJobForTenant(ja, tId, adminId)).toBe(false); // 删不掉(不再有善后权)
+    db.prepare(`UPDATE job SET status='failed' WHERE id=?`).run(ja);
+    expect(retryJob(ja, tId, adminId)).toBe(false); // 重试不了
+    expect(retryJob(ja, tId, aliceId)).toBe(true); // 本人可以
   });
 
-  it('NULL 老数据:creator 不可见、admin 可见', () => {
+  it('NULL 老数据:对所有人不可见,含 admin(老数据不迁移)', () => {
     const orphan = enqueueJob('ai_image', { prompt: 'old' }, tId, null); // created_by=NULL(老数据)
-    expect(listJobsForTenant(tId, aliceId, false).map((j) => j.id)).not.toContain(orphan);
-    expect(listJobsForTenant(tId, adminId, true).map((j) => j.id)).toContain(orphan);
+    expect(listJobsForTenant(tId, aliceId).map((j) => j.id)).not.toContain(orphan);
+    expect(listJobsForTenant(tId, adminId).map((j) => j.id)).not.toContain(orphan);
   });
 });
 
 describe('形象/音色账号隔离 + isUsable', () => {
-  it('形象:creator 只看自己建的;isUsable 自己的可用、别人的不可用、预置全员可用', () => {
+  it('形象:只看自己建的;isUsable 自己的可用、别人的不可用(admin 亦然)、预置全员可用', () => {
     const av = createCustomAvatar({ tenantId: tId, userId: aliceId, name: '主播A', kind: 'photo', sourceKey: 'k.png', consent: true });
-    expect(listCustom(tId, aliceId, false).map((a) => a.id)).toContain(av.id);
-    expect(listCustom(tId, bobId, false).map((a) => a.id)).not.toContain(av.id); // bob 看不到 alice 的
-    expect(getAvatar(av.id, tId, aliceId, false)).toBeTruthy();
-    expect(getAvatar(av.id, tId, bobId, false)).toBeUndefined(); // IDOR
-    // isUsable:alice 用自己的 → 可;bob 用 alice 的 → 不可(用户定:自定义形象自己的不共享);预置 → 全员可用
-    expect(isUsableAvatar(av.id, tId, aliceId, false)).toBe(true);
-    expect(isUsableAvatar(av.id, tId, bobId, false)).toBe(false);
-    expect(isUsableAvatar('preset-1', tId, bobId, false)).toBe(true); // 预置仍共享
-    expect(isUsableAvatar(av.id, tId, adminId, true)).toBe(true); // admin 可用任意
+    expect(listCustom(tId, aliceId).map((a) => a.id)).toContain(av.id);
+    expect(listCustom(tId, bobId).map((a) => a.id)).not.toContain(av.id); // bob 看不到 alice 的
+    expect(listCustom(tId, adminId).map((a) => a.id)).not.toContain(av.id); // admin 也看不到
+    expect(getAvatar(av.id, tId, aliceId)).toBeTruthy();
+    expect(getAvatar(av.id, tId, bobId)).toBeUndefined(); // IDOR
+    expect(getAvatar(av.id, tId, adminId)).toBeUndefined(); // admin IDOR 同样挡住
+    // isUsable:alice 用自己的 → 可;bob / admin 用 alice 的 → 不可;预置 → 全员可用
+    expect(isUsableAvatar(av.id, tId, aliceId)).toBe(true);
+    expect(isUsableAvatar(av.id, tId, bobId)).toBe(false);
+    expect(isUsableAvatar('preset-1', tId, bobId)).toBe(true); // 预置仍共享
+    expect(isUsableAvatar(av.id, tId, adminId)).toBe(false); // admin 不能拿他人形象去生成
   });
 
-  it('音色:creator 只看自己建的;isUsable 同形象', () => {
+  it('形象默认标记按人互斥:甲设默认不影响乙的默认', () => {
+    const a1 = createCustomAvatar({ tenantId: tId, userId: aliceId, name: 'A默认', kind: 'photo', sourceKey: 'a.png', consent: true });
+    const b1 = createCustomAvatar({ tenantId: tId, userId: bobId, name: 'B默认', kind: 'photo', sourceKey: 'b.png', consent: true });
+    expect(setDefaultAvatar(a1.id, tId, aliceId)).toBe(true);
+    expect(setDefaultAvatar(b1.id, tId, bobId)).toBe(true); // bob 设自己的
+    expect(getDefaultAvatar(tId, aliceId)?.id).toBe(a1.id); // alice 的默认没被 bob 清掉
+    expect(getDefaultAvatar(tId, bobId)?.id).toBe(b1.id);
+    expect(setDefaultAvatar(a1.id, tId, bobId)).toBe(false); // bob 设 alice 的形象为默认 → 拒
+  });
+
+  it('音色:只看自己建的;isUsable 同形象', () => {
     const v = createDesignVoice({ tenantId: tId, name: '温柔女声', providerVoiceId: 'vd-1', userId: aliceId });
-    expect(listClones(tId, aliceId, false).map((x) => x.id)).toContain(v.id);
-    expect(listClones(tId, bobId, false).map((x) => x.id)).not.toContain(v.id);
-    expect(isUsableVoice(v.id, tId, aliceId, false)).toBe(true);
-    expect(isUsableVoice(v.id, tId, bobId, false)).toBe(false);
+    expect(listClones(tId, aliceId).map((x) => x.id)).toContain(v.id);
+    expect(listClones(tId, bobId).map((x) => x.id)).not.toContain(v.id);
+    expect(listClones(tId, adminId).map((x) => x.id)).not.toContain(v.id); // admin 也看不到
+    expect(isUsableVoice(v.id, tId, aliceId)).toBe(true);
+    expect(isUsableVoice(v.id, tId, bobId)).toBe(false);
+    expect(isUsableVoice(v.id, tId, adminId)).toBe(false); // admin 不能拿他人音色去合成
   });
 });
 
-describe('计费明细账号隔离(grant 行可见 + 参数不错位)', () => {
-  it('creator 只看自己消费行 + grant 发放行(eng-review 1B);admin 看全部', () => {
+describe('计费明细:行可见性 + 内容闸门(「只看账不看内容」)', () => {
+  it('creator 只看自己消费行 + grant 发放行(eng-review 1B);admin 看全部行', () => {
     const ja = jobBy(aliceId);
     const jb = jobBy(bobId);
     reserve(tId, ja, 10);
@@ -110,9 +132,33 @@ describe('计费明细账号隔离(grant 行可见 + 参数不错位)', () => {
     expect(aliceLedger.some((r) => r.job_id === jb)).toBe(false);
     // grant 发放行(job_id=NULL)仍可见(机构钱包入账)
     expect(aliceLedger.some((r) => r.kind === 'grant')).toBe(true);
-    // admin 看全部(含 bob)
+    // admin 看全部行(机构要管预算 → 保留「谁花了多少」)
     const adminLedger = ledger(tId, 100, adminId, true);
     expect(adminLedger.some((r) => r.job_id === jb)).toBe(true);
+  });
+
+  it('admin 看得到他人的账,但看不到内容:taskTitle / outputKind 被屏蔽', () => {
+    const ja = enqueueJob('ai_image', { prompt: '这是 alice 的私密提示词' }, tId, aliceId);
+    reserve(tId, ja, 10);
+    // 造一个已完成、有产物的行(否则 outputKind 本来就是 null,测不出闸门)
+    db.prepare(`UPDATE job SET status='done', output_url=?, output_kind='image' WHERE id=?`)
+      .run(JSON.stringify(['out/a.png']), ja);
+
+    // 本人:拿得到文案摘要 + 产物入口(可点开预览)
+    const own = ledger(tId, 200, aliceId, false).find((r) => r.job_id === ja);
+    expect(own?.taskTitle).toContain('私密提示词');
+    expect(own?.outputKind).toBe('image');
+
+    // admin:看得到这一行(谁 / 什么工具 / 多少积分),但拿不到内容
+    const seen = ledger(tId, 200, adminId, true).find((r) => r.job_id === ja);
+    expect(seen).toBeTruthy(); // 行在
+    expect(seen?.userName).toBe('alice'); // 知道是谁花的
+    expect(seen?.toolType).toBe('ai_image'); // 知道用了什么工具
+    expect(seen?.taskTitle).toBeNull(); // 但看不到提示词
+    expect(seen?.outputKind).toBeNull(); // 也点不开产物
+
+    // bob(creator)连这一行都看不到
+    expect(ledger(tId, 200, bobId, false).some((r) => r.job_id === ja)).toBe(false);
   });
 
   it('[eng-review 1A] 参数不错位:带 created_by 过滤 + limit 同时,返回自己的前 N 条而非错位', () => {
@@ -172,8 +218,8 @@ describe('老资产 backfill(部署前建的资产迁移后原创作者仍可见
        WHERE created_by IS NULL AND id=?`,
     ).run(avId);
     // 回填后 alice(creator)能看到
-    expect(listCustom(tId, aliceId, false).map((a) => a.id)).toContain(avId);
-    expect(listCustom(tId, bobId, false).map((a) => a.id)).not.toContain(avId);
+    expect(listCustom(tId, aliceId).map((a) => a.id)).toContain(avId);
+    expect(listCustom(tId, bobId).map((a) => a.id)).not.toContain(avId);
   });
 });
 

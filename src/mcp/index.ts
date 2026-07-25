@@ -62,7 +62,7 @@ function buildMcpServer(actor: SubmitActor): McpServer {
   server.registerTool('get_job',
     { title: '查询任务', description: '按 job_id 查状态;完成后含产物签名下载 URL(默认 1h 有效,过期重查即可)。', inputSchema: { job_id: z.string() } },
     async ({ job_id }) => {
-      const job = getJobForTenant(job_id, actor.tenantId, actor.userId, actor.role === 'admin');
+      const job = getJobForTenant(job_id, actor.tenantId, actor.userId);
       if (!job) return err('任务不存在或无权访问', 'NOT_FOUND');
       const out: Record<string, unknown> = { job_id: job.id, status: job.status, type: job.type };
       if (job.status === 'done' && job.output_url) {
@@ -80,12 +80,12 @@ function buildMcpServer(actor: SubmitActor): McpServer {
     });
 
   server.registerTool('list_voices',
-    { title: '音色列表', description: '本机构可用音色(含预置);用其 ref 作 generate_speech 的 voice_ref。', inputSchema: {} },
-    async () => ok({ voices: [...listVoicePresets(), ...listVoices(actor.tenantId, actor.userId, actor.role === 'admin')] as unknown as unknown[] }));
+    { title: '音色列表', description: '本人可用音色(预置 + 自己创建的);用其 ref 作 generate_speech 的 voice_ref。', inputSchema: {} },
+    async () => ok({ voices: [...listVoicePresets(), ...listVoices(actor.tenantId, actor.userId)] as unknown as unknown[] }));
 
   server.registerTool('list_avatars',
-    { title: '形象列表', description: '本机构可用数字人形象(含预置)。', inputSchema: {} },
-    async () => ok({ avatars: [...listAvatarPresets(), ...listAvatars(actor.tenantId, actor.userId, actor.role === 'admin')] as unknown as unknown[] }));
+    { title: '形象列表', description: '本人可用数字人形象(预置 + 自己创建的)。', inputSchema: {} },
+    async () => ok({ avatars: [...listAvatarPresets(), ...listAvatars(actor.tenantId, actor.userId)] as unknown as unknown[] }));
 
   server.registerTool('estimate',
     { title: '费用预估', description: '提交前预估扣费(参数同 generate_*,加 type)。', inputSchema: { type: z.string(), prompt: z.string().optional(), text: z.string().optional(), count: z.number().int().optional(), model: z.string().optional(), resolution: z.string().optional(), duration: z.number().int().optional() } },

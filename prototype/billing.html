@@ -289,6 +289,9 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   // ── 「作品」列:UUID 死信息 → 看得懂的文案摘要 + 可点预览 ──
   // 有产物(有 output_kind=有成品)→ 蓝色可点链接(点开预览浮层);
   // grant 发放 / 生成中 / 失败 / 老 job 无产物 → 纯文本(文案摘要或工具名),无文案显「—」。
+  // 账号隔离(2026-07-25):管理员看他人的消费行时,后端把 taskTitle/outputKind 置 null
+  // (「只看账不看内容」),此处自然落到纯文本分支显工具名 —— 管理员知道花在哪个工具上,
+  // 但看不到提示词、也点不开成品。无需前端判角色。
   function workCell(l){
     const title = l.taskTitle || (l.toolType ? toolLabel(l.toolType) : '');
     if(l.job_id && l.outputKind && title){

@@ -5,7 +5,7 @@
 // 更新做"领取",等价于 Postgres 的 SELECT FOR UPDATE SKIP LOCKED。
 
 import { randomUUID } from 'node:crypto';
-import { db, scopeByActor, type JobChannel, type JobRow, type JobStatus } from '../db/index.js';
+import { db, scopeByOwner, type JobChannel, type JobRow, type JobStatus } from '../db/index.js';
 import { config } from '../config.js';
 import type { VideoGenInput } from '../gateway/types.js';
 import { translateProviderError } from '../gateway/provider-errors.js';
@@ -55,9 +55,15 @@ export function deleteJobRow(id: string): void {
   db.prepare(`DELETE FROM job WHERE id=?`).run(id);
 }
 
-/** 入队一个视频(AI 虚拟人)生成任务,返回 jobId。enqueueJob 的 video 便捷包装(向后兼容)。 */
-export function enqueueVideo(input: VideoGenInput, tenantId: string = config.defaultTenantId): string {
-  return enqueueJob('video', input, tenantId);
+/** 入队一个视频(AI 虚拟人)生成任务,返回 jobId。enqueueJob 的 video 便捷包装。
+ *  仅测试 / 内部脚本用 —— 生产提交一律走 api/jobs.ts 的 submitJob(必带真实 createdBy)。
+ *  createdBy 省略时写 NULL,该 job 归属为空 → 账号隔离下对所有人不可见(安全的失败方向)。 */
+export function enqueueVideo(
+  input: VideoGenInput,
+  tenantId: string = config.defaultTenantId,
+  createdBy: string | null = null,
+): string {
+  return enqueueJob('video', input, tenantId, createdBy);
 }
 
 /**
@@ -100,18 +106,18 @@ export function getJob(id: string): JobRow | undefined {
 }
 
 // 删除作品(租户 + 账号隔离)。生成中的任务不让删(防删掉正在跑的)。
-// admin 可删本机构任意作品(善后/审核);creator 仅删自己的。非本人非 admin → changes=0 → API 层 404。
-export function deleteJobForTenant(id: string, tenantId: string, actingUserId: string, isAdmin: boolean): boolean {
-  const scope = scopeByActor(actingUserId, isAdmin);
+// 只能删自己的 —— 管理员对他人作品无善后权(产品决策 2026-07-25)。非本人 → changes=0 → API 层 404。
+export function deleteJobForTenant(id: string, tenantId: string, actingUserId: string): boolean {
+  const scope = scopeByOwner(actingUserId);
   const res = db
     .prepare(`DELETE FROM job WHERE id=? AND tenant_id=?${scope.clause} AND status!='running'`)
     .run(id, tenantId, ...scope.params);
   return res.changes === 1;
 }
 
-// API 层用:租户 + 账号隔离。creator 仅取自己的;admin 取本机构任意。非本人非 admin → undefined → 路由 404。
-export function getJobForTenant(id: string, tenantId: string, actingUserId: string, isAdmin: boolean): JobRow | undefined {
-  const scope = scopeByActor(actingUserId, isAdmin);
+// API 层用:租户 + 账号隔离。只取自己的作品;他人作品(含管理员视角)→ undefined → 路由 404。
+export function getJobForTenant(id: string, tenantId: string, actingUserId: string): JobRow | undefined {
+  const scope = scopeByOwner(actingUserId);
   return db.prepare(`SELECT * FROM job WHERE id=? AND tenant_id=?${scope.clause}`).get(id, tenantId, ...scope.params) as
     | JobRow
     | undefined;
@@ -149,14 +155,13 @@ function jobFilterWhere(filter: JobListFilter): { clause: string; params: unknow
   return { clause: parts.length ? ' AND ' + parts.join(' AND ') : '', params };
 }
 
-// 列某租户的任务(作品库 / 各模块生成记录)。creator 仅自己的;admin 全机构(含 NULL 老数据)。
+// 列某租户的任务(作品库 / 各模块生成记录)。一律只列自己的 —— 管理员也看不到他人的生成记录。
 export function listJobsForTenant(
   tenantId: string,
   actingUserId: string,
-  isAdmin: boolean,
   filter: JobListFilter = {},
 ): JobRow[] {
-  const scope = scopeByActor(actingUserId, isAdmin);
+  const scope = scopeByOwner(actingUserId);
   const f = jobFilterWhere(filter);
   const limit = Math.min(100, Math.max(1, filter.limit ?? 50));
   const offset = Math.max(0, filter.offset ?? 0);
@@ -171,10 +176,9 @@ export function listJobsForTenant(
 export function countJobsForTenant(
   tenantId: string,
   actingUserId: string,
-  isAdmin: boolean,
   filter: JobListFilter = {},
 ): number {
-  const scope = scopeByActor(actingUserId, isAdmin);
+  const scope = scopeByOwner(actingUserId);
   const f = jobFilterWhere(filter);
   const row = db
     .prepare(`SELECT COUNT(*) AS n FROM job WHERE tenant_id=?${scope.clause}${f.clause}`)
@@ -233,13 +237,12 @@ export function markFailed(id: string, error: string): void {
 
 /**
  * 用户重试:failed → queued 重新入队。
- * 传 tenantId 时强制租户隔离(API 层必传);省略时不限租户(测试/内部用)。
+ * 传 tenantId 时强制租户隔离 + 账号隔离(API 层必传 tenantId + actingUserId);
+ * 省略 tenantId 时不限(测试/内部用)。只能重试自己的作品,管理员亦然。
  */
-// 用户重试:failed → queued。传 tenantId 时强制租户隔离 + 账号隔离(API 必传 actingUserId/isAdmin);
-// 省略 tenantId 时不限(测试/内部)。admin 可重试本机构任意;creator 仅自己的。
-export function retryJob(id: string, tenantId?: string, actingUserId?: string, isAdmin?: boolean): boolean {
+export function retryJob(id: string, tenantId?: string, actingUserId?: string): boolean {
   if (tenantId) {
-    const scope = actingUserId !== undefined ? scopeByActor(actingUserId, !!isAdmin) : { clause: '', params: [] as string[] };
+    const scope = actingUserId !== undefined ? scopeByOwner(actingUserId) : { clause: '', params: [] as string[] };
     const res = db
       .prepare(
         `UPDATE job SET status='queued', error=NULL, progress=0, updated_at=? WHERE id=? AND tenant_id=?${scope.clause} AND status='failed'`,

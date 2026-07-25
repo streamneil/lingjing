@@ -576,7 +576,12 @@ function summarizeJobInput(toolType: string | null | undefined, inputJson: strin
 /** 消费记录(可查询/导出,验收第H3)。 */
 /** 消费明细 + 归属 + 关联作品:LEFT JOIN job(取工具 type / 文案 / 产物类型)+ user(取消费人名)。
  *  归属与作品摘要经 JOIN + input_json 解析派生(一次查询,前端不用 N 次 getJob),不冗余存 ledger;
- *  grant 行无 job_id → toolType/userName/taskTitle 空;老 job 的 created_by NULL → userName 空(前端显「—」)。 */
+ *  grant 行无 job_id → toolType/userName/taskTitle 空;老 job 的 created_by NULL → userName 空(前端显「—」)。
+ *
+ *  隔离口径「只看账不看内容」(产品决策 2026-07-25):
+ *    行的可见性 —— admin 看全机构(机构要管预算,得知道谁花了多少);creator 只看自己 + grant。
+ *    行的内容   —— taskTitle(提示词摘要)与 outputKind(可点开预览成品)只对**本人**下发。
+ *  两者是不同的闸门:admin 能看见「张三 · AI 图片 · 36 积分」,但看不到他生成了什么、也点不开。 */
 export function ledger(
   tenantId: string,
   limit = 100,
@@ -594,6 +599,7 @@ export function ledger(
     .prepare(
       `SELECT l.*, j.type AS toolType, j.input_json AS jobInput,
               j.output_kind AS jobOutputKind, j.output_url AS jobOutput,
+              j.created_by AS jobOwner,
               COALESCE(u.display_name, u.username) AS userName
          FROM credit_ledger l
          LEFT JOIN job j ON l.job_id = j.id
@@ -605,15 +611,22 @@ export function ledger(
     jobInput?: string | null;
     jobOutputKind?: string | null;
     jobOutput?: string | null;
+    jobOwner?: string | null;
   })[];
   // 解析放在 JS 层:SQLite 不便解 JSON,且解析逻辑要与各工具字段口径对齐(summarizeJobInput)。
-  return rows.map(({ jobInput, jobOutputKind, jobOutput, ...r }) => ({
-    ...r,
-    taskTitle: summarizeJobInput(r.toolType, jobInput),
-    // outputKind 只在有成品(output_url 非空)时暴露 → 前端据此判断「可点预览」。
-    // output_kind 列有 DEFAULT 'video',queued/failed 行也非空,故不能用它判产物;以 output_url 为准。
-    outputKind: jobOutput ? jobOutputKind ?? null : null,
-  }));
+  return rows.map(({ jobInput, jobOutputKind, jobOutput, jobOwner, ...r }) => {
+    // 内容闸门:只有本人才拿得到文案摘要与产物入口。actingUserId 缺省(内部调用/导出脚本)时不放行,
+    // 宁可少给也不越权 —— 少给的表现是前端回退显工具名,越权的表现是提示词泄漏。
+    const isOwn = !!actingUserId && !!jobOwner && jobOwner === actingUserId;
+    return {
+      ...r,
+      taskTitle: isOwn ? summarizeJobInput(r.toolType, jobInput) : null,
+      // outputKind 只在有成品(output_url 非空)时暴露 → 前端据此判断「可点预览」。
+      // output_kind 列有 DEFAULT 'video',queued/failed 行也非空,故不能用它判产物;以 output_url 为准。
+      // 他人行恒为 null:即便前端被改也点不开,真正的闸门在 /api/jobs/:id(getJobForTenant 会 404)。
+      outputKind: isOwn && jobOutput ? jobOutputKind ?? null : null,
+    };
+  });
 }
 
 /** 消费明细总条数(分页用;与 ledger() 同隔离口径)。 */
