@@ -961,10 +961,82 @@ jobsRouter.post('/jobs', requireRole('admin', 'creator'), async (req: Request, r
   return res.status(r.reused ? 200 : 202).json({ id: r.id, status: r.status, cost: r.cost });
 });
 
-// ── 图生图输入图上传 ──
-// 仅 admin/creator。授权门票(/plan-ceo-review B4 + 外部声音 P1):含人输入图编辑=深度合成真人,
-// 必须 consent + proof,与形象上传同等合规——绝不弱化护城河。
-// images[] 1-3 张,落 MinIO 存 key,每张写 authorization 行(subject_type='image-edit'),返回 key 数组。
+// ── 图生图输入图上传(核心)──
+// 授权门票(/plan-ceo-review B4 + 外部声音 P1):含人输入图编辑=深度合成真人,必须 consent + proof,
+// 与形象上传同等合规——绝不弱化护城河。
+// images[] 1-9 张,落 MinIO 存 key,每张写 authorization 行(subject_type='image-edit'),返回 key 数组。
+//
+// 抽成函数供两个入口共用(REST /image-uploads 与 MCP upload_image):校验/存证/落库只有一份实现,
+// 杜绝「网页严、Agent 松」的合规漂移 —— 这是深度合成的法律门票,两条路必须逐字一致。
+export type UploadFile = { buffer: Buffer; mimetype: string; originalname: string; size: number };
+export type StoreImageInputsActor = { tenantId: string; userId: string; ip: string | null; apiKeyId?: string | null };
+export type StoreImageInputsResult =
+  | { ok: true; imageRefs: string[] }
+  | { ok: false; status: number; error: string };
+
+// 百炼图生图支持(qwen-image-edit 文档):JPEG/PNG/WEBP/BMP/TIFF/GIF;不含 HEIC。
+const OK_INPUT_IMG = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/bmp', 'image/tiff', 'image/gif']);
+
+/** 存储 key 的扩展名:只收 [a-z0-9]{1,8},其余一律回落默认值。
+ *  originalname 是调用方完全可控的字符串(multipart 文件名 / MCP 的 filename 字段),不过滤则
+ *  `split('.').pop()` 能产出 '/'、'..'、超长片段并被拼进对象 key。不构成跨租户逃逸(对象存储不
+ *  解析 '..',且 checkRefsOwned 仍按 `image-inputs/<tid>/` 前缀校验),但会写出畸形 key,超长时
+ *  撞 MinIO 1024 字节 key 上限直接 500。扩展名只用于可读性,回落默认零损失。 */
+function safeExt(originalname: string, fallback: string): string {
+  const raw = (originalname.split('.').pop() || '').toLowerCase();
+  return /^[a-z0-9]{1,8}$/.test(raw) ? raw : fallback;
+}
+
+export async function storeImageInputs(
+  actor: StoreImageInputsActor,
+  images: UploadFile[],
+  consent: boolean,
+  proof?: UploadFile,
+): Promise<StoreImageInputsResult> {
+  const tid = actor.tenantId;
+  if (images.length === 0) return { ok: false, status: 400, error: '缺少图片(images)' };
+  if (images.length > 9) return { ok: false, status: 400, error: '最多 9 张输入图' };
+  // 防御纵深:前端已拦 HEIC/非支持格式/超 10MB,但客户端可绕过 → 后端再校验一遍。
+  for (const img of images) {
+    if (/heic|heif/i.test(img.mimetype) || /\.heic$|\.heif$/i.test(img.originalname))
+      return { ok: false, status: 400, error: '暂不支持 HEIC,请上传 JPG/PNG/WEBP' };
+    if (!OK_INPUT_IMG.has(img.mimetype))
+      return { ok: false, status: 400, error: `不支持的格式 ${img.mimetype || '未知'},请用 JPG/PNG/WEBP` };
+    if (img.size > 10 * 1024 * 1024)
+      return { ok: false, status: 400, error: '单张图片不能超过 10MB' };
+  }
+  // 授权门票:含人输入图必须授权(同形象上传)
+  if (!consent) {
+    return { ok: false, status: 400, error: '必须勾选"已获图中人物授权"(政企合规)' };
+  }
+
+  try {
+    // 授权凭证(可选上传):落 MinIO
+    let proofKey: string | undefined;
+    if (proof) {
+      proofKey = `authorizations/${tid}/${randomUUID()}.${safeExt(proof.originalname, 'bin')}`;
+      await putObject(proofKey, proof.buffer, proof.mimetype);
+    }
+    const keys: string[] = [];
+    for (const img of images) {
+      const key = `image-inputs/${tid}/${randomUUID()}.${safeExt(img.originalname, 'png')}`;
+      await putObject(key, img.buffer, img.mimetype);
+      // 每张输入图写授权存证行(subject_type='image-edit',可举证同意的条款版本)
+      db.prepare(
+        `INSERT INTO authorization (id,tenant_id,subject_type,consent,proof_key,terms_version,created_by,created_at)
+         VALUES (?,?,?,?,?,?,?,?)`,
+      ).run(randomUUID(), tid, 'image-edit', 1, proofKey ?? null, 'v1', actor.userId, Date.now());
+      keys.push(key);
+    }
+    // 审计记 key id → 记录卡/审计页能区分「本人网页传的」还是「Agent 传的」。
+    writeAudit(tid, actor.userId, 'upload_image_input', keys[0]!, actor.ip, 'user', undefined, actor.apiKeyId ?? null);
+    return { ok: true, imageRefs: keys };
+  } catch (e) {
+    return { ok: false, status: 500, error: e instanceof Error ? e.message : '上传失败' };
+  }
+}
+
+// REST 入口:仅 admin/creator。薄壳 —— multipart 解析 → storeImageInputs → 映射 HTTP。
 jobsRouter.post(
   '/image-uploads',
   requireRole('admin', 'creator'),
@@ -974,54 +1046,14 @@ jobsRouter.post(
   ]),
   async (req: Request, res: Response) => {
     const files = req.files as Record<string, Express.Multer.File[]> | undefined;
-    const images = files?.images ?? [];
-    const proof = files?.proof?.[0];
-    const consent = req.body?.consent === 'true' || req.body?.consent === true;
-    const tid = req.user!.tenantId;
-
-    if (images.length === 0) return res.status(400).json({ error: '缺少图片(images)' });
-    if (images.length > 9) return res.status(400).json({ error: '最多 9 张输入图' });
-    // 防御纵深:前端已拦 HEIC/非支持格式/超 10MB,但客户端可绕过 → 后端再校验一遍。
-    // 百炼图生图支持(qwen-image-edit 文档):JPEG/PNG/WEBP/BMP/TIFF/GIF;不含 HEIC。
-    const OK_IMG = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/bmp', 'image/tiff', 'image/gif']);
-    for (const img of images) {
-      if (/heic|heif/i.test(img.mimetype) || /\.heic$|\.heif$/i.test(img.originalname))
-        return res.status(400).json({ error: '暂不支持 HEIC,请上传 JPG/PNG/WEBP' });
-      if (!OK_IMG.has(img.mimetype))
-        return res.status(400).json({ error: `不支持的格式 ${img.mimetype || '未知'},请用 JPG/PNG/WEBP` });
-      if (img.size > 10 * 1024 * 1024)
-        return res.status(400).json({ error: '单张图片不能超过 10MB' });
-    }
-    // 授权门票:含人输入图必须授权(同形象上传)
-    if (!consent) {
-      return res.status(400).json({ error: '必须勾选"已获图中人物授权"(政企合规)' });
-    }
-
-    try {
-      // 授权凭证(可选上传):落 MinIO
-      let proofKey: string | undefined;
-      if (proof) {
-        const pext = (proof.originalname.split('.').pop() || 'bin').toLowerCase();
-        proofKey = `authorizations/${tid}/${randomUUID()}.${pext}`;
-        await putObject(proofKey, proof.buffer, proof.mimetype);
-      }
-      const keys: string[] = [];
-      for (const img of images) {
-        const ext = (img.originalname.split('.').pop() || 'png').toLowerCase();
-        const key = `image-inputs/${tid}/${randomUUID()}.${ext}`;
-        await putObject(key, img.buffer, img.mimetype);
-        // 每张输入图写授权存证行(subject_type='image-edit',可举证同意的条款版本)
-        db.prepare(
-          `INSERT INTO authorization (id,tenant_id,subject_type,consent,proof_key,terms_version,created_by,created_at)
-           VALUES (?,?,?,?,?,?,?,?)`,
-        ).run(randomUUID(), tid, 'image-edit', 1, proofKey ?? null, 'v1', req.user!.id, Date.now());
-        keys.push(key);
-      }
-      audit(req, 'upload_image_input', keys[0]!);
-      return res.status(201).json({ imageRefs: keys });
-    } catch (e) {
-      return res.status(500).json({ error: e instanceof Error ? e.message : '上传失败' });
-    }
+    const r = await storeImageInputs(
+      { tenantId: req.user!.tenantId, userId: req.user!.id, ip: clientIpOf(req), apiKeyId: req.apiKeyId ?? null },
+      files?.images ?? [],
+      req.body?.consent === 'true' || req.body?.consent === true,
+      files?.proof?.[0],
+    );
+    if (!r.ok) return res.status(r.status).json({ error: r.error });
+    return res.status(201).json({ imageRefs: r.imageRefs });
   },
 );
 
