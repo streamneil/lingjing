@@ -109,6 +109,18 @@ const API_SCOPE_ALLOW_GET: RegExp[] = [
   /^\/api\/avatars(\/|$)/,
 ];
 
+// 403 里回给调用方的可用端点清单。守卫全局挂在路由**之前**,故不存在的路径也照样 403(不会走到 404)——
+// 只回「无权访问」会让 Agent 把「路径写错」误判成「密钥 scope 不够」,进而去找人要权限而不是改调用
+// (v0.8.0.7 真实事故:Agent 想传图生图参考图,撞 403 后报「key 只开了 MCP」,实则 image-uploads 一直是放行的)。
+// 故把白名单直接回给它:能自我纠正的错误,才是对 Agent 有用的错误。
+const API_SCOPE_HINT = [
+  'POST /api/jobs(提交生成)· GET /api/jobs/{id}(查结果)',
+  'POST /api/image-uploads · /api/video-uploads · /api/audio-uploads(上传参考素材,multipart,需 consent=true)',
+  'GET /api/image-models · /api/video-models 等(模型列表)',
+  'GET /api/voices · /api/avatars(只读:音色/形象发现;形象需在灵镜后台创建)',
+  'GET /api/credits/balance(查余额)',
+];
+
 /** Open API key 作用域守卫:viaApiKey 请求只放行生成面,其余 /api/* → 403。
  *  非 key 请求(cookie session / 公开接口)完全不受影响。 */
 export function requireApiScope(req: Request, res: Response, next: NextFunction): void {
@@ -116,7 +128,11 @@ export function requireApiScope(req: Request, res: Response, next: NextFunction)
   const p = req.path;
   if (API_SCOPE_ALLOW.some((re) => re.test(p))) return next();
   if (req.method === 'GET' && API_SCOPE_ALLOW_GET.some((re) => re.test(p))) return next();
-  res.status(403).json({ error: 'API 密钥无权访问此接口', code: 'SCOPE_FORBIDDEN' });
+  res.status(403).json({
+    error: `API 密钥无权访问此接口(${req.method} ${p})。注意:不存在的路径也会返回本错误,请先核对下方可用端点清单。`,
+    code: 'SCOPE_FORBIDDEN',
+    allowed: API_SCOPE_HINT,
+  });
 }
 
 /** 要求已登录。 */
