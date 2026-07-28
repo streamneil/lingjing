@@ -11,7 +11,7 @@
 // ffprobe 走 mock:CI 容器不保证有 ffmpeg,而时长是计费真相 —— 要测的是「路由怎么用探测结果」,
 // 不是 ffmpeg 本身。probeVideoMeta 用 importOriginal 保留其余导出(worker/avatars 也从这里拿函数)。
 
-import { describe, it, expect, beforeAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 
 process.env.DB_FILE = ':memory:';
 process.env.DASHSCOPE_API_KEY = 'sk-test';
@@ -48,6 +48,9 @@ const { Client } = await import('./helpers.js');
 
 const app = createApp();
 const rest = new Client(app);
+// probeResult 是模块级可变状态,用例内改完若中途抛错就不会复原,后续用例会全线
+// 「无法解析视频」把真正的失败埋掉。统一在 afterEach 复位,而不是逐个 await 后手动还原。
+afterEach(() => { probeResult = { duration: 8, width: 1920, height: 1080 }; });
 
 let key = '';
 let tId = '';
@@ -269,7 +272,7 @@ describe('R5 — 内容寻址:重传不产生孤儿对象、不叠加存证行',
     expect(a.body.videoRef).not.toBe(b.body.videoRef);
   });
 
-  it('音频重传 → 同一个 audioRef(音频无存证行,只验对象不重复)', async () => {
+  it('音频重传 → 同一个 audioRef,且 audio-ref 存证行不叠加(与视频同口径)', async () => {
     const clip = Buffer.concat([MP3, Buffer.from('r5-audio')]);
     const up = () => rest.postMultipart(
       '/api/audio-uploads', { consent: 'true' },
@@ -277,9 +280,12 @@ describe('R5 — 内容寻址:重传不产生孤儿对象、不叠加存证行',
     );
     const first = await up();
     const objsBefore = mem.size;
-    const second = await up();
+    const authBefore = authCount('audio-ref');
+    const second = await up(); // 模拟客户端库自动重试
     expect(second.body.audioRef).toBe(first.body.audioRef);
     expect(mem.size).toBe(objsBefore);
+    // 少了这一条,把 insertAuthOnce 换成裸 INSERT 也全绿 —— 一次授权事件写两份证据
+    expect(authCount('audio-ref'), '音频侧的存证去重没生效').toBe(authBefore);
   });
 
   it('每个落盘视频对象都有 subject_key 指向它的存证行(合规不变量)', async () => {

@@ -26,7 +26,7 @@ import { resolveApiKeyFull } from '../auth/api-keys.js';
 import type { AuthedUser } from '../auth/index.js';
 import { SlidingWindowLimiter } from '../auth/rate-limit.js';
 import {
-  submitJob, quoteJob, storeImageInputs, storeVideoInput, storeAudioInput,
+  submitJob, quoteJob, storeImageInputs, storeVideoInput, storeAudioInput, clientIpOf,
   listEnabledImageModels, projectImageModel, projectT2VModel, projectI2VModel, projectR2VModel, projectEditModel,
   type SubmitActor, type UploadFile,
 } from '../api/jobs.js';
@@ -71,7 +71,18 @@ const CODE = {
   // 声称「与 api-docs §9 同一张表」——漏一个,Agent 就会拿到一个文档里查不到的码。
   INSUFFICIENT_CREDITS: 'INSUFFICIENT_CREDITS', // 402 余额不足                            不重试(充值后)
   IDEMPOTENCY_CONFLICT: 'IDEMPOTENCY_CONFLICT', // 409 同幂等键但请求体不同                不重试(换键)
+  INTERNAL_ERROR: 'INTERNAL_ERROR',          // 500 服务端未预期异常                     是(退避)
 } as const;
+
+/** 只读工具:限速走读档(300/min),与 api-docs §7 和各工具的 readOnlyHint 保持一致。
+ *  改这里时记得同步 buildMcpServer 里对应工具的 annotations —— 两处说的必须是同一件事。 */
+// JSON-RPC batch 的硬上限。MCP 客户端(Claude Code / Cursor)实际都发单条,给 20 是给
+// 未来的批量客户端留余地,同时把「一个请求扇出十万次提交」这条路堵死。
+const MAX_BATCH_MESSAGES = 20;
+
+const READ_ONLY_TOOL_NAMES = new Set([
+  'get_job', 'list_jobs', 'get_balance', 'list_models', 'list_voices', 'list_avatars', 'estimate',
+]);
 
 type ToolText = { content: { type: 'text'; text: string }[]; structuredContent?: Record<string, unknown>; isError?: boolean };
 const ok = (data: Record<string, unknown>): ToolText => ({ content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: data });
@@ -652,7 +663,7 @@ function instructionsFor(uploadMB: number): string {
     '请改参数、换一个 idempotency_key,或告知用户充值;',
     '只有 RATE_LIMITED 和 UPLOAD_FAILED 值得指数退避后重试。',
     '',
-    '合规红线(不可绕过):含真人的图片 / 视频必须持有被摄主体授权,上传时传 consent=true,',
+    '合规红线(不可绕过):含真人的图片 / 视频 / 音频都必须持有被摄主体或本人授权,上传时传 consent=true,',
     '责任主体是调用方机构。生成内容受平台审核约束 —— 审核拒绝不在提交时报错,而是任务落为 failed,',
     '原因在 get_job 的 error 字段里。',
     '',
@@ -710,6 +721,22 @@ mcpRouter.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
+// ── body 上限解析(要放在字节闸之前:闸子拿它给未声明长度的请求记账,并据此定人头上限)──
+const RAW_BODY_LIMIT = process.env.MCP_BODY_LIMIT || '';
+const MCP_BODY_LIMIT = /^\d+(\.\d+)?(b|kb|mb|gb)$/i.test(RAW_BODY_LIMIT) ? RAW_BODY_LIMIT : '32mb';
+if (RAW_BODY_LIMIT && RAW_BODY_LIMIT !== MCP_BODY_LIMIT) {
+  console.warn(`[MCP] MCP_BODY_LIMIT="${RAW_BODY_LIMIT}" 格式非法(应形如 32mb),已回落 ${MCP_BODY_LIMIT}`);
+}
+// 单个素材的**有效**上限 = min(工具自己的 20MB, body 上限 × 0.75)。运维把 MCP_BODY_LIMIT 调小时,
+// 工具描述里写死的 "20MB" 就成了假话 —— Agent 会照着 20MB 传然后吃 413,且不知道为什么。
+// 故算出来写进 description 与 instructions,不写字面量。
+const BODY_LIMIT_BYTES = ((): number => {
+  const m = /^(\d+(?:\.\d+)?)(b|kb|mb|gb)$/i.exec(MCP_BODY_LIMIT);
+  const unit = { b: 1, kb: 1024, mb: 1024 ** 2, gb: 1024 ** 3 }[(m?.[2] || 'mb').toLowerCase()]!;
+  return Math.round(Number(m?.[1] ?? 32) * unit);
+})();
+const EFFECTIVE_UPLOAD_MB = Math.max(1, Math.floor(Math.min(MAX_MEDIA_BYTES, BODY_LIMIT_BYTES * 0.75) / (1024 * 1024)));
+
 // ── 并发在飞字节闸(必须也在 parser 之前)──
 // 上面的粗闸管的是**频率**(次/分钟),管不了**同时有多少字节在内存里**。加了两条 20MB 上传路径后,
 // 单个已鉴权请求的常态足迹就是几十 MB;速率闸允许 300 次/分钟/密钥,完全放得下十几路并发大上传
@@ -727,6 +754,19 @@ const MCP_INFLIGHT_BYTES = ((): number => {
   return Math.round(Number(m[1]) * (m[2]!.toLowerCase() === 'gb' ? 1024 ** 3 : 1024 ** 2));
 })();
 let inflightBytes = 0;
+// 除了全局预算,还要一道**每密钥**上限。原因是上面那条「未声明长度按 body 上限记账」的
+// 保守修法自带一个副作用:一个 chunked 请求无论实际多小都按 32mb 记 —— 128mb 全局预算
+// 只够四个。计数器又是进程全局、不分租户,Node 默认 requestTimeout 还有 300 秒,
+// 于是任一客户开四条 chunked 连接慢慢吐字节,就能把**全平台**的 /mcp 堵死五分钟,
+// 而两道速率闸都看不见(它们数的是「几次」,不是「同时占了多少」)。
+// 加人头闸后爆炸半径从「全平台」缩到「该密钥自己」。配套的 requestTimeout 见 server.ts。
+const perKeyInflight = new Map<string, number>();
+// 下界必须是 body 上限:低于它,一个**完全合法的满尺寸请求**就永远发不出去 ——
+// 闸子在拦自己允许的东西。所以取 max(body 上限, 全局/4):
+//   · 默认配置(32mb body / 128mb 全局)→ 32mb,单密钥同时只占得下一个满尺寸请求;
+//     那正是要挡的场景(四条 chunked 吃满全局),而合法的大上传不受影响。
+//   · 全局预算调得比 body 上限还小时,人头闸自然失效、由全局闸兜底(配置本身不自洽)。
+const PER_KEY_INFLIGHT_MAX = Math.max(BODY_LIMIT_BYTES, Math.floor(MCP_INFLIGHT_BYTES / 4));
 mcpRouter.use((req: Request, res: Response, next: NextFunction) => {
   // Content-Length 缺失(Transfer-Encoding: chunked)时**按 body 上限记账**,不能当 0。
   // 实测过:算 0 的话十路并发 26.7MB 的 chunked 上传全部放行,同样字节带 Content-Length 则被拦 ——
@@ -734,7 +774,9 @@ mcpRouter.use((req: Request, res: Response, next: NextFunction) => {
   // 预算紧时被 429 退避),不可少算(免费绕过)。
   const declared = Number(req.headers['content-length']);
   const len = Number.isFinite(declared) && declared > 0 ? declared : BODY_LIMIT_BYTES;
-  if (inflightBytes + len > MCP_INFLIGHT_BYTES) {
+  const keyId = req.mcpKey!.keyId; // 前置鉴权中间件保证非空
+  const mine = perKeyInflight.get(keyId) ?? 0;
+  if (inflightBytes + len > MCP_INFLIGHT_BYTES || mine + len > PER_KEY_INFLIGHT_MAX) {
     res.set('Retry-After', '2').status(429).json({
       error: '服务端上传通道繁忙(并发数据量已达上限),请退避 2 秒后重试',
       code: CODE.RATE_LIMITED,
@@ -742,8 +784,16 @@ mcpRouter.use((req: Request, res: Response, next: NextFunction) => {
     return;
   }
   inflightBytes += len;
+  perKeyInflight.set(keyId, mine + len);
   let released = false;
-  const release = () => { if (!released) { released = true; inflightBytes -= len; } };
+  const release = () => {
+    if (released) return;
+    released = true;
+    inflightBytes -= len;
+    const left = (perKeyInflight.get(keyId) ?? len) - len;
+    // 归零就删键,否则 Map 会随密钥数无限长(每把用过的密钥留一个 0 条目)
+    if (left > 0) perKeyInflight.set(keyId, left); else perKeyInflight.delete(keyId);
+  };
   res.on('close', release);
   res.on('finish', release);
   next();
@@ -754,21 +804,6 @@ mcpRouter.use((req: Request, res: Response, next: NextFunction) => {
 // 注:base64 比原始字节大 ~33%,故 32mb 约等于 24MB 原始文件。
 // 格式必须校验:body-parser 用 bytes.parse(),解析不出的值返回 null = **不设上限**,
 // 一个 env 里的错别字就会静默关掉整个上限闸,而不是报错。宁可回落默认。
-const RAW_BODY_LIMIT = process.env.MCP_BODY_LIMIT || '';
-const MCP_BODY_LIMIT = /^\d+(\.\d+)?(b|kb|mb|gb)$/i.test(RAW_BODY_LIMIT) ? RAW_BODY_LIMIT : '32mb';
-if (RAW_BODY_LIMIT && RAW_BODY_LIMIT !== MCP_BODY_LIMIT) {
-  console.warn(`[MCP] MCP_BODY_LIMIT="${RAW_BODY_LIMIT}" 格式非法(应形如 32mb),已回落 ${MCP_BODY_LIMIT}`);
-}
-// 单个素材的**有效**上限 = min(工具自己的 20MB, body 上限 × 0.75)。运维把 MCP_BODY_LIMIT 调小时,
-// 工具描述里写死的 "20MB" 就成了假话 —— Agent 会照着 20MB 传然后吃 413,且不知道为什么。
-// 故算出来写进 description 与 instructions,不写字面量。
-const BODY_LIMIT_BYTES = ((): number => {
-  const m = /^(\d+(?:\.\d+)?)(b|kb|mb|gb)$/i.exec(MCP_BODY_LIMIT);
-  const unit = { b: 1, kb: 1024, mb: 1024 ** 2, gb: 1024 ** 3 }[(m?.[2] || 'mb').toLowerCase()]!;
-  return Math.round(Number(m?.[1] ?? 32) * unit);
-})();
-const EFFECTIVE_UPLOAD_MB = Math.max(1, Math.floor(Math.min(MAX_MEDIA_BYTES, BODY_LIMIT_BYTES * 0.75) / (1024 * 1024)));
-
 mcpRouter.use(express.json({ limit: MCP_BODY_LIMIT }));
 // 超限兜底:express.json 默认抛 HTML 错误页,Agent 拿到一坨 HTML 只能瞎猜。
 // 转成明确的 JSON + 可执行建议。文案不能只说「减少图片张数」—— 视频上传本来就只有一个文件,
@@ -799,22 +834,71 @@ mcpRouter.use((e: unknown, _req: Request, res: Response, next: NextFunction) => 
 // stateless:认证/粗闸/字节闸已在 parser 前置中间件完成 → 精确读写限速 → 新建 server+transport → handleRequest。
 mcpRouter.post('/', async (req: Request, res: Response) => {
   const viaKey = req.mcpKey!; // 前置中间件保证非空(不通过者已被 401/403/429 拦下)
-  // tools/call 走写限速,其余(initialize/tools/list)走读限速。best-effort 从 body 判定 method。
-  const method = (req.body as { method?: string } | undefined)?.method ?? '';
-  const limiter = method === 'tools/call' ? writeLimiter : readLimiter;
-  if (!limiter.allow(viaKey.keyId)) {
-    res.status(429).json({ error: '请求过于频繁,请稍后重试', code: CODE.RATE_LIMITED });
+  // 只给 /mcp 设请求超时(不全局设:REST 侧的 100MB 上传合法地要跑 80–160 秒)。
+  // 这里的请求体上限是 32mb 且已被并发字节闸记账,一条卡住的连接会一直占着那份额度 ——
+  // Node 默认 300 秒太长,60 秒足够任何一次内联上传。
+  req.setTimeout(60_000);
+  // ── 限速分档 ──
+  // 两件事必须同时做对,漏一件就等于没有写限速:
+  //
+  // ① 按**工具**分,不能只按 JSON-RPC method 分。get_job / list_jobs / get_balance / list_*
+  //    也都是 tools/call,但它们是读 —— 而 instructions 恰恰叫 Agent 每 5 秒轮一次 get_job。
+  //    全算写的话,盯 5 个视频任务光轮询就吃满 60/min 的生成配额,一次生成都发不出去。
+  //
+  // ② **JSON-RPC 允许 body 是数组(batch)**,而我们用的 transport 确实会逐条派发
+  //    (streamableHttp 内部包的是 WebStandardStreamableHTTPServerTransport,它 Array.isArray 后循环)。
+  //    数组上取 body.method 是 undefined —— 只按单条对象分类的话,一个装了 N 条 generate_* 的
+  //    数组会被判成「一次读」放行,然后在里面跑 N 次真实提交:写限速形同虚设,余额可被一口气抽干,
+  //    事件循环被钉住(worker 同进程)。而且 stateless 下不需要先 initialize 就能打。
+  //    所以:逐条分类、逐条计数,并给批量长度设硬上限。
+  const raw = req.body as unknown;
+  const msgs: { method?: string; params?: { name?: string } }[] =
+    Array.isArray(raw) ? raw as { method?: string; params?: { name?: string } }[]
+      : [ (raw ?? {}) as { method?: string; params?: { name?: string } } ];
+  if (msgs.length > MAX_BATCH_MESSAGES) {
+    res.status(413).json({
+      error: `单次请求最多 ${MAX_BATCH_MESSAGES} 条 JSON-RPC 消息,请拆分后重发`,
+      code: CODE.PAYLOAD_TOO_LARGE,
+    });
     return;
+  }
+  const isWriteMsg = (m: { method?: string; params?: { name?: string } }): boolean => {
+    if ((m?.method ?? '') !== 'tools/call') return false;
+    const name = m?.params?.name;
+    // 取不到工具名(畸形/缺失)时算写:保守方向,宁可严不可松。
+    return !(typeof name === 'string' && READ_ONLY_TOOL_NAMES.has(name));
+  };
+  for (const m of msgs) {
+    const limiter = isWriteMsg(m) ? writeLimiter : readLimiter;
+    if (!limiter.allow(viaKey.keyId)) {
+      res.status(429).json({ error: '请求过于频繁,请稍后重试', code: CODE.RATE_LIMITED });
+      return;
+    }
   }
 
   const actor: SubmitActor = {
     tenantId: viaKey.user.tenantId, userId: viaKey.user.id, role: viaKey.user.role,
-    ip: null, apiKeyId: viaKey.keyId,
+    // 取真实客户端 IP。此前写死 null,导致**整个 Agent 面**的审计行与授权存证都没有来源 ——
+    // 而这恰恰是最需要溯源的一面(密钥可能泄漏、调用方不是本人在操作)。
+    // app 已配 trust proxy,clientIpOf 与 REST 侧同一口径。
+    ip: clientIpOf(req), apiKeyId: viaKey.keyId,
     channel: 'mcp', // 此端点只服务 MCP → 提交的 job 标 mcp,记录卡显「MCP 创建」
   };
   const server = buildMcpServer(actor, EFFECTIVE_UPLOAD_MB);
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined }); // stateless
   res.on('close', () => { transport.close(); server.close(); });
-  await server.connect(transport);
-  await transport.handleRequest(req, res, req.body);
+  // 必须包 try/catch:express 4 不捕获 async handler 的拒绝,漏出去就是 unhandledRejection,
+  // 而 Node 默认对它 **退出进程** —— 本进程同时跑着 worker(server.ts 里 startWorker),
+  // 一个客户端中途断开就能把全平台在跑的生成任务一起带走。
+  // 触发路径不假设:res.on('close') 在两个 await 之前就注册了,客户端 abort 会先 close 掉
+  // transport,随后的 connect/handleRequest 就在一个已关闭的 transport 上操作。
+  try {
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+  } catch (e) {
+    console.error('[MCP] handleRequest 失败', e);
+    if (!res.headersSent) {
+      res.status(500).json({ error: '服务端内部错误,请稍后重试', code: CODE.INTERNAL_ERROR });
+    }
+  }
 });

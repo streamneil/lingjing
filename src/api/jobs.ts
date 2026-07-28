@@ -856,7 +856,7 @@ const JOB_BUILDERS: Record<
   });
 
 /** 取客户端 IP(供 submitJob 审计;与 audit 模块内部同口径:X-Forwarded-For 首段 → socket)。 */
-function clientIpOf(req: Request): string | null {
+export function clientIpOf(req: Request): string | null {
   const xf = req.headers['x-forwarded-for'];
   if (typeof xf === 'string') return xf.split(',')[0]!.trim();
   return req.socket?.remoteAddress ?? null;
@@ -1125,7 +1125,10 @@ export async function storeImageInputs(
     writeAudit(tid, actor.userId, 'upload_image_input', keys[0]!, actor.ip, 'user', undefined, actor.apiKeyId ?? null);
     return { ok: true, imageRefs: keys };
   } catch (e) {
-    return { ok: false, status: 500, error: e instanceof Error ? e.message : '上传失败' };
+    // 同 storeVideoInput/storeAudioInput:厂商错误里带 endpoint/bucket/region/requestId,
+    // 经 MCP 会原样递给持密钥方 —— 细节只进日志。
+    console.error('[storeImageInputs] 落盘失败', e);
+    return { ok: false, status: 500, error: '存储写入失败,请稍后重试' };
   }
 }
 
@@ -1162,15 +1165,25 @@ jobsRouter.post(
 //           └──────────┬────────────────────────┘
 //                      ▼
 //        storeVideoInput(actor, src, consent)
-//          const own = !src.path                  ← 所有权:谁建谁删
-//          const p = src.path ?? writeTmp(buffer)
-//          try   { probe → 格式/时长闸 → putObject(视频 + sidecar) → 存证 }
-//          finally { if (own) unlink(p) }         ← 只删自己建的,不碰 multer 的
+//          格式闸(mimetype 或扩展名)          ← 在 try 之前:坏格式不该碰磁盘
+//          consent 闸                          ← 同上,合规先于 IO
+//          const own = !src.path                ← 所有权:谁建谁删
+//          try   { p = src.path ?? writeTmp(buffer)   ← 写盘失败落进本 catch
+//                  probe → 时长闸
+//                  putObject(视频 + sidecar) → 存证 }
+//          catch { → 500 UPLOAD_FAILED(细节只进日志) }
+//          finally { if (own) unlink(p) }       ← 只删自己建的,不碰 multer 的
 //
 // 让 REST 也统一走「先落临时文件」会给 100MB 视频白加一轮磁盘 IO —— multer 已经写过一次了。
-export type VideoUploadSource = UploadFile & {
+export type VideoUploadSource = Omit<UploadFile, 'buffer'> & {
   /** 磁盘上已有一份(multer dest)→ ffprobe 直读它;缺失则本函数自建临时文件并负责删除。 */
   path?: string;
+  /** 字节。MCP 侧解完 base64 就在内存里,直接给;REST 侧给 readBuffer 惰性读 —— 见下。 */
+  buffer?: Buffer;
+  /** 惰性取字节:只有过了格式 / consent / 时长三道闸、真要落盘时才调。
+   *  REST 的 multer 把 100MB 视频放在临时盘上,提前读进内存等于让被拒的请求也白占内存
+   *  (十路并发 1GB),而 REST 侧没有 /mcp 那道并发字节闸兜底。 */
+  readBuffer?: () => Promise<Buffer>;
 };
 export type StoreVideoInputResult =
   | { ok: true; videoRef: string; duration: number; width: number; height: number }
@@ -1194,10 +1207,18 @@ export async function storeVideoInput(
   // 自建临时文件仅在调用方没给 path 时发生;own 决定 finally 里删不删(不能删 multer 的)。
   const own = !src.path;
   let probePath = src.path;
+  // 字节按需取:REST 传 readBuffer(闸后才读盘),MCP 传现成的 buffer。
+  let bytes: Buffer | undefined = src.buffer;
+  const getBytes = async (): Promise<Buffer> => {
+    if (bytes) return bytes;
+    if (!src.readBuffer) throw new Error('缺少视频字节:buffer 与 readBuffer 至少给一个');
+    bytes = await src.readBuffer();
+    return bytes;
+  };
   try {
     if (!probePath) {
       probePath = join(tmpdir(), `lj-vin-${randomUUID()}`);
-      await writeFile(probePath, src.buffer, { mode: 0o600 }); // /tmp 全局可列,别把合规素材摊开
+      await writeFile(probePath, await getBytes(), { mode: 0o600 }); // /tmp 全局可列,别把合规素材摊开
     }
     // ffprobe 严格模式(eng-review E4):时长是计费真相,probe 失败必须拒,不可优雅放行。
     const meta = await probeVideoMeta(probePath);
@@ -1207,8 +1228,10 @@ export async function storeVideoInput(
     if (meta.duration < 2 || meta.duration > 60)
       return { ok: false, status: 400, error: `视频时长需在 2-60 秒之间(当前 ${meta.duration.toFixed(1)} 秒)` };
 
-    const key = contentKey('video-inputs', tid, src.buffer, src.mimetype, src.originalname, /\.mov$/i.test(src.originalname || '') ? 'mov' : 'mp4');
-    await putObject(key, src.buffer, src.mimetype || 'video/mp4');
+    // 到这里才真正需要字节:三道闸都过了。
+    const buf = await getBytes();
+    const key = contentKey('video-inputs', tid, buf, src.mimetype, src.originalname, /\.mov$/i.test(src.originalname || '') ? 'mov' : 'mp4');
+    await putObject(key, buf, src.mimetype || 'video/mp4');
     // sidecar:时长真相(build/estimate 只认它,客户端上报无效)
     await putObject(videoMetaKey(key), JSON.stringify({ ...meta, size: src.size }), 'application/json');
     // 授权存证(同输入图口径);重传同一视频 → 同 key → 不叠加存证行。
@@ -1251,7 +1274,13 @@ export async function storeAudioInput(
   if (file.size > 20 * 1024 * 1024)
     return { ok: false, status: 400, error: '音频不能超过 20MB' };
   if (!consent)
-    return { ok: false, status: 400, error: '必须勾选"已获音频中人物授权"(政企合规)' };
+    return {
+      ok: false, status: 400,
+      // 这是 v0.9.2 新增的要求。老 REST 调用方看到 UI 文案「请勾选」是没法行动的 ——
+      // 必须点名字段、点明版本、给出原因。
+      error: '参考音频自 v0.9.2 起需要授权确认:请在 multipart 表单中传 consent=true。'
+        + '声纹属个人信息,口径与图片/视频上传一致(政企合规)。',
+    };
   try {
     const key = contentKey('audio-inputs', tid, file.buffer, file.mimetype, file.originalname, 'mp3');
     await putObject(key, file.buffer, file.mimetype || 'audio/mpeg');
@@ -1275,18 +1304,25 @@ jobsRouter.post(
     if (!file) return res.status(400).json({ error: '缺少视频文件(video)' });
     const cleanup = () => unlink(file.path).catch(() => {});
     try {
-      // multer 已把文件写到临时盘 → 传 path,storeVideoInput 就不必再落一次盘。
-      // buffer 仍要读:内容寻址命名与 putObject 都要字节(REST 原本也在这里 readFile)。
-      const buffer = await readFile(file.path);
+      // 读盘**必须在格式/consent 闸之后**。抽取时一度把 readFile 提到了最前面,结果
+      // 100MB 的 .txt 改名 .mp4、或没勾授权的请求,都要先整个进内存再被 400 拒 ——
+      // 十路并发就是 1GB 白占(REST 侧没有 /mcp 那道并发字节闸兜着)。
+      // 故传惰性读取器:storeVideoInput 只在真要落盘时才调它。
       const r = await storeVideoInput(
         { tenantId: req.user!.tenantId, userId: req.user!.id, ip: clientIpOf(req), apiKeyId: req.apiKeyId ?? null },
-        { buffer, mimetype: file.mimetype, originalname: file.originalname, size: file.size, path: file.path },
+        {
+          readBuffer: () => readFile(file.path),
+          mimetype: file.mimetype, originalname: file.originalname, size: file.size, path: file.path,
+        },
         req.body?.consent === 'true' || req.body?.consent === true,
       );
       if (!r.ok) return res.status(r.status).json({ error: r.error });
       return res.json({ videoRef: r.videoRef, duration: r.duration, width: r.width, height: r.height });
     } catch (e) {
-      return res.status(500).json({ error: e instanceof Error ? e.message : '上传失败' });
+      // storeVideoInput 已自己吞了存储错误,这里只剩 readFile 失败 —— 但那条消息带 multer
+      // 临时目录的绝对路径,同样不该出给调用方。
+      console.error('[video-uploads] 读取临时文件失败', e);
+      return res.status(500).json({ error: '上传失败,请稍后重试' });
     } finally {
       void cleanup(); // multer 的临时文件由本路由删(storeVideoInput 只删自建的)
     }

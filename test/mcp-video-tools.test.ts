@@ -65,6 +65,7 @@ let key = '';
 let tId = '';
 let imgA = '';
 let imgB = '';
+let uid = '';  // 本测试租户里「API 密钥代表的那个人」——投影测试要用它当 created_by
 
 async function mcp() {
   const transport = new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`), {
@@ -80,7 +81,7 @@ const sc = (r: unknown): Sc => ((r as { structuredContent?: unknown }).structure
 
 beforeAll(async () => {
   tId = createTenant('影片工具台').id;
-  const uid = (await createUser(tId, 'videotools', 'pw123456', 'creator')).id;
+  uid = (await createUser(tId, 'videotools', 'pw123456', 'creator')).id;
   grant(tId, 10_000_000);
   key = createApiKey(tId, uid, 'vt-key').key;
   port = await serverPort(app);
@@ -559,7 +560,7 @@ describe('发现工具 — 不泄漏内部字段', () => {
        VALUES (?,?,?,?,?,?,?,?,?,?)`,
     ).run(vid, tId, '我的克隆音色', 'clone', 'ready',
       `voice-samples/${tId}/secret-sample.wav`, 'bailian-voice-xyz-789', 'auth-row-id-123',
-      (db.prepare(`SELECT id FROM user WHERE tenant_id=? LIMIT 1`).get(tId) as { id: string }).id, Date.now());
+      uid, Date.now()); // 必须是密钥代表的那个人:listClones 按 created_by 过滤,取错人这行就被过滤掉了
 
     const c = await mcp();
     const voices = sc(await c.callTool({ name: 'list_voices', arguments: {} })).voices as Record<string, unknown>[];
@@ -586,7 +587,7 @@ describe('发现工具 — 不泄漏内部字段', () => {
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
     ).run(aid, tId, '我的形象', 'photo', 'ready',
       `avatars/${tId}/secret-source.png`, `avatars/${tId}/secret-thumb.png`, 'auth-row-id-456',
-      'portrait', 0, (db.prepare(`SELECT id FROM user WHERE tenant_id=? LIMIT 1`).get(tId) as { id: string }).id, Date.now());
+      'portrait', 0, uid, Date.now()); // 必须是密钥代表的那个人:listClones 按 created_by 过滤,取错人这行就被过滤掉了
 
     const c = await mcp();
     const avatars = sc(await c.callTool({ name: 'list_avatars', arguments: {} })).avatars as Record<string, unknown>[];
@@ -806,4 +807,102 @@ describe('list_models 投影 — Agent 选参所需字段必须都在', () => {
       await c.close();
     });
   }
+});
+
+// ── 评审修复的防回归钉子(ship 覆盖率再审:这些代码删掉后套件依然全绿)──────
+// 每一条都对应本轮为响应专家评审而做的修复。修了不钉 = 等着它悄悄回来。
+describe('评审修复防回归 — 删掉对应代码这里必须红', () => {
+  it('generate_image 的 count 不再有 .max(9):超出模型上限时截断而非拒绝', async () => {
+    // v0.9.1 没有这个上限,是我在 v0.9.2 加的 —— 对老调用方是破坏性变更,且 maxImages
+    // 是超管在后台可改的,写死任何数字都会与配置漂。加回 .max(9) → 这条红。
+    const c = await mcp();
+    const r = await c.callTool({ name: 'generate_image', arguments: { prompt: '大数量', count: 25 } });
+    expect(r.isError, `count:25 被拒了 —— schema 里又写死上限了:${String(sc(r).error)}`).toBeFalsy();
+    const input = JSON.parse(getJob(sc(r).job_id as string)!.input_json) as { count: number };
+    expect(input.count, '应被 clampImageCount 截到模型上限,而不是原样入库').toBeLessThanOrEqual(9);
+    expect(input.count).toBeGreaterThan(0);
+    await c.close();
+  });
+
+  it('edit_video 的 dry_run 回传 inputDuration(quoteJob 合并 builder 的 extra)', async () => {
+    // quoteJob 若不合并 built.extra,这个既有响应字段就悄悄消失了 ——
+    // 调用方无从知道这个价是按几秒算的。video-edit-api 测的是 estimateJob,是另一个函数。
+    probeResult = { duration: 8, width: 1920, height: 1080 };
+    const c = await mcp();
+    const uv = await c.callTool({
+      name: 'upload_video',
+      arguments: { filename: 'quote-extra.mp4', data_base64: mp4('quote-extra').toString('base64'), consent: true },
+    });
+    const r = await c.callTool({
+      name: 'edit_video',
+      arguments: { videoRef: sc(uv).videoRef as string, prompt: '换装', dry_run: true },
+    });
+    const s = sc(r);
+    expect(r.isError, String(s.error)).toBeFalsy();
+    expect(s.inputDuration, 'quoteJob 丢掉了 builder 的 extra').toBe(8);
+    expect(typeof s.cost).toBe('number');
+    expect(typeof s.balance).toBe('number'); // balance 也还在,合并没覆盖掉它
+    await c.close();
+  });
+
+  it('MCP upload_audio 的 consent 闸与 REST 同口径(consent=false → 拒)', async () => {
+    // upload_video 早有这条,audio 此前没有 —— 不对称意味着把 MCP 侧的闸删掉也全绿。
+    const c = await mcp();
+    const r = await c.callTool({
+      name: 'upload_audio',
+      arguments: { filename: 'noconsent.mp3', data_base64: mp3('mcp-noconsent').toString('base64'), consent: false },
+    });
+    expect(r.isError).toBe(true);
+    expect(String(sc(r).error)).toContain('授权');
+    await c.close();
+  });
+
+  it('MCP upload_audio 成功时写 audio-ref 存证行(合规链不因入口而异)', async () => {
+    const c = await mcp();
+    const r = await c.callTool({
+      name: 'upload_audio',
+      arguments: { filename: 'ok.mp3', data_base64: mp3('mcp-authrow').toString('base64'), consent: true },
+    });
+    expect(r.isError).toBeFalsy();
+    const row = db.prepare(
+      `SELECT consent, subject_type FROM authorization WHERE tenant_id=? AND subject_key=?`,
+    ).get(tId, sc(r).audioRef) as { consent: number; subject_type: string } | undefined;
+    expect(row?.consent, 'MCP 上传的音频没写存证行 —— 与 REST 口径不一致').toBe(1);
+    expect(row?.subject_type).toBe('audio-ref');
+    await c.close();
+  });
+
+  it('upload_audio 超 20MB → 被 MCP 侧的 decodeUpload 拒(不是被服务函数兜住)', async () => {
+    // 钉的是 MCP 这道闸。storeAudioInput 自己也有 20MB 检查,所以只断言「被拒」的话,
+    // 把 decodeUpload 的 maxBytes 调大照样绿 —— 靠错误文案区分是谁拒的:
+    //   decodeUpload  → 「单个文件不能超过 20MB」
+    //   storeAudioInput → 「音频不能超过 20MB」
+    const c = await mcp();
+    const big = Buffer.alloc(21 * 1024 * 1024, 0x41);
+    const r = await c.callTool({
+      name: 'upload_audio',
+      arguments: { filename: 'big.mp3', data_base64: big.toString('base64'), consent: true },
+    });
+    expect(r.isError).toBe(true);
+    expect(sc(r).code).toBe('INVALID_INPUT_FILE');
+    expect(String(sc(r).error), 'MCP 侧的尺寸闸没生效,是被服务函数兜住的').toContain('单个文件不能超过');
+    await c.close();
+  });
+});
+
+describe('审计溯源 — MCP 面也要记 IP', () => {
+  it('MCP 提交的任务/上传要记客户端 IP(此前整个 Agent 面的审计行都没有来源)', async () => {
+    const c = await mcp();
+    await c.callTool({
+      name: 'upload_image',
+      arguments: { images: [{ filename: 'ip.png', data_base64: mp3('ip-audit').toString('base64') }], consent: true },
+    });
+    const row = db.prepare(
+      `SELECT ip, via_api_key FROM audit_log WHERE tenant_id=? AND action='upload_image_input'
+        ORDER BY rowid DESC LIMIT 1`,
+    ).get(tId) as { ip: string | null; via_api_key: string | null } | undefined;
+    expect(row?.via_api_key, '没记 key id').toBeTruthy();
+    expect(row?.ip, 'MCP 侧审计 IP 仍是 null —— 密钥泄漏后无从溯源').toBeTruthy();
+    await c.close();
+  });
 });

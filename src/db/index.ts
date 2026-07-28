@@ -381,6 +381,9 @@ const voiceHadCreatedBy = (db.prepare(`PRAGMA table_info(voice)`).all() as { nam
 addColumnIfMissing('avatar', 'created_by', `created_by TEXT`);
 addColumnIfMissing('voice', 'created_by', `created_by TEXT`);
 // ② 复合索引:creator 查询 WHERE tenant_id=? AND created_by=? 走索引(admin 的 tenant-only 查询用现有 idx_*_tenant)。
+// 注:下面那条 (tenant_id, created_by, created_at DESC) 是本索引的超集,SQLite 用它也能
+// 服务纯 (tenant_id, created_by) 的查询。保留本行只为让「先加列再建索引」的时序注释仍然成立;
+// 真正生效的是下面那条,本条已在下方 DROP(每次 job 写入少维护一棵 B 树)。
 db.exec(`CREATE INDEX IF NOT EXISTS idx_job_tenant_creator ON job(tenant_id, created_by);`);
 // 同上但带排序列:list_jobs / GET /api/jobs 的主查询是
 //   WHERE tenant_id=? AND created_by=? ORDER BY created_at DESC
@@ -390,6 +393,9 @@ db.exec(`CREATE INDEX IF NOT EXISTS idx_job_tenant_creator ON job(tenant_id, cre
 // 位置要紧:必须在上面的 addColumnIfMissing('job','created_by') 之后 —— 建在之前会
 // 「no such column: created_by」直接起不来(本文件顶部那句「时序严格:先加列→再复合索引」)。
 db.exec(`CREATE INDEX IF NOT EXISTS idx_job_tenant_creator_created ON job(tenant_id, created_by, created_at DESC);`);
+// 上面那条是本条的严格前缀 → 永远不会被选中,却要在每次 job 插入/状态流转时维护。
+// 回滚安全:旧版本代码用 CREATE INDEX IF NOT EXISTS 会把它重新建回来。
+db.exec(`DROP INDEX IF EXISTS idx_job_tenant_creator;`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_avatar_tenant_creator ON avatar(tenant_id, created_by);`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_voice_tenant_creator ON voice(tenant_id, created_by);`);
 // 并发改造(2026-06-16):claimNextJob 的 per-tenant cap COUNT 与 admin 看板都按 status 过滤活跃 job。

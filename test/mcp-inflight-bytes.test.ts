@@ -76,12 +76,15 @@ describe('/mcp 并发在飞字节闸', () => {
   // initialize,协议层会回 400,那是 transport 的责任,不该由本文件断言。
   it('闸内的请求正常放行(不误伤日常调用)', async () => {
     const r = await post(padded(1024), key);
-    expect(r.status).not.toBe(429);
+    // 断具体值而非 not.toBe(429):后者在 500/401/服务崩了时也过,当不了对照组。
+    // 400 是协议层对「裸 tools/list 没先 initialize」的回应,见上方注释。
+    expect(r.status).toBe(400);
   });
 
-  it('请求结束后额度被释放 —— 连发多个小请求不会累积到触闸', async () => {
-    for (let i = 0; i < 12; i++) {
-      const r = await post(padded(200 * 1024), key); // 每个 200KB,12 个累计 2.4MB > 闸值
+  it('请求结束后额度被释放 —— 连发多个请求不会累积到触闸', async () => {
+    // 每个 50KB,20 个累计 1MB 已达全局闸值。只有「用完即还」才能全部通过。
+    for (let i = 0; i < 20; i++) {
+      const r = await post(padded(50 * 1024), key);
       expect(r.status, `第 ${i + 1} 个请求被误拒,说明 close/finish 没释放额度`).not.toBe(429);
     }
   });
@@ -92,5 +95,58 @@ describe('/mcp 并发在飞字节闸', () => {
     const r = await post(padded(2 * 1024 * 1024));
     expect(r.status).toBe(401);
     expect(r.body.code).toBe('UNAUTHORIZED');
+  });
+});
+
+// ── chunked 绕过防回归(v0.9.2 CRITICAL)────────────────────────────────────
+// security 与 performance 两个专家独立实测:闸子只读 Content-Length 时,
+// Transfer-Encoding: chunked 的请求被算作 0 字节直接放行 —— 十路并发 26.7MB
+// chunked 上传全部 200,同样字节带 Content-Length 则被 429。一行客户端配置就能绕开。
+// 修法是「未声明长度按 body 上限记账」。这条测试钉的就是那一行:
+// 把 `: BODY_LIMIT_BYTES` 改回 `: 0`,下面立刻红。
+describe('/mcp 并发字节闸 — chunked(无 Content-Length)不得免费通行', () => {
+  /** 不设 Content-Length 发请求 → Node 自动用 Transfer-Encoding: chunked。 */
+  function postChunked(bodyBuf: Buffer): Promise<{ status: number; body: Record<string, unknown>; sentCL?: string }> {
+    return new Promise((resolve, reject) => {
+      const req = http.request({
+        host: '127.0.0.1', port, path: '/mcp', method: 'POST',
+        headers: {
+          Authorization: `Bearer ${key}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/event-stream',
+          // 故意不给 Content-Length
+        },
+      }, (r) => {
+        let b = '';
+        r.on('data', (c) => (b += c));
+        r.on('end', () => {
+          let json: Record<string, unknown>;
+          try { json = JSON.parse(b); } catch { json = { raw: b }; }
+            // 记录实际发出的请求头:要证明的前提是「没发 Content-Length」——
+          // 那正是服务端分支的判据。Node 内部加的 Transfer-Encoding 读不到,也不该依赖它。
+          resolve({ status: r.statusCode!, body: json, sentCL: req.getHeader('content-length') as string | undefined });
+        });
+      });
+      req.on('error', reject);
+      req.write(bodyBuf);
+      req.end();
+    });
+  }
+
+  it('前提校验:本测试确实没发 Content-Length(否则测不到要测的分支)', async () => {
+    const r = await postChunked(padded(512));
+    expect(r.sentCL, '测试自己发了 Content-Length,就走不到未声明长度那条分支').toBeUndefined();
+  });
+
+  it('哪怕只有 1KB,未声明长度也按 body 上限记账 → 撞闸 429', async () => {
+    // 闸值 1mb,body 上限回落 32mb。按 0 记就会放行,按上限记就必然超。
+    const r = await postChunked(padded(512));
+    expect(r.status, 'chunked 请求被免费放行了 —— 字节闸可被一行客户端配置绕开').toBe(429);
+    expect(r.body.code).toBe('RATE_LIMITED');
+  });
+
+  it('对照组:同样大小带 Content-Length → 不撞闸(证明差异确实来自那个头)', async () => {
+    const r = await post(padded(512), key);
+    expect(r.status, '对照组必须断具体值,否则两边一起坏也看不出来').toBe(400);
   });
 });

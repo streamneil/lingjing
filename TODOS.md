@@ -193,6 +193,65 @@
 - **Context:** 2026-07-28 /plan-eng-review D16。MCP 侧已在 v0.9.2 通过新增 `quoteJob()`(跑 builder,跳过余额闸/入队/reserve)单独解决,**网页端那条路未动**。本条是把同样的严格性推到网页端。
 - **Effort:** M(human)→ S(CC),但前端回归面大。**Priority:** P2。
 
+## MCP 全量补全落地后补充(2026-07-28,/ship 两轮专家评审 + 对抗评审)
+
+### T-REF-CAPABILITY:内容寻址让素材 key 变得可推算,提交时却不校验授权行
+- **What:** `contentKey` 改为 `sha256(字节)` 后,同租户内**任何持有同一份原图的人**都能在本地算出 key,
+  绕开 `upload_image` 直接填进 `generate_image` 的 `imageRefs`。`checkRefsOwned` 只校验租户前缀,
+  而 `authorization` 表全仓**只写不读**(grep 确认:jobs/avatars/voices 里只有 INSERT,无一处用于放行判定)。
+- **Why:** uuid 命名时,持有 ref ≈ 持有一张「已过 consent 闸」的凭证(不可推算);内容寻址把这个性质拿掉了。
+  后果:成员 B 用成员 A 传过的照片出图,全程无自己的授权声明、无对应存证行 —— 深度合成审计时,
+  这次生成的授权记录指向 A。相关只读变体:`edit_video({videoRef, dry_run:true})` 会回传别人 sidecar 里的
+  `inputDuration`,泄漏 job 级隔离本该挡住的元数据。
+- **修法:** 提交时要求每个 ref 都能解析到「存在的对象 + 对应的 authorization 行」。本轮新加的
+  `idx_auth_subject_key` 索引正好让这个查询很便宜 —— 目前它只被去重路径用到。
+- **Context:** 2026-07-28 /ship 对抗评审(FIXABLE/INVESTIGATE,已验证 `authorization` 表无读取点)。
+  是 D14(内容哈希命名)的未预见后果,不是历史遗留。**Priority:** P1(触发条件:多成员机构上线即成立)。
+
+### T-AUTH-ACTOR-ATTRIBUTION:存证去重把授权归给了第一个上传者
+- **What:** `insertAuthOnce` 的去重键是 `(tenant_id, subject_key, proof_key)`,不含 `created_by`。
+  成员 B 上传成员 A 传过的同一份字节时命中去重,B 的 `consent=true` 声明**不落任何一行**。
+- **Why:** 这个列加进来的理由就是「审计时答得出这张图的授权行是哪一条」(db/index.ts 注释)。
+  现在答出来的是 A。去重的初衷是折叠**同一个人的重试**,实现却分不出「重试」与「另一个人」。
+- **修法:** 去重键加 `created_by`(保留折叠重试),或另立一张「授权声明」表按人记、authorization 仍按对象一行。
+- **Context:** 2026-07-28 两轮评审都提到(security round1 #5 / round2 / 对抗 #8)。**Priority:** P2。
+
+### T-MCP-PERKEY-TENANT:并发字节闸按密钥分,而密钥可无限创建
+- **What:** `PER_KEY_INFLIGHT_MAX` 与三道限速器都以 `keyId` 为键,而 `POST /api/api-keys` 对密钥数量无上限。
+  同一个人建 4 把密钥即可占满全局预算;`PER_KEY_INFLIGHT_MAX = max(body上限, 全局/4)` 还会随
+  `MCP_BODY_LIMIT` 调大而失效(把 body 上限调到 100mb,单密钥就能占 81% 全局预算)。
+- **修法:** 闸与限速改按 `tenantId` 计,或给密钥数量设上限;并在 `全局 < 2×body上限` 时启动告警。
+- **Context:** 2026-07-28 对抗评审 #2。**Priority:** P2。
+
+### T-MCP-INFLIGHT-AMPLIFICATION:字节闸记的是线缆字节,实际堆内存是它的 3–4 倍
+- **What:** 一个 32MB 请求同时持有:原始 body、`JSON.parse` 的字符串、解析后对象里的 base64 串
+  (`decodeUpload` 用 slice,SlicedString 会拖住父串)、以及解码出的 Buffer —— 峰值约 100–130MB,
+  而闸只记 32MB。默认 128MB 预算实际放行约 400–500MB 堆。
+- **修法:** 记账时乘一个放大系数,或把默认值按实测 RSS 调低。
+- **Context:** 2026-07-28 对抗评审 #3(perf 专家 round1 也独立测到 ~1.7x)。**Priority:** P2。
+
+### T-GETJOB-EMPTY-RESULTS:done 但签不出 URL 时返回「成功且无产物」
+- **What:** `get_job` 里 `try { out.results = await signOutputUrls(...) } catch {}`;而 `signOutputUrls`
+  内部已经 `.catch(() => null)` 再 filter,存储降级时返回 `[]` 而非抛错 —— 于是工具回
+  `{status:'done'}` 且 results 为空/缺失、**没有 error 字段**。而 instructions 告诉 Agent
+  「完成后 results 里是签名下载 URL」。Agent 只能误报成功(积分已结算)或对终态无限轮询。
+- **修法:** done 但零签名 URL 时回可重试码(`UPLOAD_FAILED` / `INTERNAL_ERROR`)。
+- **Context:** 2026-07-28 对抗评审 #10。**Priority:** P2。
+
+### T-ENV-MAGNITUDE-CLAMP:env 只校验格式不校验量级
+- **What:** `MCP_BODY_LIMIT` 的正则只管形状。`0mb` 能通过 → `BODY_LIMIT_BYTES=0` → chunked 请求记 0 字节
+  (正是「免费绕过」),同时 `express.json({limit:0})` 让所有请求 413;`999gb` 能通过 → 两道闸全废。
+- **修法:** 夹到 `[1mb, 128mb]` 并告警,与格式非法同一处理。
+- **Context:** 2026-07-28 对抗评审 #11。**Priority:** P3。
+
+### T-MCP-ANON-THROTTLE:未鉴权的 /mcp 流量完全不限速
+- **What:** `preParseLimiter` 以 `keyId` 为键,只有鉴权通过后才轮到它;`/mcp` 又挂在全局 `apiRateLimit` 之前。
+  密钥无效的请求每次仍要跑两次同步 better-sqlite3 查询,而 better-sqlite3 会阻塞事件循环。
+- **Why:** 不是 2026-07-25 修过的那个 32 倍内存放大(那个已修),但确实意味着 `/mcp` 对匿名洪水的
+  唯一防线是前面的 Caddy。
+- **修法:** 在 `resolveApiKeyFull` 之前加一道按 IP 的滑窗限速;或确认并写明 Caddy 侧的限速作为补偿控制。
+- **Context:** 2026-07-28 security 评审 round1 #2 / round2。**Priority:** P3。
+
 ## ✅ 已完成(归档,保留可追溯)
 
 ### T-MCP-VERSION-DRIFT:MCP server 版本号写死 — ✅ 2026-07-28

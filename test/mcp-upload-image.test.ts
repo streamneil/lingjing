@@ -437,7 +437,11 @@ describe('storeImageInputs 守卫(单测:REST/MCP 入口各自被 multer/zod 挡
       .mockRejectedValueOnce(new Error('MinIO 连接失败'));
     const r = await storeImageInputs(actor(), [file('fail.png')], true);
     expect(r).toMatchObject({ ok: false, status: 500 });
-    expect((r as { error: string }).error).toContain('MinIO');
+    // 反过来断言:**不能**把厂商原文回给调用方。MinIO/OSS 的报错带 endpoint、bucket、
+    // region、requestId,经 MCP 会原样递给持密钥方 —— 等于送出内部拓扑。
+    // 细节进日志,调用方只拿到可执行结论。视频/音频两条路同口径。
+    expect((r as { error: string }).error).not.toContain('MinIO');
+    expect((r as { error: string }).error).toContain('存储写入失败');
     const after = (db.prepare(
       `SELECT COUNT(*) n FROM authorization WHERE tenant_id=? AND subject_type='image-edit'`,
     ).get(tId) as { n: number }).n;
