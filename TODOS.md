@@ -167,13 +167,36 @@
 - **Context:** 2026-07-26 /ship 落地前审查(confidence 9/10)。**既有行为**,非 v0.8.0.7 引入 —— 循环结构自 REST `/image-uploads` 首版即如此,本次只是把它抽成共用函数时看见了。触发条件是 MinIO 中途抖动,概率低但非零。
 - **Effort:** S(human)→ XS(CC)。**Priority:** P3。
 
-### T-MCP-VERSION-DRIFT:MCP server 版本号写死,与 VERSION 漂移
-- **What:** `src/mcp/index.ts` 里 `new McpServer({ name: 'lingjing', version: '0.7.0' })` 是硬编码字面量,VERSION 已到 0.8.0.7。
-- **Why:** 该版本号在 MCP 握手时回给 Agent,客户端可见。报错的版本会让客户排查问题时对不上号。
-- **Cons:** 直接改成 0.8.0.7 只是把漂移推后一版,真正的修法是从 VERSION/package.json 读取,需引入一次启动期读文件。
-- **Context:** 2026-07-26 /ship 落地前审查(confidence 8/10)。既有问题,无功能影响。**Priority:** P4。
+## MCP 补全评审补充(2026-07-28,/plan-eng-review — MCP 全量补全轮)
+
+### T-MCP-PRESIGNED-UPLOAD:预签名直传,解除 MCP 上传 20MB 天花板
+- **What:** 新增 `create_upload_url` 工具返回预签名 PUT URL,Agent 直传对象存储;再调 `confirm_upload` 补登 consent 与 `authorization` 存证。未 confirm 的对象需 GC。
+- **Why:** MCP 是 JSON-RPC,文件只能 base64 内联,body 上限 32mb 折合真实文件约 24MB,实现取 20MB。而 `video_edit` 允许 60 秒输入、REST `/video-uploads` 允许 100MB —— 大多数手机实拍素材会 413 被赶去走 REST,打破「装了 MCP 就能用全部能力」的承诺。
+- **Pros:** MCP 上传能力与网页端对齐;文件不经服务端内存,并发字节闸(v0.9.2 引入)可以放宽甚至撤掉。
+- **Cons:** 存储层要给 MinIO(`presignedPutObject`)和 OSS(`signatureUrl` with PUT)**两个后端**都实现;更关键的是**合规存证从「服务端接到文件时同步写」退化成「confirm 补登」**—— 「已上传但未 confirm」= 有对象无存证,深度合成审计时是真窟窿,必须配套 GC + 对账。
+- **Context:** 2026-07-28 /plan-eng-review D3 的选项 C,当轮因合规链风险被否决,改走 base64 内联 + 明确上限引导(超限错误直接指引 Agent 改调 `POST /api/video-uploads`,该端点一直在 key 作用域内)。设计取舍已推导完毕,勿重推。
+- **Depends on:** D14 的内容哈希命名先落地 —— key 由内容 sha256 决定后,`confirm_upload` 才能校验「Agent 说传的」与「存储里实际是的」是同一个文件。
+- **Effort:** L(human)→ M(CC)。**Priority:** P2(触发条件:客户反馈 20MB 不够,或 413 在真实使用中变常见)。
+
+### T-ESTIMATE-BUILDER-DRY:estimateJob 与 JOB_BUILDERS 的平行校验实现
+- **What:** 让 `estimateJob`(`src/api/jobs.ts:1156-1235`)也跑 `JOB_BUILDERS`(`:838`)取 cost,消灭两份平行校验实现。
+- **Why:** 网页端今天就会给出「报价能过、提交 400」的体验。2026-07-28 逐行比对查出的**六条实际分歧**(带行号,勿重查):
+  - `duration` 超模型 `durationRange` → estimate 静默 clamp 给价,builder 400(`:584` / `:677`)
+  - `resolution` ∉ `def.resolutions`(i2v/r2v)→ estimate 透传并按 1080 计价,builder 400(`:579`)
+  - `voiceRef` 伪造/非本人(tts)→ estimate 完全不读 voiceRef(`:1225`),builder 400(`:368`)
+  - `prompt` 为空 / 超 `maxPromptChars` → estimate 无校验,builder 400
+  - i2v 的 `task` → estimate 从不读(`:1200`),builder 必填
+  - `truncateDuration` 非整数(edit)→ estimate 接受并计价,builder 400(`:763`)
+  - 另:gpt-image-2 img2img 的输入图计数,estimate 走 `inputImageCount`(`:1178`)、settle 走 `imageRefs.length`(`src/credits/index.ts:291`),口径不同会少报价。
+- **Pros:** 一份校验实现永不再漂;网页端报价与实扣完全一致。
+- **Cons:** builder 比 estimate 严得多 —— 网页是**边填参数边实时报价**的,用户还没选音色 / 未传图时就会开始 400。必须配套改前端「参数未齐不请求报价」的逻辑,影响 8 个生成页。
+- **Context:** 2026-07-28 /plan-eng-review D16。MCP 侧已在 v0.9.2 通过新增 `quoteJob()`(跑 builder,跳过余额闸/入队/reserve)单独解决,**网页端那条路未动**。本条是把同样的严格性推到网页端。
+- **Effort:** M(human)→ S(CC),但前端回归面大。**Priority:** P2。
 
 ## ✅ 已完成(归档,保留可追溯)
+
+### T-MCP-VERSION-DRIFT:MCP server 版本号写死 — ✅ 2026-07-28
+- 完成证据:`src/mcp/index.ts` 的 `SERVER_VERSION` 启动期从 package.json 读一次(读不到回落 `0.0.0-unknown` 哨兵,不让服务起不来);`new McpServer({ name:'lingjing', version: SERVER_VERSION })`。test/mcp-video-tools.test.ts 断言 `client.getServerVersion().version === package.json.version`,从此不会再漂。随 v0.9.2 MCP 全量补全一并落地。
 
 ### T-TTS-QUALITY-MODEL:品质模型选择 + 按 tier 计价 — ✅ 2026-06-11
 - 完成证据:TTS_MODELS 注册表(cosyvoice-v1/v3.5-flash/qwen3-tts-flash/instruct)+ 品质下拉按音色 transport 过滤。estimateTtsCost(len,pricePerChar) 默认不变(byte-identical)、costFor 读 pricePerCharSnapshot;buildTtsJob 校验模型⟂音色 transport(不兼容 400)+ 快照单价(reserve==settle);GET /tts-models。test/tts-quality-model.test.ts 15 例。merge fd18281。

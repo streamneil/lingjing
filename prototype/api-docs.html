@@ -40,7 +40,7 @@
     <h2>1. 认证</h2>
     <p>在<b>系统设置 → API 密钥</b>创建密钥(格式 <code>lj_sk_…</code>,明文仅创建时显示一次)。每个请求带上:</p>
     <pre><code>Authorization: Bearer lj_sk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</code></pre>
-    <p>密钥以创建者身份行动:权限、计费、作品归属都和这个人网页操作一致。<b>viewer 角色的密钥不能发起生成</b>(会返回 <code>403 ROLE_FORBIDDEN</code>)。密钥只能访问生成相关接口,不能管理账号 / 成员 / 支付(其余接口返回 <code>403 SCOPE_FORBIDDEN</code>)。</p>
+    <p>密钥以创建者身份行动:权限、计费、作品归属都和这个人网页操作一致。当前成员角色只有管理员 / 创作者两种,两者都可发起生成。密钥只能访问生成相关接口,不能管理账号 / 成员 / 支付(其余接口返回 <code>403 SCOPE_FORBIDDEN</code>)。</p>
     <div class="note">主人被停用或密钥被吊销后,密钥立即失效(返回 <code>401 UNAUTHORIZED</code>)。管理员可在系统设置吊销任意密钥。</div>
 
     <h2>2. 提交生成</h2>
@@ -89,7 +89,7 @@
     <h2>6. 发现音色 / 形象 · 上传参考素材</h2>
     <p><span class="method get">GET</span><code>/api/voices</code> · <span class="method get">GET</span><code>/api/avatars</code> — 拿到 <code>voiceRef</code> / <code>avatarRef</code> ID(TTS、数字人视频需要)。</p>
     <p><span class="method post">POST</span><code>/api/image-uploads</code> · <code>/api/video-uploads</code> · <code>/api/audio-uploads</code> — 上传参考素材(<code>multipart/form-data</code>),返回存储 key 供 <code>imageRefs</code> 等引用。</p>
-    <div class="note">⚠️ 合规:上传含<b>真人</b>的素材必须持有被摄主体的授权(<code>consent=true</code>),这与网页端同一口径。责任主体为你的机构。深度合成生成受平台内容审核约束。</div>
+    <div class="note">⚠️ 合规:上传含<b>真人</b>的素材(图片 / 视频 / <b>音频</b>)必须持有被摄主体或本人的授权(<code>consent=true</code>),这与网页端同一口径。责任主体为你的机构。深度合成生成受平台内容审核约束。<br><b>v0.9.2 起参考音频也要求 <code>consent</code></b>:声纹属个人信息,且参考音频可直接驱动影片生成。</div>
 
     <h2>7. 限速</h2>
     <p>按密钥计数,读写分级。超限返回 <code>429 RATE_LIMITED</code>,请<b>指数退避</b>后重试。</p>
@@ -105,14 +105,19 @@
     <h2>9. 错误码</h2>
     <p>开放接口的错误响应统一为 <code>{"error":"中文可读","code":"机器可读"}</code>。按 <code>code</code> 决定是否重试:</p>
     <table>
-      <tr><th>code</th><th>HTTP</th><th>含义</th><th>可重试?</th></tr>
-      <tr><td><code>UNAUTHORIZED</code></td><td>401</td><td>密钥无效 / 已吊销 / 主人被停用</td><td class="no">否</td></tr>
-      <tr><td><code>SCOPE_FORBIDDEN</code></td><td>403</td><td>密钥访问了生成面以外的接口。<b>路径写错(不存在)也返回本码</b> —— 响应的 <code>allowed</code> 字段列出全部可用端点,先照它核对路径,再考虑权限</td><td class="no">否</td></tr>
-      <tr><td><code>ROLE_FORBIDDEN</code></td><td>403</td><td>viewer 密钥不能发起生成</td><td class="no">否</td></tr>
-      <tr><td><code>RATE_LIMITED</code></td><td>429</td><td>超出限速</td><td class="tag">是(退避)</td></tr>
-      <tr><td><code>INSUFFICIENT_CREDITS</code></td><td>402</td><td>积分余额不足</td><td class="no">否(充值后)</td></tr>
-      <tr><td><code>IDEMPOTENCY_CONFLICT</code></td><td>409</td><td>相同幂等键但请求体不同</td><td class="no">否</td></tr>
-      <tr><td>(无 code)</td><td>400</td><td>参数错误</td><td class="no">否</td></tr>
+      <tr><th>code</th><th>HTTP</th><th>含义</th><th>适用</th><th>可重试?</th></tr>
+      <tr><td><code>UNAUTHORIZED</code></td><td>401</td><td>密钥无效 / 已吊销 / 主人被停用</td><td>REST · MCP</td><td class="no">否</td></tr>
+      <tr><td><code>SCOPE_FORBIDDEN</code></td><td>403</td><td>密钥访问了生成面以外的接口。<b>路径写错(不存在)也返回本码</b> —— 响应的 <code>allowed</code> 字段列出全部可用端点,先照它核对路径,再考虑权限</td><td>REST</td><td class="no">否</td></tr>
+      <tr><td><code>ROLE_FORBIDDEN</code></td><td>403</td><td>该角色的密钥不能发起生成。当前角色只有管理员 / 创作者两种,两者都可生成 —— 这是为将来的只读角色预留的防御性拦截,正常不会遇到</td><td>REST · MCP</td><td class="no">否</td></tr>
+      <tr><td><code>RATE_LIMITED</code></td><td>429</td><td>超出限速,或 MCP 上传通道并发数据量已达上限(带 <code>Retry-After</code>)</td><td>REST · MCP</td><td class="tag">是(退避)</td></tr>
+      <tr><td><code>INSUFFICIENT_CREDITS</code></td><td>402</td><td>积分余额不足</td><td>REST · MCP</td><td class="no">否(充值后)</td></tr>
+      <tr><td><code>IDEMPOTENCY_CONFLICT</code></td><td>409</td><td>相同幂等键但请求体不同</td><td>REST · MCP</td><td class="no">否</td></tr>
+      <tr><td><code>INVALID_PARAMS</code></td><td>400</td><td>参数错误(缺必填、取值不在该模型允许范围、组合非法…)。错误文案是中文可读的具体原因,照它改参数即可</td><td>MCP</td><td class="no">否</td></tr>
+      <tr><td><code>INVALID_INPUT_FILE</code></td><td>400</td><td>上传的文件格式不支持、超大小上限、或 base64 解不出字节</td><td>MCP</td><td class="no">否</td></tr>
+      <tr><td><code>NOT_FOUND</code></td><td>404</td><td>任务不存在或无权访问(跨成员查任务也返回本码)</td><td>MCP</td><td class="no">否</td></tr>
+      <tr><td><code>PAYLOAD_TOO_LARGE</code></td><td>413</td><td>请求体超过 <code>/mcp</code> 上限。图片可减张数或压缩;视频/音频请改用 REST 上传端点</td><td>MCP</td><td class="no">否</td></tr>
+      <tr><td><code>UPLOAD_FAILED</code></td><td>500</td><td>对象存储写入失败(服务端侧问题)</td><td>MCP</td><td class="tag">是(退避)</td></tr>
+      <tr><td>(无 code)</td><td>400</td><td>参数错误(REST 侧,文案为中文可读原因)</td><td>REST</td><td class="no">否</td></tr>
     </table>
     <p>内容审核拒绝不在提交时返回,而是任务落为 <code>failed</code>,<code>error</code> 字段说明原因(轮询 §3 可见)。</p>
 
@@ -127,21 +132,62 @@
     }
   }
 }</code></pre>
-    <p>工具集(全部异步:生成类返回 <code>job_id</code>,用 <code>get_job</code> 轮询取结果):</p>
+    <p>连上后 Agent 会自动读到一份<b>使用说明</b>(MCP <code>instructions</code>)与全部工具的参数 schema —— 它据此决定调哪个工具、怎么填参数,你不需要额外提示。工具集(生成类全异步:返回 <code>job_id</code>,用 <code>get_job</code> 轮询):</p>
     <table>
-      <tr><th>工具</th><th>说明</th></tr>
-      <tr><td><code>upload_image</code></td><td>上传参考图(base64),返回 <code>imageRefs</code> 供图生图用</td></tr>
-      <tr><td><code>generate_image</code></td><td>文生图 / 图生图</td></tr>
-      <tr><td><code>generate_video</code></td><td>文字转影片</td></tr>
-      <tr><td><code>generate_music</code></td><td>AI 音乐</td></tr>
-      <tr><td><code>generate_speech</code></td><td>文字转语音(需 <code>voice_ref</code>)</td></tr>
-      <tr><td><code>get_job</code></td><td>查任务状态;完成后含签名下载 URL</td></tr>
-      <tr><td><code>list_models</code> / <code>list_voices</code> / <code>list_avatars</code></td><td>发现可用模型 / 音色 / 形象</td></tr>
-      <tr><td><code>estimate</code></td><td>提交前预估费用</td></tr>
+      <tr><th>工具</th><th>说明</th><th>REST 对应</th></tr>
+      <tr><td><code>upload_image</code></td><td>上传参考图(base64,≤10MB × ≤9 张),返回 <code>imageRefs</code></td><td><code>/api/image-uploads</code></td></tr>
+      <tr><td><code>upload_video</code></td><td>上传视频(base64,≤20MB、2–60 秒),返回 <code>videoRef</code></td><td><code>/api/video-uploads</code></td></tr>
+      <tr><td><code>upload_audio</code></td><td>上传参考音频(base64,≤20MB,需 <code>consent</code>),返回 <code>audioRef</code></td><td><code>/api/audio-uploads</code></td></tr>
+      <tr><td><code>generate_image</code></td><td>文生图 / 图生图</td><td><code>ai_image</code></td></tr>
+      <tr><td><code>generate_video</code></td><td>文字转影片</td><td><code>video_t2v</code></td></tr>
+      <tr><td><code>generate_video_from_image</code></td><td>图片转影片(<code>task</code>:首帧 / 首尾帧 / 参考生成)</td><td><code>video_i2v</code></td></tr>
+      <tr><td><code>generate_video_from_refs</code></td><td>多模态参考生成影片(图 + 视频 + 音频任意组合)</td><td><code>video_r2v</code></td></tr>
+      <tr><td><code>edit_video</code></td><td>影片编辑(换装 / 风格化 / 局部替换)</td><td><code>video_edit</code></td></tr>
+      <tr><td><code>generate_music</code></td><td>AI 音乐(<code>mode</code>:<code>song</code> 有人声 / <code>instrumental</code> 纯音乐)</td><td><code>ai_music</code></td></tr>
+      <tr><td><code>generate_speech</code></td><td>文字转语音(需 <code>voice_ref</code>;支持情绪 / 语速 / 音高 / 语言)</td><td><code>tts</code></td></tr>
+      <tr><td><code>get_job</code></td><td>查任务状态;完成后含签名下载 URL</td><td><code>GET /api/jobs/:id</code></td></tr>
+      <tr><td><code>list_jobs</code></td><td>列最近任务(会话重启后找回 <code>job_id</code>)</td><td><code>GET /api/jobs</code></td></tr>
+      <tr><td><code>get_balance</code></td><td>查本机构积分余额</td><td><code>/api/credits/balance</code></td></tr>
+      <tr><td><code>list_models</code></td><td>按 <code>kind</code>(image/video/i2v/r2v/edit)列模型及其能力边界</td><td><code>/api/*-models</code></td></tr>
+      <tr><td><code>list_voices</code> / <code>list_avatars</code></td><td>发现可用音色 / 数字人形象(只读)</td><td><code>/api/voices</code> · <code>/api/avatars</code></td></tr>
     </table>
-    <p><b>图生图闭环</b>(MCP 侧全程不用碰 REST):<code>upload_image</code> 拿 <code>imageRefs</code> → <code>generate_image</code> 传 <code>mode="img2img"</code> + <code>imageRefs</code> → <code>get_job</code> 取结果。图片走 base64 内联,单张 ≤10MB、一次 ≤9 张;单次请求体上限 32MB(超限返回 <code>413 PAYLOAD_TOO_LARGE</code>,减张数或压缩后重试)。</p>
-    <div class="note">「参考图」不是「数字人形象」:参考图用于图生图/图转影片,<code>upload_image</code> 即可;<b>数字人形象</b>(<code>avatarRef</code>)只用于口播视频,需在灵镜后台创建并完成授权存证,API 侧只读(<code>list_avatars</code> / <code>GET /api/avatars</code>)。</div>
-    <p>认证、限速、错误、计费与 REST 完全一致(§1、§7、§9)。</p>
+
+    <h3>先问价再花钱:<code>dry_run</code></h3>
+    <p>每个 <code>generate_*</code> 都接受 <code>dry_run: true</code> —— <b>只返回预估费用与当前余额,不提交、不扣积分</b>。它走的是与真提交<b>完全相同</b>的校验,所以「<code>dry_run</code> 通过」就意味着「同参数提交也会通过」。想真做时,把同一份参数去掉 <code>dry_run</code> 再发一次即可。</p>
+    <pre><code>generate_video_from_refs({ prompt: "…", imageRefs: [...], dry_run: true })
+  → { cost: 240, balance: 8600 }
+generate_video_from_refs({ prompt: "…", imageRefs: [...] })
+  → { job_id: "…", status: "queued", cost: 240 }</code></pre>
+    <div class="note">旧的 <code>estimate</code> 工具已标记<b>废弃</b>(仍可用,将在后续版本移除)。它的参数是扁平化的,覆盖不了图转影片 / 参考生成 / 影片编辑的完整字段,请改用 <code>dry_run</code>。</div>
+
+    <h3>超时重试不双扣:<code>idempotency_key</code></h3>
+    <p>每个 <code>generate_*</code> 都接受可选的 <code>idempotency_key</code>。网络超时后重试同一次请求请传<b>相同</b>的值 → 返回原任务、不重复扣费;想再生成一份(哪怕参数完全一样)请换一个<b>新</b>值。语义与 REST 的 <code>Idempotency-Key</code> 请求头一致(§2)。</p>
+
+    <h3>三条闭环</h3>
+    <ul>
+      <li><b>图生图</b>:<code>upload_image</code> → <code>generate_image</code>(<code>mode="img2img"</code> + <code>imageRefs</code>)→ <code>get_job</code></li>
+      <li><b>图转影片</b>:<code>upload_image</code> → <code>generate_video_from_image</code>(<code>task="first_frame"</code> + <code>imageRefs</code>)→ <code>get_job</code></li>
+      <li><b>参考生成 / 影片编辑</b>:<code>upload_image</code> / <code>upload_video</code> / <code>upload_audio</code> → <code>generate_video_from_refs</code> 或 <code>edit_video</code> → <code>get_job</code></li>
+    </ul>
+
+    <h3>大文件走 REST</h3>
+    <p>MCP 是 JSON-RPC,文件只能 base64 内联,单个素材上限约 20MB(受 <code>/mcp</code> 请求体上限约束,base64 比原始字节大约 33%)。<b>手机实拍视频经常超限</b> —— 这时改用 REST 上传端点即可,同一把 <code>lj_sk_</code> 密钥,该端点一直在密钥作用域内,不需要额外权限:</p>
+    <pre><code>curl -X POST https://你的域名/api/video-uploads \
+  -H "Authorization: Bearer lj_sk_..." \
+  -F consent=true -F video=@clip.mp4
+# → {"videoRef":"video-inputs/…","duration":42.5,...}</code></pre>
+    <p>拿到 <code>videoRef</code> 后照常填进 <code>edit_video</code> / <code>generate_video_from_refs</code>。</p>
+
+    <h3>MCP 侧做不到的事</h3>
+    <p>以下能力<b>只能在灵镜后台网页端完成</b>,MCP 不提供对应工具(Agent 会在 <code>instructions</code> 里读到这一点,不会反复尝试):</p>
+    <ul>
+      <li><b>数字人口播视频</b>(形象 + 文案 → 对口型视频)</li>
+      <li><b>创建数字人形象</b>(需上传素材并完成授权存证)</li>
+      <li><b>声音克隆 / 设计音色</b>(需授权存证)</li>
+    </ul>
+    <div class="note">「参考图」不是「数字人形象」:参考图用于图生图 / 图转影片,<code>upload_image</code> 即可;<b>数字人形象</b>只用于口播视频,需在后台创建并完成授权存证,API 侧只读(<code>list_avatars</code> / <code>GET /api/avatars</code>)。</div>
+    <div class="note">⚠️ 合规:含<b>真人</b>的图片 / 视频必须持有被摄主体授权,上传时传 <code>consent=true</code>,责任主体为你的机构 —— 这与网页端同一口径,Agent 绕不过。</div>
+    <p>认证、限速、错误码、计费与 REST 完全一致(§1、§7、§9)。</p>
 
     <p style="margin-top:48px"><a href="/settings.html">← 返回系统设置</a></p>
   </div>
