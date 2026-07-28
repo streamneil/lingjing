@@ -94,7 +94,7 @@
     <div class="note">⚠️ 合规:上传含<b>真人</b>的素材(图片 / 视频 / <b>音频</b>)必须持有被摄主体或本人的授权(<code>consent=true</code>),这与网页端同一口径。责任主体为你的机构。深度合成生成受平台内容审核约束。<br><b>v0.9.2 起参考音频也要求 <code>consent</code></b>:声纹属个人信息,且参考音频可直接驱动影片生成。</div>
 
     <h2>7. 限速</h2>
-    <p>按密钥计数,读写分级。超限返回 <code>429 RATE_LIMITED</code>,请<b>指数退避</b>后重试。</p>
+    <p>按密钥计数,读写分级。超限返回 <code>429 RATE_LIMITED</code>,响应带 <code>Retry-After</code>(秒)—— <b>直接按这个值退避</b>,不用自己猜;<code>error</code> 文案会说明撞的是读档还是写档、阈值是多少。</p>
     <table>
       <tr><th>口径</th><th>上限</th><th>包含</th></tr>
       <tr><td>写</td><td>60 次 / 分钟 / 密钥</td><td>提交生成、上传</td></tr>
@@ -112,13 +112,13 @@
       <tr><td><code>UNAUTHORIZED</code></td><td>401</td><td>密钥无效 / 已吊销 / 主人被停用</td><td>REST · MCP</td><td class="no">否</td></tr>
       <tr><td><code>SCOPE_FORBIDDEN</code></td><td>403</td><td>密钥访问了生成面以外的接口。<b>路径写错(不存在)也返回本码</b> —— 响应的 <code>allowed</code> 字段列出全部可用端点,先照它核对路径,再考虑权限</td><td>REST</td><td class="no">否</td></tr>
       <tr><td><code>ROLE_FORBIDDEN</code></td><td>403</td><td>该角色的密钥不能发起生成。当前角色只有管理员 / 创作者两种,两者都可生成 —— 这是为将来的只读角色预留的防御性拦截,正常不会遇到</td><td>REST · MCP</td><td class="no">否</td></tr>
-      <tr><td><code>RATE_LIMITED</code></td><td>429</td><td>超出限速,或 MCP 上传通道并发数据量已达上限(带 <code>Retry-After</code>)</td><td>REST · MCP</td><td class="tag">是(退避)</td></tr>
+      <tr><td><code>RATE_LIMITED</code></td><td>429</td><td>超出限速,或 MCP 上传通道并发数据量已达上限。<b>一律带 <code>Retry-After</code></b>,按它退避即可。注意:请求体本身太大不会落到这里,那是 <code>413</code>(见下)</td><td>REST · MCP</td><td class="tag">是(退避)</td></tr>
       <tr><td><code>INSUFFICIENT_CREDITS</code></td><td>402</td><td>积分余额不足</td><td>REST · MCP</td><td class="no">否(充值后)</td></tr>
       <tr><td><code>IDEMPOTENCY_CONFLICT</code></td><td>409</td><td>相同幂等键但请求体不同</td><td>REST · MCP</td><td class="no">否</td></tr>
       <tr><td><code>INVALID_PARAMS</code></td><td>400</td><td>参数错误(缺必填、取值不在该模型允许范围、组合非法…)。错误文案是中文可读的具体原因,照它改参数即可</td><td>MCP</td><td class="no">否</td></tr>
       <tr><td><code>INVALID_INPUT_FILE</code></td><td>400</td><td>上传的文件格式不支持、超大小上限、或 base64 解不出字节</td><td>MCP</td><td class="no">否</td></tr>
       <tr><td><code>NOT_FOUND</code></td><td>404</td><td>任务不存在或无权访问(跨成员查任务也返回本码)</td><td>MCP</td><td class="no">否</td></tr>
-      <tr><td><code>PAYLOAD_TOO_LARGE</code></td><td>413</td><td>两种触发:①请求体超过 <code>/mcp</code> 上限 —— 图片可减张数或压缩,视频/音频请改用 REST 上传端点;②单次 JSON-RPC 批量超过 20 条消息 —— 拆分后重发。看 <code>error</code> 文案区分</td><td>MCP</td><td class="no">否</td></tr>
+      <tr><td><code>PAYLOAD_TOO_LARGE</code></td><td>413</td><td>两种触发:①请求体超过 <code>/mcp</code> 上限 —— 图片可减张数或压缩,视频/音频请改用 REST 上传端点;②单次 JSON-RPC 批量超过 20 条消息 —— 拆分后重发。看 <code>error</code> 文案区分。<b>体积超限一定是 413,不会是 429</b> —— 换句话说,收到 429 就该退避重试,收到 413 就该换路子,两者不会混</td><td>MCP</td><td class="no">否</td></tr>
       <tr><td><code>UPLOAD_FAILED</code></td><td>500</td><td>对象存储写入失败(服务端侧问题)</td><td>MCP</td><td class="tag">是(退避)</td></tr>
       <tr><td>(无 code)</td><td>400</td><td>参数错误(REST 侧,文案为中文可读原因)</td><td>REST</td><td class="no">否</td></tr>
     </table>

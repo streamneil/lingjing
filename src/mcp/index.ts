@@ -714,7 +714,9 @@ mcpRouter.use((req: Request, res: Response, next: NextFunction) => {
     return;
   }
   if (!preParseLimiter.allow(viaKey.keyId)) {
-    res.status(429).json({ error: '请求过于频繁,请稍后重试', code: CODE.RATE_LIMITED });
+    const wait = preParseLimiter.retryAfterSeconds(viaKey.keyId);
+    res.set('Retry-After', String(wait))
+      .status(429).json({ error: `请求过于频繁,请 ${wait} 秒后重试`, code: CODE.RATE_LIMITED });
     return;
   }
   req.mcpKey = viaKey;
@@ -775,6 +777,19 @@ mcpRouter.use((req: Request, res: Response, next: NextFunction) => {
   const declared = Number(req.headers['content-length']);
   const len = Number.isFinite(declared) && declared > 0 ? declared : BODY_LIMIT_BYTES;
   const keyId = req.mcpKey!.keyId; // 前置鉴权中间件保证非空
+  // 先分流「永远装不下」的:声明长度已超 body 上限的请求,后面 express.json 必然 413。
+  // 但这道闸在 parser 之前,而人头预算下界正好等于 body 上限 —— 于是它会抢先回 429。
+  // 429 的语义是「现在忙,待会儿再来」,可这种请求**再来一万次也是同一个结果**:
+  // Agent 照着 Retry-After 无限退避重试,而文档恰恰告诉它「太大就改走 REST」——
+  // 那条自救路只在拿到 413 时才会被触发。语义必须是永久失败,不能是可重试。
+  if (Number.isFinite(declared) && declared > BODY_LIMIT_BYTES) {
+    res.status(413).json({
+      error: `请求体超过上限(${MCP_BODY_LIMIT},约合 ${EFFECTIVE_UPLOAD_MB}MB 原始文件)。` +
+        `图片可减少单次张数或压缩;视频/音频请改用 REST 上传端点(POST /api/video-uploads · /api/audio-uploads,multipart,同一把密钥)。`,
+      code: CODE.PAYLOAD_TOO_LARGE,
+    });
+    return;
+  }
   const mine = perKeyInflight.get(keyId) ?? 0;
   if (inflightBytes + len > MCP_INFLIGHT_BYTES || mine + len > PER_KEY_INFLIGHT_MAX) {
     res.set('Retry-After', '2').status(429).json({
@@ -869,9 +884,14 @@ mcpRouter.post('/', async (req: Request, res: Response) => {
     return !(typeof name === 'string' && READ_ONLY_TOOL_NAMES.has(name));
   };
   for (const m of msgs) {
-    const limiter = isWriteMsg(m) ? writeLimiter : readLimiter;
+    const write = isWriteMsg(m);
+    const limiter = write ? writeLimiter : readLimiter;
     if (!limiter.allow(viaKey.keyId)) {
-      res.status(429).json({ error: '请求过于频繁,请稍后重试', code: CODE.RATE_LIMITED });
+      const wait = limiter.retryAfterSeconds(viaKey.keyId);
+      res.set('Retry-After', String(wait)).status(429).json({
+        error: `${write ? '写' : '读'}操作过于频繁(上限 ${write ? WRITE_PER_MIN : READ_PER_MIN} 次/分钟),请 ${wait} 秒后重试`,
+        code: CODE.RATE_LIMITED,
+      });
       return;
     }
   }

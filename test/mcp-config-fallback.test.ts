@@ -72,36 +72,60 @@ describe('非法 env 回落到安全默认 —— 而不是「解析不出就不
     expect(res.headers.get('content-type')).toContain('application/json'); // 永远不给 Agent 发 HTML
   });
 
-  it('并发字节闸回落 128mb:声明 200MB 的请求在 parser 之前就被 429 挡下', async () => {
-    // 只声明 Content-Length,不真发 200MB —— 字节闸读的就是这个头,在读 body 之前判。
+  it('并发字节闸回落 128mb:多密钥并发把全局预算吃满后 429', async () => {
+    // 只声明 Content-Length,不真发字节 —— 字节闸读的就是这个头,在读 body 之前判。
     // 用裸 http 而非 fetch:fetch 会因声明长度与实际写入不符而在客户端侧先炸,
     // 拿不到服务端的响应码,那就证明不了「是闸挡的」。
-    // 这条同时钉住闸的**顺序**:429(字节闸,parser 前)而不是 413(parser 后)。
+    //
+    // 必须**多密钥并发**,不能一条大请求了事:回落后 body 上限 32mb、人头上限也是 32mb,
+    // 任何单条超 32mb 的请求都会先被 413 分流(那是永久失败,见 mcp-oversize-permanent),
+    // 单条 ≤32mb 又撑不爆 128mb 全局预算。所以全局闸本质上只有并发才观察得到。
+    // 若 MCP_INFLIGHT_BYTES 回落成了 NaN,`x > NaN` 恒 false = 闸全开,下面一条 429 都不会有。
     const http = await import('node:http');
-    const body = padded(1024);
-    const res = await new Promise<{ status: number; retryAfter?: string; body: string }>((resolve, reject) => {
+    const keys: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      const t = createTenant(`回落台${i}`).id;
+      const u = (await createUser(t, `cfgconc${i}`, 'pw123456', 'creator')).id;
+      keys.push(createApiKey(t, u, `cfg-conc-${i}`).key);
+    }
+    const statuses: number[] = [];
+    const retryAfters: (string | undefined)[] = [];
+    const codes: string[] = [];
+    const reqs = keys.map((k) => {
       const req = http.request({
         host: '127.0.0.1', port, path: '/mcp', method: 'POST',
         headers: {
-          Authorization: `Bearer ${key}`,
+          Authorization: `Bearer ${k}`,
           'Content-Type': 'application/json',
           Accept: 'application/json, text/event-stream',
-          'Content-Length': String(200 * 1024 * 1024),
+          // 每条 30MB:< 32mb 人头/body 上限(不会被 413 分流),6 条 = 180MB > 128mb 全局预算。
+          'Content-Length': String(30 * 1024 * 1024),
         },
       }, (r) => {
         let b = '';
         r.on('data', (c) => (b += c));
-        r.on('end', () => resolve({
-          status: r.statusCode!, retryAfter: r.headers['retry-after'] as string | undefined, body: b,
-        }));
+        r.on('end', () => {
+          statuses.push(r.statusCode!);
+          retryAfters.push(r.headers['retry-after'] as string | undefined);
+          try { codes.push(String((JSON.parse(b) as { code?: string }).code)); } catch { /* 无正文 */ }
+        });
       });
-      req.on('error', reject);
-      req.write(body); // 故意只写一小截:服务端应在读 body 之前就已经拒了
-      req.end();
+      req.on('error', () => { /* destroy 时的正常噪音 */ });
+      req.write('{'); // 只写一个字节:请求挂在飞行中,额度被占住
+      return req;
     });
-    expect(res.status, '非法 env 下字节闸失效了 —— 回落值没生效或变成了 NaN(NaN 比较恒 false = 闸全开)').toBe(429);
-    expect(res.retryAfter).toBeTruthy();
-    expect(JSON.parse(res.body).code).toBe('RATE_LIMITED');
+    try {
+      await new Promise((r) => setTimeout(r, 500));
+      expect(statuses.filter((s) => s === 429).length,
+        '非法 env 下字节闸失效了 —— 回落值没生效或变成了 NaN(NaN 比较恒 false = 闸全开)')
+        .toBeGreaterThan(0);
+      expect(statuses.includes(413), '30MB 在回落后的 32mb 上限内,不该被判永久超限').toBe(false);
+      expect(retryAfters.some(Boolean)).toBe(true);
+      expect(codes).toContain('RATE_LIMITED');
+    } finally {
+      reqs.forEach((r) => r.destroy());
+      await new Promise((r) => setTimeout(r, 100));
+    }
   });
 
   it('正常大小的请求不受影响(回落不等于把闸调死)', async () => {

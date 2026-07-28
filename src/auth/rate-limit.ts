@@ -31,6 +31,17 @@ export class SlidingWindowLimiter {
     return true;
   }
 
+  /** 被拒后还要等几秒才有名额 = 最老的那次命中滑出窗口的时刻。
+   *  给 429 的 Retry-After 用:不给这个头,Agent 只能瞎猜退避时长 ——
+   *  猜短了继续撞墙(每次撞墙又不计数,但白跑一轮 RTT),猜长了白等一分钟。
+   *  窗口内无命中(理论上不该在被拒后发生)时回 1,不回 0:0 秒退避等于不退避。 */
+  retryAfterSeconds(key: string): number {
+    const arr = this.hits.get(key);
+    const oldest = arr?.[0];
+    if (oldest === undefined) return 1;
+    return Math.max(1, Math.ceil((oldest + this.windowMs - now()) / 1000));
+  }
+
   /** 惰性回收:删掉窗口内已无命中的 key,防内存无限增长。调用方可定时触发。 */
   sweep(): void {
     const cutoff = now() - this.windowMs;

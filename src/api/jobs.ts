@@ -556,7 +556,7 @@ function buildVideoI2VJob(body: Record<string, unknown>): JobBuildResult {
   if (task === 'first_frame' && refs.length !== 1)
     return { ok: false, status: 400, error: '首帧任务须上传 1 张首帧图' };
   if (task === 'first_last' && refs.length !== 2)
-    return { ok: false, status: 400, error: '首尾帧任务须上传開始图 + 結束图(共 2 张)' };
+    return { ok: false, status: 400, error: '首尾帧任务须上传开始图 + 结束图(共 2 张)' };
   if (task === 'reference') {
     const max = def.maxRefImages ?? 1;
     if (refs.length < 1 || refs.length > max)
