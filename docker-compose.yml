@@ -77,6 +77,13 @@ services:
       # 缺这行 → .env 配了也进不了容器,运营调不动上限(OPENAI_PROXY 漏转发同款事故,勿删)。
       # 默认值与 src/mcp/index.ts 保持一致;填非法值时代码会告警并回落 32mb。
       MCP_BODY_LIMIT: ${MCP_BODY_LIMIT:-32mb}
+      # /mcp 并发在飞字节总预算(v0.9.2 起)。同上:缺这行 → .env 配了也进不了容器。
+      # 默认值与 src/mcp/index.ts 保持一致;填非法值时代码会告警并回落 128mb。
+      MCP_INFLIGHT_BYTES: ${MCP_INFLIGHT_BYTES:-128mb}
+      # 开放 API / MCP 密钥限速(读写分级)。同时作用于 REST(auth/middleware.ts)与 /mcp。
+      # 同上:缺这两行 → .env 配了也进不了容器。默认值与代码保持一致。
+      API_RATE_WRITE_PER_MIN: ${API_RATE_WRITE_PER_MIN:-60}
+      API_RATE_READ_PER_MIN: ${API_RATE_READ_PER_MIN:-300}
     # 让容器能解析宿主机(Gemini 走宿主机 clash 代理时:GEMINI_PROXY=http://host.docker.internal:7890)。
     # 无害:没配 GEMINI_PROXY 时没人解析它。需 Docker 20.10+。
     extra_hosts:

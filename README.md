@@ -4,7 +4,8 @@
 影片、图片、音频三大模态，多个 AI 创作工具，一套积分通用、云端生成、合规可控、支持私有化部署。
 
 > 运行见 `RUNNING.md`；部署见 `DEPLOY.md` / `DEPLOY-ALIYUN.md`（阿里云）/ `DEPLOY-PRIVATE.md`（私有化）；
-> 产品规格见 `功能清单-PRD.md`；在线支付运维排障见 `docs/PAYMENTS-RUNBOOK.md`。
+> 产品规格见 `功能清单-PRD.md`；在线支付运维排障见 `docs/PAYMENTS-RUNBOOK.md`；
+> 用户可见变更见 `CHANGELOG.md`；待办与评审结论见 `TODOS.md`。
 
 ---
 

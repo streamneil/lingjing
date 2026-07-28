@@ -23,6 +23,7 @@
 
 - **无外部中间件**:SQLite 嵌入式库 + 进程内 worker 池。AI 重算力全在云端(百炼/火山),本机只做编排/轮询/ffmpeg 轻量后处理。
 - **多 provider**:百炼(数字人 s2v / Qwen-TTS / Qwen 图片 / Fun-Music)+ 火山方舟(Seedance/Seedream)。key 走加密网关(库内密文优先,回落 .env)。
+- **第二个入口(浏览器之外):客户的 AI Agent**。同一套 `api/*` 与队列,前面多两条鉴权路径 —— REST(`Authorization: Bearer lj_sk_…`)与 **MCP**(`POST /mcp`,Streamable HTTP 无状态,Claude Code / Cursor 原生调用)。`/mcp` 有自己的一套闸:鉴权与粗粒度限速**前置到读请求体之前**、并发在飞字节预算(全局 + 每密钥)、独立的请求超时,以及独立的 body 上限(`MCP_BODY_LIMIT` / `MCP_INFLIGHT_BYTES`,见 `.env.example`)—— 因为 base64 内联上传的内存足迹和网页端 multipart 不是一回事。接入方式见 `README.md`,完整接口见站内 `/api-docs.html`。
 
 ## 本地跑(不用 docker)
 
@@ -30,9 +31,12 @@
 
 ```bash
 npm install
-cp .env.example .env          # 最少填 SUPERADMIN_PASS + DASHSCOPE_API_KEY
+cp .env.example .env          # 最少填 SUPERADMIN_PASS + MASTER_KEY(openssl rand -base64 32)
 npm run dev                   # http://localhost:9372/  (tsx watch)
 ```
+
+> 厂商 key(百炼/火山/Google)**不进 `.env`** —— 起来之后在 `/admin →「厂商 / Key」`粘贴(经 `MASTER_KEY`
+> 加密入库)。库里没有时代码会回落读 `DASHSCOPE_API_KEY` 等环境变量,私有化种子场景可用,日常开发建议走 /admin。
 
 > 对象存储:本地未配 OSS 时,代码自动回退到本机存储(MinIO 客户端,默认 127.0.0.1:9000)。
 > 想跑真实数字人/视频生成需配 OSS(百炼要公网可达素材 URL),否则生成会卡 pending。

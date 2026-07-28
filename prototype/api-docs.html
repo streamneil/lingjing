@@ -75,12 +75,14 @@
 
     <h2>3. 查询任务 / 取结果</h2>
     <p><span class="method get">GET</span><code>/api/jobs/:id</code> — 返回状态。终态 <code>done</code> 后含产物;<code>failed</code> 时 <code>error</code> 为中文可读原因(如送审拒绝、余额不足)。</p>
+    <p><span class="method get">GET</span><code>/api/jobs</code> — 列最近任务(仅本人创建的)。会话中断、<code>job_id</code> 丢失时用它找回。MCP 侧对应 <code>list_jobs</code>(§10)。</p>
     <p><span class="method get">GET</span><code>/api/jobs/:id/download/:idx</code> — 下载第 <code>idx</code> 个产物(签名 URL 重定向)。</p>
     <div class="note">视频类任务是分钟级异步。建议轮询 <code>GET /api/jobs/:id</code> 的间隔 <b>≥ 5 秒</b>,直到 <code>status</code> 为 <code>done</code> 或 <code>failed</code>。读接口限速较宽(见 §7)。</div>
     <p>响应含 <code>channel</code> 字段标记任务来源:<code>rest</code>(本接口提交)/ <code>mcp</code>(MCP 工具提交)/ <code>web</code>(成员在网页上创建)。经密钥提交的任务会在网页端的生成记录里显示「API 创建」/「MCP 创建」徽章,便于机构区分人工创作与 Agent 产出。该字段由服务端按认证方式判定,请求体无法指定。</p>
 
     <h2>4. 费用预估</h2>
-    <p><span class="method post">POST</span><code>/api/jobs/estimate</code> — 参数同提交,返回 <code>{cost}</code>。生成前预估扣费,报价≡实扣。</p>
+    <p><span class="method post">POST</span><code>/api/jobs/estimate</code> — 参数同提交,返回 <code>{cost}</code>。生成前预估扣费,成功后按真实用量结算。</p>
+    <div class="note">本端点的校验<b>比真提交宽松</b>(为网页端「边填参数边实时报价」而设):时长超模型范围会被截断后照样给价、分辨率不合法照样计价、<code>voiceRef</code> 不校验存在性。因此「estimate 通过」<b>不</b>保证「同参数提交也通过」。Agent 请改用 MCP 的 <code>dry_run: true</code>(§10)—— 它走的是与提交完全相同的校验路径。</div>
 
     <h2>5. 模型列表</h2>
     <p><span class="method get">GET</span> <code>/api/image-models</code> · <code>/api/video-models</code> · <code>/api/i2v-models</code> · <code>/api/r2v-models</code> · <code>/api/edit-models</code> · <code>/api/tts-models</code></p>
@@ -98,6 +100,7 @@
       <tr><td>写</td><td>60 次 / 分钟 / 密钥</td><td>提交生成、上传</td></tr>
       <tr><td>读</td><td>300 次 / 分钟 / 密钥</td><td>查询任务、模型列表、余额</td></tr>
     </table>
+    <div class="note"><b>MCP 按「条」计,不按「次请求」计。</b>JSON-RPC 允许一次请求装多条消息(数组),服务端逐条分档、逐条计数 —— 一个装了 10 条 <code>generate_*</code> 的数组消耗 10 次写额度,不是 1 次。单次请求最多 <b>20 条</b>消息,超出返回 <code>413 PAYLOAD_TOO_LARGE</code>。</div>
 
     <h2>8. 余额</h2>
     <p><span class="method get">GET</span><code>/api/credits/balance</code> — 返回 <code>{balance}</code>(当前机构积分)。余额不足时提交返回 <code>402 INSUFFICIENT_CREDITS</code>。</p>
@@ -115,7 +118,7 @@
       <tr><td><code>INVALID_PARAMS</code></td><td>400</td><td>参数错误(缺必填、取值不在该模型允许范围、组合非法…)。错误文案是中文可读的具体原因,照它改参数即可</td><td>MCP</td><td class="no">否</td></tr>
       <tr><td><code>INVALID_INPUT_FILE</code></td><td>400</td><td>上传的文件格式不支持、超大小上限、或 base64 解不出字节</td><td>MCP</td><td class="no">否</td></tr>
       <tr><td><code>NOT_FOUND</code></td><td>404</td><td>任务不存在或无权访问(跨成员查任务也返回本码)</td><td>MCP</td><td class="no">否</td></tr>
-      <tr><td><code>PAYLOAD_TOO_LARGE</code></td><td>413</td><td>请求体超过 <code>/mcp</code> 上限。图片可减张数或压缩;视频/音频请改用 REST 上传端点</td><td>MCP</td><td class="no">否</td></tr>
+      <tr><td><code>PAYLOAD_TOO_LARGE</code></td><td>413</td><td>两种触发:①请求体超过 <code>/mcp</code> 上限 —— 图片可减张数或压缩,视频/音频请改用 REST 上传端点;②单次 JSON-RPC 批量超过 20 条消息 —— 拆分后重发。看 <code>error</code> 文案区分</td><td>MCP</td><td class="no">否</td></tr>
       <tr><td><code>UPLOAD_FAILED</code></td><td>500</td><td>对象存储写入失败(服务端侧问题)</td><td>MCP</td><td class="tag">是(退避)</td></tr>
       <tr><td>(无 code)</td><td>400</td><td>参数错误(REST 侧,文案为中文可读原因)</td><td>REST</td><td class="no">否</td></tr>
     </table>
