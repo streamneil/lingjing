@@ -518,11 +518,12 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     document.querySelectorAll('.feed-list .fitem[id^=job-]').forEach(it=>{ it.style.display=(k==='all'||(it.dataset.st||'')===k)?'':'none'; });
   });
 
-  // 上传(图走 /image-uploads 带 consent;视频走 /video-uploads 带 consent;音频走 /audio-uploads 轻量)
+  // 上传:三类素材统一带 consent(v0.9.2 起音频也要)。页面的 consentChk 文案本来就写了
+  // 「图片/视频/音频」且是提交前置(见 validate),所以这里的 true 有据可依。
   async function uploadGroup(files, kind){
     if(!files.length) return [];
     if(kind==='aud'){
-      const keys=[]; for(const f of files){ const fd=new FormData(); fd.append('audio',f.file);
+      const keys=[]; for(const f of files){ const fd=new FormData(); fd.append('audio',f.file); fd.append('consent','true');
         const r=await fetch('/api/audio-uploads',{method:'POST',body:fd,credentials:'same-origin'});
         if(!r.ok){ const j=await r.json().catch(()=>({})); throw new Error(j.error||'音频上传失败'); }
         keys.push((await r.json()).audioRef); } return keys;

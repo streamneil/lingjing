@@ -165,9 +165,17 @@ if (isMain) {
     setTimeout(tick, 30_000).unref?.(); // 启动 30s 后首查(避开启动高峰)
     setInterval(tick, 60 * 60_000).unref?.();
   })();
-  app.listen(config.port, () => {
+  const httpServer = app.listen(config.port, () => {
     console.log(`灵镜启动: http://localhost:${config.port}`);
     console.log(`  worker: 已启动(DB 队列轮询)`);
   });
+  // 头部超时可以全局收紧:20 秒收不完请求头的一律是慢速攻击,不是正常客户端。
+  httpServer.headersTimeout = 20_000;
+  // **不要**全局设 requestTimeout。requestTimeout 限的是「收完整个请求体」的时间,而本平台
+  // REST 侧接受 100MB 的视频/音色上传(jobs.ts 与 voices.ts 的 multer 上限),
+  // 5–10Mbps 上行要 80–160 秒 —— 全局 60 秒会把合法大上传拦腰掐断,而且客户端拿到的是
+  // 裸连接重置,没有 JSON 错误、没有 code。更要命的是:那恰恰是 api-docs 与 MCP instructions
+  // 让 Agent 在文件超过内联上限时回落的那条路。
+  // 慢速占用只在 /mcp 上是问题(那里有按声明长度记账的并发字节闸),故超时按路由设,见 src/mcp/index.ts。
   })();
 }

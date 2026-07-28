@@ -4,7 +4,8 @@
 影片、图片、音频三大模态，多个 AI 创作工具，一套积分通用、云端生成、合规可控、支持私有化部署。
 
 > 运行见 `RUNNING.md`；部署见 `DEPLOY.md` / `DEPLOY-ALIYUN.md`（阿里云）/ `DEPLOY-PRIVATE.md`（私有化）；
-> 产品规格见 `功能清单-PRD.md`；在线支付运维排障见 `docs/PAYMENTS-RUNBOOK.md`。
+> 产品规格见 `功能清单-PRD.md`；在线支付运维排障见 `docs/PAYMENTS-RUNBOOK.md`；
+> 用户可见变更见 `CHANGELOG.md`；待办与评审结论见 `TODOS.md`。
 
 ---
 
@@ -20,6 +21,39 @@
 - **积分计费**：reserve（提交预扣）→ settle（成功结算）→ release（失败退还），按真实秒/字/张计价。
 - **在线收款**：充值支持微信支付 / 支付宝（秒级自动到账、原路退款、每日自动对账）与对公转账；商户号/密钥在 `/admin →「在线支付」`加密配置。
 - **合规**：AI 生成标识、内容送审、本人授权存证。
+- **开放接口**：REST API + **MCP**，让客户自己的 AI Agent 直接调用平台能力（见下）。
+
+## 给 AI Agent 用（开放 API / MCP）
+
+机构成员在 `系统设置 → API 密钥` 建一把 `lj_sk_…`，就能让 Claude Code、Cursor 等 Agent 直接调用平台。
+密钥**等同于创建它的那个成员本人** —— 权限、计费、作品归属都和这个人在网页上操作一致。
+
+**MCP（推荐，Agent 生态的事实标准）** —— 在 Agent 里加一段配置即可：
+
+```json
+{ "mcpServers": { "lingjing": {
+  "type": "http",
+  "url": "https://你的域名/mcp",
+  "headers": { "Authorization": "Bearer lj_sk_..." }
+} } }
+```
+
+连上后 Agent 自动获得 16 个在用工具(另有一个已废弃的 estimate)与一份使用说明，覆盖**除数字人口播外的全部创作能力**：
+
+| 类别 | 工具 |
+|---|---|
+| 上传 | `upload_image` · `upload_video` · `upload_audio` |
+| 生成 | `generate_image` · `generate_video` · `generate_video_from_image` · `generate_video_from_refs` · `edit_video` · `generate_music` · `generate_speech` |
+| 查询 | `get_job` · `list_jobs` · `get_balance` |
+| 发现 | `list_models` · `list_voices` · `list_avatars` |
+
+- 生成类全异步：返回 `job_id`，用 `get_job` 轮询（间隔 ≥5 秒）。
+- **先问价**：任意 `generate_*` 传 `dry_run: true` 只返回预估费用与余额，不扣分；它与真提交共用同一套校验，通过即代表提交也会通过。
+- **重试不双扣**：传相同的 `idempotency_key` 即可。
+- **做不到的事**：数字人口播视频、创建数字人形象、声音克隆/设计音色 —— 强合规链路，只能在后台网页端完成（Agent 会从 `instructions` 读到这一点，不会瞎试）。
+- 大文件（>20MB 视频）改走 REST `POST /api/video-uploads`，同一把密钥。
+
+**REST** —— 同一把密钥，`POST /api/jobs` 用 `type` 区分工具。完整文档见站内 `/api-docs.html`（含错误码表、限速、幂等）。
 
 ## 技术形态
 

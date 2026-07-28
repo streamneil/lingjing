@@ -51,8 +51,9 @@ import type { VideoGenInput, ImageGenInput, TtsGenInput, VideoGenT2VInput, AiMus
 import { getImageModel, resolutionAllowed, enabledTiers, tierDelisted, DEFAULT_KEYWORD_TIER, isKnownModel, listEnabledModels, DEFAULT_IMAGE_MODEL, tierFromPixels, type ImageModelDef } from '../gateway/image-models.js';
 import { getVideoModel, isKnownVideoModel, listVideoModels, klingModeToResolution, getI2VModel, listI2VModels, getEditModel, listEditModels, getR2VModel, listR2VModels, type VideoTask, type VideoModelDef } from '../gateway/video-models.js';
 import { probeVideoMeta, type VideoMeta } from '../pipeline/ai-label.js';
-import { readFile, unlink } from 'node:fs/promises';
+import { readFile, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 export const jobsRouter = Router();
 
@@ -120,7 +121,9 @@ async function signAvatarThumb(
 // 只接受这里登记的 type;未知/`__proto__`/空 → 400。每个 type 有自己的 input 校验器 + 计价。
 // 新工具接后端时在此加一条(与 prototype/tools.js 的 enabled 工具对齐)。
 type JobBuildResult =
-  | { ok: true; type: string; input: Record<string, unknown>; cost: number }
+  // extra:随报价一起回给调用方的补充信息(如 video_edit 的 inputDuration)。
+  // quoteJob 会把它并进响应 —— 少了它,estimate/dry_run 就丢掉了一个既有响应字段。
+  | { ok: true; type: string; input: Record<string, unknown>; cost: number; extra?: Record<string, unknown> }
   | { ok: false; status: number; error: string; extra?: Record<string, unknown> };
 
 /** 校验并构建 video(AI 虚拟人)job 入参 + 计价。 */
@@ -553,7 +556,7 @@ function buildVideoI2VJob(body: Record<string, unknown>): JobBuildResult {
   if (task === 'first_frame' && refs.length !== 1)
     return { ok: false, status: 400, error: '首帧任务须上传 1 张首帧图' };
   if (task === 'first_last' && refs.length !== 2)
-    return { ok: false, status: 400, error: '首尾帧任务须上传開始图 + 結束图(共 2 张)' };
+    return { ok: false, status: 400, error: '首尾帧任务须上传开始图 + 结束图(共 2 张)' };
   if (task === 'reference') {
     const max = def.maxRefImages ?? 1;
     if (refs.length < 1 || refs.length > max)
@@ -802,6 +805,9 @@ async function buildVideoEditJob(body: Record<string, unknown>): Promise<JobBuil
     type: 'video_edit',
     input: input as unknown as Record<string, unknown>,
     cost: estimateVideoCost(billable, editPrice, resolution, false),
+    // 与 estimateJob 的 video_edit 分支同口径:调用方要知道服务端探测到的输入时长,
+    // 才能理解这个价是怎么算出来的(计费按 输入 + 预计输出 秒)。
+    extra: { inputDuration: meta.duration },
   };
 }
 
@@ -850,7 +856,7 @@ const JOB_BUILDERS: Record<
   });
 
 /** 取客户端 IP(供 submitJob 审计;与 audit 模块内部同口径:X-Forwarded-For 首段 → socket)。 */
-function clientIpOf(req: Request): string | null {
+export function clientIpOf(req: Request): string | null {
   const xf = req.headers['x-forwarded-for'];
   if (typeof xf === 'string') return xf.split(',')[0]!.trim();
   return req.socket?.remoteAddress ?? null;
@@ -947,6 +953,35 @@ export async function submitJob(
   return { ok: true, id, cost, status: 'queued', reused: false };
 }
 
+/** 严格报价:跑**真正的提交校验器**(JOB_BUILDERS)取 cost,只跳过余额闸 / 入队 / 预扣。
+ *
+ *  与 estimateJob 的区别,以及为什么需要两个(eng-review D11):
+ *  estimateJob 是给**网页端边填参数边实时报价**用的,刻意比 builder 松 —— 用户还没选音色、
+ *  还没传图时也得能出个数,否则表单填一半就开始报错。代价是它与 builder 会得出不同结论:
+ *  时长超范围它静默 clamp、分辨率不合法它照样计价、voiceRef 压根不读、i2v 的 task 也不读。
+ *
+ *  而 Agent 场景要的恰恰相反:报价能过的参数,提交必须也能过 —— 否则 Agent 拿着一个数字去提交
+ *  却撞 400,而它对这类错误无法自救,只会重试到限速。所以开放面(MCP 的 dry_run)走本函数,
+ *  网页端继续走 estimateJob,互不影响。彻底统一见 TODOS.md 的 T-ESTIMATE-BUILDER-DRY。
+ *
+ *  顺带回 balance:报价通过但余额不足会在提交时 402,Agent 拿到余额就能自己先比一下。 */
+export async function quoteJob(
+  tid: string,
+  actingUserId: string,
+  body: Record<string, unknown>,
+): Promise<EstimateResult> {
+  const type = typeof body.type === 'string' && body.type ? body.type : 'video';
+  const builder = Object.prototype.hasOwnProperty.call(JOB_BUILDERS, type) ? JOB_BUILDERS[type] : undefined;
+  if (!builder) return { ok: false, status: 400, error: `不支持的任务类型:${type}` };
+  // 与 submitJob 同一道跨租户闸(builder / sidecar 读取之前拦截)。
+  const refErr = checkRefsOwned(body, tid);
+  if (refErr) return { ok: false, status: 400, error: refErr };
+  const built = await builder(body, tid, actingUserId);
+  if (!built.ok) return { ok: false, status: built.status, error: built.error };
+  // 合并 builder 的 extra:video_edit 的 inputDuration 靠它回传,丢了等于砍掉一个既有响应字段。
+  return { ok: true, cost: built.cost, extra: { ...(built.extra ?? {}), balance: balance(tid) } };
+}
+
 // 提交生成 — 仅 admin/creator(viewer 不能发起生成,验收第8条)。薄壳:解析请求 → submitJob → 映射 HTTP。
 jobsRouter.post('/jobs', requireRole('admin', 'creator'), async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
@@ -993,6 +1028,59 @@ function safeExt(originalname: string, fallback: string): string {
   return /^[a-z0-9]{1,8}$/.test(raw) ? raw : fallback;
 }
 
+// ── 内容寻址命名 + 存证去重 ──────────────────────────────────────────────
+// key 由**文件内容**的 sha256 决定,不再是 randomUUID。动机是 Agent 重试:
+// upload_video 是整个开放面最慢的调用(几十 MB 传输 + ffprobe + 两次 putObject),最容易撞客户端
+// 超时被重试。uuid 命名下,一次重试 = 第二个存储对象 + 第二份 sidecar + **第二条 authorization 行**
+//   —— 一次授权事件两份合规证据,深度合成审计时对不上号;外加一个永不被引用的孤儿对象占存储。
+// 内容寻址后重传落回同一个 key:putObject 覆写同样的字节是幂等的,存证行靠 subject_key 去重。
+// 租户前缀保留在 key 里 → **不跨租户去重**(同一文件两个机构各存一份,这是对的:归属与授权各自独立)。
+// 扩展名由**已校验的 mimetype**反推,不用客户端给的文件名 —— 否则同一份字节先传 ref.jpg
+// 再重试成 ref.jpeg 就是两个 key、两个对象、两条存证行,去重承诺当场作废(客户端库重试时
+// 重算文件名并不罕见)。扩展名只用于可读性,认不出就回落,不影响正确性。
+const MIME_EXT: Record<string, string> = {
+  'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/bmp': 'bmp',
+  'image/tiff': 'tiff', 'image/gif': 'gif',
+  'video/mp4': 'mp4', 'video/quicktime': 'mov',
+  'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/wav': 'wav', 'audio/x-wav': 'wav',
+  'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/aac': 'aac',
+};
+function contentKey(
+  prefix: string, tid: string, buffer: Buffer, mimetype: string, originalname: string, fallbackExt: string,
+): string {
+  const hash = createHash('sha256').update(buffer).digest('hex').slice(0, 32);
+  // 受校验的素材(图/视频/音频)mimetype 必在白名单内 → 走 MIME_EXT,与文件名无关,去重稳定。
+  // 只有授权凭证走 anyExt,mimetype 可能是 octet-stream → 这时回落文件名,保住 .pdf 这种可读性
+  // (凭证一份一传,不存在「同字节不同名」的重试去重问题)。
+  return `${prefix}/${tid}/${hash}.${MIME_EXT[mimetype] ?? safeExt(originalname, fallbackExt)}`;
+}
+
+/** 为某个输入素材写授权存证行。去重键是 (租户, 对象 key, 凭证 key)。
+ *
+ *  为什么带上 proof_key:同一素材配**不同凭证**再次上传 = 一次**新的授权事件**(换了授权书、
+ *  补了扫描件),必须留痕,不能被当成重试吐掉。只有三元组完全相同才是重试。
+ *
+ *  存证粒度按「对象」而非按「次」(eng-review D18):深度合成审计要回答的是
+ *  「这个素材有没有授权」,不是「当时点选了几个文件」—— 同一份字节塌成一个对象,一条存证覆盖它。
+ *  返回是否真的写入(false = 命中已有存证,属重传)。 */
+function insertAuthOnce(
+  tid: string, subjectType: string, subjectKey: string,
+  proofKey: string | null, createdBy: string,
+): boolean {
+  const hit = db
+    .prepare(
+      `SELECT 1 FROM authorization
+        WHERE tenant_id=? AND subject_key=? AND proof_key IS ? LIMIT 1`,
+    )
+    .get(tid, subjectKey, proofKey);
+  if (hit) return false;
+  db.prepare(
+    `INSERT INTO authorization (id,tenant_id,subject_type,consent,proof_key,terms_version,created_by,created_at,subject_key)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
+  ).run(randomUUID(), tid, subjectType, 1, proofKey, 'v1', createdBy, Date.now(), subjectKey);
+  return true;
+}
+
 export async function storeImageInputs(
   actor: StoreImageInputsActor,
   images: UploadFile[],
@@ -1020,25 +1108,27 @@ export async function storeImageInputs(
     // 授权凭证(可选上传):落 MinIO
     let proofKey: string | undefined;
     if (proof) {
-      proofKey = `authorizations/${tid}/${randomUUID()}.${safeExt(proof.originalname, 'bin')}`;
+      // 凭证可能是 PDF/扫描件,不在 MIME_EXT 表里 → 回落 bin(仅可读性)。
+      proofKey = contentKey('authorizations', tid, proof.buffer, proof.mimetype, proof.originalname, 'bin');
       await putObject(proofKey, proof.buffer, proof.mimetype);
     }
     const keys: string[] = [];
     for (const img of images) {
-      const key = `image-inputs/${tid}/${randomUUID()}.${safeExt(img.originalname, 'png')}`;
+      const key = contentKey('image-inputs', tid, img.buffer, img.mimetype, img.originalname, 'png');
       await putObject(key, img.buffer, img.mimetype);
-      // 每张输入图写授权存证行(subject_type='image-edit',可举证同意的条款版本)
-      db.prepare(
-        `INSERT INTO authorization (id,tenant_id,subject_type,consent,proof_key,terms_version,created_by,created_at)
-         VALUES (?,?,?,?,?,?,?,?)`,
-      ).run(randomUUID(), tid, 'image-edit', 1, proofKey ?? null, 'v1', actor.userId, Date.now());
+      // 每张输入图写授权存证行(subject_type='image-edit',可举证同意的条款版本)。
+      // 重传同一张图 → 同 key → 命中已有存证,不叠加(见 insertAuthOnce)。
+      insertAuthOnce(tid, 'image-edit', key, proofKey ?? null, actor.userId);
       keys.push(key);
     }
     // 审计记 key id → 记录卡/审计页能区分「本人网页传的」还是「Agent 传的」。
     writeAudit(tid, actor.userId, 'upload_image_input', keys[0]!, actor.ip, 'user', undefined, actor.apiKeyId ?? null);
     return { ok: true, imageRefs: keys };
   } catch (e) {
-    return { ok: false, status: 500, error: e instanceof Error ? e.message : '上传失败' };
+    // 同 storeVideoInput/storeAudioInput:厂商错误里带 endpoint/bucket/region/requestId,
+    // 经 MCP 会原样递给持密钥方 —— 细节只进日志。
+    console.error('[storeImageInputs] 落盘失败', e);
+    return { ok: false, status: 500, error: '存储写入失败,请稍后重试' };
   }
 }
 
@@ -1063,88 +1153,197 @@ jobsRouter.post(
   },
 );
 
-// ── 视频编辑输入视频上传 ──
+// ── 视频编辑输入视频上传(服务函数,REST 与 MCP 共用)──
 // 仅 admin/creator + consent(含人视频编辑=深度合成真人,合规口径同输入图)。
-// 流程:multer 临时盘 → ffprobe(严格:失败即 400,计费真相不可缺)→ 校验格式/时长下限
-// → 落 MinIO(视频 + {key}.meta.json sidecar)→ finally 删临时文件。
-// 逐模型时长上界在 buildVideoEditJob 按所选模型校验(此处只挡通用下限 2s / 上限 60s 全集)。
+// 抽成函数的理由同 storeImageInputs:校验/存证/落库只有一份实现,杜绝「网页严、Agent 松」的合规漂移。
+//
+// path 旁路(eng-review D7):ffprobe 只能读磁盘文件,而两个入口手里的东西不一样 ——
+//
+//   REST /api/video-uploads              MCP  upload_video
+//      multer(dest: tmpdir)                 decodeUpload → Buffer
+//      file.path 已在磁盘                    无磁盘副本
+//           └──────────┬────────────────────────┘
+//                      ▼
+//        storeVideoInput(actor, src, consent)
+//          格式闸(mimetype 或扩展名)          ← 在 try 之前:坏格式不该碰磁盘
+//          consent 闸                          ← 同上,合规先于 IO
+//          const own = !src.path                ← 所有权:谁建谁删
+//          try   { p = src.path ?? writeTmp(buffer)   ← 写盘失败落进本 catch
+//                  probe → 时长闸
+//                  putObject(视频 + sidecar) → 存证 }
+//          catch { → 500 UPLOAD_FAILED(细节只进日志) }
+//          finally { if (own) unlink(p) }       ← 只删自己建的,不碰 multer 的
+//
+// 让 REST 也统一走「先落临时文件」会给 100MB 视频白加一轮磁盘 IO —— multer 已经写过一次了。
+export type VideoUploadSource = Omit<UploadFile, 'buffer'> & {
+  /** 磁盘上已有一份(multer dest)→ ffprobe 直读它;缺失则本函数自建临时文件并负责删除。 */
+  path?: string;
+  /** 字节。MCP 侧解完 base64 就在内存里,直接给;REST 侧给 readBuffer 惰性读 —— 见下。 */
+  buffer?: Buffer;
+  /** 惰性取字节:只有过了格式 / consent / 时长三道闸、真要落盘时才调。
+   *  REST 的 multer 把 100MB 视频放在临时盘上,提前读进内存等于让被拒的请求也白占内存
+   *  (十路并发 1GB),而 REST 侧没有 /mcp 那道并发字节闸兜底。 */
+  readBuffer?: () => Promise<Buffer>;
+};
+export type StoreVideoInputResult =
+  | { ok: true; videoRef: string; duration: number; width: number; height: number }
+  | { ok: false; status: number; error: string };
+
+const OK_INPUT_VIDEO = new Set(['video/mp4', 'video/quicktime']);
+
+export async function storeVideoInput(
+  actor: StoreImageInputsActor,
+  src: VideoUploadSource,
+  consent: boolean,
+): Promise<StoreVideoInputResult> {
+  const tid = actor.tenantId;
+  // 格式:MP4 / MOV(防御纵深:前端已拦,客户端可绕过 → 后端再验)。
+  const extOk = /\.(mp4|mov)$/i.test(src.originalname || '');
+  if (!OK_INPUT_VIDEO.has(src.mimetype) && !extOk)
+    return { ok: false, status: 400, error: `不支持的格式 ${src.mimetype || '未知'},请上传 MP4/MOV` };
+  if (!consent)
+    return { ok: false, status: 400, error: '必须勾选"已获视频中人物授权"(政企合规)' };
+
+  // 自建临时文件仅在调用方没给 path 时发生;own 决定 finally 里删不删(不能删 multer 的)。
+  const own = !src.path;
+  let probePath = src.path;
+  // 字节按需取:REST 传 readBuffer(闸后才读盘),MCP 传现成的 buffer。
+  let bytes: Buffer | undefined = src.buffer;
+  const getBytes = async (): Promise<Buffer> => {
+    if (bytes) return bytes;
+    if (!src.readBuffer) throw new Error('缺少视频字节:buffer 与 readBuffer 至少给一个');
+    bytes = await src.readBuffer();
+    return bytes;
+  };
+  try {
+    if (!probePath) {
+      probePath = join(tmpdir(), `lj-vin-${randomUUID()}`);
+      await writeFile(probePath, await getBytes(), { mode: 0o600 }); // /tmp 全局可列,别把合规素材摊开
+    }
+    // ffprobe 严格模式(eng-review E4):时长是计费真相,probe 失败必须拒,不可优雅放行。
+    const meta = await probeVideoMeta(probePath);
+    if (!meta)
+      return { ok: false, status: 400, error: '无法解析视频,请检查文件是否完整(需 MP4/MOV)' };
+    // 通用时长界(全模型并集 2-60s);逐模型界在提交时按所选模型再验。
+    if (meta.duration < 2 || meta.duration > 60)
+      return { ok: false, status: 400, error: `视频时长需在 2-60 秒之间(当前 ${meta.duration.toFixed(1)} 秒)` };
+
+    // 到这里才真正需要字节:三道闸都过了。
+    const buf = await getBytes();
+    const key = contentKey('video-inputs', tid, buf, src.mimetype, src.originalname, /\.mov$/i.test(src.originalname || '') ? 'mov' : 'mp4');
+    await putObject(key, buf, src.mimetype || 'video/mp4');
+    // sidecar:时长真相(build/estimate 只认它,客户端上报无效)
+    await putObject(videoMetaKey(key), JSON.stringify({ ...meta, size: src.size }), 'application/json');
+    // 授权存证(同输入图口径);重传同一视频 → 同 key → 不叠加存证行。
+    insertAuthOnce(tid, 'video-edit', key, null, actor.userId);
+    writeAudit(tid, actor.userId, 'upload_video_input', key, actor.ip ?? null, 'user', undefined, actor.apiKeyId ?? null);
+    console.log(`[video-uploads] tenant=${tid} key=${key} size=${src.size} dur=${meta.duration.toFixed(2)}s ${meta.width}x${meta.height}`);
+    return { ok: true, videoRef: key, duration: meta.duration, width: meta.width, height: meta.height };
+  } catch (e) {
+    // 临时文件写失败 / 存储写失败都落这里 —— 必须映射成明确错误,否则是静默 500(eng-review §8)。
+    // 原始异常只进日志:MinIO/OSS 的错误里带 endpoint、bucket、region、requestId,
+    // 回给持密钥方等于把内部基础设施拓扑送出去。
+    console.error('[storeVideoInput] 落盘失败', e);
+    return { ok: false, status: 500, error: '存储写入失败,请稍后重试' };
+  } finally {
+    if (own && probePath) void unlink(probePath).catch(() => {});
+  }
+}
+
+// ── 参考音频上传(video_r2v 多模态参考;服务函数,REST 与 MCP 共用)──
+// v0.9.2 起与图片/视频同口径:要 consent 且写 authorization 行。
+// 此前按 eng-review #4 的「参考素材语义 ≠ 深度伪造」走轻量口径,那个结论是在 Agent 接入之前做的;
+// 现在 audioRef 能直接驱动 generate_video_from_refs 生成视频,一段真人录音全程零授权声明就能出片。
+// 声纹是个人信息,审计要答得上「这段声音有没有授权」—— 两个入口一起紧,不搞「网页严、Agent 松」。
+export type StoreAudioInputResult =
+  | { ok: true; audioRef: string }
+  | { ok: false; status: number; error: string };
+
+const OK_INPUT_AUDIO = new Set(['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/mp4', 'audio/x-m4a', 'audio/aac']);
+
+export async function storeAudioInput(
+  actor: StoreImageInputsActor,
+  file: UploadFile,
+  consent: boolean,
+): Promise<StoreAudioInputResult> {
+  const tid = actor.tenantId;
+  // 防御纵深:前端已拦,客户端可绕过 → 后端再验格式/大小。
+  const extOk = /\.(mp3|wav|m4a|aac)$/i.test(file.originalname || '');
+  if (!OK_INPUT_AUDIO.has(file.mimetype) && !extOk)
+    return { ok: false, status: 400, error: `不支持的格式 ${file.mimetype || '未知'},请上传 MP3/WAV/M4A` };
+  if (file.size > 20 * 1024 * 1024)
+    return { ok: false, status: 400, error: '音频不能超过 20MB' };
+  if (!consent)
+    return {
+      ok: false, status: 400,
+      // 这是 v0.9.2 新增的要求。老 REST 调用方看到 UI 文案「请勾选」是没法行动的 ——
+      // 必须点名字段、点明版本、给出原因。
+      error: '参考音频自 v0.9.2 起需要授权确认:请在 multipart 表单中传 consent=true。'
+        + '声纹属个人信息,口径与图片/视频上传一致(政企合规)。',
+    };
+  try {
+    const key = contentKey('audio-inputs', tid, file.buffer, file.mimetype, file.originalname, 'mp3');
+    await putObject(key, file.buffer, file.mimetype || 'audio/mpeg');
+    insertAuthOnce(tid, 'audio-ref', key, null, actor.userId); // 与图片/视频同一条存证链
+    writeAudit(tid, actor.userId, 'upload_audio_input', key, actor.ip ?? null, 'user', undefined, actor.apiKeyId ?? null);
+    return { ok: true, audioRef: key };
+  } catch (e) {
+    console.error('[storeAudioInput] 落盘失败', e); // 同 storeVideoInput:细节只进日志
+    return { ok: false, status: 500, error: '存储写入失败,请稍后重试' };
+  }
+}
+
+// REST 入口:薄壳 —— multipart 解析 → storeVideoInput → 映射 HTTP。
+// 逐模型时长上界在 buildVideoEditJob 按所选模型校验(此处只挡通用 2-60s 全集)。
 jobsRouter.post(
   '/video-uploads',
   requireRole('admin', 'creator'),
   videoUpload.single('video'),
   async (req: Request, res: Response) => {
     const file = req.file;
-    const consent = req.body?.consent === 'true' || req.body?.consent === true;
-    const tid = req.user!.tenantId;
     if (!file) return res.status(400).json({ error: '缺少视频文件(video)' });
     const cleanup = () => unlink(file.path).catch(() => {});
     try {
-      // 格式:MP4 / MOV(防御纵深:前端已拦,客户端可绕过 → 后端再验)。
-      const OK_VIDEO = new Set(['video/mp4', 'video/quicktime']);
-      const extOk = /\.(mp4|mov)$/i.test(file.originalname || '');
-      if (!OK_VIDEO.has(file.mimetype) && !extOk) {
-        return res.status(400).json({ error: `不支持的格式 ${file.mimetype || '未知'},请上传 MP4/MOV` });
-      }
-      if (!consent) {
-        return res.status(400).json({ error: '必须勾选"已获视频中人物授权"(政企合规)' });
-      }
-      // ffprobe 严格模式(eng-review E4):时长是计费真相,probe 失败必须拒,不可优雅放行。
-      const meta = await probeVideoMeta(file.path);
-      if (!meta) {
-        return res.status(400).json({ error: '无法解析视频,请检查文件是否完整(需 MP4/MOV)' });
-      }
-      // 通用时长界(全模型并集 2-60s);逐模型界在提交时按所选模型再验。
-      if (meta.duration < 2 || meta.duration > 60) {
-        return res.status(400).json({ error: `视频时长需在 2-60 秒之间(当前 ${meta.duration.toFixed(1)} 秒)` });
-      }
-      const ext = /\.mov$/i.test(file.originalname || '') ? 'mov' : 'mp4';
-      const key = `video-inputs/${tid}/${randomUUID()}.${ext}`;
-      const buf = await readFile(file.path);
-      await putObject(key, buf, file.mimetype || 'video/mp4');
-      // sidecar:时长真相(build/estimate 只认它,客户端上报无效)
-      await putObject(videoMetaKey(key), JSON.stringify({ ...meta, size: file.size }), 'application/json');
-      // 授权存证(同输入图口径)
-      db.prepare(
-        `INSERT INTO authorization (id,tenant_id,subject_type,consent,proof_key,terms_version,created_by,created_at)
-         VALUES (?,?,?,?,?,?,?,?)`,
-      ).run(randomUUID(), tid, 'video-edit', 1, null, 'v1', req.user!.id, Date.now());
-      console.log(`[video-uploads] tenant=${tid} key=${key} size=${file.size} dur=${meta.duration.toFixed(2)}s ${meta.width}x${meta.height}`);
-      return res.json({ videoRef: key, duration: meta.duration, width: meta.width, height: meta.height });
+      // 读盘**必须在格式/consent 闸之后**。抽取时一度把 readFile 提到了最前面,结果
+      // 100MB 的 .txt 改名 .mp4、或没勾授权的请求,都要先整个进内存再被 400 拒 ——
+      // 十路并发就是 1GB 白占(REST 侧没有 /mcp 那道并发字节闸兜着)。
+      // 故传惰性读取器:storeVideoInput 只在真要落盘时才调它。
+      const r = await storeVideoInput(
+        { tenantId: req.user!.tenantId, userId: req.user!.id, ip: clientIpOf(req), apiKeyId: req.apiKeyId ?? null },
+        {
+          readBuffer: () => readFile(file.path),
+          mimetype: file.mimetype, originalname: file.originalname, size: file.size, path: file.path,
+        },
+        req.body?.consent === 'true' || req.body?.consent === true,
+      );
+      if (!r.ok) return res.status(r.status).json({ error: r.error });
+      return res.json({ videoRef: r.videoRef, duration: r.duration, width: r.width, height: r.height });
     } catch (e) {
-      return res.status(500).json({ error: e instanceof Error ? e.message : '上传失败' });
+      // storeVideoInput 已自己吞了存储错误,这里只剩 readFile 失败 —— 但那条消息带 multer
+      // 临时目录的绝对路径,同样不该出给调用方。
+      console.error('[video-uploads] 读取临时文件失败', e);
+      return res.status(500).json({ error: '上传失败,请稍后重试' });
     } finally {
-      void cleanup();
+      void cleanup(); // multer 的临时文件由本路由删(storeVideoInput 只删自建的)
     }
   },
 );
 
-// ── 参考音频上传(video_r2v 多模态参考)──
-// 仅 admin/creator。eng-review #4:参考素材语义 ≠ 深度伪造,走轻量 consent(不写 authorization 行),
-// 只挡格式/大小。mp3/wav/m4a ≤20MB,落存储返 key。
+// REST 入口:薄壳 —— multipart 解析 → storeAudioInput → 映射 HTTP。
 jobsRouter.post(
   '/audio-uploads',
   requireRole('admin', 'creator'),
   audioUpload.single('audio'),
   async (req: Request, res: Response) => {
     const file = req.file;
-    const tid = req.user!.tenantId;
     if (!file) return res.status(400).json({ error: '缺少音频文件(audio)' });
-    // 防御纵深:前端已拦,客户端可绕过 → 后端再验格式/大小。
-    const OK_AUDIO = new Set(['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/mp4', 'audio/x-m4a', 'audio/aac']);
-    const extOk = /\.(mp3|wav|m4a|aac)$/i.test(file.originalname || '');
-    if (!OK_AUDIO.has(file.mimetype) && !extOk)
-      return res.status(400).json({ error: `不支持的格式 ${file.mimetype || '未知'},请上传 MP3/WAV/M4A` });
-    if (file.size > 20 * 1024 * 1024)
-      return res.status(400).json({ error: '音频不能超过 20MB' });
-    try {
-      const ext = /\.(\w+)$/.exec(file.originalname || '')?.[1]?.toLowerCase() ?? 'mp3';
-      const key = `audio-inputs/${tid}/${randomUUID()}.${ext}`;
-      await putObject(key, file.buffer, file.mimetype || 'audio/mpeg');
-      audit(req, 'upload_audio_input', key);
-      return res.json({ audioRef: key });
-    } catch (e) {
-      return res.status(500).json({ error: e instanceof Error ? e.message : '上传失败' });
-    }
+    const r = await storeAudioInput(
+      { tenantId: req.user!.tenantId, userId: req.user!.id, ip: clientIpOf(req), apiKeyId: req.apiKeyId ?? null },
+      { buffer: file.buffer, mimetype: file.mimetype, originalname: file.originalname, size: file.size },
+      req.body?.consent === 'true' || req.body?.consent === true,
+    );
+    if (!r.ok) return res.status(r.status).json({ error: r.error });
+    return res.json({ audioRef: r.audioRef });
   },
 );
 
@@ -1249,8 +1448,17 @@ jobsRouter.get('/image-models', requireAuth, (_req: Request, res: Response) => {
   // 只列 enabled(DB override 优先);P2-default:default = 首个 enabled(禁用默认时前端不预选不在列表的)。
   // 全档下架的档集模型不下发(D5 收尾):resolutionTiers:[] 会被前端当 falsy 回落 maxResolution 假档集,
   // 模型看似可选但提交必 400 —— 没有在售档 = 模型本身不可售,直接从列表剔除。
-  const enabled = listEnabledModels().filter((d) => (enabledTiers(d)?.length ?? 1) > 0);
-  const models = enabled.map((d) => ({
+  const enabled = listEnabledImageModels();
+  const models = enabled.map(projectImageModel);
+  const def = enabled.find((d) => d.key === DEFAULT_IMAGE_MODEL)?.key ?? enabled[0]?.key ?? DEFAULT_IMAGE_MODEL;
+  res.json({ models, default: def });
+});
+/** 在售图片模型(全档下架的档集模型剔除;REST 与 MCP 同一份口径)。 */
+export function listEnabledImageModels(): ImageModelDef[] {
+  return listEnabledModels().filter((d) => (enabledTiers(d)?.length ?? 1) > 0);
+}
+export function projectImageModel(d: ImageModelDef) {
+  return ({
     key: d.key,
     label: d.label,
     modes: d.modes,
@@ -1271,10 +1479,8 @@ jobsRouter.get('/image-models', requireAuth, (_req: Request, res: Response) => {
       : (d.sizeKind === 'keyword' ? [] : undefined)),
     // admin 录的分辨率表(前端比例下拉用;只吐 ratio/w/h/默认,不漏 priceTier/modelId)
     resolutions: (d.resolutions ?? []).map((r) => ({ ratio: r.ratio, width: r.width, height: r.height, isDefault: !!r.isDefault })),
-  }));
-  const def = enabled.find((d) => d.key === DEFAULT_IMAGE_MODEL)?.key ?? enabled[0]?.key ?? DEFAULT_IMAGE_MODEL;
-  res.json({ models, default: def });
-});
+  });
+}
 
 // TTS 情绪 + 语速选项清单(T-TTS-EMOTION)— 前端下拉真相源。
 // 全 Qwen-TTS:无「品质」模型选择(系统按是否带指令自动选 flash/instruct)。
@@ -1289,9 +1495,11 @@ jobsRouter.get('/tts-models', requireAuth, (_req: Request, res: Response) => {
 // 文生视频模型清单 — 前端下拉单一真相源(只吐 UI 能力字段,不漏 modelId/priceTier)。
 // 仅 t2v 模型(tasks 空);i2v 走 /i2v-models。
 jobsRouter.get('/video-models', requireAuth, (_req: Request, res: Response) => {
-  const models = listVideoModels()
-    .filter((d) => d.tasks.length === 0)
-    .map((d) => ({
+  const models = listVideoModels().filter((d) => d.tasks.length === 0).map(projectT2VModel);
+  res.json({ models, default: getVideoModel().key });
+});
+export function projectT2VModel(d: VideoModelDef) {
+  return ({
       key: d.key,
       label: d.label,
       shape: d.shape, // 前端据此显 mode(V_KLING)或 resolution 段控(V_DASH)
@@ -1303,13 +1511,16 @@ jobsRouter.get('/video-models', requireAuth, (_req: Request, res: Response) => {
       supportsAudio: d.supportsAudio, // 前端据此显/隐有声开关(仅可灵)
       supportsNegative: d.supportsNegative, // wan2.7
       supportsPromptExtend: d.supportsPromptExtend, // wan2.7
-    }));
-  res.json({ models, default: getVideoModel().key });
-});
+  });
+}
 
 // 图转影片模型清单 — img2video 页下拉真相源(吐 tasks/maxRefImages/promptRequired 供 tab 显隐 + 校验)。
 jobsRouter.get('/i2v-models', requireAuth, (_req: Request, res: Response) => {
-  const models = listI2VModels().map((d) => ({
+  const models = listI2VModels().map(projectI2VModel);
+  res.json({ models, default: getI2VModel().key });
+});
+export function projectI2VModel(d: VideoModelDef) {
+  return ({
     key: d.key,
     label: d.label,
     resolutions: d.resolutions,
@@ -1323,13 +1534,16 @@ jobsRouter.get('/i2v-models', requireAuth, (_req: Request, res: Response) => {
     tasks: d.tasks, // 前端据此显隐 tab(first_frame/first_last/reference)
     maxRefImages: d.maxRefImages, // 参考生上限
     promptRequired: d.promptRequired, // 参考生 prompt 必填
-  }));
-  res.json({ models, default: getI2VModel().key });
-});
+  });
+}
 
 // 参考生影片模型清单 — ref-video 页下拉真相源(多模态:吐 maxRefImages/maxVideoRefs/maxAudioRefs + supportsAudio)。
 jobsRouter.get('/r2v-models', requireAuth, (_req: Request, res: Response) => {
-  const models = listR2VModels().map((d) => ({
+  const models = listR2VModels().map(projectR2VModel);
+  res.json({ models, default: getR2VModel().key });
+});
+export function projectR2VModel(d: VideoModelDef) {
+  return ({
     key: d.key,
     label: d.label,
     resolutions: d.resolutions,
@@ -1342,13 +1556,16 @@ jobsRouter.get('/r2v-models', requireAuth, (_req: Request, res: Response) => {
     maxVideoRefs: d.maxVideoRefs,   // 视频≤3
     maxAudioRefs: d.maxAudioRefs,   // 音频≤3
     promptRequired: d.promptRequired,
-  }));
-  res.json({ models, default: getR2VModel().key });
-});
+  });
+}
 
 // 视频编辑模型清单 — video-edit 页下拉真相源(吐输入视频约束供前端校验/文案,不漏 priceTier)。
 jobsRouter.get('/edit-models', requireAuth, (_req: Request, res: Response) => {
-  const models = listEditModels().map((d) => ({
+  const models = listEditModels().map(projectEditModel);
+  res.json({ models, default: getEditModel().key });
+});
+export function projectEditModel(d: VideoModelDef) {
+  return ({
     key: d.key,
     label: d.label,
     resolutions: d.resolutions,
@@ -1363,9 +1580,8 @@ jobsRouter.get('/edit-models', requireAuth, (_req: Request, res: Response) => {
     maxOutSeconds: d.maxOutSeconds, // HH=15(估价说明)
     supportsTruncate: d.supportsTruncate, // wan 截断时长档
     supportsAudioOrigin: d.supportsAudioOrigin, // 保留原声 toggle
-  }));
-  res.json({ models, default: getEditModel().key });
-});
+  });
+}
 
 // 作品列表 — 任何登录角色(含 viewer)可读本租户作品
 jobsRouter.get('/jobs', requireAuth, async (req: Request, res: Response) => {

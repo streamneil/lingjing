@@ -167,13 +167,95 @@
 - **Context:** 2026-07-26 /ship 落地前审查(confidence 9/10)。**既有行为**,非 v0.8.0.7 引入 —— 循环结构自 REST `/image-uploads` 首版即如此,本次只是把它抽成共用函数时看见了。触发条件是 MinIO 中途抖动,概率低但非零。
 - **Effort:** S(human)→ XS(CC)。**Priority:** P3。
 
-### T-MCP-VERSION-DRIFT:MCP server 版本号写死,与 VERSION 漂移
-- **What:** `src/mcp/index.ts` 里 `new McpServer({ name: 'lingjing', version: '0.7.0' })` 是硬编码字面量,VERSION 已到 0.8.0.7。
-- **Why:** 该版本号在 MCP 握手时回给 Agent,客户端可见。报错的版本会让客户排查问题时对不上号。
-- **Cons:** 直接改成 0.8.0.7 只是把漂移推后一版,真正的修法是从 VERSION/package.json 读取,需引入一次启动期读文件。
-- **Context:** 2026-07-26 /ship 落地前审查(confidence 8/10)。既有问题,无功能影响。**Priority:** P4。
+## MCP 补全评审补充(2026-07-28,/plan-eng-review — MCP 全量补全轮)
+
+### T-MCP-PRESIGNED-UPLOAD:预签名直传,解除 MCP 上传 20MB 天花板
+- **What:** 新增 `create_upload_url` 工具返回预签名 PUT URL,Agent 直传对象存储;再调 `confirm_upload` 补登 consent 与 `authorization` 存证。未 confirm 的对象需 GC。
+- **Why:** MCP 是 JSON-RPC,文件只能 base64 内联,body 上限 32mb 折合真实文件约 24MB,实现取 20MB。而 `video_edit` 允许 60 秒输入、REST `/video-uploads` 允许 100MB —— 大多数手机实拍素材会 413 被赶去走 REST,打破「装了 MCP 就能用全部能力」的承诺。
+- **Pros:** MCP 上传能力与网页端对齐;文件不经服务端内存,并发字节闸(v0.9.2 引入)可以放宽甚至撤掉。
+- **Cons:** 存储层要给 MinIO(`presignedPutObject`)和 OSS(`signatureUrl` with PUT)**两个后端**都实现;更关键的是**合规存证从「服务端接到文件时同步写」退化成「confirm 补登」**—— 「已上传但未 confirm」= 有对象无存证,深度合成审计时是真窟窿,必须配套 GC + 对账。
+- **Context:** 2026-07-28 /plan-eng-review D3 的选项 C,当轮因合规链风险被否决,改走 base64 内联 + 明确上限引导(超限错误直接指引 Agent 改调 `POST /api/video-uploads`,该端点一直在 key 作用域内)。设计取舍已推导完毕,勿重推。
+- **Depends on:** D14 的内容哈希命名先落地 —— key 由内容 sha256 决定后,`confirm_upload` 才能校验「Agent 说传的」与「存储里实际是的」是同一个文件。
+- **Effort:** L(human)→ M(CC)。**Priority:** P2(触发条件:客户反馈 20MB 不够,或 413 在真实使用中变常见)。
+
+### T-ESTIMATE-BUILDER-DRY:estimateJob 与 JOB_BUILDERS 的平行校验实现
+- **What:** 让 `estimateJob`(`src/api/jobs.ts:1156-1235`)也跑 `JOB_BUILDERS`(`:838`)取 cost,消灭两份平行校验实现。
+- **Why:** 网页端今天就会给出「报价能过、提交 400」的体验。2026-07-28 逐行比对查出的**六条实际分歧**(带行号,勿重查):
+  - `duration` 超模型 `durationRange` → estimate 静默 clamp 给价,builder 400(`:584` / `:677`)
+  - `resolution` ∉ `def.resolutions`(i2v/r2v)→ estimate 透传并按 1080 计价,builder 400(`:579`)
+  - `voiceRef` 伪造/非本人(tts)→ estimate 完全不读 voiceRef(`:1225`),builder 400(`:368`)
+  - `prompt` 为空 / 超 `maxPromptChars` → estimate 无校验,builder 400
+  - i2v 的 `task` → estimate 从不读(`:1200`),builder 必填
+  - `truncateDuration` 非整数(edit)→ estimate 接受并计价,builder 400(`:763`)
+  - 另:gpt-image-2 img2img 的输入图计数,estimate 走 `inputImageCount`(`:1178`)、settle 走 `imageRefs.length`(`src/credits/index.ts:291`),口径不同会少报价。
+- **Pros:** 一份校验实现永不再漂;网页端报价与实扣完全一致。
+- **Cons:** builder 比 estimate 严得多 —— 网页是**边填参数边实时报价**的,用户还没选音色 / 未传图时就会开始 400。必须配套改前端「参数未齐不请求报价」的逻辑,影响 8 个生成页。
+- **Context:** 2026-07-28 /plan-eng-review D16。MCP 侧已在 v0.9.2 通过新增 `quoteJob()`(跑 builder,跳过余额闸/入队/reserve)单独解决,**网页端那条路未动**。本条是把同样的严格性推到网页端。
+- **Effort:** M(human)→ S(CC),但前端回归面大。**Priority:** P2。
+
+## MCP 全量补全落地后补充(2026-07-28,/ship 两轮专家评审 + 对抗评审)
+
+### T-REF-CAPABILITY:内容寻址让素材 key 变得可推算,提交时却不校验授权行
+- **What:** `contentKey` 改为 `sha256(字节)` 后,同租户内**任何持有同一份原图的人**都能在本地算出 key,
+  绕开 `upload_image` 直接填进 `generate_image` 的 `imageRefs`。`checkRefsOwned` 只校验租户前缀,
+  而 `authorization` 表全仓**只写不读**(grep 确认:jobs/avatars/voices 里只有 INSERT,无一处用于放行判定)。
+- **Why:** uuid 命名时,持有 ref ≈ 持有一张「已过 consent 闸」的凭证(不可推算);内容寻址把这个性质拿掉了。
+  后果:成员 B 用成员 A 传过的照片出图,全程无自己的授权声明、无对应存证行 —— 深度合成审计时,
+  这次生成的授权记录指向 A。相关只读变体:`edit_video({videoRef, dry_run:true})` 会回传别人 sidecar 里的
+  `inputDuration`,泄漏 job 级隔离本该挡住的元数据。
+- **修法:** 提交时要求每个 ref 都能解析到「存在的对象 + 对应的 authorization 行」。本轮新加的
+  `idx_auth_subject_key` 索引正好让这个查询很便宜 —— 目前它只被去重路径用到。
+- **Context:** 2026-07-28 /ship 对抗评审(FIXABLE/INVESTIGATE,已验证 `authorization` 表无读取点)。
+  是 D14(内容哈希命名)的未预见后果,不是历史遗留。**Priority:** P1(触发条件:多成员机构上线即成立)。
+
+### T-AUTH-ACTOR-ATTRIBUTION:存证去重把授权归给了第一个上传者
+- **What:** `insertAuthOnce` 的去重键是 `(tenant_id, subject_key, proof_key)`,不含 `created_by`。
+  成员 B 上传成员 A 传过的同一份字节时命中去重,B 的 `consent=true` 声明**不落任何一行**。
+- **Why:** 这个列加进来的理由就是「审计时答得出这张图的授权行是哪一条」(db/index.ts 注释)。
+  现在答出来的是 A。去重的初衷是折叠**同一个人的重试**,实现却分不出「重试」与「另一个人」。
+- **修法:** 去重键加 `created_by`(保留折叠重试),或另立一张「授权声明」表按人记、authorization 仍按对象一行。
+- **Context:** 2026-07-28 两轮评审都提到(security round1 #5 / round2 / 对抗 #8)。**Priority:** P2。
+
+### T-MCP-PERKEY-TENANT:并发字节闸按密钥分,而密钥可无限创建
+- **What:** `PER_KEY_INFLIGHT_MAX` 与三道限速器都以 `keyId` 为键,而 `POST /api/api-keys` 对密钥数量无上限。
+  同一个人建 4 把密钥即可占满全局预算;`PER_KEY_INFLIGHT_MAX = max(body上限, 全局/4)` 还会随
+  `MCP_BODY_LIMIT` 调大而失效(把 body 上限调到 100mb,单密钥就能占 81% 全局预算)。
+- **修法:** 闸与限速改按 `tenantId` 计,或给密钥数量设上限;并在 `全局 < 2×body上限` 时启动告警。
+- **Context:** 2026-07-28 对抗评审 #2。**Priority:** P2。
+
+### T-MCP-INFLIGHT-AMPLIFICATION:字节闸记的是线缆字节,实际堆内存是它的 3–4 倍
+- **What:** 一个 32MB 请求同时持有:原始 body、`JSON.parse` 的字符串、解析后对象里的 base64 串
+  (`decodeUpload` 用 slice,SlicedString 会拖住父串)、以及解码出的 Buffer —— 峰值约 100–130MB,
+  而闸只记 32MB。默认 128MB 预算实际放行约 400–500MB 堆。
+- **修法:** 记账时乘一个放大系数,或把默认值按实测 RSS 调低。
+- **Context:** 2026-07-28 对抗评审 #3(perf 专家 round1 也独立测到 ~1.7x)。**Priority:** P2。
+
+### T-GETJOB-EMPTY-RESULTS:done 但签不出 URL 时返回「成功且无产物」
+- **What:** `get_job` 里 `try { out.results = await signOutputUrls(...) } catch {}`;而 `signOutputUrls`
+  内部已经 `.catch(() => null)` 再 filter,存储降级时返回 `[]` 而非抛错 —— 于是工具回
+  `{status:'done'}` 且 results 为空/缺失、**没有 error 字段**。而 instructions 告诉 Agent
+  「完成后 results 里是签名下载 URL」。Agent 只能误报成功(积分已结算)或对终态无限轮询。
+- **修法:** done 但零签名 URL 时回可重试码(`UPLOAD_FAILED` / `INTERNAL_ERROR`)。
+- **Context:** 2026-07-28 对抗评审 #10。**Priority:** P2。
+
+### T-ENV-MAGNITUDE-CLAMP:env 只校验格式不校验量级
+- **What:** `MCP_BODY_LIMIT` 的正则只管形状。`0mb` 能通过 → `BODY_LIMIT_BYTES=0` → chunked 请求记 0 字节
+  (正是「免费绕过」),同时 `express.json({limit:0})` 让所有请求 413;`999gb` 能通过 → 两道闸全废。
+- **修法:** 夹到 `[1mb, 128mb]` 并告警,与格式非法同一处理。
+- **Context:** 2026-07-28 对抗评审 #11。**Priority:** P3。
+
+### T-MCP-ANON-THROTTLE:未鉴权的 /mcp 流量完全不限速
+- **What:** `preParseLimiter` 以 `keyId` 为键,只有鉴权通过后才轮到它;`/mcp` 又挂在全局 `apiRateLimit` 之前。
+  密钥无效的请求每次仍要跑两次同步 better-sqlite3 查询,而 better-sqlite3 会阻塞事件循环。
+- **Why:** 不是 2026-07-25 修过的那个 32 倍内存放大(那个已修),但确实意味着 `/mcp` 对匿名洪水的
+  唯一防线是前面的 Caddy。
+- **修法:** 在 `resolveApiKeyFull` 之前加一道按 IP 的滑窗限速;或确认并写明 Caddy 侧的限速作为补偿控制。
+- **Context:** 2026-07-28 security 评审 round1 #2 / round2。**Priority:** P3。
 
 ## ✅ 已完成(归档,保留可追溯)
+
+### T-MCP-VERSION-DRIFT:MCP server 版本号写死 — ✅ 2026-07-28
+- 完成证据:`src/mcp/index.ts` 的 `SERVER_VERSION` 启动期从 package.json 读一次(读不到回落 `0.0.0-unknown` 哨兵,不让服务起不来);`new McpServer({ name:'lingjing', version: SERVER_VERSION })`。test/mcp-video-tools.test.ts 断言 `client.getServerVersion().version === package.json.version`,从此不会再漂。随 v0.9.2 MCP 全量补全一并落地。
 
 ### T-TTS-QUALITY-MODEL:品质模型选择 + 按 tier 计价 — ✅ 2026-06-11
 - 完成证据:TTS_MODELS 注册表(cosyvoice-v1/v3.5-flash/qwen3-tts-flash/instruct)+ 品质下拉按音色 transport 过滤。estimateTtsCost(len,pricePerChar) 默认不变(byte-identical)、costFor 读 pricePerCharSnapshot;buildTtsJob 校验模型⟂音色 transport(不兼容 400)+ 快照单价(reserve==settle);GET /tts-models。test/tts-quality-model.test.ts 15 例。merge fd18281。

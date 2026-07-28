@@ -208,25 +208,107 @@ describe('MCP upload_image — 合规闸不因入口而异(与 REST 同口径)',
     expect((r as { error: string }).error).toContain('10MB');
   });
 
-  it('每张写 authorization 存证行(subject_type=image-edit)', async () => {
-    const before = (db.prepare(
-      `SELECT COUNT(*) n FROM authorization WHERE tenant_id=? AND subject_type='image-edit'`,
-    ).get(tId) as { n: number }).n;
+  // 存证粒度按「对象」而非按「次」(eng-review D18)。存储 key 由内容 sha256 决定,所以
+  // 「同一份字节」= 同一个对象 = 一条存证覆盖它。审计要回答的是「这个素材有没有授权」,
+  // 不是「当时点选了几个文件」—— 后者是 uuid 命名时代的实现细节,不是合规要求。
+  // 这里钉的是真正的不变量:**每个落盘的输入对象,都有一条 subject_key 指向它的存证行**。
+  it('每个落盘对象都有存证行覆盖(subject_key 关联,subject_type=image-edit)', async () => {
     const c = await mcp();
-    await c.callTool({
+    const PNG_B = Buffer.concat([PNG, Buffer.from('distinct-bytes')]); // 与 PNG 内容不同 → 不同对象
+    const res = await c.callTool({
       name: 'upload_image',
       arguments: {
         images: [
           { filename: 'e1.png', data_base64: PNG.toString('base64') },
-          { filename: 'e2.png', data_base64: PNG.toString('base64') },
+          { filename: 'e2.png', data_base64: PNG_B.toString('base64') },
         ],
         consent: true,
+      },
+    });
+    const refs = (res.structuredContent as { imageRefs: string[] }).imageRefs;
+    expect(refs).toHaveLength(2);
+    expect(new Set(refs).size).toBe(2); // 内容不同 → 两个对象
+    for (const k of refs) {
+      expect(mem.has(k)).toBe(true); // 对象真落盘
+      const row = db.prepare(
+        `SELECT consent FROM authorization
+          WHERE tenant_id=? AND subject_key=? AND subject_type='image-edit'`,
+      ).get(tId, k) as { consent: number } | undefined;
+      expect(row?.consent).toBe(1); // 且每个对象都被一条存证行覆盖
+    }
+    await c.close();
+  });
+
+  it('同一次请求里传两份相同字节 → 塌成一个对象一条存证(imageRefs 长度不变)', async () => {
+    const c = await mcp();
+    const dup = Buffer.concat([PNG, Buffer.from('dup-case')]);
+    const before = (db.prepare(
+      `SELECT COUNT(*) n FROM authorization WHERE tenant_id=? AND subject_type='image-edit'`,
+    ).get(tId) as { n: number }).n;
+    const res = await c.callTool({
+      name: 'upload_image',
+      arguments: {
+        images: [
+          { filename: 'same-a.png', data_base64: dup.toString('base64') },
+          { filename: 'same-b.png', data_base64: dup.toString('base64') },
+        ],
+        consent: true,
+      },
+    });
+    const refs = (res.structuredContent as { imageRefs: string[] }).imageRefs;
+    expect(refs).toHaveLength(2);          // 入参几张就回几个 ref(调用方的数组形状不变)
+    expect(new Set(refs).size).toBe(1);    // 但指向同一个对象
+    const after = (db.prepare(
+      `SELECT COUNT(*) n FROM authorization WHERE tenant_id=? AND subject_type='image-edit'`,
+    ).get(tId) as { n: number }).n;
+    expect(after - before).toBe(1);        // 一个对象一条存证,不叠加
+    await c.close();
+  });
+
+  it('重传同一素材 → 不叠加存证行(Agent 超时重试的真实场景)', async () => {
+    const c = await mcp();
+    const retryImg = Buffer.concat([PNG, Buffer.from('retry-case')]);
+    const call = () => c.callTool({
+      name: 'upload_image',
+      arguments: { images: [{ filename: 'r.png', data_base64: retryImg.toString('base64') }], consent: true },
+    });
+    const first = await call();
+    const before = (db.prepare(
+      `SELECT COUNT(*) n FROM authorization WHERE tenant_id=? AND subject_type='image-edit'`,
+    ).get(tId) as { n: number }).n;
+    const second = await call(); // 模拟客户端库自动重试(Agent 没参与决策,不会传幂等键)
+    const k1 = (first.structuredContent as { imageRefs: string[] }).imageRefs[0];
+    const k2 = (second.structuredContent as { imageRefs: string[] }).imageRefs[0];
+    expect(k2).toBe(k1); // 同字节 → 同 key,不产生孤儿对象
+    const after = (db.prepare(
+      `SELECT COUNT(*) n FROM authorization WHERE tenant_id=? AND subject_type='image-edit'`,
+    ).get(tId) as { n: number }).n;
+    expect(after).toBe(before); // 一次授权事件只留一份证据
+    await c.close();
+  });
+
+  it('同素材换新凭证再传 → 新增存证行(新的授权事件不能被当成重试吐掉)', async () => {
+    const c = await mcp();
+    const img = Buffer.concat([PNG, Buffer.from('reconsent-case')]);
+    await c.callTool({
+      name: 'upload_image',
+      arguments: { images: [{ filename: 'rc.png', data_base64: img.toString('base64') }], consent: true },
+    });
+    const before = (db.prepare(
+      `SELECT COUNT(*) n FROM authorization WHERE tenant_id=? AND subject_type='image-edit'`,
+    ).get(tId) as { n: number }).n;
+    await c.callTool({
+      name: 'upload_image',
+      arguments: {
+        images: [{ filename: 'rc.png', data_base64: img.toString('base64') }],
+        consent: true,
+        proof: { filename: '补充授权书.pdf', data_base64: Buffer.from('%PDF new consent').toString('base64') },
       },
     });
     const after = (db.prepare(
       `SELECT COUNT(*) n FROM authorization WHERE tenant_id=? AND subject_type='image-edit'`,
     ).get(tId) as { n: number }).n;
-    expect(after - before).toBe(2);
+    expect(after - before).toBe(1); // 凭证不同 = 新授权事件,必须留痕
     await c.close();
   });
 
@@ -355,7 +437,11 @@ describe('storeImageInputs 守卫(单测:REST/MCP 入口各自被 multer/zod 挡
       .mockRejectedValueOnce(new Error('MinIO 连接失败'));
     const r = await storeImageInputs(actor(), [file('fail.png')], true);
     expect(r).toMatchObject({ ok: false, status: 500 });
-    expect((r as { error: string }).error).toContain('MinIO');
+    // 反过来断言:**不能**把厂商原文回给调用方。MinIO/OSS 的报错带 endpoint、bucket、
+    // region、requestId,经 MCP 会原样递给持密钥方 —— 等于送出内部拓扑。
+    // 细节进日志,调用方只拿到可执行结论。视频/音频两条路同口径。
+    expect((r as { error: string }).error).not.toContain('MinIO');
+    expect((r as { error: string }).error).toContain('存储写入失败');
     const after = (db.prepare(
       `SELECT COUNT(*) n FROM authorization WHERE tenant_id=? AND subject_type='image-edit'`,
     ).get(tId) as { n: number }).n;
@@ -395,5 +481,61 @@ describe('REST /api/image-uploads 回归 — API key 一直是放行的(不是�
     expect(r.body.error).toContain('不存在的路径');
     expect(Array.isArray(r.body.allowed)).toBe(true);
     expect(r.body.allowed.join('\n')).toContain('/api/image-uploads');
+  });
+});
+
+// ── R1 收尾:折行 base64 的阈值口径(ship 方案完成度审计)────────────────────
+// v0.9.2 把「解码前按字符串长度粗筛」去掉了。原因不是性能,是那个判据本身错:
+// raw.length*3/4 是解码后字节数的**上界**,上界超限 ≠ 真实值超限。旧实现能用长度判,
+// 是因为它先 replace 掉空白量的是净长度;去掉那次复制后,唯一还准的量是 buffer.length。
+// 中间那版两道闸并存,会让 PEM 风格折行的 base64 在阈值附近被提前拒 —— 与 R1「行为严格不变」冲突。
+describe('R1 收尾 — 折行 base64 不因空白被提前拒', () => {
+  it('折行把字符串上界撑过阈值、真实字节没超 → 必须放行', async () => {
+    const c = await mcp();
+    // 关键在于 fixture 要能区分两种判据:
+    //   真实字节 8MB   < 10MB 上限          → 按 buffer.length 判 = 放行
+    //   base64 折行后字符串 ≈14MB,×3/4 ≈ 10.6MB > 10MB → 按字符串长度判 = 误拒
+    // 用小图做这条测试是没用的(两种判据都远在阈值之下,断言不可能失败)。
+    const real = Buffer.alloc(8 * 1024 * 1024, 0x41);
+    const folded = real.toString('base64').replace(/(.{4})/g, '$1\n');
+    expect(folded.length * 3 / 4, 'fixture 没撑过阈值,这条测试就区分不了两种判据')
+      .toBeGreaterThan(10 * 1024 * 1024);
+    const r = await c.callTool({
+      name: 'upload_image',
+      arguments: { images: [{ filename: 'folded-big.png', data_base64: folded }], consent: true },
+    });
+    expect(r.isError, '折行撑大了字符串就被拒 —— 说明尺寸判据又回到了字符串长度').toBeFalsy();
+    await c.close();
+  });
+
+  it('折行与不折行解出同一份字节 → 内容寻址下落同一个 key', async () => {
+    const c = await mcp();
+    const flat = PNG.toString('base64');
+    const folded = flat.replace(/(.{4})/g, '$1\n');
+    const a = await c.callTool({
+      name: 'upload_image',
+      arguments: { images: [{ filename: 'folded.png', data_base64: folded }], consent: true },
+    });
+    const b = await c.callTool({
+      name: 'upload_image',
+      arguments: { images: [{ filename: 'flat.png', data_base64: flat }], consent: true },
+    });
+    expect((a.structuredContent as { imageRefs: string[] }).imageRefs[0])
+      .toBe((b.structuredContent as { imageRefs: string[] }).imageRefs[0]);
+    await c.close();
+  });
+
+  it('超限判定落在解码后的真实字节数上(10MB 阈值不因编码方式浮动)', async () => {
+    const c = await mcp();
+    // 真实 11MB 字节 → base64 约 14.7MB 字符,解码后 11MB > 10MB → 必须拒
+    const big = Buffer.alloc(11 * 1024 * 1024, 0x41);
+    const r = await c.callTool({
+      name: 'upload_image',
+      arguments: { images: [{ filename: 'big.png', data_base64: big.toString('base64') }], consent: true },
+    });
+    expect(r.isError).toBe(true);
+    expect((r.structuredContent as { code: string }).code).toBe('INVALID_INPUT_FILE');
+    expect(String((r.structuredContent as { error: string }).error)).toContain('10MB');
+    await c.close();
   });
 });
