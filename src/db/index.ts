@@ -311,6 +311,12 @@ addColumnIfMissing('api_key', 'key_cipher', `key_cipher BLOB`);
 addColumnIfMissing('api_key', 'key_iv', `key_iv BLOB`);
 addColumnIfMissing('api_key', 'key_tag', `key_tag BLOB`);
 addColumnIfMissing('api_key', 'key_version', `key_version INTEGER`);
+// 输入素材存证的归属对象 key(image-inputs/… · video-inputs/…)。补这一列之前,存证行与它证明的
+// 那个对象之间**没有任何关联** —— 审计时答不出「这张图的授权行是哪一条」。
+// 顺带解决 Agent 重试:上传走内容哈希命名后,同一文件重传落同一个 key,靠本列去重就不会叠加存证行
+// (一次授权事件两份证据,深度合成审计时对不上号)。旧行为 NULL,不参与去重,不影响历史数据。
+addColumnIfMissing('authorization', 'subject_key', `subject_key TEXT`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_auth_subject_key ON authorization(tenant_id, subject_key)`);
 addColumnIfMissing('avatar', 'orientation', `orientation TEXT DEFAULT 'portrait'`);
 addColumnIfMissing('avatar', 'is_default', `is_default INTEGER NOT NULL DEFAULT 0`);
 addColumnIfMissing('user', 'display_name', `display_name TEXT`);
@@ -376,6 +382,14 @@ addColumnIfMissing('avatar', 'created_by', `created_by TEXT`);
 addColumnIfMissing('voice', 'created_by', `created_by TEXT`);
 // ② 复合索引:creator 查询 WHERE tenant_id=? AND created_by=? 走索引(admin 的 tenant-only 查询用现有 idx_*_tenant)。
 db.exec(`CREATE INDEX IF NOT EXISTS idx_job_tenant_creator ON job(tenant_id, created_by);`);
+// 同上但带排序列:list_jobs / GET /api/jobs 的主查询是
+//   WHERE tenant_id=? AND created_by=? ORDER BY created_at DESC
+// 只有 (tenant_id, created_by) 时 SQLite 仍要 USE TEMP B-TREE FOR ORDER BY —— 把该成员的
+// 全部历史物化排序才取前 20 条。实测 10 万条/租户单次 31.9ms,而 better-sqlite3 是同步的,
+// 这 31.9ms 阻塞整个事件循环;带上排序列后 0.09ms。Agent 会话恢复时高频调 list_jobs。
+// 位置要紧:必须在上面的 addColumnIfMissing('job','created_by') 之后 —— 建在之前会
+// 「no such column: created_by」直接起不来(本文件顶部那句「时序严格:先加列→再复合索引」)。
+db.exec(`CREATE INDEX IF NOT EXISTS idx_job_tenant_creator_created ON job(tenant_id, created_by, created_at DESC);`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_avatar_tenant_creator ON avatar(tenant_id, created_by);`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_voice_tenant_creator ON voice(tenant_id, created_by);`);
 // 并发改造(2026-06-16):claimNextJob 的 per-tenant cap COUNT 与 admin 看板都按 status 过滤活跃 job。

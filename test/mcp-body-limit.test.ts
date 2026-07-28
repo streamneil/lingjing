@@ -113,3 +113,26 @@ describe('/mcp 鉴权必须早于 body parser(免鉴权内存放大防回归)', 
     expect(r.status).toBe(413);
   });
 });
+
+// ── 解析失败也必须回 JSON(v0.9.2)──────────────────────────────────────────
+// 与 413 同源的病:app 没有全局错误中间件,body-parser 抛的解析错漏到 express 默认处理器
+// 就是一张 HTML 错误页。Agent 拿到 HTML 只能瞎猜 —— 413 当初专门修过这个,解析失败漏了。
+describe('/mcp 请求体解析失败', () => {
+  it('畸形 JSON → 400 JSON + INVALID_PARAMS(不是 HTML 错误页)', async () => {
+    const body = Buffer.from('{"jsonrpc":"2.0", BROKEN');
+    const res = await fetch(`http://127.0.0.1:${port}/mcp`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      },
+      body,
+    });
+    expect(res.status).toBe(400);
+    expect(res.headers.get('content-type')).toContain('application/json'); // 关键:不是 text/html
+    const j = await res.json() as { code: string; error: string };
+    expect(j.code).toBe('INVALID_PARAMS');
+    expect(j.error).toContain('JSON');
+  });
+});
