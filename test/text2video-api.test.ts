@@ -122,6 +122,29 @@ describe('GET /api/video-models', () => {
 });
 
 describe('POST /api/jobs/estimate (video_t2v) ≡ build(N1/N2,reserve==settle)', () => {
+  it('Seedance 2.5 按官方 Token 公式计价:720P/16:9/10秒=216000 tokens,有声不另加价', async () => {
+    const base = { type: 'video_t2v', model: 'doubao-seedance-2.5', resolution: '720P', ratio: '16:9', duration: 10 };
+    const silent = await client.post('/api/jobs/estimate', { ...base, audio: false });
+    const voiced = await client.post('/api/jobs/estimate', { ...base, audio: true });
+    // ceil(216000 × ¥70/1M × 全局35)=530；旧逻辑逐秒 ceil 会误收 540。
+    expect(silent.body.cost).toBe(530);
+    expect(voiced.body.cost).toBe(530);
+    const sub = await client.post('/api/jobs', { ...base, prompt: '海边日落', audio: true });
+    expect(sub.status).toBe(202);
+    const inp = JSON.parse(getJob(sub.body.id)!.input_json);
+    expect(inp.videoEstimatedTokensSnapshot).toBe(216000);
+    expect(inp.videoTokenRateSnapshot).toBeCloseTo(70 / 1_000_000, 12);
+    expect(inp.priceTierSnapshot).toBeUndefined();
+  });
+
+  it('Seedance 2.5 480P 显著低于 720P,不再错误同价', async () => {
+    const body = { type: 'video_t2v', model: 'doubao-seedance-2.5', ratio: '16:9', duration: 10 };
+    const p480 = await client.post('/api/jobs/estimate', { ...body, resolution: '480P' });
+    const p720 = await client.post('/api/jobs/estimate', { ...body, resolution: '720P' });
+    expect(p480.body.cost).toBe(236);
+    expect(p720.body.cost).toBe(530);
+  });
+
   it('估价随 duration 变', async () => {
     const r5 = await client.post('/api/jobs/estimate', { type: 'video_t2v', model: 'wan2.7-t2v', resolution: '720P', ratio: '16:9', duration: 5 });
     const r10 = await client.post('/api/jobs/estimate', { type: 'video_t2v', model: 'wan2.7-t2v', resolution: '720P', ratio: '16:9', duration: 10 });

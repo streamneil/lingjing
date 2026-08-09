@@ -51,7 +51,10 @@ vi.mock('../src/gateway/baichuan.js', () => ({
       return 'provider-i2v-task';
     },
     async fetchJobStatus() {
-      return { status: 'succeeded', videoUrl: 'http://fake/i2v.mp4', aiLabel: 'none' as const };
+      return {
+        status: 'succeeded', videoUrl: 'http://fake/i2v.mp4', aiLabel: 'none' as const,
+        usage: { completionTokens: 50000 },
+      };
     },
   }),
 }));
@@ -96,6 +99,24 @@ function i2vInput(over: Record<string, unknown> = {}) {
 }
 
 describe('runVideoI2VJob + finalizeVideoJob 集成', () => {
+  it('Seedance 2.5 把厂商实际 completion_tokens 带入最终结算并退回预估差额', async () => {
+    grant(TID, 10000);
+    const before = balance(TID);
+    const input = i2vInput({
+      model: 'doubao-seedance-2.5',
+      videoTokenRateSnapshot: 70 / 1_000_000,
+      videoEstimatedTokensSnapshot: 100000,
+      priceTierSnapshot: undefined,
+    });
+    const reserved = costFor('video_i2v', input);
+    const actual = costFor('video_i2v', { ...input, videoUsageSnapshot: { completionTokens: 50000 } });
+    expect(actual).toBeLessThan(reserved);
+    const id = enqueueJob('video_i2v', input, TID);
+    await tick();
+    expect(getJob(id)!.status).toBe('done');
+    expect(balance(TID)).toBe(before - actual);
+  });
+
   it('首帧 i2v(空 prompt):跳过送审 → 走完链路 done + settle == reserve', async () => {
     grant(TID, 10000);
     const before = balance(TID);

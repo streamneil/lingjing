@@ -33,7 +33,13 @@ export interface ProviderJobResult {
   progress?: number; // 0-100,厂商若不给则 undefined
   videoUrl?: string; // succeeded 时的成品 URL
   aiLabel?: 'native' | 'none'; // 厂商成品是否自带 AI 标识(C-code 探明)
+  usage?: VideoUsage; // 火山视频成功时返回的实际计费 Token(按实结算)
   error?: string;
+}
+
+/** 视频生成实际用量。火山方舟查询任务成功后以 usage.completion_tokens 返回。 */
+export interface VideoUsage {
+  completionTokens: number;
 }
 
 // ── AI 图片(文生图,qwen-image)──
@@ -118,6 +124,11 @@ export interface VideoGenT2VInput {
   priceTierSnapshot?: number; // 提交时模型每秒计价基数
   inputDurationSnapshot?: number; // 编辑:服务端探测的输入视频时长(秒,sidecar 真相)
   billableSecondsSnapshot?: number; // 编辑:计费秒快照 = 输入 + 预计输出(贴厂商 in+out)
+  // ── Seedance 2.5 Token 计价快照 ──
+  videoTokenRateSnapshot?: number; // 每 Token 真实成本元(无视频输入 70/百万;含视频 42/百万)
+  videoEstimatedTokensSnapshot?: number; // 提交时按官方公式估算的 Token(用于预估/预冻结)
+  referenceVideoDurationSnapshot?: number; // 参考视频总时长(服务端 sidecar 真相)
+  videoUsageSnapshot?: VideoUsage; // worker 从厂商成功响应回写,最终按 completionTokens 实结
 }
 
 // ── 文转语音(TTS,全 Qwen-TTS HTTP)──

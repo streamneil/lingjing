@@ -51,6 +51,8 @@ export interface VideoModelDef {
   priceTierAudio?: number; // 可灵有声 720P 每秒售价积分(缺省回落 priceTier)
   priceTierAudio480?: number; // 有声 480P 每秒售价积分(缺省回落 priceTierAudio/priceTier480)
   priceTierAudio1080?: number; // 可灵有声 1080P 每秒售价积分(缺省回落 priceTier1080)
+  tokenRateNoVideo?: number; // Token 计价:输入不含视频时每 Token 真实成本元
+  tokenRateWithVideo?: number; // Token 计价:输入含视频时每 Token 真实成本元
   supportsAudio: boolean; // 支持有声视频(audio 布尔;可灵/Seedance 前端显示开关)
   supportsNegative: boolean; // 支持反向提示词(仅 wan2.7)
   supportsPromptExtend: boolean; // 支持 prompt 智能改写(仅 wan2.7)
@@ -201,7 +203,7 @@ export const VIDEO_MODELS: Record<string, VideoModelDef> = {
 
   // ── 火山引擎 豆包 Seedance(PR-2a;provider='volc-ark',走 ark.ts 适配器)──
   // shape 复用 V_DASH 占位(ark 适配器自建请求体,不读 shape)。文本+图(首帧/首尾帧/参考生)+ 有声。
-  // ⚠ 价格未录(火山按 token 计,非每秒固定价)→ priceTier 占位、cost_source 待用户在 admin 录真实成本前不启用。
+  // Seedance 2.5 按 Token 计价;priceTier 仅保留给旧任务兼容,新任务不走按秒分支。
   'doubao-seedance-2.5': {
     key: 'doubao-seedance-2.5', label: 'Seedance 2.5', modelId: 'doubao-seedance-2-5-260628', provider: 'volc-ark',
     shape: 'V_DASH',
@@ -209,11 +211,12 @@ export const VIDEO_MODELS: Record<string, VideoModelDef> = {
     ratios: ['adaptive', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
     durationRange: [4, 30], defaultDuration: 5,
     maxPromptChars: 5000,
-    // 官方按 output token 计价:无视频输入 70 元/百万 token、含视频输入 42 元/百万 token。
-    // 平台现有视频账本按秒快照,以 2.0 的 720P 实测档按刊例 token 单价比例保守折算:
-    // 70/46≈1.52 元/秒 → ceil(1.52×35)=54;480P 暂同档防低估,后台可分档校准。
+    // 官方按视频 Token 计价:无视频输入 70 元/百万、含视频输入 42 元/百万。
+    tokenRateNoVideo: 70 / 1_000_000,
+    tokenRateWithVideo: 42 / 1_000_000,
+    // 旧 job 没有 Token 快照时仍需可结算;这些值只作遗留回落,新 job 不读。
     priceTier480: 54, priceTier: 54,
-    priceTierAudio480: 65, priceTierAudio: 65, // 延续现有 Seedance 有声 ×1.2 保守占位
+    priceTierAudio480: 65, priceTierAudio: 65,
     supportsAudio: true,
     supportsNegative: false, supportsPromptExtend: false,
     supportsT2V: true,

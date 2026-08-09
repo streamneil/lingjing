@@ -380,7 +380,16 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
       const k=kindOf(f);
       if(!k){ window.LJToast&&LJToast(`不支持的文件:${f.name||''}`,'err'); rejected=true; continue; }
       if(arrs[k].length>=max[k]){ window.LJToast&&LJToast(`${label[k]}最多 ${max[k]} 个`,'err'); rejected=true; continue; }
-      arrs[k].push({ file:f, url:URL.createObjectURL(f) }); // 音频也给 objectURL 供预览播放
+      const entry={ file:f, url:URL.createObjectURL(f) };
+      arrs[k].push(entry); // 音频也给 objectURL 供预览播放
+      // 实时估价需把参考视频时长计入官方 Token 公式。本地 metadata 仅用于展示；正式扣费
+      // 仍由服务端上传 sidecar 重算,客户端无法靠改 duration 少付。
+      if(k==='vid'){
+        entry.duration=null;
+        const probe=document.createElement('video'); probe.preload='metadata'; probe.src=entry.url;
+        probe.onloadedmetadata=()=>{ entry.duration=Number.isFinite(probe.duration)?probe.duration:0; probe.removeAttribute('src'); probe.load(); scheduleEstimate(); };
+        probe.onerror=()=>{ entry.duration=0; probe.removeAttribute('src'); scheduleEstimate(); };
+      }
     }
     afterChange();
     return rejected;
@@ -488,12 +497,12 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
     if(!document.getElementById('consentChk').checked) return '请勾选授权同意';
     return '';
   }
-  function jobBodyMeta(){ // 估价用占位 refs(数量对即可)
+  function jobBodyMeta(){ // 估价不发送伪 storage key,避免触发租户素材归属校验
     const b={ type:'video_r2v', model, resolution, duration, audio };
     if(ta.value.trim()) b.prompt=ta.value.trim();
     const m=curModel(); if(m&&m.ratios.length) b.ratio=ratio;
     if(seed) b.seed=parseInt(seed,10);
-    b.imageRefs=imgFiles.map((_,i)=>'i'+i); b.videoRefs=vidFiles.map((_,i)=>'v'+i); b.audioRefs=audFiles.map((_,i)=>'a'+i);
+    if(vidFiles.length){ b.hasVideoInput=true; b.inputVideoDuration=vidFiles.reduce((sum,f)=>sum+(Number(f.duration)||0),0); }
     return b;
   }
   let estTimer=null;

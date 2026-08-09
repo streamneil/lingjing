@@ -93,14 +93,17 @@ describe('videoPriceTier 接 model_pricing 统一表 + 全局倍率', () => {
   });
 });
 
-describe('Seedance 2.5 默认定价种子', () => {
+describe('Seedance 2.5 默认 Token 定价种子', () => {
   beforeEach(() => { resetCfg(); clearVov(); });
-  it('种出 480P/720P 及对应有声四个独立变体', () => {
+  it('按输入是否含视频种出两条官方每 Token 费率,不再按有声/分辨率伪分档', () => {
     seedPlatformDefaults();
     const rows = db.prepare(
-      `SELECT variant,real_cost_yuan,enabled FROM model_pricing WHERE model_key=? ORDER BY variant`,
-    ).all('doubao-seedance-2.5') as Array<{ variant: string; real_cost_yuan: number; enabled: number }>;
-    expect(rows.map((r) => r.variant)).toEqual(['480P', '720P', 'audio-480P', 'audio-720P']);
+      `SELECT variant,unit,real_cost_yuan,enabled FROM model_pricing WHERE model_key=? ORDER BY variant`,
+    ).all('doubao-seedance-2.5') as Array<{ variant: string; unit: string; real_cost_yuan: number; enabled: number }>;
+    expect(rows.map((r) => r.variant)).toEqual(['no-video-input', 'video-input']);
+    expect(rows.map((r) => r.unit)).toEqual(['token', 'token']);
+    expect(rows[0]!.real_cost_yuan).toBeCloseTo(70 / 1_000_000, 12);
+    expect(rows[1]!.real_cost_yuan).toBeCloseTo(42 / 1_000_000, 12);
     expect(rows.every((r) => r.real_cost_yuan > 0 && r.enabled === 1)).toBe(true);
   });
 });

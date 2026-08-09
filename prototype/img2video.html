@@ -1029,7 +1029,8 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         return (await r.json()).imageRefs;
       }
 
-      // 提交/估价体(build 与 estimate 同参,reserve==settle)。估价用 imageRefs 占位(数量对即可)。
+      // 提交/估价体。实时估价还没上传素材,不能伪造 storage key(会被租户归属校验拒绝);
+      // 后端估价只需模型参数,正式提交再带真实 imageRefs 并按同一计价函数 reserve。
       function jobBody(imageRefs) {
         const m = curModel(); const b = { type: 'video_i2v', model, task, imageRefs, resolution, duration };
         if (ta.value.trim()) b.prompt = ta.value.trim();
@@ -1047,7 +1048,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         estTimer = setTimeout(async () => {
           if (!imagesReady()) { document.getElementById('estLabel').textContent = '预估 — 点'; document.getElementById('estGem').textContent = '—'; return; }
           try {
-            const placeholder = Array.from({ length: imageCount() }, (_, i) => 'est' + i); const r = await LJ.post('/jobs/estimate', jobBody(placeholder));
+            const r = await LJ.post('/jobs/estimate', jobBody([]));
             document.getElementById('estLabel').textContent = '预估 ' + r.cost + ' 点';
             document.getElementById('estGem').textContent = r.cost;
           } catch (e) { }
@@ -1059,7 +1060,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         document.getElementById('cbtnLabel').textContent = ok ? '创建' : msg;
       }
       ta.addEventListener('input', () => { cnt.textContent = ta.value.length; refreshBtn(); scheduleEstimate(); });
-      document.getElementById('consentChk').addEventListener('change', refreshBtn);
+      document.getElementById('consentChk').addEventListener('change', () => { refreshBtn(); scheduleEstimate(); });
 
       document.querySelectorAll('.ftab').forEach(t => t.onclick = function () {
         this.parentNode.querySelectorAll('.ftab').forEach(x => x.classList.remove('active')); this.classList.add('active');

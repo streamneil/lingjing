@@ -172,6 +172,10 @@ export class ArkGateway implements CapabilityGateway, SyncImageGateway {
     if (normalized === 'succeeded') {
       result.videoUrl = json?.content?.video_url;
       result.aiLabel = 'none'; // worker 统一 applyAiLabel 后处理(与百炼同口径)
+      const completionTokens = Number(json?.usage?.completion_tokens);
+      if (Number.isFinite(completionTokens) && completionTokens > 0) {
+        result.usage = { completionTokens: Math.ceil(completionTokens) };
+      }
     }
     if (normalized === 'failed') result.error = json?.error?.message ?? json?.error?.code ?? '火山任务失败';
     return result;

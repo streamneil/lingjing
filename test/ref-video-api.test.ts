@@ -16,7 +16,8 @@ const { createApp } = await import('../src/server.js');
 const { createTenant, createUser } = await import('../src/auth/index.js');
 const { grant } = await import('../src/credits/index.js');
 const { getJob } = await import('../src/queue/index.js');
-const { costFor, estimateVideoCost } = await import('../src/credits/index.js');
+const { costFor, estimateVideoCost, estimateVideoTokens, estimateVideoTokenCost } = await import('../src/credits/index.js');
+const { putObject } = await import('../src/storage/index.js');
 const { getR2VModel, listR2VModels } = await import('../src/gateway/video-models.js');
 const { Client } = await import('./helpers.js');
 
@@ -35,6 +36,8 @@ beforeAll(async () => {
   grant(t.id, 1000000);
   const r = await client.login('rcreator', 'pw123456');
   expect(r.status).toBe(200);
+  // Seedance 2.5 正式提交只认服务端 sidecar 的视频时长；不需要真实视频对象即可测 builder 钱路。
+  await putObject(`${VV}priced.mp4.meta.json`, JSON.stringify({ duration: 5, width: 1280, height: 720 }), 'application/json');
 }, 30000);
 
 describe('r2v 模型注册(能力门控)', () => {
@@ -136,6 +139,29 @@ describe('POST /api/jobs (video_r2v) 多模态组合校验', () => {
 });
 
 describe('POST /api/jobs (video_r2v) 成功 + 快照', () => {
+  it('网页未上传 refs 时也能估价；提交后按 sidecar 输入时长切到 42元/百万 Token', async () => {
+    const quote = await client.post('/api/jobs/estimate', {
+      type: 'video_r2v', model: 'doubao-seedance-2.5', prompt: '参考视频生成',
+      resolution: '720P', ratio: '16:9', duration: 10, audio: true,
+      hasVideoInput: true, inputVideoDuration: 5,
+    });
+    expect(quote.status).toBe(200);
+
+    const sub = await client.post('/api/jobs', {
+      type: 'video_r2v', model: 'doubao-seedance-2.5', prompt: '参考视频生成',
+      videoRefs: [VV+'priced.mp4'], resolution: '720P', ratio: '16:9', duration: 10, audio: true,
+      // 伪造值必须无效；builder 会从 sidecar 得到真实 5 秒。
+      inputVideoDuration: 0,
+    });
+    expect(sub.status).toBe(202);
+    const inp = JSON.parse(getJob(sub.body.id)!.input_json);
+    const tokens = estimateVideoTokens('720P', '16:9', 10, 5);
+    expect(inp.referenceVideoDurationSnapshot).toBe(5);
+    expect(inp.videoEstimatedTokensSnapshot).toBe(tokens);
+    expect(inp.videoTokenRateSnapshot).toBeCloseTo(42 / 1_000_000, 12);
+    expect(sub.body.cost).toBe(quote.body.cost);
+  });
+
   it('全模态(文本+2图+1视频+1音频)+有声 → 202,三数组+audio 入快照', async () => {
     const r = await client.post('/api/jobs', {
       type: 'video_r2v', model: 'doubao-seedance-2.0',
@@ -170,6 +196,16 @@ describe('POST /api/jobs (video_r2v) 成功 + 快照', () => {
 });
 
 describe("costFor('video_r2v') 读快照(reserve==settle,含音频)", () => {
+  it('Seedance 2.5 有官方实际 completion_tokens 时按实结算,不再按预估秒数', () => {
+    const input = {
+      model: 'doubao-seedance-2.5', videoTokenRateSnapshot: 42 / 1_000_000,
+      videoEstimatedTokensSnapshot: 324000,
+    };
+    expect(costFor('video_r2v', input)).toBe(estimateVideoTokenCost(324000, 42 / 1_000_000));
+    expect(costFor('video_r2v', { ...input, videoUsageSnapshot: { completionTokens: 300000 } }))
+      .toBe(estimateVideoTokenCost(300000, 42 / 1_000_000));
+  });
+
   it('有声 720P 用 priceTierAudio;快照口径', () => {
     const d = getR2VModel('doubao-seedance-2.0');
     const cost = costFor('video_r2v', {

@@ -113,6 +113,15 @@ describe('POST /api/jobs/estimate (video_i2v) ≡ build', () => {
 });
 
 describe('POST /api/jobs (video_i2v) Seedance 有声(generate_audio)', () => {
+  it('尚未上传真实 refs 的网页实时估价仍返回积分(修复按钮显示“—”)', async () => {
+    const r = await client.post('/api/jobs/estimate', {
+      type: 'video_i2v', model: 'doubao-seedance-2.5', task: 'first_frame', imageRefs: [],
+      resolution: '720P', duration: 10, audio: true,
+    });
+    expect(r.status).toBe(200);
+    expect(r.body.cost).toBeGreaterThan(0);
+  });
+
   it('Seedance 2.5 首尾帧支持 480P/30 秒/有声', async () => {
     const r = await client.post('/api/jobs', {
       type: 'video_i2v', model: 'doubao-seedance-2.5', task: 'first_last',

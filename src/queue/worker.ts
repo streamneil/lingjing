@@ -318,6 +318,7 @@ async function runVideoT2VJob(job: JobRow): Promise<void> {
   );
   const videoUrl = done.videoUrl;
   if (!videoUrl) throw new Error('厂商成功但未返回成品 URL');
+  if (done.usage) input.videoUsageSnapshot = done.usage;
 
   // 4-6. 共享尾段:抓 Buffer → 送审 → AI 标识 → 落库 → markDone → settle(eng A1)
   await finalizeVideoJob(job, videoUrl, input as unknown as Record<string, unknown>, 'video_t2v');
@@ -461,6 +462,7 @@ async function runMediaVideoJob(
   );
   const videoUrl = done.videoUrl;
   if (!videoUrl) throw new Error('厂商成功但未返回成品 URL');
+  if (done.usage) input.videoUsageSnapshot = done.usage;
 
   // 4-6. 共享尾段(costFor 用原始快照 input;refs/videoRef 已覆写成公网 URL → costFor 只读快照,无碍)
   await finalizeVideoJob(job, videoUrl, input as unknown as Record<string, unknown>, opts.costType);

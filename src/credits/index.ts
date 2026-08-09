@@ -193,6 +193,59 @@ export function videoPriceTier(def: ReturnType<typeof getVideoModel>, resolution
   return def.priceTier;
 }
 
+// ── Seedance 2.5 视频 Token 计价 ──
+// 官方公式:Token ≈ (输入视频总时长 + 输出时长) × 输出宽 × 输出高 × 24fps / 1024。
+// adaptive 无法在提交前知道首图宽高,取该清晰度支持比例中的最大像素数做预估；任务完成后
+// 由 usage.completion_tokens 按实结算,因此这里的像素上界只影响预冻结,不影响最终扣费。
+const SEEDANCE_VIDEO_PIXELS: Record<string, Record<string, [number, number]>> = {
+  '480P': {
+    '16:9': [854, 480], '4:3': [752, 560], '1:1': [640, 640],
+    '3:4': [560, 752], '9:16': [480, 854], '21:9': [992, 432],
+  },
+  '720P': {
+    '16:9': [1280, 720], '4:3': [1112, 834], '1:1': [960, 960],
+    '3:4': [834, 1112], '9:16': [720, 1280], '21:9': [1470, 630],
+  },
+};
+
+export function isVideoTokenPriced(def: ReturnType<typeof getVideoModel>): boolean {
+  return typeof def.tokenRateNoVideo === 'number' && def.tokenRateNoVideo > 0;
+}
+
+/** Seedance 2.5 每 Token 真实成本元:提交快照 → 统一定价 token 行 → 官方代码回落。 */
+export function videoTokenRate(
+  def: ReturnType<typeof getVideoModel>,
+  hasVideoInput: boolean,
+  snapshot?: number,
+): number {
+  if (typeof snapshot === 'number' && snapshot > 0) return snapshot;
+  const variant = hasVideoInput ? 'video-input' : 'no-video-input';
+  const mp = lookupCost(variantId(def.key, variant));
+  if (mp && mp.enabled && mp.unit === 'token' && mp.realCostYuan > 0) return mp.realCostYuan;
+  return hasVideoInput ? (def.tokenRateWithVideo ?? def.tokenRateNoVideo ?? 0) : (def.tokenRateNoVideo ?? 0);
+}
+
+/** 按火山官方公式估算视频 Token；输入视频时长只接受服务端 sidecar 汇总值。 */
+export function estimateVideoTokens(
+  resolution: string,
+  ratio: string | undefined,
+  outputSeconds: number,
+  inputVideoSeconds = 0,
+): number {
+  const byRatio = SEEDANCE_VIDEO_PIXELS[resolution] ?? SEEDANCE_VIDEO_PIXELS['720P']!;
+  const wh = ratio && ratio !== 'adaptive' ? byRatio[ratio] : undefined;
+  const pixels = wh
+    ? wh[0] * wh[1]
+    : Math.max(...Object.values(byRatio).map(([w, h]) => w * h));
+  const seconds = Math.max(0, outputSeconds) + Math.max(0, inputVideoSeconds);
+  return Math.max(1, Math.ceil(seconds * pixels * 24 / 1024));
+}
+
+/** 视频 Token 售价积分:先合计官方真实成本,再统一 ceil 一次,避免逐秒取整多收。 */
+export function estimateVideoTokenCost(tokens: number, rate: number): number {
+  return sellPrice(Math.max(1, Math.ceil(tokens)) * rate);
+}
+
 // 文转语音(TTS)计价:按字数 × 每字单价。
 // 价格对齐(2026-06):qwen3-tts-flash / cosyvoice-v3.5-flash 真实 0.8元/万字符 = 0.00008/字符。
 // 售价 = 成本 × 3.5 = 0.00028/字符 → 取 0.0028(留 10 倍安全垫?不:0.00008×35=0.0028,正好3.5倍)。
@@ -333,6 +386,18 @@ export function costFor(toolType: string, input: Record<string, unknown>): numbe
       // r2v audio 由快照决定(Seedance generate_audio,eng-review P1#1:不硬编码 false → 不漏钱)。读快照(reserve==settle);
       // 无快照(老 job)回落实时派生(同 build 规则,R5.1 DRY)。
       const def = getVideoModel(typeof input.model === 'string' ? input.model : undefined);
+      // Seedance 2.5 新任务:预冻结按官方公式估算 Token,成功后 worker 回写
+      // usage.completion_tokens 按实结算。旧任务没有 Token 快照,继续走下方按秒遗留路径。
+      const tokenRateSnapshot = typeof input.videoTokenRateSnapshot === 'number'
+        ? input.videoTokenRateSnapshot : undefined;
+      const estimatedTokens = typeof input.videoEstimatedTokensSnapshot === 'number'
+        ? input.videoEstimatedTokensSnapshot : undefined;
+      const usage = input.videoUsageSnapshot as { completionTokens?: unknown } | undefined;
+      const actualTokens = typeof usage?.completionTokens === 'number' && Number.isFinite(usage.completionTokens) && usage.completionTokens > 0
+        ? Math.ceil(usage.completionTokens) : undefined;
+      if (tokenRateSnapshot && (actualTokens || estimatedTokens)) {
+        return estimateVideoTokenCost(actualTokens ?? estimatedTokens!, tokenRateSnapshot);
+      }
       const duration = typeof input.durationSnapshot === 'number'
         ? input.durationSnapshot
         : (typeof input.duration === 'number' ? input.duration : def.defaultDuration);

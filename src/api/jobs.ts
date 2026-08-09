@@ -32,6 +32,10 @@ import {
   estimateImageEditCost,
   estimateTtsCost,
   estimateVideoCost,
+  estimateVideoTokens,
+  estimateVideoTokenCost,
+  isVideoTokenPriced,
+  videoTokenRate,
   videoPriceTier,
   estimateAiMusicCost,
   estimateAiMusicSeconds,
@@ -468,6 +472,34 @@ function deriveVideoT2VParams(def: ReturnType<typeof getVideoModel>, body: Recor
   return { duration, resolution, audio, priceTier: videoPriceTier(def, resolution, audio) };
 }
 
+/** 视频计价统一入口:普通模型按秒;Seedance 2.5 按官方 Token 公式。
+ *  inputVideoSeconds 仅由 video_r2v builder 的服务端 sidecar 汇总值传入；网页估价可传本地
+ *  时长但不会写入正式 job,因此不能靠伪造客户端字段少付。 */
+function snapshotVideoGenerationCost(
+  input: VideoGenT2VInput | null,
+  def: ReturnType<typeof getVideoModel>,
+  duration: number,
+  resolution: string,
+  ratio: string | undefined,
+  audio: boolean,
+  inputVideoSeconds = 0,
+  hasVideoInput = inputVideoSeconds > 0,
+): number {
+  if (isVideoTokenPriced(def)) {
+    const rate = videoTokenRate(def, hasVideoInput);
+    const tokens = estimateVideoTokens(resolution, ratio, duration, inputVideoSeconds);
+    if (input) {
+      input.videoTokenRateSnapshot = rate;
+      input.videoEstimatedTokensSnapshot = tokens;
+      if (hasVideoInput) input.referenceVideoDurationSnapshot = inputVideoSeconds;
+    }
+    return estimateVideoTokenCost(tokens, rate);
+  }
+  const tier = videoPriceTier(def, resolution, audio);
+  if (input) input.priceTierSnapshot = tier;
+  return estimateVideoCost(duration, tier, resolution, audio);
+}
+
 /** 校验并构建 video_t2v(文生视频)job 入参 + 计价。registry + shape 感知校验。 */
 function buildVideoT2VJob(body: Record<string, unknown>): JobBuildResult {
   const modelKey = typeof body.model === 'string' ? body.model : undefined;
@@ -506,7 +538,7 @@ function buildVideoT2VJob(body: Record<string, unknown>): JobBuildResult {
   if (body.seed !== undefined && (typeof body.seed !== 'number' || body.seed < 0 || body.seed > 2147483647))
     return { ok: false, status: 400, error: 'seed 需在 0–2147483647 之间' };
 
-  const { duration, resolution, audio, priceTier } = deriveVideoT2VParams(def, body);
+  const { duration, resolution, audio } = deriveVideoT2VParams(def, body);
 
   const input: VideoGenT2VInput = { model: def.key, prompt, ratio };
   if (def.shape === 'V_KLING') {
@@ -521,17 +553,17 @@ function buildVideoT2VJob(body: Record<string, unknown>): JobBuildResult {
   }
   input.duration = duration;
   if (typeof body.seed === 'number') input.seed = body.seed;
-  // 快照(reserve==settle):duration/res档/audio/priceTier 提交时定死。
+  // 快照:普通模型固定每秒价;Seedance 2.5 固定 Token 费率+官方公式预估量。
   input.durationSnapshot = duration;
   input.resSnapshot = resolution;
   input.audioSnapshot = audio;
-  input.priceTierSnapshot = priceTier;
+  const cost = snapshotVideoGenerationCost(input, def, duration, resolution, ratio, audio);
 
   return {
     ok: true,
     type: 'video_t2v',
     input: input as unknown as Record<string, unknown>,
-    cost: estimateVideoCost(duration, priceTier, resolution, audio),
+    cost,
   };
 }
 
@@ -595,7 +627,7 @@ function buildVideoI2VJob(body: Record<string, unknown>): JobBuildResult {
 
   // 派生(复用 deriveVideoT2VParams:duration clamp + res 档 + audio)。
   // Seedance i2v 支持 generate_audio(前端默认开);百炼 happyhorse/wan i2v supportsAudio=false → audio 恒 false。
-  const { duration, audio, priceTier } = deriveVideoT2VParams(def, body);
+  const { duration, audio } = deriveVideoT2VParams(def, body);
 
   const input: VideoGenT2VInput = { model: def.key, task, imageRefs: refs, resolution };
   if (prompt.trim()) input.prompt = prompt;
@@ -607,17 +639,17 @@ function buildVideoI2VJob(body: Record<string, unknown>): JobBuildResult {
   if (audio) input.audio = true; // Seedance i2v 有声(ark.ts 据此发 generate_audio)
   input.duration = duration;
   if (typeof body.seed === 'number') input.seed = body.seed;
-  // 快照(reserve==settle):duration/res/audio/priceTier(R5.2:首帧跳 ratio 但仍快照 res)。
+  // 快照:首帧/首尾帧比例自适应时 Token 预估取该清晰度最大像素上界。
   input.durationSnapshot = duration;
   input.resSnapshot = resolution;
   input.audioSnapshot = audio;
-  input.priceTierSnapshot = priceTier;
+  const cost = snapshotVideoGenerationCost(input, def, duration, resolution, ratio, audio);
 
   return {
     ok: true,
     type: 'video_i2v',
     input: input as unknown as Record<string, unknown>,
-    cost: estimateVideoCost(duration, priceTier, resolution, audio),
+    cost,
   };
 }
 
@@ -643,8 +675,8 @@ function validateMultimodalRefs(
 /** 校验并构建 video_r2v(多模态参考生影片)job 入参 + 计价(eng-review:独立类型,隔离 i2v)。
  *  Seedance 2.0:文本 + 0-9 图 + 0-3 视频 + 0-3 音频;Seedance 2.5 上限 30/10/10 且可纯音频。
  *  - 能力门控:仅声明 maxVideoRefs 的模型(getR2VModel);prompt 必填(含 [图N]/[视频N]/[音频N] 指代)。
- *  - 计费含音频(audio 入快照 → costFor 不破 reserve≡settle;Seedance 有 priceTierAudio)。 */
-function buildVideoR2VJob(body: Record<string, unknown>): JobBuildResult {
+ *  - 2.0 按秒+有声档;2.5 按 Token 且「是否含视频输入」分费率,实际 usage 完成后实结。 */
+async function buildVideoR2VJob(body: Record<string, unknown>): Promise<JobBuildResult> {
   const modelKey = typeof body.model === 'string' ? body.model : undefined;
   if (modelKey && (!isKnownVideoModel(modelKey) || typeof getVideoModel(modelKey).maxVideoRefs !== 'number'))
     return { ok: false, status: 400, error: '未知的多模态参考生模型' };
@@ -692,7 +724,19 @@ function buildVideoR2VJob(body: Record<string, unknown>): JobBuildResult {
   // 有声(generate_audio):Seedance supportsAudio → 读 body.audio(eng-review P1#1:audio 入快照+计价,不硬编码 false)
   const audio = def.supportsAudio ? !!body.audio : false;
   const { duration } = deriveVideoT2VParams(def, body);
-  const priceTier = videoPriceTier(def, resolution, audio);
+
+  // Seedance 2.5 含视频输入时,官方 Token 公式必须计入所有输入视频时长。
+  // 正式提交只认上传时写入的服务端 sidecar；客户端传 inputVideoDuration 无效。
+  let inputVideoSeconds = 0;
+  if (isVideoTokenPriced(def) && videoRefs.length) {
+    const metas = await Promise.all(videoRefs.map((ref) => readVideoSidecar(ref)));
+    if (metas.some((m) => !m)) return { ok: false, status: 400, error: '参考视频元数据丢失,请重新上传' };
+    if (metas.some((m) => m!.duration < 2 || m!.duration > 30))
+      return { ok: false, status: 400, error: 'Seedance 2.5 单个参考视频时长需为 2–30 秒' };
+    inputVideoSeconds = metas.reduce((sum, m) => sum + m!.duration, 0);
+    if (inputVideoSeconds > 30)
+      return { ok: false, status: 400, error: `Seedance 2.5 参考视频总时长最多 30 秒(当前 ${inputVideoSeconds.toFixed(1)} 秒)` };
+  }
 
   const input: VideoGenT2VInput = { model: def.key, task: 'reference', resolution };
   if (imageRefs.length) input.imageRefs = imageRefs;
@@ -702,17 +746,17 @@ function buildVideoR2VJob(body: Record<string, unknown>): JobBuildResult {
   if (ratio) input.ratio = ratio;
   input.audio = audio;
   if (typeof body.seed === 'number') input.seed = body.seed;
-  // 快照(reserve==settle):duration/res/audio/priceTier
+  // 快照:普通模型按秒;Seedance 2.5 按 Token,含视频时长来自 sidecar。
   input.durationSnapshot = duration;
   input.resSnapshot = resolution;
   input.audioSnapshot = audio;
-  input.priceTierSnapshot = priceTier;
+  const cost = snapshotVideoGenerationCost(input, def, duration, resolution, ratio, audio, inputVideoSeconds);
 
   return {
     ok: true,
     type: 'video_r2v',
     input: input as unknown as Record<string, unknown>,
-    cost: estimateVideoCost(duration, priceTier, resolution, audio),
+    cost,
   };
 }
 
@@ -1399,21 +1443,32 @@ export async function estimateJob(tid: string, body: Record<string, unknown>): P
   if (type === 'video_t2v') {
     const def = getVideoModel(typeof body.model === 'string' ? body.model : undefined);
     if (body.audio === true && !def.supportsAudio) return { ok: false, status: 400, error: '该模型不支持有声视频' };
-    const { duration, resolution, audio, priceTier } = deriveVideoT2VParams(def, body);
-    return { ok: true, cost: estimateVideoCost(duration, priceTier, resolution, audio) };
+    const { duration, resolution, audio } = deriveVideoT2VParams(def, body);
+    const ratio = typeof body.ratio === 'string' ? body.ratio : def.ratios[0];
+    return { ok: true, cost: snapshotVideoGenerationCost(null, def, duration, resolution, ratio, audio) };
   }
   if (type === 'video_i2v') {
     const def = getI2VModel(typeof body.model === 'string' ? body.model : undefined);
     if (body.audio === true && !def.supportsAudio) return { ok: false, status: 400, error: '该模型不支持有声视频' };
-    const { duration, resolution, audio, priceTier } = deriveVideoT2VParams(def, body);
-    return { ok: true, cost: estimateVideoCost(duration, priceTier, resolution, audio) };
+    const { duration, resolution, audio } = deriveVideoT2VParams(def, body);
+    const ratio = typeof body.ratio === 'string' ? body.ratio : undefined;
+    return { ok: true, cost: snapshotVideoGenerationCost(null, def, duration, resolution, ratio, audio) };
   }
   if (type === 'video_r2v') {
     const def = getR2VModel(typeof body.model === 'string' ? body.model : undefined);
     const resolution = typeof body.resolution === 'string' ? body.resolution : '720P';
     const { duration } = deriveVideoT2VParams(def, body);
     const audio = def.supportsAudio ? !!body.audio : false;
-    return { ok: true, cost: estimateVideoCost(duration, videoPriceTier(def, resolution, audio), resolution, audio) };
+    const ratio = typeof body.ratio === 'string' ? body.ratio : def.ratios[0];
+    // 网页实时估价尚未上传素材,只把本地 metadata 时长用于展示；正式 reserve 在 builder
+    // 中重读服务端 sidecar,不信任这两个字段。
+    const hasVideoInput = body.hasVideoInput === true;
+    const inputVideoSeconds = hasVideoInput && typeof body.inputVideoDuration === 'number' && Number.isFinite(body.inputVideoDuration)
+      ? Math.min(30, Math.max(0, body.inputVideoDuration)) : 0;
+    return {
+      ok: true,
+      cost: snapshotVideoGenerationCost(null, def, duration, resolution, ratio, audio, inputVideoSeconds, hasVideoInput),
+    };
   }
   if (type === 'video_edit') {
     const def = getEditModel(typeof body.model === 'string' ? body.model : undefined);

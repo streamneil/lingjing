@@ -36,13 +36,9 @@ const DOUBAO_SEED: [string, string, string, string, string | null, number][] = [
   ['doubao-seedream-4.0', 'doubao-seedream-4.0', 'image', '张', null, 0.20],
   ['doubao-seedream-4.5', 'doubao-seedream-4.5', 'image', '张', null, 0.25],
   ['doubao-seedream-5.0-lite', 'doubao-seedream-5.0-lite', 'image', '张', null, 0.22],
-  // Seedance 2.5 官方按 output token 计价(无视频输入 70 元/百万、含视频 42 元/百万)。
-  // 现有账本按输出秒计费,按 2.0 的 720P 实测秒价与刊例 token 单价比 70/46 折算为 1.52 元/秒;
-  // 480P 暂同 720P 保守防低估,管理员可在统一定价页按真实 usage 分档校准。
-  ['doubao-seedance-2.5:480P', 'doubao-seedance-2.5', 'video', '秒', '480P', 1.52],
-  ['doubao-seedance-2.5:720P', 'doubao-seedance-2.5', 'video', '秒', '720P', 1.52],
-  ['doubao-seedance-2.5:audio-480P', 'doubao-seedance-2.5', 'video', '秒', 'audio-480P', 1.824],
-  ['doubao-seedance-2.5:audio-720P', 'doubao-seedance-2.5', 'video', '秒', 'audio-720P', 1.824],
+  // Seedance 2.5 官方按视频 Token 计价；生成音频不另分档,费率轴是「输入是否含视频」。
+  ['doubao-seedance-2.5:no-video-input', 'doubao-seedance-2.5', 'video', 'token', 'no-video-input', 70 / 1_000_000],
+  ['doubao-seedance-2.5:video-input', 'doubao-seedance-2.5', 'video', 'token', 'video-input', 42 / 1_000_000],
   ['doubao-seedance-2.0:720P', 'doubao-seedance-2.0', 'video', '秒', '720P', 1.0],
   ['doubao-seedance-2.0:1080P', 'doubao-seedance-2.0', 'video', '秒', '1080P', 2.5],
   ['doubao-seedance-2.0-fast:720P', 'doubao-seedance-2.0-fast', 'video', '秒', '720P', 0.8],
@@ -95,6 +91,17 @@ export function seedPlatformDefaults(): { image: number; video: number; pricing:
     if (insMp.run(`${key}:${variant}`, key, 'video', '秒', variant, cost, 1, 0, now).changes) pricing++;
   }
   if (insMp.run('tts', 'tts', 'tts', '万字', '每字', 0.00008, 1, 0, now).changes) pricing++;
+  // 2.5 初版曾误种 480P/720P × 有声/无声四个「元/秒」估算档。只清理字节级匹配
+  // 官方旧默认的行；管理员若已经改过成本则保留其数据(新计价不会读取这些遗留 id)。
+  const legacyS25 = [
+    ['doubao-seedance-2.5:480P', 1.52], ['doubao-seedance-2.5:720P', 1.52],
+    ['doubao-seedance-2.5:audio-480P', 1.824], ['doubao-seedance-2.5:audio-720P', 1.824],
+  ] as const;
+  const delLegacyS25 = db.prepare(
+    `DELETE FROM model_pricing WHERE id=? AND model_key='doubao-seedance-2.5'
+       AND unit='秒' AND cost_source='doc' AND ABS(real_cost_yuan-?) < 0.000000001`,
+  );
+  for (const [id, oldCost] of legacyS25) delLegacyS25.run(id, oldCost);
   for (const [id, key, modality, unit, variant, cost] of DOUBAO_SEED) {
     if (insMp.run(id, key, modality, unit, variant, cost, 1, 0, now).changes) pricing++;
   }

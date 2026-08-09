@@ -122,11 +122,15 @@ describe('ArkGateway 视频:请求体组装 + 响应解析', () => {
 
   it('fetchJobStatus:小写 status 归一 + 取 content.video_url', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ status: 'succeeded', content: { video_url: 'https://v/out.mp4' } }), { status: 200 }) as any,
+      new Response(JSON.stringify({
+        status: 'succeeded', content: { video_url: 'https://v/out.mp4' },
+        usage: { completion_tokens: 216000, total_tokens: 216000 },
+      }), { status: 200 }) as any,
     );
     const r = await new ArkGateway().fetchJobStatus('cgt-ark-123');
     expect(r.status).toBe('succeeded');
     expect(r.videoUrl).toBe('https://v/out.mp4');
+    expect(r.usage).toEqual({ completionTokens: 216000 });
   });
 
   it('fetchJobStatus:running/queued/failed 归一', async () => {
