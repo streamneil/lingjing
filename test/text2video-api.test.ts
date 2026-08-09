@@ -90,6 +90,35 @@ describe('POST /api/jobs (video_t2v) 校验', () => {
     expect(inp.resSnapshot).toBe('1080P');
     expect(inp.audioSnapshot).toBe(true);
   });
+
+  it('Seedance 2.5 支持 480P/30 秒/adaptive/有声,不支持 1080P 或 31 秒', async () => {
+    const body = {
+      type: 'video_t2v', model: 'doubao-seedance-2.5', prompt: '海边日落延时摄影',
+      resolution: '480P', ratio: 'adaptive', duration: 30, audio: true,
+    };
+    const ok = await client.post('/api/jobs', body);
+    expect(ok.status).toBe(202);
+    const inp = JSON.parse(getJob(ok.body.id)!.input_json);
+    expect(inp.resSnapshot).toBe('480P');
+    expect(inp.durationSnapshot).toBe(30);
+    expect(inp.audioSnapshot).toBe(true);
+    expect((await client.post('/api/jobs', { ...body, resolution: '1080P' })).status).toBe(400);
+    expect((await client.post('/api/jobs', { ...body, duration: 31 })).status).toBe(400);
+  });
+});
+
+describe('GET /api/video-models', () => {
+  it('发现列表包含 Seedance 2.5 与既有 Seedance 2.0,不泄漏 modelId', async () => {
+    const r = await client.get('/api/video-models');
+    expect(r.status).toBe(200);
+    const keys = r.body.models.map((m: { key: string }) => m.key);
+    expect(keys).toContain('doubao-seedance-2.5');
+    expect(keys).toContain('doubao-seedance-2.0');
+    const d = r.body.models.find((m: { key: string }) => m.key === 'doubao-seedance-2.5');
+    expect(d.resolutions).toEqual(['480P', '720P']);
+    expect(d.durationRange).toEqual([4, 30]);
+    expect(d).not.toHaveProperty('modelId');
+  });
 });
 
 describe('POST /api/jobs/estimate (video_t2v) ≡ build(N1/N2,reserve==settle)', () => {

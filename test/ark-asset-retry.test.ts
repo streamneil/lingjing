@@ -50,6 +50,7 @@ describe('shouldAssetRetry 门控', () => {
   });
   it('全条件满足 → true', () => {
     expect(shouldAssetRetry(privacyErr(), 'doubao-seedance-2.0', 1)).toBe(true);
+    expect(shouldAssetRetry(privacyErr(), 'doubao-seedance-2.5', 1)).toBe(true);
   });
 });
 

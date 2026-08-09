@@ -21,6 +21,7 @@ afterEach(() => { vi.restoreAllMocks(); });
 
 describe('providerForModel 解析', () => {
   it('豆包视频 → volc-ark', () => {
+    expect(providerForModel('doubao-seedance-2.5')).toBe('volc-ark');
     expect(providerForModel('doubao-seedance-2.0')).toBe('volc-ark');
     expect(providerForModel('doubao-seedance-2.0-fast')).toBe('volc-ark');
   });
@@ -40,6 +41,7 @@ describe('providerForModel 解析', () => {
 
 describe('getGateway 按模型选适配器', () => {
   it('豆包模型 → ArkGateway', () => {
+    expect(getGateway('doubao-seedance-2.5')).toBeInstanceOf(ArkGateway);
     expect(getGateway('doubao-seedance-2.0')).toBeInstanceOf(ArkGateway);
     expect(getGateway('doubao-seedream-4.0')).toBeInstanceOf(ArkGateway);
   });
@@ -77,6 +79,24 @@ describe('ArkGateway 视频:请求体组装 + 响应解析', () => {
     const img = captured.content.find((c: any) => c.type === 'image_url');
     expect(img.image_url.url).toBe('https://img/a.png');
     expect(img.role).toBe('first_frame');
+  });
+
+  it('Seedance 2.5 纯音频参考 → 官方 modelId + reference_audio + 480p/30s', async () => {
+    let captured: any = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_u, init: any) => {
+      captured = JSON.parse(init.body);
+      return new Response(JSON.stringify({ id: 'cgt-s25-audio' }), { status: 200 });
+    });
+    await new ArkGateway().submitVideoT2V({
+      model: 'doubao-seedance-2.5', task: 'reference', audioRefs: ['https://aud/only.wav'],
+      resolution: '480P', duration: 30,
+    });
+    expect(captured.model).toBe('doubao-seedance-2-5-260628');
+    expect(captured.resolution).toBe('480p');
+    expect(captured.duration).toBe(30);
+    expect(captured.content).toEqual([
+      { type: 'audio_url', audio_url: { url: 'https://aud/only.wav' }, role: 'reference_audio' },
+    ]);
   });
 
   it('submitVideoT2V 多模态参考(r2v):图/视频/音频 → typed content + role + ratio', async () => {

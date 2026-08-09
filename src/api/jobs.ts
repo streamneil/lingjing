@@ -49,7 +49,7 @@ import { getEmotion, EMOTIONS, getSpeed, SPEEDS, getLanguage, LANGUAGES } from '
 import { db } from '../db/index.js';
 import type { VideoGenInput, ImageGenInput, TtsGenInput, VideoGenT2VInput, AiMusicGenInput } from '../gateway/types.js';
 import { getImageModel, resolutionAllowed, enabledTiers, tierDelisted, DEFAULT_KEYWORD_TIER, isKnownModel, listEnabledModels, DEFAULT_IMAGE_MODEL, tierFromPixels, type ImageModelDef } from '../gateway/image-models.js';
-import { getVideoModel, isKnownVideoModel, listVideoModels, klingModeToResolution, getI2VModel, listI2VModels, getEditModel, listEditModels, getR2VModel, listR2VModels, type VideoTask, type VideoModelDef } from '../gateway/video-models.js';
+import { getVideoModel, isKnownVideoModel, listT2VModels, klingModeToResolution, getI2VModel, listI2VModels, getEditModel, listEditModels, getR2VModel, listR2VModels, type VideoTask, type VideoModelDef } from '../gateway/video-models.js';
 import { probeVideoMeta, type VideoMeta } from '../pipeline/ai-label.js';
 import { readFile, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -468,7 +468,7 @@ function deriveVideoT2VParams(def: ReturnType<typeof getVideoModel>, body: Recor
   return { duration, resolution, audio, priceTier: videoPriceTier(def, resolution, audio) };
 }
 
-/** 校验并构建 video_t2v(文生视频)job 入参 + 计价。三模型(registry)+ shape 感知校验。 */
+/** 校验并构建 video_t2v(文生视频)job 入参 + 计价。registry + shape 感知校验。 */
 function buildVideoT2VJob(body: Record<string, unknown>): JobBuildResult {
   const modelKey = typeof body.model === 'string' ? body.model : undefined;
   if (modelKey && !isKnownVideoModel(modelKey))
@@ -626,20 +626,22 @@ function buildVideoI2VJob(body: Record<string, unknown>): JobBuildResult {
 function validateMultimodalRefs(
   images: string[], videos: string[], audios: string[],
   maxImg: number, maxVid: number, maxAud: number,
-  hasPrompt: boolean,
+  hasPrompt: boolean, supportsAudioOnlyRefs = false,
 ): { ok: true } | { ok: false; error: string } {
   if (images.length > maxImg) return { ok: false, error: `参考图最多 ${maxImg} 张` };
   if (videos.length > maxVid) return { ok: false, error: `参考视频最多 ${maxVid} 个` };
   if (audios.length > maxAud) return { ok: false, error: `参考音频最多 ${maxAud} 个` };
-  // 文档:不支持「纯音频」「文本+音频」输入(必须有 文本/图/视频 之一作为画面来源)。
+  // Seedance 2.5 可仅传音频;2.0 系列仍要求至少一项图片/视频作为画面来源。
   const hasVisual = images.length > 0 || videos.length > 0;
-  if (!hasVisual && !hasPrompt) return { ok: false, error: '请输入提示词或上传图片/视频参考' };
-  if (!hasVisual && audios.length > 0) return { ok: false, error: '不支持仅音频或「文本+音频」输入,请加图片或视频参考' };
+  if (!hasVisual && !hasPrompt && audios.length === 0)
+    return { ok: false, error: '请输入提示词或上传图片/视频/音频参考' };
+  if (!supportsAudioOnlyRefs && !hasVisual && audios.length > 0)
+    return { ok: false, error: '该模型不支持仅音频或「文本+音频」输入,请加图片或视频参考' };
   return { ok: true };
 }
 
 /** 校验并构建 video_r2v(多模态参考生影片)job 入参 + 计价(eng-review:独立类型,隔离 i2v)。
- *  Seedance 2.0 多模态:文本 + 0-9 图 + 0-3 视频 + 0-3 音频 → 新视频。
+ *  Seedance 2.0:文本 + 0-9 图 + 0-3 视频 + 0-3 音频;Seedance 2.5 上限 30/10/10 且可纯音频。
  *  - 能力门控:仅声明 maxVideoRefs 的模型(getR2VModel);prompt 必填(含 [图N]/[视频N]/[音频N] 指代)。
  *  - 计费含音频(audio 入快照 → costFor 不破 reserve≡settle;Seedance 有 priceTierAudio)。 */
 function buildVideoR2VJob(body: Record<string, unknown>): JobBuildResult {
@@ -655,7 +657,11 @@ function buildVideoR2VJob(body: Record<string, unknown>): JobBuildResult {
   const prompt = typeof body.prompt === 'string' ? body.prompt : '';
 
   // 组合校验(单一 helper)
-  const v = validateMultimodalRefs(imageRefs, videoRefs, audioRefs, def.maxRefImages ?? 9, def.maxVideoRefs ?? 0, def.maxAudioRefs ?? 0, !!prompt.trim());
+  const v = validateMultimodalRefs(
+    imageRefs, videoRefs, audioRefs,
+    def.maxRefImages ?? 9, def.maxVideoRefs ?? 0, def.maxAudioRefs ?? 0,
+    !!prompt.trim(), def.supportsAudioOnlyRefs === true,
+  );
   if (!v.ok) return { ok: false, status: 400, error: v.error };
 
   if (def.promptRequired && !prompt.trim())
@@ -1493,9 +1499,9 @@ jobsRouter.get('/tts-models', requireAuth, (_req: Request, res: Response) => {
 });
 
 // 文生视频模型清单 — 前端下拉单一真相源(只吐 UI 能力字段,不漏 modelId/priceTier)。
-// 仅 t2v 模型(tasks 空);i2v 走 /i2v-models。
+// 纯 t2v + 显式 supportsT2V 的跨场景模型(Seedance 2.x);i2v 走 /i2v-models。
 jobsRouter.get('/video-models', requireAuth, (_req: Request, res: Response) => {
-  const models = listVideoModels().filter((d) => d.tasks.length === 0).map(projectT2VModel);
+  const models = listT2VModels().map(projectT2VModel);
   res.json({ models, default: getVideoModel().key });
 });
 export function projectT2VModel(d: VideoModelDef) {
@@ -1552,9 +1558,10 @@ export function projectR2VModel(d: VideoModelDef) {
     defaultDuration: d.defaultDuration,
     maxPromptChars: d.maxPromptChars,
     supportsAudio: d.supportsAudio, // generate_audio 开关
-    maxRefImages: d.maxRefImages,   // 图≤9
-    maxVideoRefs: d.maxVideoRefs,   // 视频≤3
-    maxAudioRefs: d.maxAudioRefs,   // 音频≤3
+    maxRefImages: d.maxRefImages,
+    maxVideoRefs: d.maxVideoRefs,
+    maxAudioRefs: d.maxAudioRefs,
+    supportsAudioOnlyRefs: d.supportsAudioOnlyRefs === true,
     promptRequired: d.promptRequired,
   });
 }

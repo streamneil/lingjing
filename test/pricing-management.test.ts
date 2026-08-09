@@ -8,6 +8,7 @@ const { db } = await import('../src/db/index.js');
 const { sellPrice, assertProfitable, setConfig, getConfig, markupX35 } = await import('../src/credits/pricing.js');
 const { videoPriceTier } = await import('../src/credits/index.js');
 const { getVideoModel } = await import('../src/gateway/video-models.js');
+const { seedPlatformDefaults } = await import('../src/seed/platform-defaults.js');
 
 function resetCfg() {
   setConfig('markup_x35', '35');
@@ -76,5 +77,30 @@ describe('videoPriceTier 接 model_pricing 统一表 + 全局倍率', () => {
   it('无统一表行 → 回落代码常数(迁移前兜底)', () => {
     // 不插行;回落 def.priceTier(代码里 wan2.7-t2v 720P=21)
     expect(videoPriceTier(getVideoModel('wan2.7-t2v'), '720P', false)).toBe(21);
+  });
+  it('Seedance 2.5 的 480P/720P 与有声价档独立,旧 720P/1080P 分支不变', () => {
+    const d = getVideoModel('doubao-seedance-2.5');
+    insVideoPricing('doubao-seedance-2.5:480P', d.key, '480P', 0.5);
+    insVideoPricing('doubao-seedance-2.5:720P', d.key, '720P', 0.8);
+    insVideoPricing('doubao-seedance-2.5:audio-480P', d.key, 'audio-480P', 0.7);
+    expect(videoPriceTier(d, '480P', false)).toBe(18);
+    expect(videoPriceTier(d, '720P', false)).toBe(28);
+    expect(videoPriceTier(d, '480P', true)).toBe(25);
+
+    const wan = getVideoModel('wan2.7-t2v');
+    expect(videoPriceTier(wan, '720P', false)).toBe(wan.priceTier);
+    expect(videoPriceTier(wan, '1080P', false)).toBe(wan.priceTier1080);
+  });
+});
+
+describe('Seedance 2.5 默认定价种子', () => {
+  beforeEach(() => { resetCfg(); clearVov(); });
+  it('种出 480P/720P 及对应有声四个独立变体', () => {
+    seedPlatformDefaults();
+    const rows = db.prepare(
+      `SELECT variant,real_cost_yuan,enabled FROM model_pricing WHERE model_key=? ORDER BY variant`,
+    ).all('doubao-seedance-2.5') as Array<{ variant: string; real_cost_yuan: number; enabled: number }>;
+    expect(rows.map((r) => r.variant)).toEqual(['480P', '720P', 'audio-480P', 'audio-720P']);
+    expect(rows.every((r) => r.real_cost_yuan > 0 && r.enabled === 1)).toBe(true);
   });
 });

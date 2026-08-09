@@ -19,7 +19,7 @@ afterEach(() => vi.restoreAllMocks());
 describe('i2v registry 自洽性', () => {
   it('i2v 模型 tasks 合法 / modelId 非空 / 全 V_DASH(含豆包 seedance)', () => {
     const i2v = listI2VModels();
-    expect(i2v.length).toBe(6); // 万相2.7 i2v/r2v + HappyHorse i2v/r2v + 豆包 seedance 2.0 / 2.0-fast(PR-2a)
+    expect(i2v.length).toBe(7); // 万相2.7 + HappyHorse + Seedance 2.5 / 2.0 / 2.0-fast
     const valid = new Set(['first_frame', 'first_last', 'reference']);
     for (const d of i2v) {
       expect(d.shape).toBe('V_DASH'); // 全 V_DASH(豆包 seedance 复用 V_DASH 占位,走 ark 适配器)
@@ -27,6 +27,14 @@ describe('i2v registry 自洽性', () => {
       expect(d.tasks.length).toBeGreaterThan(0);
       expect(d.tasks.every((t) => valid.has(t))).toBe(true);
     }
+  });
+
+  it('Seedance 2.5 支持首帧/首尾帧/参考生,参考图上限 30', () => {
+    const d = VIDEO_MODELS['doubao-seedance-2.5']!;
+    expect(d.tasks).toEqual(['first_frame', 'first_last', 'reference']);
+    expect(d.maxRefImages).toBe(30);
+    expect(d.promptRequired).toBe(false);
+    expect(d.supportsAudio).toBe(true);
   });
 
   it('happyhorse-i2v:首帧、无 ratio、prompt 可选', () => {

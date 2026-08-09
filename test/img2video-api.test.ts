@@ -113,6 +113,19 @@ describe('POST /api/jobs/estimate (video_i2v) ≡ build', () => {
 });
 
 describe('POST /api/jobs (video_i2v) Seedance 有声(generate_audio)', () => {
+  it('Seedance 2.5 首尾帧支持 480P/30 秒/有声', async () => {
+    const r = await client.post('/api/jobs', {
+      type: 'video_i2v', model: 'doubao-seedance-2.5', task: 'first_last',
+      imageRefs: [II+'s25-first', II+'s25-last'], resolution: '480P', duration: 30, audio: true,
+    });
+    expect(r.status).toBe(202);
+    const inp = JSON.parse(getJob(r.body.id)!.input_json);
+    expect(inp.task).toBe('first_last');
+    expect(inp.resSnapshot).toBe('480P');
+    expect(inp.durationSnapshot).toBe(30);
+    expect(inp.audioSnapshot).toBe(true);
+  });
+
   it('Seedance i2v + audio=true → 202,快照 audio=true,reserve==settle', async () => {
     const { costFor } = await import('../src/credits/index.js');
     const body = { type: 'video_i2v', model: 'doubao-seedance-2.0', task: 'first_frame', imageRefs: [II+'k1'], resolution: '720P', duration: 5, audio: true };
@@ -153,5 +166,11 @@ describe('POST /api/jobs (video_i2v) Seedance 有声(generate_audio)', () => {
     expect(seedance.supportsAudio).toBe(true); // Seedance → 显开关
     const hh = r.body.models.find((m: { key: string }) => m.key === 'happyhorse-1.0-i2v');
     expect(hh.supportsAudio).toBe(false); // 百炼 i2v → 不显
+    const s25 = r.body.models.find((m: { key: string }) => m.key === 'doubao-seedance-2.5');
+    expect(s25).toMatchObject({
+      supportsAudio: true, maxRefImages: 30,
+      resolutions: ['480P', '720P'], durationRange: [4, 30],
+      tasks: ['first_frame', 'first_last', 'reference'],
+    });
   });
 });

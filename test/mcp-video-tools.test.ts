@@ -393,7 +393,7 @@ describe('generate_video_from_refs — 多模态组合', () => {
     await c.close();
   });
 
-  it('只有音频、没有画面来源 → 拒(文档口径:不支持纯音频/文本+音频)', async () => {
+  it('默认 Seedance 2.0 只有音频、没有画面来源 → 拒', async () => {
     const c = await mcp();
     const ua = await c.callTool({
       name: 'upload_audio',
@@ -404,6 +404,27 @@ describe('generate_video_from_refs — 多模态组合', () => {
       arguments: { audioRefs: [sc(ua).audioRef as string] },
     });
     expect(r.isError).toBe(true);
+    await c.close();
+  });
+
+  it('Seedance 2.5 只有音频、没有 prompt → 入队', async () => {
+    const c = await mcp();
+    const ua = await c.callTool({
+      name: 'upload_audio',
+      arguments: { filename: 's25-only.mp3', data_base64: mp3('s25-only-audio').toString('base64'), consent: true },
+    });
+    const r = await c.callTool({
+      name: 'generate_video_from_refs',
+      arguments: {
+        model: 'doubao-seedance-2.5', audioRefs: [sc(ua).audioRef as string],
+        resolution: '480P', duration: 30,
+      },
+    });
+    expect(r.isError, String(sc(r).error)).toBeFalsy();
+    const input = JSON.parse(getJob(sc(r).job_id as string)!.input_json) as Record<string, unknown>;
+    expect(input.audioRefs).toEqual([sc(ua).audioRef]);
+    expect(input.resSnapshot).toBe('480P');
+    expect(input.durationSnapshot).toBe(30);
     await c.close();
   });
 });
@@ -790,7 +811,7 @@ describe('list_models 投影 — Agent 选参所需字段必须都在', () => {
     image: ['key', 'label', 'modes', 'maxImages', 'maxResolution'],
     video: ['key', 'label', 'shape', 'resolutions', 'durationRange', 'defaultDuration', 'maxPromptChars', 'supportsAudio'],
     i2v:   ['key', 'label', 'resolutions', 'durationRange', 'maxPromptChars', 'tasks', 'promptRequired'],
-    r2v:   ['key', 'label', 'resolutions', 'durationRange', 'maxPromptChars', 'supportsAudio', 'maxRefImages', 'maxVideoRefs', 'maxAudioRefs'],
+    r2v:   ['key', 'label', 'resolutions', 'durationRange', 'maxPromptChars', 'supportsAudio', 'maxRefImages', 'maxVideoRefs', 'maxAudioRefs', 'supportsAudioOnlyRefs'],
     edit:  ['key', 'label', 'resolutions', 'maxPromptChars', 'promptRequired', 'videoDurRange', 'supportsTruncate'],
   };
   for (const kind of Object.keys(required)) {
@@ -807,6 +828,23 @@ describe('list_models 投影 — Agent 选参所需字段必须都在', () => {
       await c.close();
     });
   }
+
+  it('Seedance 2.5 同时出现在 video/i2v/r2v,并向 Agent 暴露纯音频能力', async () => {
+    const c = await mcp();
+    for (const kind of ['video', 'i2v', 'r2v'] as const) {
+      const models = sc(await c.callTool({ name: 'list_models', arguments: { kind } }))
+        .models as Record<string, unknown>[];
+      expect(models.some((m) => m.key === 'doubao-seedance-2.5')).toBe(true);
+      if (kind === 'r2v') {
+        const d = models.find((m) => m.key === 'doubao-seedance-2.5')!;
+        expect(d.supportsAudioOnlyRefs).toBe(true);
+        expect(d.maxRefImages).toBe(30);
+        expect(d.maxVideoRefs).toBe(10);
+        expect(d.maxAudioRefs).toBe(10);
+      }
+    }
+    await c.close();
+  });
 });
 
 // ── 评审修复的防回归钉子(ship 覆盖率再审:这些代码删掉后套件依然全绿)──────

@@ -28,7 +28,8 @@
 
 export type VideoShape = 'V_DASH' | 'V_KLING'; // V_DASH=百炼原生(res+ratio) V_KLING=可灵(mode+aspect_ratio+audio)
 // media 任务:first_frame=首帧、first_last=首尾帧、reference=参考生(图转影片);
-// edit=视频编辑(影片编辑器,media 必含 1 个 video)。t2v(文生视频)模型 tasks 为空。
+// edit=视频编辑(影片编辑器,media 必含 1 个 video)。纯 t2v 模型 tasks 为空;
+// Seedance 2.x 同时支持 t2v 与 media tasks,另以 supportsT2V 声明。
 export type VideoTask = 'first_frame' | 'first_last' | 'reference' | 'edit';
 
 export interface VideoModelDef {
@@ -37,7 +38,7 @@ export interface VideoModelDef {
   modelId: string; // 厂商实际 model 名(可灵带 'kling/' 前缀;豆包如 doubao-seedance-2.0)
   provider?: string; // 接入厂商(model-access-platform PR-2a);缺省 'bailian'。豆包='volc-ark'。
   shape: VideoShape;
-  resolutions: ('720P' | '1080P')[]; // 支持的分辨率档(可灵经 mode 映射:std→720P、pro→1080P)
+  resolutions: ('480P' | '720P' | '1080P')[]; // 支持的分辨率档(可灵经 mode 映射:std→720P、pro→1080P)
   ratios: string[]; // 支持的宽高比(i2v 首帧/首尾帧跟首帧自动 → 空数组)
   durationRange: [number, number]; // [最短, 最长] 秒
   defaultDuration: number; // 默认时长
@@ -45,10 +46,12 @@ export interface VideoModelDef {
   // 每秒售价积分(= ceil(真实元/秒 × 35))。priceTier = 720P 基准;1080P/有声单列(真实比值随模型变)。
   // deriveVideoT2VParams 按 resolution(+可灵 audio)选好后快照;estimateVideoCost 的 resFactor=1(价已编码完)。
   priceTier: number; // 720P 无声 每秒售价积分
+  priceTier480?: number; // 480P 无声 每秒售价积分(缺省回落 priceTier)
   priceTier1080?: number; // 1080P 每秒售价积分(缺省回落 priceTier)
   priceTierAudio?: number; // 可灵有声 720P 每秒售价积分(缺省回落 priceTier)
+  priceTierAudio480?: number; // 有声 480P 每秒售价积分(缺省回落 priceTierAudio/priceTier480)
   priceTierAudio1080?: number; // 可灵有声 1080P 每秒售价积分(缺省回落 priceTier1080)
-  supportsAudio: boolean; // 支持有声视频(audio 布尔;本轮仅可灵开关可见,见 design D4/R6)
+  supportsAudio: boolean; // 支持有声视频(audio 布尔;可灵/Seedance 前端显示开关)
   supportsNegative: boolean; // 支持反向提示词(仅 wan2.7)
   supportsPromptExtend: boolean; // 支持 prompt 智能改写(仅 wan2.7)
   // ── 图转影片(i2v)/ 视频编辑(edit)──
@@ -61,11 +64,13 @@ export interface VideoModelDef {
   maxOutSeconds?: number; // 输出时长上限(HH=15:输入>15s 截前 15;wan 无上限=跟输入/截断)
   supportsTruncate?: boolean; // 支持 duration 截断参数(仅 wan 编辑,2-10s)
   supportsAudioOrigin?: boolean; // 支持 audio_setting=origin(保留原声;两编辑模型都支持)
-  // ── 参考生影片多模态(video_r2v;仅 Seedance 2.0)──
+  // ── 参考生影片多模态(video_r2v;Seedance 2.x)──
   // 能力门控(eng-review P1#2):只有声明这两个上限的模型才接受 video/audio 参考。
   // 缺省 undefined = 不支持(wan/HH r2v 不声明 → video/audio refs 被拒,不泄漏)。
-  maxVideoRefs?: number; // 参考视频上限(Seedance 3)
-  maxAudioRefs?: number; // 参考音频上限(Seedance 3)
+  maxVideoRefs?: number; // 参考视频上限(Seedance 2.0=3、2.5=10)
+  maxAudioRefs?: number; // 参考音频上限(Seedance 2.0=3、2.5=10)
+  supportsAudioOnlyRefs?: boolean; // 多模态参考生是否允许仅传音频(Seedance 2.5=true)
+  supportsT2V?: boolean; // tasks 非空但同时支持文生视频的跨场景模型(Seedance 2.x)
 }
 
 // 三模型(纯文生视频打平)。modelId 按用户给的百炼文档核实。
@@ -197,6 +202,24 @@ export const VIDEO_MODELS: Record<string, VideoModelDef> = {
   // ── 火山引擎 豆包 Seedance(PR-2a;provider='volc-ark',走 ark.ts 适配器)──
   // shape 复用 V_DASH 占位(ark 适配器自建请求体,不读 shape)。文本+图(首帧/首尾帧/参考生)+ 有声。
   // ⚠ 价格未录(火山按 token 计,非每秒固定价)→ priceTier 占位、cost_source 待用户在 admin 录真实成本前不启用。
+  'doubao-seedance-2.5': {
+    key: 'doubao-seedance-2.5', label: 'Seedance 2.5', modelId: 'doubao-seedance-2-5-260628', provider: 'volc-ark',
+    shape: 'V_DASH',
+    resolutions: ['480P', '720P'],
+    ratios: ['adaptive', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
+    durationRange: [4, 30], defaultDuration: 5,
+    maxPromptChars: 5000,
+    // 官方按 output token 计价:无视频输入 70 元/百万 token、含视频输入 42 元/百万 token。
+    // 平台现有视频账本按秒快照,以 2.0 的 720P 实测档按刊例 token 单价比例保守折算:
+    // 70/46≈1.52 元/秒 → ceil(1.52×35)=54;480P 暂同档防低估,后台可分档校准。
+    priceTier480: 54, priceTier: 54,
+    priceTierAudio480: 65, priceTierAudio: 65, // 延续现有 Seedance 有声 ×1.2 保守占位
+    supportsAudio: true,
+    supportsNegative: false, supportsPromptExtend: false,
+    supportsT2V: true,
+    tasks: ['first_frame', 'first_last', 'reference'], maxRefImages: 30, promptRequired: false,
+    maxVideoRefs: 10, maxAudioRefs: 10, supportsAudioOnlyRefs: true,
+  },
   'doubao-seedance-2.0': {
     key: 'doubao-seedance-2.0', label: 'Seedance 2.0', modelId: 'doubao-seedance-2-0-260128', provider: 'volc-ark',
     shape: 'V_DASH',
@@ -211,6 +234,7 @@ export const VIDEO_MODELS: Record<string, VideoModelDef> = {
     priceTierAudio: 42, priceTierAudio1080: 106,
     supportsAudio: true, // generate_audio
     supportsNegative: false, supportsPromptExtend: false,
+    supportsT2V: true,
     tasks: ['first_frame', 'first_last', 'reference'], maxRefImages: 9, promptRequired: false,
     maxVideoRefs: 3, maxAudioRefs: 3, // 多模态参考(video_r2v):0-3 视频 + 0-3 音频
   },
@@ -225,6 +249,7 @@ export const VIDEO_MODELS: Record<string, VideoModelDef> = {
     priceTierAudio: 34, // 有声占位(28×1.2);admin 录真实成本前需校准
     supportsAudio: true,
     supportsNegative: false, supportsPromptExtend: false,
+    supportsT2V: true,
     tasks: ['first_frame', 'first_last', 'reference'], maxRefImages: 9, promptRequired: false,
     maxVideoRefs: 3, maxAudioRefs: 3,
   },
@@ -256,6 +281,11 @@ export function listVideoModels(): VideoModelDef[] {
   return Object.values(VIDEO_MODELS);
 }
 
+/** 文生视频模型清单。Seedance 2.x 同时支持 media tasks,不能再用 tasks 为空作为唯一判据。 */
+export function listT2VModels(): VideoModelDef[] {
+  return Object.values(VIDEO_MODELS).filter((d) => d.tasks.length === 0 || d.supportsT2V === true);
+}
+
 /** 可灵 mode → 分辨率档(R3:计价键统一按 res 字面量,可灵 std→720P、pro→1080P)。 */
 export function klingModeToResolution(mode?: string): '720P' | '1080P' {
   return mode === 'pro' ? '1080P' : '720P';
@@ -282,7 +312,7 @@ export function getI2VModel(key?: string): VideoModelDef {
   return VIDEO_MODELS[DEFAULT_I2V_MODEL]!;
 }
 
-// ── 参考生影片多模态(r2v;仅 Seedance 2.0 声明 maxVideoRefs/maxAudioRefs)──
+// ── 参考生影片多模态(r2v;Seedance 2.x 声明 maxVideoRefs/maxAudioRefs)──
 // 能力门控:r2v 模型 = 声明了 maxVideoRefs 的模型(只有它们接受 video/audio 参考)。
 export const DEFAULT_R2V_MODEL = 'doubao-seedance-2.0';
 

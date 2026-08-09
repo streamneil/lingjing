@@ -103,10 +103,10 @@ export interface VideoGenT2VInput {
   // ── 图转影片(i2v / video_i2v;t2v 不用)──
   task?: VideoTask; // media 任务:first_frame / first_last / reference / edit
   imageRefs?: string[]; // 输入图存储 key(worker publish 转公网 URL 后就地覆写;submit 按 task 组 media)
-  // ── 参考生影片多模态(video_r2v;Seedance 2.0 多模态参考)──
+  // ── 参考生影片多模态(video_r2v;Seedance 2.x 多模态参考)──
   // 三类 typed 数组,worker 各自 publish 转公网 URL 后就地覆写;绝不 merge 进 imageRefs(否则 wan/HH 收到 video URL 当 reference_image → 400)。
-  videoRefs?: string[]; // 参考视频存储 key(0-3;role=reference_video)
-  audioRefs?: string[]; // 参考音频存储 key(0-3;role=reference_audio)
+  videoRefs?: string[]; // 参考视频存储 key(模型上限 2.0=3、2.5=10;role=reference_video)
+  audioRefs?: string[]; // 参考音频存储 key(模型上限 2.0=3、2.5=10;role=reference_audio)
   // ── 视频编辑(video_edit;task='edit')──
   videoRef?: string; // 输入视频存储 key(worker publish 转公网 URL 后就地覆写;media 首元素 {type:'video'})
   audioSetting?: 'auto' | 'origin'; // 声音:auto=模型自控(缺省不发)、origin=保留原声

@@ -195,7 +195,7 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
 
     <!-- 多模态参考输入区:单一大上传区,图(0-9)+视频(0-3)+音频(0-3)混合,按类型自动归位 -->
     <div id="mmArea"></div>
-    <div class="fmt-hint">支持 图片 ≤9 · 视频 ≤3 · 音频 ≤3 混合上传,自动识别类型。图 JPG/PNG/WEBP ≤10MB · 视频 MP4/MOV ≤100MB · 音频 MP3/WAV/M4A ≤20MB。需至少 1 图或 1 视频(不支持纯音频)。</div>
+    <div class="fmt-hint">支持图片 / 视频 / 音频混合上传,各类上限随所选模型动态显示。图 JPG/PNG/WEBP ≤10MB · 视频 MP4/MOV ≤100MB · 音频 MP3/WAV/M4A ≤20MB。Seedance 2.5 支持纯音频输入,2.0 系列需至少 1 图或 1 视频。</div>
     <input type="file" id="mmPick" accept="image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif,video/mp4,video/quicktime,.mp4,.mov,audio/mpeg,audio/wav,audio/mp4,audio/aac,.mp3,.wav,.m4a,.aac" multiple style="display:none">
 
     <!-- 提示词 + 素材引用助手 -->
@@ -482,8 +482,8 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
   function hasVisual(){ return imgFiles.length>0 || vidFiles.length>0; }
   function missingMsg(){
     const m=curModel();
-    if(!hasVisual() && !ta.value.trim()) return '请输入描述或上传图片/视频';
-    if(!hasVisual() && audFiles.length>0) return '不支持仅音频,请加图片或视频';
+    if(!hasVisual() && !ta.value.trim() && audFiles.length===0) return '请输入描述或上传图片/视频/音频';
+    if(!hasVisual() && audFiles.length>0 && !(m&&m.supportsAudioOnlyRefs)) return '该模型不支持仅音频,请加图片或视频';
     if(m && m.promptRequired && !ta.value.trim()) return '请输入描述';
     if(!document.getElementById('consentChk').checked) return '请勾选授权同意';
     return '';
@@ -534,10 +534,16 @@ if(c.logoUrl){var m=brand.querySelector('#lj-brand-mark');if(m){var img=new Imag
         if(!r.ok){ const j=await r.json().catch(()=>({})); throw new Error(j.error||'视频上传失败'); }
         keys.push((await r.json()).videoRef); } return keys;
     }
-    const fd=new FormData(); files.forEach(f=>fd.append('images',f.file)); fd.append('consent','true');
-    const r=await fetch('/api/image-uploads',{method:'POST',body:fd,credentials:'same-origin'});
-    if(!r.ok){ const j=await r.json().catch(()=>({})); throw new Error(j.error||'图片上传失败'); }
-    return (await r.json()).imageRefs;
+    // /image-uploads 单次最多 9 张(共享端点的内存保护);Seedance 2.5 可参考 30 图,
+    // 因此按 9 张分批上传再合并 key,不放大共享端点的单请求内存上限。
+    const keys=[];
+    for(let i=0;i<files.length;i+=9){
+      const fd=new FormData(); files.slice(i,i+9).forEach(f=>fd.append('images',f.file)); fd.append('consent','true');
+      const r=await fetch('/api/image-uploads',{method:'POST',body:fd,credentials:'same-origin'});
+      if(!r.ok){ const j=await r.json().catch(()=>({})); throw new Error(j.error||'图片上传失败'); }
+      keys.push(...((await r.json()).imageRefs||[]));
+    }
+    return keys;
   }
 
   btn.addEventListener('click', async ()=>{

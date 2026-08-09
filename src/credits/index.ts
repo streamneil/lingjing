@@ -170,7 +170,7 @@ function videoOverrideCost(modelKey: string, variant: string): number | null {
   return mp && mp.enabled ? mp.realCostYuan : null;
 }
 function videoVariant(resolution: string, audio: boolean): string {
-  const res = resolution === '1080P' ? '1080P' : '720P';
+  const res = resolution === '1080P' ? '1080P' : resolution === '480P' ? '480P' : '720P';
   return audio ? `audio-${res}` : res;
 }
 
@@ -181,12 +181,15 @@ export function videoPriceTier(def: ReturnType<typeof getVideoModel>, resolution
   const ovCost = videoOverrideCost(def.key, videoVariant(resolution, audio));
   if (ovCost != null) return sellPrice(ovCost); // 后台录了真实成本 → 自动售价(接倍率)
   // 回落:代码常数(已是售价积分,迁移前/未录成本的兜底)
+  const is480 = resolution === '480P';
   const is1080 = resolution === '1080P';
   if (audio) {
     if (is1080) return def.priceTierAudio1080 ?? def.priceTierAudio ?? def.priceTier1080 ?? def.priceTier;
+    if (is480) return def.priceTierAudio480 ?? def.priceTierAudio ?? def.priceTier480 ?? def.priceTier;
     return def.priceTierAudio ?? def.priceTier;
   }
   if (is1080) return def.priceTier1080 ?? def.priceTier;
+  if (is480) return def.priceTier480 ?? def.priceTier;
   return def.priceTier;
 }
 

@@ -10,15 +10,14 @@ import { describe, it, expect } from 'vitest';
 
 process.env.DB_FILE = ':memory:';
 
-const { VIDEO_MODELS, getVideoModel, isKnownVideoModel, listVideoModels, klingModeToResolution } =
+const { VIDEO_MODELS, getVideoModel, isKnownVideoModel, listT2VModels, klingModeToResolution } =
   await import('../src/gateway/video-models.js');
 const { estimateVideoCost, costFor } = await import('../src/credits/index.js');
 
 describe('VIDEO_MODELS registry 自洽性', () => {
-  it('t2v 三模型 shape 合法、modelId 非空、durationRange 合理、maxPromptChars>0、ratios 非空', () => {
-    // t2v 模型 = tasks 空(i2v 模型另在 text2video-i2v 测;此处只验 t2v)。
-    const t2v = Object.values(VIDEO_MODELS).filter((d) => d.tasks.length === 0);
-    expect(t2v.length).toBe(3);
+  it('t2v 模型 shape 合法、modelId 非空、durationRange 合理、maxPromptChars>0、ratios 非空', () => {
+    const t2v = listT2VModels();
+    expect(t2v.length).toBe(6); // 三个纯 t2v + Seedance 2.5 / 2.0 / 2.0 Fast 跨场景模型
     for (const d of t2v) {
       expect(['V_DASH', 'V_KLING']).toContain(d.shape);
       expect(d.modelId.length).toBeGreaterThan(0);
@@ -28,7 +27,7 @@ describe('VIDEO_MODELS registry 自洽性', () => {
       expect(d.defaultDuration).toBeGreaterThanOrEqual(lo);
       expect(d.defaultDuration).toBeLessThanOrEqual(hi);
       expect(d.maxPromptChars).toBeGreaterThan(0);
-      expect(d.resolutions.every((r) => r === '720P' || r === '1080P')).toBe(true);
+      expect(d.resolutions.every((r) => r === '480P' || r === '720P' || r === '1080P')).toBe(true);
       expect(d.ratios.length).toBeGreaterThan(0); // t2v 都有 ratio(i2v 首帧无)
     }
   });
@@ -60,9 +59,21 @@ describe('VIDEO_MODELS registry 自洽性', () => {
     expect(getVideoModel().key).toBe('wan2.7-t2v');
   });
 
-  it('listVideoModels 含三 t2v 模型(i2v 模型也在,任务非空)', () => {
-    const t2vKeys = listVideoModels().filter((d) => d.tasks.length === 0).map((d) => d.key).sort();
-    expect(t2vKeys).toEqual(['happyhorse-1.0-t2v', 'kling-v3-t2v', 'wan2.7-t2v']);
+  it('listT2VModels 含纯 t2v 与同时支持图生的 Seedance 2.x', () => {
+    const t2vKeys = listT2VModels().map((d) => d.key).sort();
+    expect(t2vKeys).toEqual([
+      'doubao-seedance-2.0', 'doubao-seedance-2.0-fast', 'doubao-seedance-2.5',
+      'happyhorse-1.0-t2v', 'kling-v3-t2v', 'wan2.7-t2v',
+    ]);
+  });
+
+  it('Seedance 2.5 文生能力参数与官方模型 ID', () => {
+    const d = VIDEO_MODELS['doubao-seedance-2.5']!;
+    expect(d.modelId).toBe('doubao-seedance-2-5-260628');
+    expect(d.resolutions).toEqual(['480P', '720P']);
+    expect(d.durationRange).toEqual([4, 30]);
+    expect(d.ratios[0]).toBe('adaptive');
+    expect(d.supportsT2V).toBe(true);
   });
 
   it('isKnownVideoModel 白名单', () => {

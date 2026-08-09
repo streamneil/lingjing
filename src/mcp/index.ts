@@ -33,7 +33,7 @@ import {
 import { getJobForTenant, listJobsForTenant } from '../queue/index.js';
 import { balance } from '../credits/index.js';
 import { signOutputUrls } from '../storage/index.js';
-import { listVideoModels, listI2VModels, listR2VModels, listEditModels } from '../gateway/video-models.js';
+import { listT2VModels, listI2VModels, listR2VModels, listEditModels } from '../gateway/video-models.js';
 import { EMOTIONS, SPEEDS, LANGUAGES } from '../gateway/tts-models.js';
 import { listCustom as listAvatars, listPresets as listAvatarPresets } from '../avatars/index.js';
 import { listClones as listVoices, listPresets as listVoicePresets } from '../voices/index.js';
@@ -389,7 +389,7 @@ function buildMcpServer(actor: SubmitActor, effectiveUploadMB: number): McpServe
       description: '用文字 + 图片/视频/音频参考的任意组合生成影片(对应 REST 的 type=video_r2v)。' +
         'imageRefs 来自 upload_image、videoRefs 来自 upload_video、audioRefs 来自 upload_audio,三者都可选。' +
         'prompt 里可用 [图1] / [视频1] / [音频1] 指代具体参考。' +
-        '唯一的组合限制:不支持「只有音频没有画面来源」——传 audioRefs 时必须同时有 prompt 之外的图或视频。' +
+        '纯音频输入仅 supportsAudioOnlyRefs=true 的模型可用;其他模型传 audioRefs 时仍须同时有图片或视频。' +
         '各上限(图/视频/音频各几个)见 list_models({kind:"r2v"})。返回 job_id,用 get_job 轮询。',
       inputSchema: {
         prompt: z.string().optional().describe('画面描述;多数参考生模型必填(见 list_models 的 promptRequired)'),
@@ -584,7 +584,7 @@ function buildMcpServer(actor: SubmitActor, effectiveUploadMB: number): McpServe
       // 与 REST 共用同一批 project* 投影:不泄漏 modelId / provider / priceTier* 等内部计费字段。
       switch (kind) {
         case 'image': return ok({ models: listEnabledImageModels().map(projectImageModel) });
-        case 'video': return ok({ models: listVideoModels().filter((d) => d.tasks.length === 0).map(projectT2VModel) });
+        case 'video': return ok({ models: listT2VModels().map(projectT2VModel) });
         case 'i2v': return ok({ models: listI2VModels().map(projectI2VModel) });
         case 'r2v': return ok({ models: listR2VModels().map(projectR2VModel) });
         case 'edit': return ok({ models: listEditModels().map(projectEditModel) });

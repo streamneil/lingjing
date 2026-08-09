@@ -1,7 +1,7 @@
 // 灵镜 参考生影片(video_r2v)API 测试 —— buildVideoR2VJob 多模态校验 + costFor + 计价快照。
 //
 // 覆盖 /plan-eng-review 测试覆盖图(video_r2v 全路径):
-//   - 多模态组合:图≤9/视频≤3/音频≤3 + 禁「仅音频」「文本+仅音频」(文档约束)
+//   - 多模态组合:2.0 图≤9/视频≤3/音频≤3 且禁纯音频;2.5 图≤30/视频≤10/音频≤10 且允许纯音频
 //   - 能力门控:非 r2v 模型(无 maxVideoRefs)发 video_r2v → 400
 //   - 有声计价:audio 入快照,costFor 读快照不破 reserve≡settle(eng-review P1#1)
 //   - estimate≡build;快照写入(imageRefs/videoRefs/audioRefs/ratio/audio)
@@ -38,9 +38,9 @@ beforeAll(async () => {
 }, 30000);
 
 describe('r2v 模型注册(能力门控)', () => {
-  it('listR2VModels 仅含声明 maxVideoRefs 的模型(Seedance 2.0 / Fast)', () => {
+  it('listR2VModels 仅含声明 maxVideoRefs 的 Seedance 2.x 模型', () => {
     const keys = listR2VModels().map((d) => d.key).sort();
-    expect(keys).toEqual(['doubao-seedance-2.0', 'doubao-seedance-2.0-fast']);
+    expect(keys).toEqual(['doubao-seedance-2.0', 'doubao-seedance-2.0-fast', 'doubao-seedance-2.5']);
   });
   it('getR2VModel 未知/非 r2v → 回落默认(doubao-seedance-2.0)', () => {
     expect(getR2VModel('wan2.7-r2v').key).toBe('doubao-seedance-2.0'); // wan 无 maxVideoRefs → 不认
@@ -51,6 +51,22 @@ describe('r2v 模型注册(能力门控)', () => {
     expect(d.maxVideoRefs).toBe(3);
     expect(d.maxAudioRefs).toBe(3);
     expect(d.priceTierAudio).toBeGreaterThan(d.priceTier); // 有声更贵
+  });
+  it('Seedance 2.5 声明 30 图/10 视频/10 音频 + 纯音频能力', () => {
+    const d = getR2VModel('doubao-seedance-2.5');
+    expect(d.maxRefImages).toBe(30);
+    expect(d.maxVideoRefs).toBe(10);
+    expect(d.maxAudioRefs).toBe(10);
+    expect(d.supportsAudioOnlyRefs).toBe(true);
+  });
+  it('/r2v-models 向网页/MCP 投影 2.5 上限与纯音频能力', async () => {
+    const r = await client.get('/api/r2v-models');
+    expect(r.status).toBe(200);
+    const d = r.body.models.find((m: { key: string }) => m.key === 'doubao-seedance-2.5');
+    expect(d).toMatchObject({
+      maxRefImages: 30, maxVideoRefs: 10, maxAudioRefs: 10, supportsAudioOnlyRefs: true,
+    });
+    expect(d).not.toHaveProperty('modelId');
   });
 });
 
@@ -67,6 +83,25 @@ describe('POST /api/jobs (video_r2v) 多模态组合校验', () => {
     const r = await client.post('/api/jobs', { type: 'video_r2v', model: 'doubao-seedance-2.0', prompt: '配乐', audioRefs: [AA+'a1'] });
     expect(r.status).toBe(400);
   });
+  it('Seedance 2.5 仅音频(提示词可选)→ 202', async () => {
+    const r = await client.post('/api/jobs', {
+      type: 'video_r2v', model: 'doubao-seedance-2.5', audioRefs: [AA+'a1'],
+      resolution: '480P', duration: 30,
+    });
+    expect(r.status).toBe(202);
+    const inp = JSON.parse(getJob(r.body.id)!.input_json);
+    expect(inp.audioRefs).toEqual([AA+'a1']);
+    expect(inp.prompt).toBeUndefined();
+    expect(inp.resSnapshot).toBe('480P');
+    expect(inp.durationSnapshot).toBe(30);
+  });
+  it('Seedance 2.5 文本+仅音频 → 202', async () => {
+    const r = await client.post('/api/jobs', {
+      type: 'video_r2v', model: 'doubao-seedance-2.5', prompt: '跟随音乐节奏生成画面', audioRefs: [AA+'a1'],
+      resolution: '720P', duration: 5,
+    });
+    expect(r.status).toBe(202);
+  });
   it('视频超 3 → 400', async () => {
     const r = await client.post('/api/jobs', { type: 'video_r2v', model: 'doubao-seedance-2.0', prompt: '视频1', videoRefs: [VV+'v1', VV+'v2', VV+'v3', VV+'v4'] });
     expect(r.status).toBe(400);
@@ -79,6 +114,20 @@ describe('POST /api/jobs (video_r2v) 多模态组合校验', () => {
     const imgs = Array.from({ length: 10 }, (_, i) => II + `k${i}`);
     const r = await client.post('/api/jobs', { type: 'video_r2v', model: 'doubao-seedance-2.0', prompt: '图片1', imageRefs: imgs });
     expect(r.status).toBe(400);
+  });
+  it('Seedance 2.5 接受 30 图,第 31 图拒绝', async () => {
+    const thirty = Array.from({ length: 30 }, (_, i) => II + `s25-${i}`);
+    const ok = await client.post('/api/jobs', {
+      type: 'video_r2v', model: 'doubao-seedance-2.5', prompt: '参考图片生成', imageRefs: thirty,
+      resolution: '720P', duration: 5,
+    });
+    expect(ok.status).toBe(202);
+    const bad = await client.post('/api/jobs', {
+      type: 'video_r2v', model: 'doubao-seedance-2.5', prompt: '参考图片生成', imageRefs: [...thirty, II+'s25-30'],
+      resolution: '720P', duration: 5,
+    });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error).toContain('30');
   });
   it('比例不支持 → 400', async () => {
     const r = await client.post('/api/jobs', { type: 'video_r2v', model: 'doubao-seedance-2.0', prompt: '图片1', imageRefs: [II+'k1'], ratio: '2:3' });

@@ -11,7 +11,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 process.env.DB_FILE = ':memory:';
 process.env.DASHSCOPE_API_KEY = 'sk-test';
 
-const { VIDEO_MODELS, listEditModels, getEditModel, listI2VModels, listVideoModels } =
+const { VIDEO_MODELS, listEditModels, getEditModel, listI2VModels, listT2VModels } =
   await import('../src/gateway/video-models.js');
 const { estimateVideoCost, costFor } = await import('../src/credits/index.js');
 const { BaichuanGateway } = await import('../src/gateway/baichuan.js');
@@ -43,15 +43,15 @@ describe('edit registry 自洽 + 三向互斥', () => {
     }
   });
 
-  it('三向互斥:t2v / i2v / edit 列表零交集(A1:edit 不泄进图转影片页)', () => {
-    const t2v = listVideoModels().filter((d) => d.tasks.length === 0).map((d) => d.key);
+  it('edit 与生成列表隔离;Seedance 跨 t2v/i2v 是显式多能力', () => {
+    const t2v = listT2VModels().map((d) => d.key);
     const i2v = listI2VModels().map((d) => d.key);
     const edit = listEditModels().map((d) => d.key);
-    expect(t2v.length).toBe(3);
-    expect(i2v.length).toBe(6); // 万相2.7 i2v/r2v + HappyHorse i2v/r2v + 豆包 seedance 2.0 / 2.0-fast(PR-2a);不含 edit
+    expect(t2v.length).toBe(6);
+    expect(i2v.length).toBe(7);
     expect(edit.length).toBe(2);
     const inter = (a: string[], b: string[]) => a.filter((k) => b.includes(k));
-    expect(inter(t2v, i2v)).toEqual([]);
+    expect(inter(t2v, i2v).sort()).toEqual(['doubao-seedance-2.0', 'doubao-seedance-2.0-fast', 'doubao-seedance-2.5']);
     expect(inter(t2v, edit)).toEqual([]);
     expect(inter(i2v, edit)).toEqual([]);
   });
