@@ -243,3 +243,7 @@ npm test                                     # vitest 全量
 本地兜底),不依赖任何外网公共桶。
 注意:仅"真实生成"(wan2.2-s2v 等)需让百炼能拉到公网素材 URL,内网下需单独方案
 (见 `TODOS.md` T-PUBLIC-URL);示范素材的"显示"不受此限。
+
+## License
+
+本项目基于 [MIT License](LICENSE) 开源。
