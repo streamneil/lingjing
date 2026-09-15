@@ -49,6 +49,9 @@ services:
       OSS_ACCESS_KEY_SECRET: ${OSS_ACCESS_KEY_SECRET:?需在 .env 设置 OSS_ACCESS_KEY_SECRET}
       # worker 并发池(默认 16)。4c8g 偏激进,如压不住可在 .env 调小,如 WORKER_POOL_SIZE=8。
       WORKER_POOL_SIZE: ${WORKER_POOL_SIZE:-16}
+      IMAGE_TIMEOUT_MS: ${IMAGE_TIMEOUT_MS:-${POLL_TIMEOUT_MS:-900000}}
+      VIDEO_TIMEOUT_MS: ${VIDEO_TIMEOUT_MS:-${VIDEO_T2V_TIMEOUT_MS:-1800000}}
+      OSS_TIMEOUT_MS: ${OSS_TIMEOUT_MS:-1800000}
       DB_FILE: /data/lingjing.db
       # Gemini 出网代理(大陆 ECS 直连 Google 被墙时在 .env 填;仅 Gemini 走代理,百炼/火山直连)。
       # 容器内 127.0.0.1≠宿主机 → 用 host.docker.internal(见下方 extra_hosts);留空=直连。详见 README。

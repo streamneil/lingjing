@@ -81,6 +81,7 @@ function makeOssBackend(): StorageBackend {
         accessKeyId: config.oss.accessKeyId,
         accessKeySecret: config.oss.accessKeySecret,
         secure: true,
+        timeout: config.oss.timeoutMs,
       });
     }
     return client;

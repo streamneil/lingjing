@@ -77,11 +77,12 @@ export const config = {
     // 任务回收模式:'poll'(私有化兜底,默认) | 'webhook'(托管可选)
     jobMode: optional('BAICHUAN_JOB_MODE', 'poll') as 'poll' | 'webhook',
     pollIntervalMs: Number(optional('POLL_INTERVAL_MS', '3000')),
-    // worker 任务超时上限(防永久 running 的静默失败,见 eng-review failure mode)
+    // 音乐等其它任务仍保留原通用超时,图片/视频独立配置。
     jobTimeoutMs: Number(optional('POLL_TIMEOUT_MS', '600000')),
-    // 文生视频专用超时(eng-review A1):t2v 单条 1-5 分 + 免费档并发=1 排队共享 deadline,
-    // 复用 s2v 的 10 分易误杀 → 独立 15 分,留排队+生成双重余量。
-    videoT2vTimeoutMs: Number(optional('VIDEO_T2V_TIMEOUT_MS', '900000')),
+    // 图片同步请求/异步轮询均为 15 分钟;兼容旧 POLL_TIMEOUT_MS 配置。
+    imageTimeoutMs: Number(process.env.IMAGE_TIMEOUT_MS || process.env.POLL_TIMEOUT_MS || '900000'),
+    // 所有视频类型统一 30 分钟;兼容旧文生视频环境变量。
+    videoTimeoutMs: Number(process.env.VIDEO_TIMEOUT_MS || process.env.VIDEO_T2V_TIMEOUT_MS || '1800000'),
   },
 
   // ── 火山方舟 私域素材库(Seedance 人脸拦截解法,2026-07)──
@@ -124,6 +125,8 @@ export const config = {
     bucket: optional('OSS_BUCKET', ''),
     accessKeyId: optional('OSS_ACCESS_KEY_ID', ''),
     accessKeySecret: optional('OSS_ACCESS_KEY_SECRET', ''),
+    // 存储传输是独立超时层,不能继续被 ali-oss 默认 60 秒截断。
+    timeoutMs: Number(process.env.OSS_TIMEOUT_MS || '1800000'),
     // 是否启用 OSS:region 与 bucket 都非空时启用
     get enabled(): boolean {
       return !!(this.region && this.bucket && this.accessKeyId && this.accessKeySecret);

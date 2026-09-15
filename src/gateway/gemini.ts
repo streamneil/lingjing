@@ -16,6 +16,7 @@ import { getProviderKey, getProviderBaseUrl } from './provider-keys.js';
 import { storage } from '../storage/index.js';
 import { getMediaPublisher } from './media-publisher.js';
 import type { SyncImageGateway, SyncImageResult, ImageGenInput, ImageEditInput } from './types.js';
+import { config } from '../config.js';
 
 const GEMINI_PROVIDER = 'google-ai-studio';
 const GEMINI_FALLBACK_BASE = 'https://generativelanguage.googleapis.com/v1beta'; // v1beta:image-gen config 字段(实测 v1 不认)
@@ -37,7 +38,7 @@ function geminiDispatcher(): Dispatcher | undefined {
   const url = process.env.GEMINI_PROXY;
   if (!url) return undefined;
   if (!_proxyAgent || _proxyAgentUrl !== url) {
-    _proxyAgent = new ProxyAgent(url); // 缓存(按 url),不每次新建
+    _proxyAgent = new ProxyAgent({ uri: url, headersTimeout: config.baichuan.imageTimeoutMs, bodyTimeout: config.baichuan.imageTimeoutMs }); // 缓存(按 url),不每次新建
     _proxyAgentUrl = url;
   }
   return _proxyAgent;

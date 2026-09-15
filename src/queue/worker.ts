@@ -252,7 +252,7 @@ async function runVideoJob(job: JobRow): Promise<void> {
   // 3. 长文案分段(每段 <20s)。空文案在 moderate 已拦,这里至少 1 段。
   const segments = segmentScript(input.script);
   if (segments.length === 0) throw new Error('文案分段为空');
-  const deadline = Date.now() + config.baichuan.jobTimeoutMs;
+  const deadline = Date.now() + config.baichuan.videoTimeoutMs;
 
   // 4. 逐段渲染(免费档并发=1,串行;每段进度映射到整体的 [i/N, (i+1)/N) 区间)。
   const segVideos: Buffer[] = [];
@@ -294,7 +294,7 @@ async function runVideoJob(job: JobRow): Promise<void> {
 
 /** 处理一个文生视频(text2video)job。与数字人 s2v 不同形状:纯文生视频,无 TTS、无图、无分段。
  *
- *   prompt 送审 → submitVideoT2V(task_id) → 轮询(独立 15 分超时,eng A1)→ 取归一 r.videoUrl(R2)
+ *   prompt 送审 → submitVideoT2V(task_id) → 轮询(视频统一 30 分超时)→ 取归一 r.videoUrl(R2)
  *     → fetch Buffer → moderateOutput → applyAiLabel(同 s2v 合规尾段,eng A2)→ 落 MinIO → markDone → settle。
  *
  * 抛错由调用方捕获并标 failed(失败隔离)。 */
@@ -310,7 +310,7 @@ async function runVideoT2VJob(job: JobRow): Promise<void> {
   const providerTaskId = await submitOrResume(job, () => gateway.submitVideoT2V(input));
 
   // 3. 轮询(t2v 专用更长超时:1-5 分生成 + 免费档并发=1 排队,eng A1)。取归一 r.videoUrl(R2)。
-  const deadline = Date.now() + config.baichuan.videoT2vTimeoutMs;
+  const deadline = Date.now() + config.baichuan.videoTimeoutMs;
   const done = await pollUntilDone(
     () => gateway.fetchJobStatus(providerTaskId),
     (pct) => updateProgress(job.id, Math.min(99, pct)),
@@ -384,7 +384,7 @@ export async function assetifyImageRefs(tenantId: string, keys: string[], urls: 
  *
  *   prompt 送审(空跳过)→ [withVideo: 输入视频送审 stub + publish 覆写 input.videoRef]
  *     → 各输入图送审 + publish 覆写 input.imageRefs → submitVideoT2V(按 task 组 media)
- *     → 轮询(videoT2vTimeoutMs)→ finalizeVideoJob(costType)。
+ *     → 轮询(videoTimeoutMs)→ finalizeVideoJob(costType)。
  *
  *  publish 是就地覆写运行时 input(DB input_json 未变 → 回放仍取存储 key)。
  *  抛错由调用方捕获并标 failed(失败隔离)。 */
@@ -454,7 +454,7 @@ async function runMediaVideoJob(
     providerTaskId = await submitOrResume(job, () => gateway.submitVideoT2V(input));
   }
 
-  const deadline = Date.now() + config.baichuan.videoT2vTimeoutMs;
+  const deadline = Date.now() + config.baichuan.videoTimeoutMs;
   const done = await pollUntilDone(
     () => gateway.fetchJobStatus(providerTaskId),
     (pct) => updateProgress(job.id, Math.min(99, pct)),
@@ -519,7 +519,7 @@ async function runImageGenJob(job: JobRow): Promise<void> {
   const providerTaskId = await submitOrResume(job, () => gateway.submitImage(input));
 
   // eng-review CQ1:走共享 pollUntilDone(进度封顶 99,留成功后置 100 的余地)。
-  const deadline = Date.now() + config.baichuan.jobTimeoutMs;
+  const deadline = Date.now() + config.baichuan.imageTimeoutMs;
   const done = await pollUntilDone(
     () => gateway.fetchImageStatus(providerTaskId),
     (pct) => updateProgress(job.id, Math.min(99, pct)),
@@ -531,7 +531,7 @@ async function runImageGenJob(job: JobRow): Promise<void> {
 /** 图生图(img2img,qwen-image-edit,同步)。抛错由调用方捕获并标 failed(失败隔离)。
  *
  * 管线:提示词送审 → 输入图 key 经 publish 转公网 URL → editImage(同步,AbortController 硬超时)→ finalize。
- * ⚠️ 同步调无 poll 循环检 deadline(外部声音 P2);AbortController + setTimeout(jobTimeoutMs)是唯一防冻 worker 的保障。
+ * ⚠️ 同步调无 poll 循环检 deadline(外部声音 P2);AbortController + setTimeout(imageTimeoutMs)是唯一防冻 worker 的保障。
  */
 async function runImageEditJob(job: JobRow): Promise<void> {
   const input = JSON.parse(job.input_json) as ImageGenInput;
@@ -550,10 +550,10 @@ async function runImageEditJob(job: JobRow): Promise<void> {
   const publisher = getMediaPublisher(tenantDelivery(job.tenant_id));
   const imageUrls = await Promise.all(refs.map((k) => publisher.publish(k)));
 
-  // 同步调:AbortController 硬超时(jobTimeoutMs)。超时→abort→fetch 抛 AbortError→冒泡标 failed+release。
+  // 同步调:AbortController 硬超时(imageTimeoutMs)。超时→abort→fetch 抛 AbortError→冒泡标 failed+release。
   const gateway = getGateway(input.model) as unknown as import('../gateway/types.js').SyncImageGateway;
   const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), config.baichuan.jobTimeoutMs);
+  const timer = setTimeout(() => ac.abort(), config.baichuan.imageTimeoutMs);
   let result: import('../gateway/types.js').SyncImageResult;
   try {
     updateProgress(job.id, 50);
@@ -562,7 +562,7 @@ async function runImageEditJob(job: JobRow): Promise<void> {
       ac.signal,
     );
   } catch (e) {
-    if (ac.signal.aborted) throw new Error(`生成超时(>${config.baichuan.jobTimeoutMs}ms),已放弃`);
+    if (ac.signal.aborted) throw new Error(`生成超时(>${config.baichuan.imageTimeoutMs}ms),已放弃`);
     throw e;
   } finally {
     clearTimeout(timer);
@@ -582,13 +582,13 @@ async function runImageGenSyncJob(job: JobRow): Promise<void> {
 
   const gateway = getGateway(input.model) as unknown as import('../gateway/types.js').SyncImageGateway;
   const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), config.baichuan.jobTimeoutMs);
+  const timer = setTimeout(() => ac.abort(), config.baichuan.imageTimeoutMs);
   let result: import('../gateway/types.js').SyncImageResult;
   try {
     updateProgress(job.id, 50);
     result = await gateway.generateImageSync(input, ac.signal);
   } catch (e) {
-    if (ac.signal.aborted) throw new Error(`生成超时(>${config.baichuan.jobTimeoutMs}ms),已放弃`);
+    if (ac.signal.aborted) throw new Error(`生成超时(>${config.baichuan.imageTimeoutMs}ms),已放弃`);
     throw e;
   } finally {
     clearTimeout(timer);
@@ -621,7 +621,7 @@ async function runImageEditAsyncJob(job: JobRow): Promise<void> {
   const providerTaskId = await submitOrResume(job, () => gateway.submitImageEdit(input));
 
   // eng-review CQ1:走共享 pollUntilDone(进度封顶 99)。
-  const deadline = Date.now() + config.baichuan.jobTimeoutMs;
+  const deadline = Date.now() + config.baichuan.imageTimeoutMs;
   const done = await pollUntilDone(
     () => gateway.fetchImageStatus(providerTaskId),
     (pct) => updateProgress(job.id, Math.min(99, pct)),
