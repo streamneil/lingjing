@@ -9,6 +9,7 @@
 import { fetch as undiciFetch, ProxyAgent, type Dispatcher } from 'undici';
 import { storage } from '../storage/index.js';
 import { getMediaPublisher } from './media-publisher.js';
+import { config } from '../config.js';
 
 // 出网代理缓存(按 env 变量名 → {agent, url})。url 变则重建。
 const _agents = new Map<string, { agent: ProxyAgent; url: string }>();
@@ -24,7 +25,11 @@ export function proxyDispatcher(envVarName: string): Dispatcher | undefined {
   if (!url) return undefined;
   const cached = _agents.get(envVarName);
   if (!cached || cached.url !== url) {
-    _agents.set(envVarName, { agent: new ProxyAgent(url), url });
+    // 图片长请求不能被 undici 默认 5 分钟响应超时先截断;支付代理维持原配置。
+    const options = envVarName === 'OPENAI_PROXY' || envVarName === 'GEMINI_PROXY'
+      ? { uri: url, headersTimeout: config.baichuan.imageTimeoutMs, bodyTimeout: config.baichuan.imageTimeoutMs }
+      : url;
+    _agents.set(envVarName, { agent: new ProxyAgent(options), url });
   }
   return _agents.get(envVarName)!.agent;
 }
